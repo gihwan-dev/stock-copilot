@@ -202,6 +202,16 @@ pub struct PreparedFakeAiCli {
 
 impl PreparedFakeAiCli {
     pub fn prepare(dir: &Path, binary_name: &str, scenario: &FakeAiScenario) -> io::Result<Self> {
+        let source_bin = resolve_fake_ai_cli_binary()?;
+        Self::prepare_with_binary(&source_bin, dir, binary_name, scenario)
+    }
+
+    pub fn prepare_with_binary(
+        source_bin: &Path,
+        dir: &Path,
+        binary_name: &str,
+        scenario: &FakeAiScenario,
+    ) -> io::Result<Self> {
         if binary_name.is_empty()
             || binary_name.contains('/')
             || binary_name.contains('\\')
@@ -214,12 +224,11 @@ impl PreparedFakeAiCli {
             ));
         }
         fs::create_dir_all(dir)?;
-        let source_bin = resolve_fake_ai_cli_binary()?;
         let executable = dir.join(binary_name);
         if executable.exists() {
             fs::remove_file(&executable)?;
         }
-        fs::copy(&source_bin, &executable)?;
+        fs::copy(source_bin, &executable)?;
         let capture = match &scenario.capture_path {
             Some(path) => path.clone(),
             None => dir.join(format!("{binary_name}.invocations.jsonl")),
@@ -278,10 +287,89 @@ pub fn sidecar_scenario_path(executable: &Path) -> PathBuf {
 pub fn resolve_fake_ai_cli_binary() -> io::Result<PathBuf> {
     let current = crate::test_executable()?;
     let bin_name = format!("fake_ai_cli{}", std::env::consts::EXE_SUFFIX);
-    if let Some(found) = find_prebuilt_binary(&current, &bin_name) {
+    let workspace_root = find_workspace_root(&current);
+    if let Some(found) = find_prebuilt_binary(&current, &bin_name)
+        && is_binary_fresh(&found, workspace_root.as_deref()) == BinaryFreshness::Fresh
+    {
         return Ok(found);
     }
-    build_fake_ai_cli_offline(&current, &bin_name)
+    let root = workspace_root.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "cannot locate workspace root for fake_ai_cli binary",
+        )
+    })?;
+    build_fake_ai_cli_offline(&current, &root, &bin_name)
+}
+
+fn find_workspace_root(current: &Path) -> Option<PathBuf> {
+    current
+        .ancestors()
+        .find(|dir| {
+            dir.join("Cargo.toml").exists()
+                && dir
+                    .join("crates")
+                    .join("testkit")
+                    .join("Cargo.toml")
+                    .exists()
+        })
+        .map(Path::to_path_buf)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BinaryFreshness {
+    Fresh,
+    Stale,
+}
+
+fn is_binary_fresh(binary: &Path, workspace_root: Option<&Path>) -> BinaryFreshness {
+    if fs::metadata(binary)
+        .and_then(|meta| meta.modified())
+        .is_err()
+    {
+        return BinaryFreshness::Stale;
+    }
+    let Some(root) = workspace_root else {
+        return BinaryFreshness::Fresh;
+    };
+    let testkit_dir = root.join("crates").join("testkit");
+    if is_path_newer_than(&testkit_dir.join("Cargo.toml"), binary) == BinaryFreshness::Stale {
+        return BinaryFreshness::Stale;
+    }
+    directory_freshness(&testkit_dir.join("src"), binary)
+}
+
+fn is_path_newer_than(candidate: &Path, reference: &Path) -> BinaryFreshness {
+    let Ok(cand_time) = fs::metadata(candidate).and_then(|meta| meta.modified()) else {
+        return BinaryFreshness::Fresh;
+    };
+    let Ok(ref_time) = fs::metadata(reference).and_then(|meta| meta.modified()) else {
+        return BinaryFreshness::Stale;
+    };
+    if cand_time > ref_time {
+        BinaryFreshness::Stale
+    } else {
+        BinaryFreshness::Fresh
+    }
+}
+
+fn directory_freshness(dir: &Path, binary: &Path) -> BinaryFreshness {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return BinaryFreshness::Fresh;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if directory_freshness(&path, binary) == BinaryFreshness::Stale {
+                return BinaryFreshness::Stale;
+            }
+            continue;
+        }
+        if is_path_newer_than(&path, binary) == BinaryFreshness::Stale {
+            return BinaryFreshness::Stale;
+        }
+    }
+    BinaryFreshness::Fresh
 }
 
 fn find_prebuilt_binary(current: &Path, bin_name: &str) -> Option<PathBuf> {
@@ -300,33 +388,38 @@ fn find_prebuilt_binary(current: &Path, bin_name: &str) -> Option<PathBuf> {
     None
 }
 
-fn derive_target_dir(current: &Path) -> Option<PathBuf> {
-    let parent = current.parent()?;
-    if parent.file_name().and_then(|name| name.to_str()) == Some("deps") {
-        return parent.parent()?.parent().map(Path::to_path_buf);
-    }
-    None
+struct TargetLayout {
+    target_dir: PathBuf,
+    profile_name: String,
 }
 
-fn build_fake_ai_cli_offline(current: &Path, bin_name: &str) -> io::Result<PathBuf> {
-    let workspace_root = current
-        .ancestors()
-        .find(|dir| {
-            dir.join("Cargo.toml").exists()
-                && dir
-                    .join("crates")
-                    .join("testkit")
-                    .join("Cargo.toml")
-                    .exists()
-        })
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                "cannot locate workspace root for fake_ai_cli binary",
-            )
-        })?;
-    let target_dir = derive_target_dir(current).unwrap_or_else(|| workspace_root.join("target"));
-    let status = Command::new("cargo")
+fn derive_target_layout(current: &Path, workspace_root: &Path) -> TargetLayout {
+    let derived = current
+        .parent()
+        .filter(|parent| parent.file_name().and_then(|name| name.to_str()) == Some("deps"))
+        .and_then(Path::parent)
+        .and_then(|profile_dir| {
+            let profile_name = profile_dir.file_name()?.to_str()?.to_owned();
+            let target_dir = profile_dir.parent()?.to_path_buf();
+            Some(TargetLayout {
+                target_dir,
+                profile_name,
+            })
+        });
+    derived.unwrap_or_else(|| TargetLayout {
+        target_dir: workspace_root.join("target"),
+        profile_name: String::from("debug"),
+    })
+}
+
+fn build_fake_ai_cli_offline(
+    current: &Path,
+    workspace_root: &Path,
+    bin_name: &str,
+) -> io::Result<PathBuf> {
+    let layout = derive_target_layout(current, workspace_root);
+    let mut command = Command::new("cargo");
+    command
         .args([
             "build",
             "--offline",
@@ -342,12 +435,17 @@ fn build_fake_ai_cli_offline(current: &Path, bin_name: &str) -> io::Result<PathB
             "fake_ai_cli",
             "--target-dir",
         ])
-        .arg(&target_dir)
-        .status()?;
+        .arg(&layout.target_dir);
+    if layout.profile_name == "release" {
+        command.arg("--release");
+    } else if layout.profile_name != "debug" {
+        command.args(["--profile", &layout.profile_name]);
+    }
+    let status = command.status()?;
     if !status.success() {
         return Err(io::Error::other("failed to build fake_ai_cli offline"));
     }
-    let built = target_dir.join("debug").join(bin_name);
+    let built = layout.target_dir.join(&layout.profile_name).join(bin_name);
     if built.exists() {
         Ok(built)
     } else {

@@ -27,11 +27,13 @@ pub enum FieldName {
     OutputTokens,
     RateLimits,
     OrdinaryUsageAllowed,
+    RateLimitReachedType,
     UsedPercent,
     ResetsAt,
     Model,
     CodexErrorInfo,
     Sandbox,
+    NetworkAccess,
     InstructionSources,
     MultiAgentMode,
     Data,
@@ -61,6 +63,7 @@ pub enum ValidationFailure {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StreamOrderError {
     MissingInitialIsolationCheck,
+    DuplicateIsolationSnapshot,
     EventAfterRejection,
     DuplicateToolCallId,
     UnexpectedToolCompletion,
@@ -126,6 +129,9 @@ impl fmt::Display for StreamDecodeError {
             Self::Order(failure) => match failure {
                 StreamOrderError::MissingInitialIsolationCheck => {
                     f.write_str("missing initial isolation check")
+                }
+                StreamOrderError::DuplicateIsolationSnapshot => {
+                    f.write_str("duplicate isolation snapshot during startup")
                 }
                 StreamOrderError::EventAfterRejection => {
                     f.write_str("event received after isolation rejection")

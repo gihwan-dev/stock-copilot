@@ -144,7 +144,6 @@ mod tests {
                 AiEvent::RateLimited {
                     resets_at: ResetTime::NotProvided,
                 },
-                AiEvent::TextDelta(text("You've hit your weekly limit")),
                 AiEvent::RateLimited {
                     resets_at: ResetTime::NotProvided,
                 },
@@ -152,17 +151,36 @@ mod tests {
         );
     }
 
+    fn all_eleven_expectation() -> IsolationExpectation {
+        IsolationExpectation::new(
+            RunKind::Analysis,
+            BTreeSet::from([
+                String::from("mcp__app__get_portfolio"),
+                String::from("WebSearch"),
+            ]),
+            Some(String::from("app")),
+            BTreeSet::from([String::from("cc-plugin-privacy")]),
+            Some(BTreeSet::from([String::from("2.1.322")])),
+        )
+    }
+
     #[test]
     fn all_eleven_ai_event_variants_are_produced_distinctly() {
-        let events = decode_stream_lines(analysis_expectation(), all_eleven_variant_lines())
+        let events = decode_stream_lines(all_eleven_expectation(), all_eleven_variant_lines())
             .expect("decode all 11");
+        assert_eq!(events.len(), 15_usize, "exact event count");
+        assert_eq!(
+            events.first(),
+            Some(&AiEvent::IsolationChecked(IsolationCheck::Passed)),
+            "isolation check must be emitted first"
+        );
         assert_all_eleven_model_and_tool_events(&events);
         assert_all_eleven_quota_and_control_events(&events);
     }
 
     fn all_eleven_variant_lines() -> [&'static str; 11] {
         [
-            valid_init_line(),
+            r#"{"type":"system","subtype":"init","tools":["mcp__app__get_portfolio","WebSearch"],"mcp_servers":[{"name":"app","status":"connected"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#,
             r#"{"type":"assistant","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"call_1","name":"mcp__app__get_portfolio","input":{"a":1}}]}}"#,
             r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"call_1","content":"failed payload","is_error":true}]}}"#,
             r#"{"type":"assistant","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","id":"call_2","name":"WebSearch","input":{"query":"samsung earnings","action":"search"}}]}}"#,
@@ -170,7 +188,7 @@ mod tests {
             r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"partial"}}}"#,
             r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.25},"seven_day":{"utilization":0.72}}}}"#,
             r#"{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1794906000}}"#,
-            r#"{"type":"system","subtype":"init","tools":["mcp__app__get_portfolio"],"mcp_servers":[{"name":"app","status":"failed"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#,
+            r#"{"type":"system","subtype":"init","tools":["mcp__app__get_portfolio","WebSearch"],"mcp_servers":[{"name":"app","status":"failed"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#,
             r#"{"type":"future_event_kind","payload":"preserved"}"#,
             r#"{"type":"result","subtype":"success","is_error":false,"usage":{"input_tokens":11,"output_tokens":22,"cache_read_input_tokens":33,"cache_creation_input_tokens":44}}"#,
         ]
@@ -596,6 +614,270 @@ mod tests {
             decoder.decode_line(r#"{"type":"result","subtype":"success","is_error":false}"#),
             Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall)),
             "result line must reject unclosed tool immediately before finish"
+        );
+    }
+
+    #[test]
+    fn active_recheck_blocks_sec2_regressions_and_allows_real_mcp_disconnect() {
+        let mut analysis_tools = ClaudeEventDecoder::new(analysis_expectation());
+        analysis_tools.decode_line(valid_init_line()).expect("init");
+        let regressed_tools_and_server = r#"{"type":"system","subtype":"init","tools":["mcp__app__get_portfolio","Bash","mcp__evil__exfil"],"mcp_servers":[{"name":"app","status":"connected"},{"name":"evil","status":"connected"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#;
+        assert_eq!(
+            analysis_tools.decode_line(regressed_tools_and_server),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::Tools)
+            ))
+        );
+        assert_eq!(
+            analysis_tools.decode_line(
+                r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"id"}}]}}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::EventAfterRejection
+            ))
+        );
+
+        let mut analysis_extra_server = ClaudeEventDecoder::new(analysis_expectation());
+        analysis_extra_server
+            .decode_line(valid_init_line())
+            .expect("init");
+        let regressed_server_only = r#"{"type":"system","subtype":"init","tools":["mcp__app__get_portfolio"],"mcp_servers":[{"name":"app","status":"connected"},{"name":"evil","status":"connected"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#;
+        assert_eq!(
+            analysis_extra_server.decode_line(regressed_server_only),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::McpServers)
+            ))
+        );
+
+        let mut collection = ClaudeEventDecoder::new(collection_expectation());
+        collection
+            .decode_line(
+                r#"{"type":"system","subtype":"init","tools":["WebSearch"],"mcp_servers":[],"model":"claude-haiku-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#,
+            )
+            .expect("collection init");
+        assert_eq!(
+            collection.decode_line(
+                r#"{"type":"system","subtype":"init","tools":["WebSearch"],"mcp_servers":[{"name":"evil","status":"connected"}],"model":"claude-haiku-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::McpServers)
+            ))
+        );
+
+        let mut genuine_disconnect = ClaudeEventDecoder::new(analysis_expectation());
+        genuine_disconnect
+            .decode_line(valid_init_line())
+            .expect("init");
+        let disconnected_init = r#"{"type":"system","subtype":"init","tools":[],"mcp_servers":[{"name":"app","status":"failed"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#;
+        assert_eq!(
+            genuine_disconnect
+                .decode_line(disconnected_init)
+                .expect("expected mcp down"),
+            vec![AiEvent::McpUnavailable]
+        );
+    }
+
+    #[test]
+    fn synthetic_assistant_emits_no_text_delta_and_validates_error_field() {
+        let auth_line = r#"{"type":"assistant","error":"authentication_failed","message":{"model":"<synthetic>","content":[{"type":"text","text":"Please sign in"}]}}"#;
+        let auth_events =
+            decode_stream_lines(analysis_expectation(), [valid_init_line(), auth_line])
+                .expect("synthetic auth error");
+        assert_eq!(
+            auth_events,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::Unknown(text(auth_line)),
+            ],
+            "synthetic non-rate-limit message preserves raw event as Unknown with zero TextDelta"
+        );
+
+        let limit_line = r#"{"type":"assistant","error":"rate_limit","message":{"model":"<synthetic>","content":[{"type":"text","text":"Weekly limit reached"}]}}"#;
+        let limit_events =
+            decode_stream_lines(analysis_expectation(), [valid_init_line(), limit_line])
+                .expect("synthetic rate limit");
+        assert_eq!(
+            limit_events,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::RateLimited {
+                    resets_at: ResetTime::NotProvided,
+                },
+            ],
+            "synthetic rate_limit message emits only RateLimited with zero TextDelta"
+        );
+
+        let bad_error_type = [
+            valid_init_line(),
+            r#"{"type":"assistant","error":123,"message":{"model":"<synthetic>","content":[]}}"#,
+        ];
+        assert_eq!(
+            decode_stream_lines(analysis_expectation(), bad_error_type),
+            Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::Error
+            )))
+        );
+    }
+
+    #[test]
+    fn auxiliary_model_usage_does_not_trigger_false_model_reroute() {
+        let lines = [
+            valid_init_line(),
+            r#"{"type":"assistant","message":{"model":"claude-opus-5-5","content":[]}}"#,
+            r#"{"type":"result","subtype":"success","is_error":false,"modelUsage":{"claude-haiku-5-5":{"inputTokens":10},"claude-opus-5-5":{"inputTokens":200}}}"#,
+        ];
+        let events = decode_stream_lines(analysis_expectation(), lines).expect("decode");
+        let opus = ModelName::try_new("claude-opus-5-5").expect("model");
+        assert_eq!(
+            events,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::ActualModel(opus),
+            ]
+        );
+
+        let result_only = [
+            valid_init_line(),
+            r#"{"type":"result","subtype":"success","is_error":false,"modelUsage":{"claude-haiku-5-5":{"inputTokens":10},"claude-opus-5-5":{"inputTokens":200}}}"#,
+        ];
+        let events_result_only =
+            decode_stream_lines(analysis_expectation(), result_only).expect("decode result only");
+        assert_eq!(
+            events_result_only,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::ActualModel(ModelName::try_new("claude-opus-5-5").expect("model")),
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_unified_windows_and_non_limit_result_errors_are_preserved() {
+        let bad_windows = [
+            valid_init_line(),
+            r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":"broken"}}"#,
+        ];
+        assert_eq!(
+            decode_stream_lines(analysis_expectation(), bad_windows),
+            Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::UnifiedWindows
+            )))
+        );
+        let bad_entry = [
+            valid_init_line(),
+            r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":42}}}"#,
+        ];
+        assert_eq!(
+            decode_stream_lines(analysis_expectation(), bad_entry),
+            Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::UnifiedWindows
+            )))
+        );
+
+        let max_turns = r#"{"type":"result","subtype":"error_max_turns","is_error":true,"result":"max turns reached"}"#;
+        let events = decode_stream_lines(analysis_expectation(), [valid_init_line(), max_turns])
+            .expect("non-limit error result");
+        assert_eq!(
+            events,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::Unknown(text(max_turns)),
+            ]
+        );
+    }
+
+    #[test]
+    fn failed_result_emits_terminal_failed_events_for_open_tools_and_web_search() {
+        let lines = [
+            r#"{"type":"system","subtype":"init","tools":["mcp__app__get_portfolio","WebSearch"],"mcp_servers":[{"name":"app","status":"connected"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"call_1","name":"mcp__app__get_portfolio","input":{"k":1}},{"type":"tool_use","id":"call_2","name":"WebSearch","input":{"query":"KOSPI"}}]}}"#,
+            r#"{"type":"result","subtype":"error_during_execution","is_error":true,"api_error":"usage_limit_reached","result":"rate limit hit"}"#,
+        ];
+        let events = decode_stream_lines(all_eleven_expectation(), lines).expect("failed result");
+        assert_eq!(
+            events,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::ToolCall {
+                    server: text("app"),
+                    tool: text("get_portfolio"),
+                    args: text(r#"{"k":1}"#),
+                    result: text(""),
+                    status: ToolStatus::Running,
+                },
+                AiEvent::WebSearch {
+                    query: text("KOSPI"),
+                    action: text("search"),
+                },
+                AiEvent::ToolCall {
+                    server: text("app"),
+                    tool: text("get_portfolio"),
+                    args: text(r#"{"k":1}"#),
+                    result: text("turn_failed"),
+                    status: ToolStatus::Failed,
+                },
+                AiEvent::WebSearch {
+                    query: text("KOSPI"),
+                    action: text("failed"),
+                },
+                AiEvent::RateLimited {
+                    resets_at: ResetTime::NotProvided,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn unauthorized_tool_use_is_rejected_and_builtin_namespace_is_disjoint() {
+        let mut decoder = ClaudeEventDecoder::new(analysis_expectation());
+        decoder.decode_line(valid_init_line()).expect("init");
+        assert_eq!(
+            decoder.decode_line(
+                r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"bad_1","name":"Bash","input":{"cmd":"ls"}}]}}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::Tools)
+            ))
+        );
+        assert_eq!(
+            decoder.decode_line(r#"{"type":"result","subtype":"success","is_error":false}"#),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::EventAfterRejection
+            ))
+        );
+
+        let custom_expectation = IsolationExpectation::new(
+            RunKind::Analysis,
+            BTreeSet::from([String::from("Read"), String::from("mcp__builtin__ping")]),
+            Some(String::from("builtin")),
+            BTreeSet::from([String::from("cc-plugin-privacy")]),
+            Some(BTreeSet::from([String::from("2.1.322")])),
+        );
+        let lines = [
+            r#"{"type":"system","subtype":"init","tools":["Read","mcp__builtin__ping"],"mcp_servers":[{"name":"builtin","status":"connected"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"r1","name":"Read","input":{}},{"type":"tool_use","id":"m1","name":"mcp__builtin__ping","input":{}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"r1","content":"ok"},{"type":"tool_result","tool_use_id":"m1","content":"pong"}]}}"#,
+        ];
+        let events = decode_stream_lines(custom_expectation, lines).expect("disjoint servers");
+        assert!(
+            events.contains(&AiEvent::ToolCall {
+                server: text(""),
+                tool: text("Read"),
+                args: text("{}"),
+                result: text("ok"),
+                status: ToolStatus::Succeeded,
+            }),
+            "builtin tool uses empty server namespace"
+        );
+        assert!(
+            events.contains(&AiEvent::ToolCall {
+                server: text("builtin"),
+                tool: text("ping"),
+                args: text("{}"),
+                result: text("pong"),
+                status: ToolStatus::Succeeded,
+            }),
+            "mcp server named builtin stays distinct from builtin tools"
         );
     }
 }

@@ -134,11 +134,18 @@ pub(crate) fn parse_thread_start_snapshot(
         )))?;
     let sandbox_type = required_string(sandbox, "type", FieldName::Sandbox)?;
     let network_access = match sandbox.get("networkAccess") {
-        None | Some(Value::Null | Value::Bool(false)) => NetworkAccessState::Blocked,
+        None => {
+            return Err(StreamDecodeError::Schema(SchemaFailure::MissingField(
+                FieldName::NetworkAccess,
+            )));
+        }
+        Some(Value::Bool(false)) => NetworkAccessState::Blocked,
         Some(Value::Bool(true)) => NetworkAccessState::Allowed,
-        Some(Value::Number(_) | Value::String(_) | Value::Array(_) | Value::Object(_)) => {
+        Some(
+            Value::Null | Value::Number(_) | Value::String(_) | Value::Array(_) | Value::Object(_),
+        ) => {
             return Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
-                FieldName::Sandbox,
+                FieldName::NetworkAccess,
             )));
         }
     };
@@ -149,12 +156,17 @@ pub(crate) fn parse_thread_start_snapshot(
         )))?;
     let instruction_sources = parse_string_list(sources_value, FieldName::InstructionSources)?;
     let multi_agent = match result.get("multiAgentMode") {
-        None | Some(Value::Null | Value::Bool(false)) => MultiAgentState::Disabled,
+        None => {
+            return Err(StreamDecodeError::Schema(SchemaFailure::MissingField(
+                FieldName::MultiAgentMode,
+            )));
+        }
+        Some(Value::Bool(false)) => MultiAgentState::Disabled,
         Some(Value::String(text)) if text == "disabled" || text == "off" => {
             MultiAgentState::Disabled
         }
         Some(Value::Bool(true) | Value::String(_)) => MultiAgentState::Enabled,
-        Some(Value::Number(_) | Value::Array(_) | Value::Object(_)) => {
+        Some(Value::Null | Value::Number(_) | Value::Array(_) | Value::Object(_)) => {
             return Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
                 FieldName::MultiAgentMode,
             )));
@@ -275,7 +287,14 @@ fn version_matches(
     }
 }
 
-fn evaluate_thread_start(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ActiveCodexRecheck {
+    Passed,
+    ExpectedMcpDown,
+    Regressed(IsolationFailure),
+}
+
+pub(crate) fn evaluate_thread_start(
     snapshot: &ThreadStartSnapshot,
     expectation: &CodexIsolationExpectation,
 ) -> IsolationCheck {
@@ -341,5 +360,56 @@ pub(crate) fn evaluate_codex_isolation(
     match evaluate_thread_start(thread, expectation) {
         IsolationCheck::Rejected(failure) => IsolationCheck::Rejected(failure),
         IsolationCheck::Passed => evaluate_mcp_list(mcp, expectation),
+    }
+}
+
+pub(crate) fn evaluate_active_codex_recheck(
+    thread: &ThreadStartSnapshot,
+    mcp: &McpStatusListSnapshot,
+    expectation: &CodexIsolationExpectation,
+) -> ActiveCodexRecheck {
+    if let IsolationCheck::Rejected(failure) = evaluate_thread_start(thread, expectation) {
+        return ActiveCodexRecheck::Regressed(failure);
+    }
+    match (expectation.run_kind, expectation.expected_mcp_server()) {
+        (RunKind::Collection, _) => {
+            if mcp.servers.is_empty() {
+                ActiveCodexRecheck::Passed
+            } else {
+                ActiveCodexRecheck::Regressed(IsolationFailure::McpServers)
+            }
+        }
+        (RunKind::Analysis, None) => ActiveCodexRecheck::Regressed(IsolationFailure::McpServers),
+        (RunKind::Analysis, Some(expected_name)) => {
+            for server in &mcp.servers {
+                let unique: BTreeSet<String> = server.tools.iter().cloned().collect();
+                if unique.len() != server.tools.len()
+                    || !unique.is_subset(&expectation.expected_tools)
+                {
+                    return ActiveCodexRecheck::Regressed(IsolationFailure::Tools);
+                }
+            }
+            let has_unexpected_server = mcp.servers.len() > 1_usize
+                || mcp
+                    .servers
+                    .iter()
+                    .any(|server| server.name != expected_name);
+            if has_unexpected_server {
+                return ActiveCodexRecheck::Regressed(IsolationFailure::McpServers);
+            }
+            let Some(server) = mcp.servers.first() else {
+                return ActiveCodexRecheck::ExpectedMcpDown;
+            };
+            let healthy = server.status == "ready" || server.status == "connected";
+            if !healthy {
+                return ActiveCodexRecheck::ExpectedMcpDown;
+            }
+            let unique: BTreeSet<String> = server.tools.iter().cloned().collect();
+            if unique == expectation.expected_tools {
+                ActiveCodexRecheck::Passed
+            } else {
+                ActiveCodexRecheck::Regressed(IsolationFailure::Tools)
+            }
+        }
     }
 }

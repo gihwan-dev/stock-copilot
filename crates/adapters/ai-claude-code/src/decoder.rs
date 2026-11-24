@@ -1,5 +1,8 @@
 use crate::error::{FieldName, SchemaFailure, StreamDecodeError, StreamOrderError};
-use crate::isolation::{IsolationExpectation, evaluate_init_isolation, parse_init_snapshot};
+use crate::isolation::{
+    ActiveRecheckOutcome, IsolationExpectation, evaluate_active_init_recheck,
+    evaluate_init_isolation, parse_init_snapshot,
+};
 use crate::parse::{
     ParsedToolName, parse_model_name, parse_reset_time, parse_token_usage, parse_tool_name,
     parse_utilization, parse_web_search_fields, render_tool_result_content, required_object,
@@ -25,6 +28,18 @@ enum TurnDeltaState {
     Streamed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TurnModelSeen {
+    No,
+    Yes,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AssistantOrigin {
+    Model,
+    Synthetic,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingTool {
     server: UntrustedText,
@@ -43,6 +58,7 @@ pub struct ClaudeEventDecoder {
     lifecycle: Lifecycle,
     configured_model: Option<ModelName>,
     last_actual_model: Option<ModelName>,
+    turn_model_seen: TurnModelSeen,
     turn_delta_state: TurnDeltaState,
     pending_tools: BTreeMap<String, PendingTool>,
     pending_web_searches: BTreeMap<String, PendingWebSearch>,
@@ -56,6 +72,7 @@ impl ClaudeEventDecoder {
             lifecycle: Lifecycle::AwaitingInit,
             configured_model: None,
             last_actual_model: None,
+            turn_model_seen: TurnModelSeen::No,
             turn_delta_state: TurnDeltaState::NoneYet,
             pending_tools: BTreeMap::new(),
             pending_web_searches: BTreeMap::new(),
@@ -132,7 +149,7 @@ impl ClaudeEventDecoder {
             "assistant" => self.handle_assistant(object, raw_line),
             "user" => self.handle_user(object),
             "rate_limit_event" => handle_rate_limit(object, raw_line),
-            "result" => self.handle_result(object),
+            "result" => self.handle_result(object, raw_line),
             _ => Ok(vec![AiEvent::Unknown(untrusted(raw_line)?)]),
         }
     }
@@ -159,20 +176,24 @@ impl ClaudeEventDecoder {
         object: &Map<String, Value>,
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
         let snapshot = parse_init_snapshot(object)?;
-        let check = evaluate_init_isolation(&snapshot, &self.expectation);
         match self.lifecycle {
-            Lifecycle::AwaitingInit => self.apply_initial_init(check, snapshot.model.as_deref()),
-            Lifecycle::Active => match check {
-                IsolationCheck::Passed => {
+            Lifecycle::AwaitingInit => {
+                let check = evaluate_init_isolation(&snapshot, &self.expectation);
+                self.apply_initial_init(check, snapshot.model.as_deref())
+            }
+            Lifecycle::Active => match evaluate_active_init_recheck(&snapshot, &self.expectation) {
+                ActiveRecheckOutcome::Passed => {
                     self.turn_delta_state = TurnDeltaState::NoneYet;
+                    self.turn_model_seen = TurnModelSeen::No;
                     Ok(Vec::new())
                 }
-                IsolationCheck::Rejected(IsolationFailure::McpServers) => {
-                    Ok(vec![AiEvent::McpUnavailable])
+                ActiveRecheckOutcome::ExpectedMcpDown => Ok(vec![AiEvent::McpUnavailable]),
+                ActiveRecheckOutcome::Regressed(failure) => {
+                    self.lifecycle = Lifecycle::TerminatedAfterRejection;
+                    Err(StreamDecodeError::Order(
+                        StreamOrderError::IsolationRegressed(failure),
+                    ))
                 }
-                IsolationCheck::Rejected(failure) => Err(StreamDecodeError::Order(
-                    StreamOrderError::IsolationRegressed(failure),
-                )),
             },
             Lifecycle::TerminatedAfterRejection => Err(StreamDecodeError::Order(
                 StreamOrderError::EventAfterRejection,
@@ -224,8 +245,6 @@ impl ClaudeEventDecoder {
         raw_line: &str,
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
         let message = required_object(object, "message", FieldName::Message)?;
-        let mut events = Vec::new();
-        self.collect_assistant_model(message, object, raw_line, &mut events)?;
         let content = message
             .get("content")
             .ok_or(StreamDecodeError::Schema(SchemaFailure::MissingField(
@@ -235,6 +254,12 @@ impl ClaudeEventDecoder {
             .ok_or(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
                 FieldName::Content,
             )))?;
+        let mut events = Vec::new();
+        let origin = self.collect_assistant_model(message, object, raw_line, &mut events)?;
+        if origin == AssistantOrigin::Synthetic {
+            self.turn_delta_state = TurnDeltaState::NoneYet;
+            return Ok(events);
+        }
         for block in content {
             self.handle_assistant_block(block, &mut events)?;
         }
@@ -248,21 +273,26 @@ impl ClaudeEventDecoder {
         outer: &Map<String, Value>,
         raw_line: &str,
         events: &mut Vec<AiEvent>,
-    ) -> Result<(), StreamDecodeError> {
+    ) -> Result<AssistantOrigin, StreamDecodeError> {
         let Some(model_value) = message.get("model") else {
-            return Ok(());
+            return Ok(AssistantOrigin::Model);
         };
         if model_value.is_null() {
-            return Ok(());
+            return Ok(AssistantOrigin::Model);
         }
         let raw_model = model_value.as_str().ok_or(StreamDecodeError::Schema(
             SchemaFailure::InvalidFieldType(FieldName::Model),
         ))?;
         if raw_model == "<synthetic>" {
-            let error_kind = outer
-                .get("error")
-                .or_else(|| message.get("error"))
-                .and_then(Value::as_str);
+            let error_kind = match outer.get("error").or_else(|| message.get("error")) {
+                None | Some(Value::Null) => None,
+                Some(Value::String(text)) => Some(text.as_str()),
+                Some(Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_)) => {
+                    return Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                        FieldName::Error,
+                    )));
+                }
+            };
             if error_kind == Some("rate_limit") {
                 events.push(AiEvent::RateLimited {
                     resets_at: ResetTime::NotProvided,
@@ -270,11 +300,12 @@ impl ClaudeEventDecoder {
             } else {
                 events.push(AiEvent::Unknown(untrusted(raw_line)?));
             }
-            return Ok(());
+            return Ok(AssistantOrigin::Synthetic);
         }
         let actual = parse_model_name(raw_model)?;
+        self.turn_model_seen = TurnModelSeen::Yes;
         self.record_actual_model(actual, events);
-        Ok(())
+        Ok(AssistantOrigin::Model)
     }
 
     fn record_actual_model(&mut self, actual: ModelName, events: &mut Vec<AiEvent>) {
@@ -333,12 +364,19 @@ impl ClaudeEventDecoder {
             ));
         }
         let name = required_str(item, "name", FieldName::Name)?;
+        let parsed_tool = parse_tool_name(name)?;
+        if !self.expectation.expected_tools().contains(name) {
+            self.lifecycle = Lifecycle::TerminatedAfterRejection;
+            return Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::Tools),
+            ));
+        }
         let input =
             item.get("input")
                 .ok_or(StreamDecodeError::Schema(SchemaFailure::MissingField(
                     FieldName::Input,
                 )))?;
-        let event = match parse_tool_name(name)? {
+        let event = match parsed_tool {
             ParsedToolName::WebSearch => {
                 let (query, action) = parse_web_search_fields(input)?;
                 self.pending_web_searches.insert(
@@ -352,9 +390,7 @@ impl ClaudeEventDecoder {
             ParsedToolName::Mcp { server, tool } => {
                 self.register_pending_tool(id, &server, &tool, input)?
             }
-            ParsedToolName::Builtin { tool } => {
-                self.register_pending_tool(id, "builtin", &tool, input)?
-            }
+            ParsedToolName::Builtin { tool } => self.register_pending_tool(id, "", &tool, input)?,
         };
         events.push(event);
         Ok(())
@@ -465,9 +501,10 @@ impl ClaudeEventDecoder {
     fn handle_result(
         &mut self,
         object: &Map<String, Value>,
+        raw_line: &str,
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
-        let _subtype = required_str(object, "subtype", FieldName::Subtype)?;
-        let is_error = match object.get("is_error") {
+        let subtype = required_str(object, "subtype", FieldName::Subtype)?;
+        let is_error_flag = match object.get("is_error") {
             None | Some(Value::Null | Value::Bool(false)) => ResultOutcome::Ok,
             Some(Value::Bool(true)) => ResultOutcome::Error,
             Some(Value::Number(_) | Value::String(_) | Value::Array(_) | Value::Object(_)) => {
@@ -476,21 +513,51 @@ impl ClaudeEventDecoder {
                 )));
             }
         };
-        if is_error == ResultOutcome::Ok
+        let outcome = if is_error_flag == ResultOutcome::Error || subtype != "success" {
+            ResultOutcome::Error
+        } else {
+            ResultOutcome::Ok
+        };
+        if outcome == ResultOutcome::Ok
             && (!self.pending_tools.is_empty() || !self.pending_web_searches.is_empty())
         {
             return Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall));
         }
         let mut events = Vec::new();
+        if outcome == ResultOutcome::Error {
+            self.drain_failed_pending_items(&mut events)?;
+        }
         collect_result_usage(object, &mut events)?;
         self.collect_result_models(object, &mut events)?;
-        collect_result_rate_limit(object, is_error, &mut events)?;
-        self.turn_delta_state = TurnDeltaState::NoneYet;
-        if is_error == ResultOutcome::Error {
-            self.pending_tools.clear();
-            self.pending_web_searches.clear();
+        let rate_limited = collect_result_rate_limit(object, outcome, &mut events)?;
+        if outcome == ResultOutcome::Error && rate_limited == RateLimitReported::No {
+            events.push(AiEvent::Unknown(untrusted(raw_line)?));
         }
+        self.turn_delta_state = TurnDeltaState::NoneYet;
+        self.turn_model_seen = TurnModelSeen::No;
         Ok(events)
+    }
+
+    fn drain_failed_pending_items(
+        &mut self,
+        events: &mut Vec<AiEvent>,
+    ) -> Result<(), StreamDecodeError> {
+        while let Some((_id, tool)) = self.pending_tools.pop_first() {
+            events.push(AiEvent::ToolCall {
+                server: tool.server,
+                tool: tool.tool,
+                args: tool.args,
+                result: untrusted("turn_failed")?,
+                status: ToolStatus::Failed,
+            });
+        }
+        while let Some((_id, search)) = self.pending_web_searches.pop_first() {
+            events.push(AiEvent::WebSearch {
+                query: search.query,
+                action: untrusted("failed")?,
+            });
+        }
+        Ok(())
     }
 
     fn collect_result_models(
@@ -509,17 +576,40 @@ impl ClaudeEventDecoder {
             .ok_or(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
                 FieldName::ModelUsage,
             )))?;
+        let mut models = Vec::new();
         for key in model_usage.keys() {
             if key == "<synthetic>" {
                 continue;
             }
-            let model = parse_model_name(key)?;
+            models.push(parse_model_name(key)?);
+        }
+        if let Some(last) = &self.last_actual_model
+            && models.contains(last)
+        {
+            return Ok(());
+        }
+        if self.turn_model_seen == TurnModelSeen::Yes {
+            return Ok(());
+        }
+        if let Some(configured) = self.configured_model.clone()
+            && models.contains(&configured)
+        {
+            self.record_actual_model(configured, events);
+            return Ok(());
+        }
+        for model in models {
             if self.last_actual_model.as_ref() != Some(&model) {
                 self.record_actual_model(model, events);
             }
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RateLimitReported {
+    Yes,
+    No,
 }
 
 fn collect_result_usage(
@@ -543,9 +633,9 @@ fn collect_result_rate_limit(
     object: &Map<String, Value>,
     outcome: ResultOutcome,
     events: &mut Vec<AiEvent>,
-) -> Result<(), StreamDecodeError> {
+) -> Result<RateLimitReported, StreamDecodeError> {
     if outcome != ResultOutcome::Error {
-        return Ok(());
+        return Ok(RateLimitReported::No);
     }
     let api_error = match object.get("api_error") {
         None | Some(Value::Null) => None,
@@ -559,8 +649,9 @@ fn collect_result_rate_limit(
     if api_error == Some("usage_limit_reached") {
         let resets_at = parse_reset_time(object.get("resetsAt"), FieldName::ResetsAt)?;
         events.push(AiEvent::RateLimited { resets_at });
+        return Ok(RateLimitReported::Yes);
     }
-    Ok(())
+    Ok(RateLimitReported::No)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -601,13 +692,21 @@ fn extract_rate_limit_utilization(
     {
         return parse_utilization(direct, FieldName::Utilization).map(Some);
     }
-    let Some(Value::Object(windows)) = info.get("unifiedWindows") else {
-        return Ok(None);
+    let windows = match info.get("unifiedWindows") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Object(map)) => map,
+        Some(Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_)) => {
+            return Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::UnifiedWindows,
+            )));
+        }
     };
     let mut best: Option<application::Utilization> = None;
     for entry in windows.values() {
         let Some(window) = entry.as_object() else {
-            continue;
+            return Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::UnifiedWindows,
+            )));
         };
         let Some(value) = window.get("utilization") else {
             continue;

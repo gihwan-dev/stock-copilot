@@ -64,7 +64,7 @@ mod tests {
     }
 
     fn startup_thread_ok() -> &'static str {
-        r#"{"id":1,"result":{"sandbox":{"type":"readOnly"},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1","model":"gpt-6.1-sol"}}"#
+        r#"{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":false},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1","model":"gpt-6.1-sol"}}"#
     }
 
     fn startup_mcp_ok() -> &'static str {
@@ -275,25 +275,25 @@ mod tests {
     ); 6] {
         [
             (
-                r#"{"id":1,"result":{"sandbox":{"type":"workspaceWrite"},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1"}}"#,
+                r#"{"id":1,"result":{"sandbox":{"type":"workspaceWrite","networkAccess":false},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1"}}"#,
                 startup_mcp_ok(),
                 analysis_expectation(),
                 IsolationFailure::PermissionMode,
             ),
             (
-                r#"{"id":1,"result":{"sandbox":{"type":"readOnly"},"instructionSources":["AGENTS.md"],"multiAgentMode":false,"cliVersion":"0.167.1"}}"#,
+                r#"{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":false},"instructionSources":["AGENTS.md"],"multiAgentMode":false,"cliVersion":"0.167.1"}}"#,
                 startup_mcp_ok(),
                 analysis_expectation(),
                 IsolationFailure::Skills,
             ),
             (
-                r#"{"id":1,"result":{"sandbox":{"type":"readOnly"},"instructionSources":[],"multiAgentMode":true,"cliVersion":"0.167.1"}}"#,
+                r#"{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":false},"instructionSources":[],"multiAgentMode":true,"cliVersion":"0.167.1"}}"#,
                 startup_mcp_ok(),
                 analysis_expectation(),
                 IsolationFailure::Plugins,
             ),
             (
-                r#"{"id":1,"result":{"sandbox":{"type":"readOnly"},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.999.0"}}"#,
+                r#"{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":false},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.999.0"}}"#,
                 startup_mcp_ok(),
                 analysis_expectation(),
                 IsolationFailure::CliVersion,
@@ -557,6 +557,369 @@ mod tests {
             app.decode_line(r#"{"method":"turn/completed","params":{"status":"completed"}}"#),
             Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall)),
             "app-server turn/completed must reject unclosed tool immediately before finish"
+        );
+    }
+
+    #[test]
+    fn active_codex_recheck_blocks_extra_server_and_extra_tool() {
+        let mut extra_server = CodexAppServerDecoder::new(analysis_expectation());
+        extra_server.decode_line(startup_thread_ok()).expect("t");
+        extra_server.decode_line(startup_mcp_ok()).expect("m");
+        assert_eq!(
+            extra_server.decode_line(
+                r#"{"id":3,"result":{"data":[{"name":"app","status":"ready","tools":["get_portfolio"]},{"name":"evil","status":"ready","tools":[]}]}}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::McpServers)
+            ))
+        );
+        assert_eq!(
+            extra_server
+                .decode_line(r#"{"method":"item/agentMessage/delta","params":{"delta":"x"}}"#),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::EventAfterRejection
+            ))
+        );
+
+        let mut extra_tool = CodexAppServerDecoder::new(analysis_expectation());
+        extra_tool.decode_line(startup_thread_ok()).expect("t");
+        extra_tool.decode_line(startup_mcp_ok()).expect("m");
+        assert_eq!(
+            extra_tool.decode_line(
+                r#"{"id":3,"result":{"data":[{"name":"app","status":"ready","tools":["get_portfolio","place_order"]}]}}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::Tools)
+            ))
+        );
+    }
+
+    #[test]
+    fn active_codex_recheck_blocks_collection_mcp_and_preserves_expected_disconnect() {
+        let mut collection = CodexAppServerDecoder::new(collection_expectation());
+        collection.decode_line(startup_thread_ok()).expect("t");
+        collection
+            .decode_line(r#"{"id":2,"result":{"data":[]}}"#)
+            .expect("empty mcp");
+        assert_eq!(
+            collection.decode_line(
+                r#"{"id":3,"result":{"data":[{"name":"evil","status":"ready","tools":[]}]}}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::McpServers)
+            ))
+        );
+
+        let mut expected_down = CodexAppServerDecoder::new(analysis_expectation());
+        expected_down.decode_line(startup_thread_ok()).expect("t");
+        expected_down.decode_line(startup_mcp_ok()).expect("m");
+        assert_eq!(
+            expected_down
+                .decode_line(
+                    r#"{"id":3,"result":{"data":[{"name":"app","status":"failed","tools":[]}]}}"#
+                )
+                .expect("real mcp disconnect"),
+            vec![AiEvent::McpUnavailable]
+        );
+        assert_eq!(
+            expected_down
+                .decode_line(
+                    r#"{"method":"mcpServer/startupStatus/updated","params":{"name":"evil","status":"ready"}}"#
+                ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::McpServers)
+            ))
+        );
+    }
+
+    #[test]
+    fn duplicate_startup_snapshots_active_thread_start_and_model_list_are_handled() {
+        let mut dup_thread = CodexAppServerDecoder::new(analysis_expectation());
+        dup_thread
+            .decode_line(startup_thread_ok())
+            .expect("first thread");
+        assert_eq!(
+            dup_thread.decode_line(startup_thread_ok()),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::DuplicateIsolationSnapshot
+            ))
+        );
+
+        let mut dup_mcp = CodexAppServerDecoder::new(analysis_expectation());
+        dup_mcp.decode_line(startup_mcp_ok()).expect("first mcp");
+        assert_eq!(
+            dup_mcp.decode_line(startup_mcp_ok()),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::DuplicateIsolationSnapshot
+            ))
+        );
+
+        let mut active = CodexAppServerDecoder::new(analysis_expectation());
+        active.decode_line(startup_thread_ok()).expect("t");
+        active.decode_line(startup_mcp_ok()).expect("m");
+        assert_eq!(
+            active
+                .decode_line(startup_thread_ok())
+                .expect("passing active thread/start emits no duplicate isolation"),
+            vec![]
+        );
+        let model_list = r#"{"id":9,"result":{"data":[{"id":"gpt-6.1-sol","owned_by":"openai"}]}}"#;
+        assert_eq!(
+            active.decode_line(model_list).expect("model list unknown"),
+            vec![AiEvent::Unknown(text(model_list))]
+        );
+        assert_eq!(
+            active.decode_line(
+                r#"{"id":10,"result":{"sandbox":{"type":"workspaceWrite","networkAccess":false},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1"}}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::PermissionMode)
+            ))
+        );
+    }
+
+    #[test]
+    fn exec_direct_decode_line_emits_initial_rejection_and_finish_checks_init() {
+        let mut rejected = CodexExecDecoder::new(IsolationCheck::Rejected(IsolationFailure::Tools));
+        assert_eq!(
+            rejected
+                .decode_line(r#"{"type":"turn.started"}"#)
+                .expect("first line emits rejection"),
+            vec![AiEvent::IsolationChecked(IsolationCheck::Rejected(
+                IsolationFailure::Tools
+            ))]
+        );
+        assert_eq!(
+            rejected.decode_line(r#"{"type":"turn.started"}"#),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::EventAfterRejection
+            ))
+        );
+        rejected.finish().expect("rejected finishes cleanly");
+
+        let unstarted = CodexExecDecoder::new(IsolationCheck::Passed);
+        assert_eq!(
+            unstarted.finish(),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::MissingInitialIsolationCheck
+            ))
+        );
+    }
+
+    #[test]
+    fn missing_sandbox_network_access_and_multi_agent_mode_fail_closed() {
+        let missing_net = [
+            r#"{"id":1,"result":{"sandbox":{"type":"readOnly"},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1"}}"#,
+            startup_mcp_ok(),
+        ];
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), missing_net),
+            Err(StreamDecodeError::Schema(SchemaFailure::MissingField(
+                FieldName::NetworkAccess
+            )))
+        );
+        let null_net = [
+            r#"{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":null},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1"}}"#,
+            startup_mcp_ok(),
+        ];
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), null_net),
+            Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::NetworkAccess
+            )))
+        );
+        let missing_ma = [
+            r#"{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":false},"instructionSources":[],"cliVersion":"0.167.1"}}"#,
+            startup_mcp_ok(),
+        ];
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), missing_ma),
+            Err(StreamDecodeError::Schema(SchemaFailure::MissingField(
+                FieldName::MultiAgentMode
+            )))
+        );
+        let null_ma = [
+            r#"{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":false},"instructionSources":[],"multiAgentMode":null,"cliVersion":"0.167.1"}}"#,
+            startup_mcp_ok(),
+        ];
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), null_ma),
+            Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::MultiAgentMode
+            )))
+        );
+    }
+
+    #[test]
+    fn rate_limit_schema_secondary_window_and_pre_init_status_are_strict() {
+        let bad_primary = [
+            startup_thread_ok(),
+            startup_mcp_ok(),
+            r#"{"method":"account/rateLimits/updated","params":{"ordinaryUsageAllowed":true,"rateLimits":{"primary":"bad"}}}"#,
+        ];
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), bad_primary),
+            Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::RateLimits
+            )))
+        );
+        let bad_reached_type = [
+            startup_thread_ok(),
+            startup_mcp_ok(),
+            r#"{"method":"account/rateLimits/updated","params":{"ordinaryUsageAllowed":true,"rateLimits":{"rateLimitReachedType":false,"primary":{"usedPercent":10}}}}"#,
+        ];
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), bad_reached_type),
+            Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::RateLimitReachedType
+            )))
+        );
+        let secondary_max = [
+            startup_thread_ok(),
+            startup_mcp_ok(),
+            r#"{"method":"account/rateLimits/updated","params":{"ordinaryUsageAllowed":true,"rateLimits":{"primary":{"usedPercent":20},"secondary":{"usedPercent":85,"resetsAt":1794906000}}}}"#,
+            r#"{"method":"account/rateLimits/updated","params":{"ordinaryUsageAllowed":false,"rateLimits":{"secondary":{"usedPercent":100,"resetsAt":1794906000}}}}"#,
+        ];
+        let reset = ResetTime::Known(utc_seconds(1_794_906_000_i64));
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), secondary_max).expect("secondary"),
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::Quota(AiUsage::Available(util("0.85"))),
+                AiEvent::Quota(AiUsage::Waiting(reset)),
+                AiEvent::RateLimited { resets_at: reset },
+            ]
+        );
+        let bad_turn_error = [
+            startup_thread_ok(),
+            startup_mcp_ok(),
+            r#"{"method":"turn/completed","params":{"status":"failed","error":123}}"#,
+        ];
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), bad_turn_error),
+            Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::Error
+            )))
+        );
+        let bad_pre_init_status = [
+            r#"{"method":"mcpServer/startupStatus/updated","params":{"name":"app","status":"mystery_status"}}"#,
+        ];
+        assert_eq!(
+            decode_app_server_lines(analysis_expectation(), bad_pre_init_status),
+            Err(StreamDecodeError::Validation(
+                ValidationFailure::InvalidToolStatus
+            ))
+        );
+    }
+
+    #[test]
+    fn failed_app_server_turn_closes_pending_tools_and_blocks_unauthorized_tool() {
+        let non_limit_failed = r#"{"method":"turn/completed","params":{"status":"failed","error":{"message":"context overflow"}}}"#;
+        let app_events = decode_app_server_lines(
+            analysis_expectation(),
+            [
+                startup_thread_ok(),
+                startup_mcp_ok(),
+                r#"{"method":"item/started","params":{"item":{"id":"m1","type":"mcpToolCall","server":"app","tool":"get_portfolio","arguments":{},"status":"inProgress"}}}"#,
+                non_limit_failed,
+            ],
+        )
+        .expect("failed app turn");
+        assert_eq!(
+            app_events,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::ToolCall {
+                    server: text("app"),
+                    tool: text("get_portfolio"),
+                    args: text("{}"),
+                    result: text(""),
+                    status: ToolStatus::Running,
+                },
+                AiEvent::ToolCall {
+                    server: text("app"),
+                    tool: text("get_portfolio"),
+                    args: text("{}"),
+                    result: text("turn_failed"),
+                    status: ToolStatus::Failed,
+                },
+                AiEvent::Unknown(text(non_limit_failed)),
+            ]
+        );
+
+        let mut unauthorized = CodexAppServerDecoder::new(analysis_expectation());
+        unauthorized.decode_line(startup_thread_ok()).expect("t");
+        unauthorized.decode_line(startup_mcp_ok()).expect("m");
+        assert_eq!(
+            unauthorized.decode_line(
+                r#"{"method":"item/started","params":{"item":{"id":"x1","type":"mcpToolCall","server":"app","tool":"place_order","arguments":{},"status":"inProgress"}}}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::Tools)
+            ))
+        );
+    }
+
+    #[test]
+    fn failed_exec_turn_closes_pending_tools_and_preserves_unknown_error() {
+        let exec_failed = r#"{"type":"turn.failed","error":{"message":"internal crash"}}"#;
+        let exec_events = decode_exec_lines(
+            IsolationCheck::Passed,
+            [
+                r#"{"type":"item.started","item":{"id":"e1","type":"mcp_tool_call","server":"app","tool":"get_portfolio","arguments":{},"status":"in_progress"}}"#,
+                exec_failed,
+            ],
+        )
+        .expect("failed exec turn");
+        assert_eq!(
+            exec_events,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::ToolCall {
+                    server: text("app"),
+                    tool: text("get_portfolio"),
+                    args: text("{}"),
+                    result: text(""),
+                    status: ToolStatus::Running,
+                },
+                AiEvent::ToolCall {
+                    server: text("app"),
+                    tool: text("get_portfolio"),
+                    args: text("{}"),
+                    result: text("turn_failed"),
+                    status: ToolStatus::Failed,
+                },
+                AiEvent::Unknown(text(exec_failed)),
+            ]
+        );
+    }
+
+    #[test]
+    fn multi_agent_messages_and_model_reroute_deduplication_work() {
+        let events = decode_app_server_lines(
+            analysis_expectation(),
+            [
+                startup_thread_ok(),
+                startup_mcp_ok(),
+                r#"{"method":"model/rerouted","params":{"toModel":"gpt-6-luna"}}"#,
+                r#"{"method":"item/agentMessage/delta","params":{"delta":"first"}}"#,
+                r#"{"method":"item/completed","params":{"item":{"id":"a1","type":"agentMessage","text":"first"}}}"#,
+                r#"{"method":"item/completed","params":{"item":{"id":"a2","type":"agentMessage","text":"second"}}}"#,
+                r#"{"method":"turn/completed","params":{"status":"completed","model":"gpt-6-luna"}}"#,
+            ],
+        )
+        .expect("multi message and dedup");
+        let luna = ModelName::try_new("gpt-6-luna").expect("model");
+        assert_eq!(
+            events,
+            vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::ModelRerouted(luna.clone()),
+                AiEvent::ActualModel(luna.clone()),
+                AiEvent::TextDelta(text("first")),
+                AiEvent::TextDelta(text("second")),
+                AiEvent::ActualModel(luna),
+            ]
         );
     }
 }

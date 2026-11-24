@@ -86,6 +86,7 @@ mod tests {
     struct MockMcpObservation {
         auth_ok: AuthResult,
         methods: Vec<String>,
+        requests: Vec<Value>,
         tool_calls: Vec<(String, Value)>,
     }
 
@@ -95,21 +96,45 @@ mod tests {
         Rejected,
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum MockServerQuirk {
+        Standard,
+        PrefixNotifications,
+        WrongDiscoverId,
+    }
+
     fn spawn_mock_uds_mcp_server(
         socket_path: &Path,
         expected_token: &str,
         tool_result_text: &str,
     ) -> thread::JoinHandle<MockMcpObservation> {
+        spawn_mock_uds_mcp_server_with_quirk(
+            socket_path,
+            expected_token,
+            tool_result_text,
+            MockServerQuirk::Standard,
+        )
+    }
+
+    fn spawn_mock_uds_mcp_server_with_quirk(
+        socket_path: &Path,
+        expected_token: &str,
+        tool_result_text: &str,
+        quirk: MockServerQuirk,
+    ) -> thread::JoinHandle<MockMcpObservation> {
         let listener = UnixListener::bind(socket_path).expect("bind mock uds mcp");
         let expected = String::from(expected_token);
         let response_text = String::from(tool_result_text);
-        thread::spawn(move || serve_mock_mcp_connection(&listener, &expected, &response_text))
+        thread::spawn(move || {
+            serve_mock_mcp_connection(&listener, &expected, &response_text, quirk)
+        })
     }
 
     fn serve_mock_mcp_connection(
         listener: &UnixListener,
         expected_token: &str,
         response_text: &str,
+        quirk: MockServerQuirk,
     ) -> MockMcpObservation {
         let (stream, _addr) = listener.accept().expect("accept client");
         let mut writer = stream.try_clone().expect("clone uds stream");
@@ -122,10 +147,12 @@ mod tests {
             return MockMcpObservation {
                 auth_ok: AuthResult::Rejected,
                 methods: Vec::new(),
+                requests: Vec::new(),
                 tool_calls: Vec::new(),
             };
         }
         let mut methods = Vec::new();
+        let mut requests = Vec::new();
         let mut tool_calls = Vec::new();
         loop {
             let mut line = String::new();
@@ -139,19 +166,54 @@ mod tests {
                 .and_then(Value::as_str)
                 .expect("rpc method");
             methods.push(String::from(method));
-            if let MockRpcReply::Respond(reply) =
-                handle_mock_rpc(&req, method, response_text, &mut tool_calls)
-            {
-                let encoded = serde_json::to_string(&reply).expect("encode reply");
-                writeln!(writer, "{encoded}").expect("write reply");
-                writer.flush().expect("flush reply");
+            requests.push(req.clone());
+            if !dispatch_mock_reply(&mut writer, &req, response_text, quirk, &mut tool_calls) {
+                break;
             }
         }
         MockMcpObservation {
             auth_ok: AuthResult::Accepted,
             methods,
+            requests,
             tool_calls,
         }
+    }
+
+    fn dispatch_mock_reply<W: Write>(
+        writer: &mut W,
+        req: &Value,
+        response_text: &str,
+        quirk: MockServerQuirk,
+        tool_calls: &mut Vec<(String, Value)>,
+    ) -> bool {
+        let method = req
+            .get("method")
+            .and_then(Value::as_str)
+            .expect("rpc method");
+        if quirk == MockServerQuirk::PrefixNotifications && req.get("id").is_some() {
+            let notice = json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/message",
+                "params": { "level": "info", "data": "warming" }
+            });
+            if !write_mock_line(writer, &notice) {
+                return false;
+            }
+        }
+        if let MockRpcReply::Respond(mut reply) =
+            handle_mock_rpc(req, method, response_text, tool_calls)
+        {
+            if quirk == MockServerQuirk::WrongDiscoverId && method == "server/discover" {
+                reply["id"] = json!(999_u64);
+            }
+            return write_mock_line(writer, &reply);
+        }
+        true
+    }
+
+    fn write_mock_line<W: Write>(writer: &mut W, value: &Value) -> bool {
+        let encoded = serde_json::to_string(value).expect("encode rpc");
+        writeln!(writer, "{encoded}").is_ok() && writer.flush().is_ok()
     }
 
     enum MockRpcReply {
@@ -392,6 +454,33 @@ mod tests {
         assert_eq!(first.mcp_calls_executed, 1_usize, "1 executed call");
     }
 
+    fn assert_v2026_meta_on_requests(requests: &[Value]) {
+        for req in requests {
+            let meta = req
+                .get("params")
+                .and_then(|params| params.get("_meta"))
+                .expect("2026-07-28 params._meta");
+            assert_eq!(
+                meta.get("io.modelcontextprotocol/protocolVersion")
+                    .and_then(Value::as_str),
+                Some("2026-07-28"),
+                "protocol version must live under _meta"
+            );
+            assert!(
+                meta.get("clientCapabilities")
+                    .and_then(Value::as_object)
+                    .is_some(),
+                "clientCapabilities must live under _meta"
+            );
+            assert!(
+                req.get("params")
+                    .and_then(|params| params.get("protocolVersion"))
+                    .is_none(),
+                "no legacy top-level protocolVersion in 2026-07-28"
+            );
+        }
+    }
+
     #[test]
     fn claude_2026_07_28_mcp_config_bridge_executes_tools_and_never_leaks_token() {
         let dir = TempDirGuard::new("claude-mcp");
@@ -429,6 +518,7 @@ mod tests {
             vec!["server/discover", "tools/list", "tools/call"],
             "Claude 2026-07-28 MCP sequence"
         );
+        assert_v2026_meta_on_requests(&observed.requests);
         assert_eq!(
             observed.tool_calls,
             vec![(String::from("get_portfolio"), json!({ "currency": "KRW" }))],
@@ -737,6 +827,282 @@ mod tests {
             first.mcp_tools_discovered,
             vec!["get_portfolio", "get_quote"],
             "discovered tools recorded"
+        );
+    }
+
+    #[test]
+    fn mcp_client_skips_preceding_server_notifications() {
+        let dir = TempDirGuard::new("rpc-notice");
+        let sock_notice = TempSocketGuard::new("ntc");
+        let token = "NOTICE_TOKEN_2026";
+        let server_notice = spawn_mock_uds_mcp_server_with_quirk(
+            sock_notice.path(),
+            token,
+            r#"{"ok":true}"#,
+            MockServerQuirk::PrefixNotifications,
+        );
+        let prepared_ok = PreparedFakeAiCli::prepare(
+            dir.path(),
+            "fake-notice",
+            &FakeAiScenario {
+                mode: FakeAiMode::ScriptedMcpClient(Box::new(McpClientScenario {
+                    protocol: McpProtocolGeneration::V2026_07_28,
+                    wire_format: CliWireFormat::ClaudeStreamJson,
+                    transport: McpTransportSpec::DirectUnixSocket {
+                        socket_path: sock_notice.path().to_path_buf(),
+                    },
+                    server_name: String::from("app"),
+                    tool_calls: vec![ScriptedToolCall {
+                        name: String::from("get_portfolio"),
+                        arguments: json!({}),
+                    }],
+                    final_text: String::from("done"),
+                    token_usage: default_usage(),
+                    init_override: InitOverride::default(),
+                    on_mcp_failure: McpFailureBehavior::ExitWithCode(9_u8),
+                    preflight: PreflightBehavior::Immediate,
+                })),
+                capture_path: None,
+            },
+        )
+        .expect("prepare notice");
+        let out_ok = Command::new(prepared_ok.executable_path())
+            .env_clear()
+            .env("STOCK_MCP_TOKEN", token)
+            .output()
+            .expect("run notice");
+        assert!(out_ok.status.success(), "notifications must be skipped");
+        assert_eq!(
+            server_notice.join().expect("join").methods,
+            vec!["server/discover", "tools/list", "tools/call"]
+        );
+    }
+
+    #[test]
+    fn mcp_client_rejects_mismatched_response_id() {
+        let dir = TempDirGuard::new("rpc-bad-id");
+        let sock_bad_id = TempSocketGuard::new("bid");
+        let token = "BADID_TOKEN_2026";
+        let server_bad_id = spawn_mock_uds_mcp_server_with_quirk(
+            sock_bad_id.path(),
+            token,
+            "{}",
+            MockServerQuirk::WrongDiscoverId,
+        );
+        let prepared_bad = PreparedFakeAiCli::prepare(
+            dir.path(),
+            "fake-bad-id",
+            &FakeAiScenario {
+                mode: FakeAiMode::ScriptedMcpClient(Box::new(McpClientScenario {
+                    protocol: McpProtocolGeneration::V2026_07_28,
+                    wire_format: CliWireFormat::ClaudeStreamJson,
+                    transport: McpTransportSpec::DirectUnixSocket {
+                        socket_path: sock_bad_id.path().to_path_buf(),
+                    },
+                    server_name: String::from("app"),
+                    tool_calls: Vec::new(),
+                    final_text: String::new(),
+                    token_usage: default_usage(),
+                    init_override: InitOverride::default(),
+                    on_mcp_failure: McpFailureBehavior::ExitWithCode(9_u8),
+                    preflight: PreflightBehavior::Immediate,
+                })),
+                capture_path: None,
+            },
+        )
+        .expect("prepare bad id");
+        let out_bad = Command::new(prepared_bad.executable_path())
+            .env_clear()
+            .env("STOCK_MCP_TOKEN", token)
+            .output()
+            .expect("run bad id");
+        assert_eq!(
+            out_bad.status.code(),
+            Some(9_i32),
+            "mismatched response id must fail handshake"
+        );
+        server_bad_id.join().expect("join bad id");
+    }
+
+    #[test]
+    fn bad_mcp_config_and_rejected_bridge_exit_nonzero() {
+        let dir = TempDirGuard::new("bad-cfg");
+        let prepared =
+            PreparedFakeAiCli::prepare(dir.path(), "fake-bad-cfg", &claude_mcp_scenario())
+                .expect("prepare");
+        let missing_out = Command::new(prepared.executable_path())
+            .env_clear()
+            .output()
+            .expect("run missing flag");
+        assert_eq!(
+            missing_out.status.code(),
+            Some(2_i32),
+            "missing --mcp-config must fail with exit 2"
+        );
+
+        let broken_cfg = dir.path().join("broken.json");
+        fs::write(&broken_cfg, "{not-json").expect("write broken");
+        let broken_out = Command::new(prepared.executable_path())
+            .arg("--mcp-config")
+            .arg(&broken_cfg)
+            .env_clear()
+            .output()
+            .expect("run broken cfg");
+        assert_eq!(
+            broken_out.status.code(),
+            Some(2_i32),
+            "malformed --mcp-config must fail with exit 2"
+        );
+
+        let socket = TempSocketGuard::new("brg");
+        let server = spawn_mock_uds_mcp_server(socket.path(), "GOOD_TOKEN", "{}");
+        let mut child = Command::new(prepared.executable_path())
+            .arg(BRIDGE_FLAG)
+            .arg(socket.path())
+            .env_clear()
+            .env("STOCK_MCP_TOKEN", "BAD_TOKEN")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn bridge");
+        write_stdin_lines(
+            &mut child,
+            &[r#"{"jsonrpc":"2.0","id":1,"method":"server/discover"}"#],
+        );
+        let bridge_out = child.wait_with_output().expect("wait bridge");
+        assert_eq!(
+            bridge_out.status.code(),
+            Some(2_i32),
+            "bridge must exit nonzero when server closes on auth rejection"
+        );
+        assert_eq!(
+            server.join().expect("join").auth_ok,
+            AuthResult::Rejected,
+            "auth rejected"
+        );
+    }
+
+    #[test]
+    fn claude_partial_token_substitution_expands_without_leaking() {
+        let dir = TempDirGuard::new("claude-sub");
+        let sock_claude = TempSocketGuard::new("sub");
+        let raw_secret = "PARTIAL_SECRET_7788";
+        let server_claude =
+            spawn_mock_uds_mcp_server(sock_claude.path(), &format!("tok-{raw_secret}"), "{}");
+        let prep_claude =
+            PreparedFakeAiCli::prepare(dir.path(), "fake-sub", &claude_mcp_scenario())
+                .expect("prepare");
+        let cfg_path = dir.path().join("partial.json");
+        let cfg = json!({
+            "mcpServers": {
+                "app": {
+                    "command": prep_claude.executable_path(),
+                    "args": [BRIDGE_FLAG, sock_claude.path()],
+                    "env": { "STOCK_MCP_TOKEN": "tok-${STOCK_MCP_TOKEN}" }
+                }
+            }
+        });
+        fs::write(&cfg_path, serde_json::to_string(&cfg).expect("json")).expect("write cfg");
+        let out_claude = Command::new(prep_claude.executable_path())
+            .arg("--mcp-config")
+            .arg(&cfg_path)
+            .env_clear()
+            .env("STOCK_MCP_TOKEN", raw_secret)
+            .output()
+            .expect("run partial sub");
+        assert!(out_claude.status.success(), "partial substitution works");
+        let stdout_claude = String::from_utf8(out_claude.stdout).expect("utf8");
+        assert!(!stdout_claude.contains(raw_secret), "secret not leaked");
+        assert_eq!(
+            server_claude.join().expect("join").auth_ok,
+            AuthResult::Accepted
+        );
+    }
+
+    #[test]
+    fn codex_toml_single_quoted_and_bare_flags_work() {
+        let dir = TempDirGuard::new("codex-toml");
+        let sock_codex = TempSocketGuard::new("tml");
+        let codex_secret = "TOML_SECRET_4455";
+        let server_codex = spawn_mock_uds_mcp_server(sock_codex.path(), codex_secret, "{}");
+        let prep_codex =
+            PreparedFakeAiCli::prepare(dir.path(), "fake-toml", &codex_flags_scenario())
+                .expect("prepare codex");
+        let bin_str = prep_codex.executable_path().to_string_lossy().into_owned();
+        let sock_str = sock_codex.path().to_string_lossy().into_owned();
+        let out_codex = Command::new(prep_codex.executable_path())
+            .args([
+                "-c",
+                &format!("mcp_servers.app.command='{bin_str}'"),
+                "-c",
+                &format!("mcp_servers.app.args=['{BRIDGE_FLAG}', '{sock_str}']"),
+                "-c",
+                "mcp_servers.app.env_vars=['STOCK_MCP_TOKEN']",
+            ])
+            .env_clear()
+            .env("STOCK_MCP_TOKEN", codex_secret)
+            .output()
+            .expect("run codex toml");
+        assert!(out_codex.status.success(), "codex TOML single quotes work");
+        assert_eq!(
+            server_codex.join().expect("join").auth_ok,
+            AuthResult::Accepted
+        );
+
+        let sock_bare = TempSocketGuard::new("bar");
+        let server_bare = spawn_mock_uds_mcp_server(sock_bare.path(), codex_secret, "{}");
+        let sock_bare_str = sock_bare.path().to_string_lossy().into_owned();
+        let out_bare = Command::new(prep_codex.executable_path())
+            .args([
+                "-c",
+                &format!("mcp_servers.app.command={bin_str}"),
+                "-c",
+                &format!("mcp_servers.app.args=['{BRIDGE_FLAG}', \"{sock_bare_str}\"]"),
+                "-c",
+                "mcp_servers.app.env_vars=['STOCK_MCP_TOKEN']",
+            ])
+            .env_clear()
+            .env("STOCK_MCP_TOKEN", codex_secret)
+            .output()
+            .expect("run codex bare");
+        assert!(out_bare.status.success(), "codex bare command works");
+        assert_eq!(
+            server_bare.join().expect("join").auth_ok,
+            AuthResult::Accepted
+        );
+    }
+
+    #[test]
+    fn prepare_with_binary_runs_without_nested_cargo_or_path() {
+        let dir = TempDirGuard::new("prebuilt");
+        let base = PreparedFakeAiCli::prepare(dir.path(), "seed-cli", &replay_multiturn_scenario())
+            .expect("seed prepare");
+        let second_dir = TempDirGuard::new("prebuilt-dest");
+        let explicit = PreparedFakeAiCli::prepare_with_binary(
+            base.executable_path(),
+            second_dir.path(),
+            "explicit-cli",
+            &FakeAiScenario {
+                mode: FakeAiMode::Replay(ReplayScenario {
+                    immediate_lines: vec![String::from(r#"{"ok":1}"#)],
+                    turns: Vec::new(),
+                    final_stderr_lines: Vec::new(),
+                    trailing_without_newline: None,
+                    exit_code: 0_u8,
+                }),
+                capture_path: None,
+            },
+        )
+        .expect("prepare_with_binary");
+        let output = Command::new(explicit.executable_path())
+            .env_clear()
+            .output()
+            .expect("spawn explicit binary");
+        assert!(output.status.success(), "explicit prebuilt runs cleanly");
+        assert_eq!(
+            String::from_utf8(output.stdout).expect("utf8"),
+            "{\"ok\":1}\n"
         );
     }
 }

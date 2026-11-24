@@ -1,7 +1,10 @@
-use crate::error::{FieldName, SchemaFailure, StreamDecodeError, StreamOrderError};
+use crate::error::{
+    FieldName, SchemaFailure, StreamDecodeError, StreamOrderError, ValidationFailure,
+};
 use crate::isolation::{
-    CodexIsolationExpectation, McpStatusListSnapshot, ThreadStartSnapshot,
-    evaluate_codex_isolation, parse_mcp_status_list, parse_thread_start_snapshot,
+    ActiveCodexRecheck, CodexIsolationExpectation, McpStatusListSnapshot, ThreadStartSnapshot,
+    evaluate_active_codex_recheck, evaluate_codex_isolation, evaluate_thread_start,
+    parse_mcp_status_list, parse_thread_start_snapshot,
 };
 use crate::parse::{
     parse_model_name, parse_reset_time, parse_token_usage_camel, parse_tool_status,
@@ -9,7 +12,7 @@ use crate::parse::{
     required_str, serialize_untrusted, untrusted,
 };
 use application::{
-    AiEvent, AiUsage, IsolationCheck, IsolationFailure, ModelName, ResetTime, ToolStatus,
+    AiEvent, AiUsage, IsolationCheck, IsolationFailure, ModelName, ResetTime, RunKind, ToolStatus,
 };
 use domain::UntrustedText;
 use serde_json::{Map, Value};
@@ -28,6 +31,12 @@ enum TurnDeltaState {
     Streamed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ServerExpectation {
+    Expected,
+    Unexpected,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PendingTool {
     server: UntrustedText,
@@ -42,6 +51,7 @@ pub struct CodexAppServerDecoder {
     thread_snapshot: Option<ThreadStartSnapshot>,
     mcp_snapshot: Option<McpStatusListSnapshot>,
     configured_model: Option<ModelName>,
+    last_actual_model: Option<ModelName>,
     turn_delta_state: TurnDeltaState,
     pending_tools: BTreeMap<String, PendingTool>,
 }
@@ -55,6 +65,7 @@ impl CodexAppServerDecoder {
             thread_snapshot: None,
             mcp_snapshot: None,
             configured_model: None,
+            last_actual_model: None,
             turn_delta_state: TurnDeltaState::NoneYet,
             pending_tools: BTreeMap::new(),
         }
@@ -144,22 +155,21 @@ impl CodexAppServerDecoder {
         raw_line: &str,
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
         if result.contains_key("sandbox") && result.contains_key("instructionSources") {
-            let snapshot = parse_thread_start_snapshot(result)?;
-            if let Some(raw_model) = &snapshot.model {
-                self.configured_model = Some(parse_model_name(raw_model)?);
+            return self.handle_thread_start_result(result);
+        }
+        if self.lifecycle == Lifecycle::AwaitingIsolation && result.contains_key("data") {
+            if self.mcp_snapshot.is_some() {
+                return Err(StreamDecodeError::Order(
+                    StreamOrderError::DuplicateIsolationSnapshot,
+                ));
             }
-            self.thread_snapshot = Some(snapshot);
-            return Ok(self.try_complete_isolation());
-        }
-        if result.contains_key("data") && self.lifecycle == Lifecycle::AwaitingIsolation {
             let snapshot = parse_mcp_status_list(result)?;
             self.mcp_snapshot = Some(snapshot);
             return Ok(self.try_complete_isolation());
         }
-        if result.contains_key("data") && self.lifecycle == Lifecycle::Active {
+        if self.lifecycle == Lifecycle::Active && is_mcp_status_list_result(result) {
             let snapshot = parse_mcp_status_list(result)?;
-            self.mcp_snapshot = Some(snapshot);
-            return self.recheck_active_isolation();
+            return self.recheck_active_mcp_list(snapshot);
         }
         if self.lifecycle == Lifecycle::AwaitingIsolation {
             return Err(StreamDecodeError::Order(
@@ -170,6 +180,45 @@ impl CodexAppServerDecoder {
             return handle_rate_limits_payload(result);
         }
         Ok(vec![AiEvent::Unknown(untrusted(raw_line)?)])
+    }
+
+    fn handle_thread_start_result(
+        &mut self,
+        result: &Map<String, Value>,
+    ) -> Result<Vec<AiEvent>, StreamDecodeError> {
+        let snapshot = parse_thread_start_snapshot(result)?;
+        match self.lifecycle {
+            Lifecycle::AwaitingIsolation => {
+                if self.thread_snapshot.is_some() {
+                    return Err(StreamDecodeError::Order(
+                        StreamOrderError::DuplicateIsolationSnapshot,
+                    ));
+                }
+                if let Some(raw_model) = &snapshot.model {
+                    self.configured_model = Some(parse_model_name(raw_model)?);
+                }
+                self.thread_snapshot = Some(snapshot);
+                Ok(self.try_complete_isolation())
+            }
+            Lifecycle::Active => match evaluate_thread_start(&snapshot, &self.expectation) {
+                IsolationCheck::Passed => {
+                    if let Some(raw_model) = &snapshot.model {
+                        self.configured_model = Some(parse_model_name(raw_model)?);
+                    }
+                    self.thread_snapshot = Some(snapshot);
+                    Ok(Vec::new())
+                }
+                IsolationCheck::Rejected(failure) => {
+                    self.lifecycle = Lifecycle::TerminatedAfterRejection;
+                    Err(StreamDecodeError::Order(
+                        StreamOrderError::IsolationRegressed(failure),
+                    ))
+                }
+            },
+            Lifecycle::TerminatedAfterRejection => Err(StreamDecodeError::Order(
+                StreamOrderError::EventAfterRejection,
+            )),
+        }
     }
 
     fn try_complete_isolation(&mut self) -> Vec<AiEvent> {
@@ -184,18 +233,30 @@ impl CodexAppServerDecoder {
         vec![AiEvent::IsolationChecked(check)]
     }
 
-    fn recheck_active_isolation(&self) -> Result<Vec<AiEvent>, StreamDecodeError> {
-        let (Some(thread), Some(mcp)) = (&self.thread_snapshot, &self.mcp_snapshot) else {
-            return Ok(Vec::new());
+    fn recheck_active_mcp_list(
+        &mut self,
+        mcp: McpStatusListSnapshot,
+    ) -> Result<Vec<AiEvent>, StreamDecodeError> {
+        let Some(thread) = &self.thread_snapshot else {
+            return Err(StreamDecodeError::Order(
+                StreamOrderError::MissingInitialIsolationCheck,
+            ));
         };
-        match evaluate_codex_isolation(thread, mcp, &self.expectation) {
-            IsolationCheck::Passed => Ok(Vec::new()),
-            IsolationCheck::Rejected(IsolationFailure::McpServers) => {
+        match evaluate_active_codex_recheck(thread, &mcp, &self.expectation) {
+            ActiveCodexRecheck::Passed => {
+                self.mcp_snapshot = Some(mcp);
+                Ok(Vec::new())
+            }
+            ActiveCodexRecheck::ExpectedMcpDown => {
+                self.mcp_snapshot = Some(mcp);
                 Ok(vec![AiEvent::McpUnavailable])
             }
-            IsolationCheck::Rejected(failure) => Err(StreamDecodeError::Order(
-                StreamOrderError::IsolationRegressed(failure),
-            )),
+            ActiveCodexRecheck::Regressed(failure) => {
+                self.lifecycle = Lifecycle::TerminatedAfterRejection;
+                Err(StreamDecodeError::Order(
+                    StreamOrderError::IsolationRegressed(failure),
+                ))
+            }
         }
     }
 
@@ -244,8 +305,8 @@ impl CodexAppServerDecoder {
             "item/completed" => self.handle_item_completed(params, raw_line),
             "thread/tokenUsage/updated" => handle_token_usage(params),
             "account/rateLimits/updated" => handle_rate_limits_payload(params),
-            "model/rerouted" => handle_model_rerouted(params),
-            "turn/completed" => self.handle_turn_completed(params),
+            "model/rerouted" => self.handle_model_rerouted(params),
+            "turn/completed" => self.handle_turn_completed(params, raw_line),
             "error" => handle_error_notification(params, raw_line),
             _ => Ok(vec![AiEvent::Unknown(untrusted(raw_line)?)]),
         }
@@ -258,23 +319,58 @@ impl CodexAppServerDecoder {
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
         let params = required_object(object, "params", FieldName::Params)?;
         let status = required_str(params, "status", FieldName::Status)?;
+        let server_name = optional_str(params, "name", FieldName::Name)?;
+        if self.lifecycle == Lifecycle::TerminatedAfterRejection {
+            return Err(StreamDecodeError::Order(
+                StreamOrderError::EventAfterRejection,
+            ));
+        }
+        if self.lifecycle == Lifecycle::Active
+            && self.check_expected_server(server_name) == ServerExpectation::Unexpected
+        {
+            self.lifecycle = Lifecycle::TerminatedAfterRejection;
+            return Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::McpServers),
+            ));
+        }
         if status == "failed" || status == "error" {
-            return match self.lifecycle {
-                Lifecycle::AwaitingIsolation => {
-                    self.lifecycle = Lifecycle::TerminatedAfterRejection;
-                    Ok(vec![AiEvent::IsolationChecked(IsolationCheck::Rejected(
-                        IsolationFailure::McpServers,
-                    ))])
-                }
-                Lifecycle::Active => Ok(vec![AiEvent::McpUnavailable]),
-                Lifecycle::TerminatedAfterRejection => Err(StreamDecodeError::Order(
-                    StreamOrderError::EventAfterRejection,
-                )),
-            };
+            return self.handle_mcp_startup_failure();
         }
         match self.lifecycle {
-            Lifecycle::AwaitingIsolation => Ok(Vec::new()),
+            Lifecycle::AwaitingIsolation => match status {
+                "starting" | "connecting" | "ready" | "connected" => Ok(Vec::new()),
+                _ => Err(StreamDecodeError::Validation(
+                    ValidationFailure::InvalidToolStatus,
+                )),
+            },
             Lifecycle::Active => Ok(vec![AiEvent::Unknown(untrusted(raw_line)?)]),
+            Lifecycle::TerminatedAfterRejection => Err(StreamDecodeError::Order(
+                StreamOrderError::EventAfterRejection,
+            )),
+        }
+    }
+
+    fn check_expected_server(&self, server_name: Option<&str>) -> ServerExpectation {
+        if self.expectation.run_kind() == RunKind::Collection {
+            return ServerExpectation::Unexpected;
+        }
+        match server_name {
+            Some(name) if self.expectation.expected_mcp_server() != Some(name) => {
+                ServerExpectation::Unexpected
+            }
+            Some(_) | None => ServerExpectation::Expected,
+        }
+    }
+
+    fn handle_mcp_startup_failure(&mut self) -> Result<Vec<AiEvent>, StreamDecodeError> {
+        match self.lifecycle {
+            Lifecycle::AwaitingIsolation => {
+                self.lifecycle = Lifecycle::TerminatedAfterRejection;
+                Ok(vec![AiEvent::IsolationChecked(IsolationCheck::Rejected(
+                    IsolationFailure::McpServers,
+                ))])
+            }
+            Lifecycle::Active => Ok(vec![AiEvent::McpUnavailable]),
             Lifecycle::TerminatedAfterRejection => Err(StreamDecodeError::Order(
                 StreamOrderError::EventAfterRejection,
             )),
@@ -319,8 +415,19 @@ impl CodexAppServerDecoder {
                 StreamOrderError::DuplicateToolCallId,
             ));
         }
-        let server = untrusted(required_str(item, "server", FieldName::Server)?)?;
-        let tool = untrusted(required_str(item, "tool", FieldName::Tool)?)?;
+        let raw_server = required_str(item, "server", FieldName::Server)?;
+        let raw_tool = required_str(item, "tool", FieldName::Tool)?;
+        let tool_allowed = self.expectation.run_kind() == RunKind::Analysis
+            && self.expectation.expected_mcp_server() == Some(raw_server)
+            && self.expectation.expected_tools().contains(raw_tool);
+        if !tool_allowed {
+            self.lifecycle = Lifecycle::TerminatedAfterRejection;
+            return Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::Tools),
+            ));
+        }
+        let server = untrusted(raw_server)?;
+        let tool = untrusted(raw_tool)?;
         let arguments =
             item.get("arguments")
                 .ok_or(StreamDecodeError::Schema(SchemaFailure::MissingField(
@@ -357,11 +464,13 @@ impl CodexAppServerDecoder {
             "webSearch" => handle_web_search_item(item),
             "agentMessage" => {
                 let text = required_str(item, "text", FieldName::Text)?;
-                if self.turn_delta_state == TurnDeltaState::NoneYet {
-                    Ok(vec![AiEvent::TextDelta(untrusted(text)?)])
+                let emitted = if self.turn_delta_state == TurnDeltaState::NoneYet {
+                    vec![AiEvent::TextDelta(untrusted(text)?)]
                 } else {
-                    Ok(Vec::new())
-                }
+                    Vec::new()
+                };
+                self.turn_delta_state = TurnDeltaState::NoneYet;
+                Ok(emitted)
             }
             _ => Ok(vec![AiEvent::Unknown(untrusted(raw_line)?)]),
         }
@@ -388,9 +497,70 @@ impl CodexAppServerDecoder {
         }])
     }
 
+    fn handle_model_rerouted(
+        &mut self,
+        params: &Map<String, Value>,
+    ) -> Result<Vec<AiEvent>, StreamDecodeError> {
+        let raw_model = match params.get("toModel").or_else(|| params.get("model")) {
+            Some(Value::String(text)) => text.as_str(),
+            Some(
+                Value::Null
+                | Value::Bool(_)
+                | Value::Number(_)
+                | Value::Array(_)
+                | Value::Object(_),
+            ) => {
+                return Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                    FieldName::Model,
+                )));
+            }
+            None => {
+                return Err(StreamDecodeError::Schema(SchemaFailure::MissingField(
+                    FieldName::Model,
+                )));
+            }
+        };
+        let model = parse_model_name(raw_model)?;
+        let mut events = Vec::new();
+        if self.last_actual_model.as_ref() != Some(&model) {
+            events.push(AiEvent::ModelRerouted(model.clone()));
+        }
+        self.last_actual_model = Some(model.clone());
+        events.push(AiEvent::ActualModel(model));
+        Ok(events)
+    }
+
+    fn record_turn_model(&mut self, actual: ModelName, events: &mut Vec<AiEvent>) {
+        if let Some(configured) = &self.configured_model
+            && configured != &actual
+            && self.last_actual_model.as_ref() != Some(&actual)
+        {
+            events.push(AiEvent::ModelRerouted(actual.clone()));
+        }
+        self.last_actual_model = Some(actual.clone());
+        events.push(AiEvent::ActualModel(actual));
+    }
+
+    fn drain_failed_pending_tools(
+        &mut self,
+        events: &mut Vec<AiEvent>,
+    ) -> Result<(), StreamDecodeError> {
+        while let Some((_id, tool)) = self.pending_tools.pop_first() {
+            events.push(AiEvent::ToolCall {
+                server: tool.server,
+                tool: tool.tool,
+                args: tool.args,
+                result: untrusted("turn_failed")?,
+                status: ToolStatus::Failed,
+            });
+        }
+        Ok(())
+    }
+
     fn handle_turn_completed(
         &mut self,
         params: &Map<String, Value>,
+        raw_line: &str,
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
         let status = match params.get("status") {
             None | Some(Value::Null) => "completed",
@@ -405,6 +575,9 @@ impl CodexAppServerDecoder {
             return Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall));
         }
         let mut events = Vec::new();
+        if status == "failed" {
+            self.drain_failed_pending_tools(&mut events)?;
+        }
         if let Some(model_value) = params.get("model")
             && !model_value.is_null()
         {
@@ -412,29 +585,81 @@ impl CodexAppServerDecoder {
                 SchemaFailure::InvalidFieldType(FieldName::Model),
             ))?;
             let actual = parse_model_name(raw_model)?;
-            if let Some(configured) = &self.configured_model
-                && configured != &actual
-            {
-                events.push(AiEvent::ModelRerouted(actual.clone()));
-            }
-            events.push(AiEvent::ActualModel(actual));
+            self.record_turn_model(actual, &mut events);
         }
         if status == "failed" {
-            self.pending_tools.clear();
-            if let Some(event) = extract_turn_failure_rate_limit(params.get("error"))? {
-                events.push(event);
+            match extract_turn_failure_rate_limit(params.get("error"))? {
+                Some(event) => events.push(event),
+                None => events.push(AiEvent::Unknown(untrusted(raw_line)?)),
             }
+        } else if status != "completed" {
+            events.push(AiEvent::Unknown(untrusted(raw_line)?));
         }
         self.turn_delta_state = TurnDeltaState::NoneYet;
         Ok(events)
     }
 }
 
+fn is_mcp_status_list_result(result: &Map<String, Value>) -> bool {
+    let Some(data) = result.get("data") else {
+        return false;
+    };
+    let Some(items) = data.as_array() else {
+        return true;
+    };
+    if items.is_empty() {
+        return true;
+    }
+    items.iter().any(|entry| match entry.as_object() {
+        None => true,
+        Some(obj) => {
+            obj.contains_key("name")
+                || obj.contains_key("runtimeStatus")
+                || obj.contains_key("status")
+                || obj.contains_key("tools")
+        }
+    })
+}
+
+fn optional_str<'value>(
+    object: &'value Map<String, Value>,
+    key: &str,
+    field: FieldName,
+) -> Result<Option<&'value str>, StreamDecodeError> {
+    match object.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text.as_str())),
+        Some(Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_)) => Err(
+            StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(field)),
+        ),
+    }
+}
+
+fn optional_object<'value>(
+    object: &'value Map<String, Value>,
+    key: &str,
+    field: FieldName,
+) -> Result<Option<&'value Map<String, Value>>, StreamDecodeError> {
+    match object.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Object(map)) => Ok(Some(map)),
+        Some(Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_)) => Err(
+            StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(field)),
+        ),
+    }
+}
+
 fn extract_turn_failure_rate_limit(
     error_value: Option<&Value>,
 ) -> Result<Option<AiEvent>, StreamDecodeError> {
-    let Some(Value::Object(error_obj)) = error_value else {
-        return Ok(None);
+    let error_obj = match error_value {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Object(obj)) => obj,
+        Some(Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_)) => {
+            return Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+                FieldName::Error,
+            )));
+        }
     };
     let info = extract_codex_error_info(error_obj)?;
     if matches_rate_limit_code(info) != LimitCodeMatch::RateLimited {
@@ -496,29 +721,6 @@ fn handle_token_usage(params: &Map<String, Value>) -> Result<Vec<AiEvent>, Strea
     Ok(vec![AiEvent::TokenUsage(parse_token_usage_camel(usage)?)])
 }
 
-fn handle_model_rerouted(params: &Map<String, Value>) -> Result<Vec<AiEvent>, StreamDecodeError> {
-    let raw_model = match params.get("toModel").or_else(|| params.get("model")) {
-        Some(Value::String(text)) => text.as_str(),
-        Some(
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_),
-        ) => {
-            return Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
-                FieldName::Model,
-            )));
-        }
-        None => {
-            return Err(StreamDecodeError::Schema(SchemaFailure::MissingField(
-                FieldName::Model,
-            )));
-        }
-    };
-    let model = parse_model_name(raw_model)?;
-    Ok(vec![
-        AiEvent::ModelRerouted(model.clone()),
-        AiEvent::ActualModel(model),
-    ])
-}
-
 fn handle_error_notification(
     params: &Map<String, Value>,
     raw_line: &str,
@@ -529,6 +731,45 @@ fn handle_error_notification(
         return Ok(vec![AiEvent::RateLimited { resets_at }]);
     }
     Ok(vec![AiEvent::Unknown(untrusted(raw_line)?)])
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LimitReached {
+    Yes,
+    No,
+}
+
+fn parse_limit_reached(
+    rate_limits: &Map<String, Value>,
+) -> Result<LimitReached, StreamDecodeError> {
+    match rate_limits.get("rateLimitReachedType") {
+        None | Some(Value::Null) => Ok(LimitReached::No),
+        Some(Value::String(text)) if !text.is_empty() => Ok(LimitReached::Yes),
+        Some(
+            Value::String(_)
+            | Value::Bool(_)
+            | Value::Number(_)
+            | Value::Array(_)
+            | Value::Object(_),
+        ) => Err(StreamDecodeError::Schema(SchemaFailure::InvalidFieldType(
+            FieldName::RateLimitReachedType,
+        ))),
+    }
+}
+
+fn extract_window_utilization(
+    window: Option<&Map<String, Value>>,
+) -> Result<Option<application::Utilization>, StreamDecodeError> {
+    let Some(map) = window else {
+        return Ok(None);
+    };
+    let Some(used_percent) = map.get("usedPercent") else {
+        return Ok(None);
+    };
+    if used_percent.is_null() {
+        return Ok(None);
+    }
+    parse_used_percent(used_percent, FieldName::UsedPercent).map(Some)
 }
 
 fn handle_rate_limits_payload(
@@ -548,31 +789,44 @@ fn handle_rate_limits_payload(
         return Ok(vec![AiEvent::Quota(AiUsage::Unknown)]);
     }
     let rate_limits = required_object(payload, "rateLimits", FieldName::RateLimits)?;
-    let primary = rate_limits.get("primary").and_then(Value::as_object);
-    let resets_at = match primary {
+    let primary = optional_object(rate_limits, "primary", FieldName::RateLimits)?;
+    let secondary = optional_object(rate_limits, "secondary", FieldName::RateLimits)?;
+    let primary_reset = match primary {
         Some(window) => parse_reset_time(window.get("resetsAt"), FieldName::ResetsAt)?,
         None => ResetTime::NotProvided,
     };
-    let limit_reached = rate_limits
-        .get("rateLimitReachedType")
-        .is_some_and(|value| !value.is_null());
-    if ordinary == OrdinaryUsage::Disallowed || limit_reached {
+    let secondary_reset = match secondary {
+        Some(window) => parse_reset_time(window.get("resetsAt"), FieldName::ResetsAt)?,
+        None => ResetTime::NotProvided,
+    };
+    let resets_at = match primary_reset {
+        ResetTime::Known(ts) => ResetTime::Known(ts),
+        ResetTime::NotProvided => secondary_reset,
+    };
+    let limit_reached = parse_limit_reached(rate_limits)?;
+    if ordinary == OrdinaryUsage::Disallowed || limit_reached == LimitReached::Yes {
         return Ok(vec![
             AiEvent::Quota(AiUsage::Waiting(resets_at)),
             AiEvent::RateLimited { resets_at },
         ]);
     }
-    let Some(window) = primary else {
-        return Ok(vec![AiEvent::Quota(AiUsage::Unknown)]);
+    let primary_util = extract_window_utilization(primary)?;
+    let secondary_util = extract_window_utilization(secondary)?;
+    let max_util = match (primary_util, secondary_util) {
+        (Some(left), Some(right)) => {
+            if right.as_probability() > left.as_probability() {
+                Some(right)
+            } else {
+                Some(left)
+            }
+        }
+        (Some(only), None) | (None, Some(only)) => Some(only),
+        (None, None) => None,
     };
-    let Some(used_percent) = window.get("usedPercent") else {
-        return Ok(vec![AiEvent::Quota(AiUsage::Unknown)]);
-    };
-    if used_percent.is_null() {
-        return Ok(vec![AiEvent::Quota(AiUsage::Unknown)]);
+    match max_util {
+        Some(utilization) => Ok(vec![AiEvent::Quota(AiUsage::Available(utilization))]),
+        None => Ok(vec![AiEvent::Quota(AiUsage::Unknown)]),
     }
-    let utilization = parse_used_percent(used_percent, FieldName::UsedPercent)?;
-    Ok(vec![AiEvent::Quota(AiUsage::Available(utilization))])
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

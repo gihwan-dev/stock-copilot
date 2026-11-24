@@ -262,21 +262,28 @@ fn version_matches(snapshot: &InitSnapshot, expectation: &IsolationExpectation) 
     }
 }
 
-pub(crate) fn evaluate_init_isolation(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ActiveRecheckOutcome {
+    Passed,
+    ExpectedMcpDown,
+    Regressed(IsolationFailure),
+}
+
+fn evaluate_non_mcp_non_tool_isolation(
     snapshot: &InitSnapshot,
     expectation: &IsolationExpectation,
-) -> IsolationCheck {
+) -> Option<IsolationFailure> {
     if snapshot.api_key_source != "none" {
-        return IsolationCheck::Rejected(IsolationFailure::ApiKeySource);
+        return Some(IsolationFailure::ApiKeySource);
     }
     if snapshot.permission_mode != "dontAsk" {
-        return IsolationCheck::Rejected(IsolationFailure::PermissionMode);
+        return Some(IsolationFailure::PermissionMode);
     }
     if !snapshot.skills.is_empty() {
-        return IsolationCheck::Rejected(IsolationFailure::Skills);
+        return Some(IsolationFailure::Skills);
     }
     if !snapshot.slash_commands.is_empty() {
-        return IsolationCheck::Rejected(IsolationFailure::SlashCommands);
+        return Some(IsolationFailure::SlashCommands);
     }
     if snapshot.plugin_errors > 0_usize
         || !snapshot
@@ -284,7 +291,22 @@ pub(crate) fn evaluate_init_isolation(
             .iter()
             .all(|plugin| expectation.allowed_builtin_plugins.contains(plugin))
     {
-        return IsolationCheck::Rejected(IsolationFailure::Plugins);
+        return Some(IsolationFailure::Plugins);
+    }
+    if version_matches(snapshot, expectation) == MatchOutcome::Mismatched {
+        return Some(IsolationFailure::CliVersion);
+    }
+    None
+}
+
+pub(crate) fn evaluate_init_isolation(
+    snapshot: &InitSnapshot,
+    expectation: &IsolationExpectation,
+) -> IsolationCheck {
+    if let Some(failure) = evaluate_non_mcp_non_tool_isolation(snapshot, expectation)
+        && failure != IsolationFailure::CliVersion
+    {
+        return IsolationCheck::Rejected(failure);
     }
     if mcp_servers_match(snapshot, expectation) == MatchOutcome::Mismatched {
         return IsolationCheck::Rejected(IsolationFailure::McpServers);
@@ -296,4 +318,56 @@ pub(crate) fn evaluate_init_isolation(
         return IsolationCheck::Rejected(IsolationFailure::CliVersion);
     }
     IsolationCheck::Passed
+}
+
+pub(crate) fn evaluate_active_init_recheck(
+    snapshot: &InitSnapshot,
+    expectation: &IsolationExpectation,
+) -> ActiveRecheckOutcome {
+    if let Some(failure) = evaluate_non_mcp_non_tool_isolation(snapshot, expectation) {
+        return ActiveRecheckOutcome::Regressed(failure);
+    }
+    let unique_tools: BTreeSet<String> = snapshot.tools.iter().cloned().collect();
+    if unique_tools.len() != snapshot.tools.len()
+        || !unique_tools.is_subset(&expectation.expected_tools)
+    {
+        return ActiveRecheckOutcome::Regressed(IsolationFailure::Tools);
+    }
+    match (expectation.run_kind, expectation.expected_mcp_server()) {
+        (RunKind::Collection, _) => {
+            if snapshot.mcp_server_errors > 0_usize || !snapshot.mcp_servers.is_empty() {
+                return ActiveRecheckOutcome::Regressed(IsolationFailure::McpServers);
+            }
+            if unique_tools == expectation.expected_tools {
+                ActiveRecheckOutcome::Passed
+            } else {
+                ActiveRecheckOutcome::Regressed(IsolationFailure::Tools)
+            }
+        }
+        (RunKind::Analysis, None) => ActiveRecheckOutcome::Regressed(IsolationFailure::McpServers),
+        (RunKind::Analysis, Some(expected_name)) => {
+            let has_unexpected_server = snapshot.mcp_servers.len() > 1_usize
+                || snapshot
+                    .mcp_servers
+                    .iter()
+                    .any(|server| server.name != expected_name);
+            if has_unexpected_server {
+                return ActiveRecheckOutcome::Regressed(IsolationFailure::McpServers);
+            }
+            let expected_connected = snapshot.mcp_server_errors == 0_usize
+                && snapshot
+                    .mcp_servers
+                    .first()
+                    .is_some_and(|server| server.status == "connected");
+            if expected_connected {
+                if unique_tools == expectation.expected_tools {
+                    ActiveRecheckOutcome::Passed
+                } else {
+                    ActiveRecheckOutcome::Regressed(IsolationFailure::Tools)
+                }
+            } else {
+                ActiveRecheckOutcome::ExpectedMcpDown
+            }
+        }
+    }
 }

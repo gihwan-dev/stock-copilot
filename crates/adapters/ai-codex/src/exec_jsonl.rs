@@ -63,10 +63,15 @@ impl CodexExecDecoder {
             });
         }
         let mut prefix = Vec::new();
-        if let Some(first) = self.take_initial_event() {
-            prefix.push(first);
-        }
-        if self.state == EmissionState::TerminatedAfterRejection {
+        if self.state == EmissionState::PendingInitial {
+            let first = self.take_initial_event();
+            if self.state == EmissionState::TerminatedAfterRejection {
+                return Ok(first.into_iter().collect());
+            }
+            if let Some(event) = first {
+                prefix.push(event);
+            }
+        } else if self.state == EmissionState::TerminatedAfterRejection {
             return Err(StreamDecodeError::Order(
                 StreamOrderError::EventAfterRejection,
             ));
@@ -93,10 +98,18 @@ impl CodexExecDecoder {
     }
 
     pub fn finish(self) -> Result<(), StreamDecodeError> {
-        if self.pending_tools.is_empty() {
-            Ok(())
-        } else {
-            Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall))
+        match self.state {
+            EmissionState::PendingInitial => Err(StreamDecodeError::Order(
+                StreamOrderError::MissingInitialIsolationCheck,
+            )),
+            EmissionState::TerminatedAfterRejection => Ok(()),
+            EmissionState::Active => {
+                if self.pending_tools.is_empty() {
+                    Ok(())
+                } else {
+                    Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall))
+                }
+            }
         }
     }
 
@@ -242,9 +255,24 @@ impl CodexExecDecoder {
         object: &Map<String, Value>,
         raw_line: &str,
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
-        self.pending_tools.clear();
         let error_obj = required_object(object, "error", FieldName::Error)?;
-        handle_exec_error(error_obj, raw_line)
+        let mut events = self.drain_failed_pending_tools()?;
+        events.extend(handle_exec_error(error_obj, raw_line)?);
+        Ok(events)
+    }
+
+    fn drain_failed_pending_tools(&mut self) -> Result<Vec<AiEvent>, StreamDecodeError> {
+        let mut events = Vec::new();
+        while let Some((_id, tool)) = self.pending_tools.pop_first() {
+            events.push(AiEvent::ToolCall {
+                server: tool.server,
+                tool: tool.tool,
+                args: tool.args,
+                result: untrusted("turn_failed")?,
+                status: ToolStatus::Failed,
+            });
+        }
+        Ok(events)
     }
 }
 

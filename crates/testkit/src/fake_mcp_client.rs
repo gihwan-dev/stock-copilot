@@ -69,20 +69,36 @@ impl JsonRpcChannel {
         }
     }
 
-    fn read_response(&mut self) -> io::Result<Value> {
-        let mut line = String::new();
-        let count = match self {
-            Self::StdioChild { reader, .. } => reader.read_line(&mut line)?,
-            Self::Unix { reader, .. } => reader.read_line(&mut line)?,
-        };
-        if count == 0_usize {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "mcp peer closed connection before response",
-            ));
+    fn read_response(&mut self, expected_id: u64) -> io::Result<Value> {
+        for _attempt in 0_usize..64_usize {
+            let mut line = String::new();
+            let count = match self {
+                Self::StdioChild { reader, .. } => reader.read_line(&mut line)?,
+                Self::Unix { reader, .. } => reader.read_line(&mut line)?,
+            };
+            if count == 0_usize {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "mcp peer closed connection before response",
+                ));
+            }
+            let parsed: Value = serde_json::from_str(line.trim_end_matches(['\r', '\n']))
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+            if parsed.get("id").is_none() && parsed.get("method").is_some() {
+                continue;
+            }
+            if parsed.get("id").and_then(Value::as_u64) != Some(expected_id) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "mcp response id mismatch",
+                ));
+            }
+            return Ok(parsed);
         }
-        serde_json::from_str(line.trim_end_matches(['\r', '\n']))
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "too many mcp notifications before response",
+        ))
     }
 
     fn close(mut self) {
@@ -107,6 +123,11 @@ struct StdioServerConfig {
     env: BTreeMap<String, String>,
 }
 
+enum ResolvedTransport {
+    Stdio(StdioServerConfig),
+    UnixSocket { socket_path: std::path::PathBuf },
+}
+
 pub(crate) fn run_stdio_unix_bridge(
     socket_path: &Path,
     token: Option<&RedactedToken>,
@@ -119,7 +140,7 @@ pub(crate) fn run_stdio_unix_bridge(
     }
     let mut reader = writer.try_clone()?;
     let shutdown_handle = writer.try_clone()?;
-    let _up = thread::spawn(move || {
+    let up_handle = thread::spawn(move || {
         let mut stdin = io::stdin().lock();
         let copy_res = io::copy(&mut stdin, &mut writer);
         match writer.shutdown(std::net::Shutdown::Write) {
@@ -127,16 +148,37 @@ pub(crate) fn run_stdio_unix_bridge(
         }
         copy_res
     });
-    let down_result = {
+    let down_result: io::Result<u64> = {
         let mut stdout = io::stdout().lock();
-        let copy_res = io::copy(&mut reader, &mut stdout);
-        let flush_res = stdout.flush();
-        copy_res.and(flush_res)
+        let copied = io::copy(&mut reader, &mut stdout)?;
+        stdout.flush()?;
+        Ok(copied)
     };
     match shutdown_handle.shutdown(std::net::Shutdown::Both) {
         Ok(()) | Err(_) => {}
     }
-    down_result
+    if up_handle.is_finished() {
+        match up_handle.join() {
+            Ok(Ok(_bytes)) => {}
+            Ok(Err(error)) => {
+                if down_result.is_err() {
+                    return down_result.map(|_count| ());
+                }
+                if error.kind() != io::ErrorKind::BrokenPipe {
+                    return Err(error);
+                }
+            }
+            Err(_panic) => return Err(io::Error::other("mcp bridge upload thread panicked")),
+        }
+    }
+    let received_bytes = down_result?;
+    if received_bytes == 0_u64 {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "mcp bridge closed before any response",
+        ));
+    }
+    Ok(())
 }
 
 enum McpConnection {
@@ -171,10 +213,17 @@ pub(crate) fn run_scripted_mcp_mode(
     raw_args: &[OsString],
     env: &ProcessEnvironment,
 ) -> io::Result<RunOutcome> {
-    let connection = match connect_and_list_mcp(scenario, raw_args, env.mcp_token.as_ref()) {
-        Ok((channel, tools)) => McpConnection::Connected { channel, tools },
-        Err(_error) => McpConnection::Failed,
-    };
+    let resolved = resolve_transport(
+        &scenario.transport,
+        &scenario.server_name,
+        raw_args,
+        env.mcp_token.as_ref(),
+    )?;
+    let connection =
+        match connect_and_list_mcp(&resolved, scenario.protocol, env.mcp_token.as_ref()) {
+            Ok((channel, tools)) => McpConnection::Connected { channel, tools },
+            Err(_error) => McpConnection::Failed,
+        };
     if matches_failed_connection(&connection)
         && let McpFailureBehavior::ExitWithCode(code) = scenario.on_mcp_failure
     {
@@ -198,17 +247,36 @@ fn matches_failed_connection(connection: &McpConnection) -> bool {
     }
 }
 
-fn connect_and_list_mcp(
-    scenario: &McpClientScenario,
+fn resolve_transport(
+    transport: &McpTransportSpec,
+    server_name: &str,
     raw_args: &[OsString],
     token: Option<&RedactedToken>,
+) -> io::Result<ResolvedTransport> {
+    match transport {
+        McpTransportSpec::FromClaudeMcpConfig => {
+            parse_claude_mcp_config(raw_args, server_name, token).map(ResolvedTransport::Stdio)
+        }
+        McpTransportSpec::FromCodexConfigFlags => {
+            parse_codex_mcp_flags(raw_args, server_name, token).map(ResolvedTransport::Stdio)
+        }
+        McpTransportSpec::DirectUnixSocket { socket_path } => Ok(ResolvedTransport::UnixSocket {
+            socket_path: socket_path.clone(),
+        }),
+    }
+}
+
+fn connect_and_list_mcp(
+    transport: &ResolvedTransport,
+    protocol: McpProtocolGeneration,
+    token: Option<&RedactedToken>,
 ) -> io::Result<(JsonRpcChannel, Vec<String>)> {
-    let mut channel = open_channel(&scenario.transport, &scenario.server_name, raw_args, token)?;
-    if let Err(error) = perform_handshake(&mut channel, scenario.protocol) {
+    let mut channel = open_channel(transport, token)?;
+    if let Err(error) = perform_handshake(&mut channel, protocol) {
         channel.close();
         return Err(error);
     }
-    let tools = match list_tools(&mut channel) {
+    let tools = match list_tools(&mut channel, protocol) {
         Ok(found) => found,
         Err(error) => {
             channel.close();
@@ -220,6 +288,7 @@ fn connect_and_list_mcp(
 
 fn finalize_connection(
     connection: McpConnection,
+    protocol: McpProtocolGeneration,
     tool_calls: &[ScriptedToolCall],
 ) -> io::Result<McpSessionState> {
     match connection {
@@ -228,7 +297,7 @@ fn finalize_connection(
             let mut executed = Vec::new();
             let mut next_id = 3_u64;
             for (index, call) in tool_calls.iter().enumerate() {
-                match execute_single_tool_call(&mut channel, next_id, index, call) {
+                match execute_single_tool_call(&mut channel, protocol, next_id, index, call) {
                     Ok(record) => {
                         executed.push(record);
                         next_id = next_id.saturating_add(1_u64);
@@ -250,7 +319,7 @@ fn run_immediate_mcp(
     connection: McpConnection,
     env: &ProcessEnvironment,
 ) -> io::Result<RunOutcome> {
-    let session = finalize_connection(connection, &scenario.tool_calls)?;
+    let session = finalize_connection(connection, scenario.protocol, &scenario.tool_calls)?;
     let lines = build_full_session_lines(scenario, &session, env)?;
     write_stdout_lines(&lines)?;
     let (tools, calls) = session_summary(session);
@@ -304,7 +373,7 @@ fn run_preflight_mcp(
         second_buf.trim_end_matches(['\r', '\n']),
         env.mcp_token.as_ref(),
     ));
-    let session = finalize_connection(connection, &scenario.tool_calls)?;
+    let session = finalize_connection(connection, scenario.protocol, &scenario.tool_calls)?;
     let body_lines = build_body_only_lines(scenario, &session)?;
     write_stdout_lines(&body_lines)?;
     let (tools, calls) = session_summary(session);
@@ -324,21 +393,12 @@ fn session_summary(session: McpSessionState) -> (Vec<String>, usize) {
 }
 
 fn open_channel(
-    transport: &McpTransportSpec,
-    server_name: &str,
-    raw_args: &[OsString],
+    transport: &ResolvedTransport,
     token: Option<&RedactedToken>,
 ) -> io::Result<JsonRpcChannel> {
     match transport {
-        McpTransportSpec::FromClaudeMcpConfig => {
-            let config = parse_claude_mcp_config(raw_args, server_name, token)?;
-            spawn_stdio_server(&config)
-        }
-        McpTransportSpec::FromCodexConfigFlags => {
-            let config = parse_codex_mcp_flags(raw_args, server_name, token)?;
-            spawn_stdio_server(&config)
-        }
-        McpTransportSpec::DirectUnixSocket { socket_path } => {
+        ResolvedTransport::Stdio(config) => spawn_stdio_server(config),
+        ResolvedTransport::UnixSocket { socket_path } => {
             let mut writer = UnixStream::connect(socket_path)?;
             if let Some(secret) = token {
                 let auth_line = format!("AUTH {}\n", secret.expose_for_auth());
@@ -379,6 +439,13 @@ fn spawn_stdio_server(config: &StdioServerConfig) -> io::Result<JsonRpcChannel> 
     })
 }
 
+fn v2026_meta() -> Value {
+    json!({
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "clientCapabilities": {}
+    })
+}
+
 fn perform_handshake(
     channel: &mut JsonRpcChannel,
     protocol: McpProtocolGeneration,
@@ -390,12 +457,11 @@ fn perform_handshake(
                 "id": 1_u64,
                 "method": "server/discover",
                 "params": {
-                    "protocolVersion": "2026-07-28",
-                    "clientInfo": { "name": "fake-claude-code", "version": "2.1.322" }
+                    "_meta": v2026_meta()
                 }
             });
             channel.send_json(&discover)?;
-            let reply = channel.read_response()?;
+            let reply = channel.read_response(1_u64)?;
             require_rpc_result(&reply)
         }
         McpProtocolGeneration::V2025_06_18 => {
@@ -410,7 +476,7 @@ fn perform_handshake(
                 }
             });
             channel.send_json(&initialize)?;
-            let reply = channel.read_response()?;
+            let reply = channel.read_response(1_u64)?;
             require_rpc_result(&reply)?;
             let initialized = json!({
                 "jsonrpc": "2.0",
@@ -421,15 +487,22 @@ fn perform_handshake(
     }
 }
 
-fn list_tools(channel: &mut JsonRpcChannel) -> io::Result<Vec<String>> {
+fn list_tools(
+    channel: &mut JsonRpcChannel,
+    protocol: McpProtocolGeneration,
+) -> io::Result<Vec<String>> {
+    let params = match protocol {
+        McpProtocolGeneration::V2026_07_28 => json!({ "_meta": v2026_meta() }),
+        McpProtocolGeneration::V2025_06_18 => json!({}),
+    };
     let request = json!({
         "jsonrpc": "2.0",
         "id": 2_u64,
         "method": "tools/list",
-        "params": {}
+        "params": params
     });
     channel.send_json(&request)?;
-    let reply = channel.read_response()?;
+    let reply = channel.read_response(2_u64)?;
     require_rpc_result(&reply)?;
     let tools_array = reply
         .get("result")
@@ -449,21 +522,30 @@ fn list_tools(channel: &mut JsonRpcChannel) -> io::Result<Vec<String>> {
 
 fn execute_single_tool_call(
     channel: &mut JsonRpcChannel,
+    protocol: McpProtocolGeneration,
     request_id: u64,
     index: usize,
     call: &ScriptedToolCall,
 ) -> io::Result<ExecutedToolCall> {
+    let params = match protocol {
+        McpProtocolGeneration::V2026_07_28 => json!({
+            "name": call.name,
+            "arguments": call.arguments,
+            "_meta": v2026_meta()
+        }),
+        McpProtocolGeneration::V2025_06_18 => json!({
+            "name": call.name,
+            "arguments": call.arguments
+        }),
+    };
     let request = json!({
         "jsonrpc": "2.0",
         "id": request_id,
         "method": "tools/call",
-        "params": {
-            "name": call.name,
-            "arguments": call.arguments,
-        }
+        "params": params
     });
     channel.send_json(&request)?;
-    let reply = channel.read_response()?;
+    let reply = channel.read_response(request_id)?;
     let call_id = format!("toolu_fake_{}", index.saturating_add(1_usize));
     if let Some(error_obj) = reply.get("error") {
         let encoded = serde_json::to_string(error_obj)
@@ -572,6 +654,15 @@ fn expand_claude_env_map(
             if let Some(secret) = token {
                 expanded.insert(key.clone(), String::from(secret.expose_for_auth()));
             }
+        } else if raw_text.contains("${STOCK_MCP_TOKEN}") {
+            let replacement = match token {
+                Some(secret) => secret.expose_for_auth(),
+                None => "",
+            };
+            expanded.insert(
+                key.clone(),
+                raw_text.replace("${STOCK_MCP_TOKEN}", replacement),
+            );
         } else {
             expanded.insert(key.clone(), String::from(raw_text));
         }
@@ -633,26 +724,126 @@ fn apply_codex_config_entry(
 ) -> io::Result<()> {
     match key {
         "command" => {
-            let parsed: Value = serde_json::from_str(raw_val)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            let text = parsed
-                .as_str()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "command must be str"))?;
-            *command = Some(String::from(text));
+            *command = Some(parse_toml_or_bare_string(raw_val)?);
         }
         "args" => {
-            let parsed: Value = serde_json::from_str(raw_val)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            *args = parse_json_string_array(Some(&parsed))?;
+            *args = parse_toml_string_array(raw_val)?;
         }
         "env_vars" => {
-            let parsed: Value = serde_json::from_str(raw_val)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            *env_vars = parse_json_string_array(Some(&parsed))?;
+            *env_vars = parse_toml_string_array(raw_val)?;
         }
         _ => {}
     }
     Ok(())
+}
+
+enum QuoteEscape {
+    Plain,
+    Escaped,
+}
+
+fn parse_toml_or_bare_string(raw_val: &str) -> io::Result<String> {
+    let trimmed = raw_val.trim();
+    if trimmed.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "command must not be empty",
+        ));
+    }
+    if trimmed.starts_with('"') {
+        let parsed: Value = serde_json::from_str(trimmed)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        return parsed
+            .as_str()
+            .map(String::from)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "command must be str"));
+    }
+    if let Some(inner) = trimmed
+        .strip_prefix('\'')
+        .and_then(|rest| rest.strip_suffix('\''))
+    {
+        if inner.contains('\'') {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid single-quoted string",
+            ));
+        }
+        return Ok(String::from(inner));
+    }
+    if trimmed.starts_with('[') || trimmed.starts_with('{') || trimmed.starts_with('\'') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "command must be str",
+        ));
+    }
+    Ok(String::from(trimmed))
+}
+
+fn parse_toml_string_array(raw_val: &str) -> io::Result<Vec<String>> {
+    let trimmed = raw_val.trim();
+    if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+        return parse_json_string_array(Some(&parsed));
+    }
+    let inner = trimmed
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "expected string array"))?;
+    let mut output = Vec::new();
+    let mut rest = inner.trim();
+    while !rest.is_empty() {
+        let (item, after) = parse_next_toml_array_string(rest)?;
+        output.push(item);
+        rest = after.trim();
+        if let Some(next) = rest.strip_prefix(',') {
+            rest = next.trim();
+        } else if !rest.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "expected comma in string array",
+            ));
+        }
+    }
+    Ok(output)
+}
+
+fn parse_next_toml_array_string(rest: &str) -> io::Result<(String, &str)> {
+    if let Some(after_open) = rest.strip_prefix('\'') {
+        let (item, after_close) = after_open.split_once('\'').ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "unterminated single quote")
+        })?;
+        return Ok((String::from(item), after_close));
+    }
+    if rest.starts_with('"') {
+        return parse_double_quoted_prefix(rest);
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        "array item must be quoted str",
+    ))
+}
+
+fn parse_double_quoted_prefix(rest: &str) -> io::Result<(String, &str)> {
+    let mut state = QuoteEscape::Plain;
+    let mut closing_end = None;
+    for (idx, ch) in rest.char_indices().skip(1_usize) {
+        match state {
+            QuoteEscape::Escaped => state = QuoteEscape::Plain,
+            QuoteEscape::Plain if ch == '\\' => state = QuoteEscape::Escaped,
+            QuoteEscape::Plain if ch == '"' => {
+                closing_end = Some(idx.saturating_add(1_usize));
+                break;
+            }
+            QuoteEscape::Plain => {}
+        }
+    }
+    let end = closing_end
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "unterminated double quote"))?;
+    let (literal, after) = rest
+        .split_at_checked(end)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid quote boundary"))?;
+    let decoded: String = serde_json::from_str(literal)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok((decoded, after))
 }
 
 fn parse_json_string_array(value: Option<&Value>) -> io::Result<Vec<String>> {
