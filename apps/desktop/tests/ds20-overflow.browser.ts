@@ -2442,3 +2442,174 @@ describe("DS-23 layout, numeric preservation, and scroll area guarantees", () =>
     expect(inspectOverflow(doc)).toEqual([]);
   }, 20000);
 });
+
+describe("DS-11 layout components, container-query bands, and child min-width guarantees", () => {
+  it("switches GridItem column spans by container width across narrow, medium, and wide bands", async () => {
+    const { doc, slot } = await catalogStory(
+      "Grid",
+      "Light0",
+      "normal",
+      "100%",
+    );
+    const frame = doc.defaultView?.frameElement;
+    const view = doc.defaultView;
+    if (!(frame instanceof HTMLIFrameElement) || view === null)
+      throw new Error("grid frame missing");
+    const flush = (): Promise<void> =>
+      new Promise<void>((resolve) =>
+        view.requestAnimationFrame(() =>
+          view.requestAnimationFrame(() => resolve()),
+        ),
+      );
+    const items = (): HTMLElement[] => {
+      const grid = slot.querySelector<HTMLElement>(".grid-cols-layout");
+      if (grid === null) throw new Error("grid container missing");
+      return [...grid.children] as HTMLElement[];
+    };
+    const setContainerWidth = async (widthPx: number): Promise<void> => {
+      frame.width = `${widthPx + 120}`;
+      slot.style.boxSizing = "content-box";
+      slot.style.width = `${widthPx}px`;
+      await flush();
+    };
+
+    await setContainerWidth(640);
+    const narrowItems = items();
+    expect(narrowItems).toHaveLength(3);
+    expect(getComputedStyle(narrowItems[0]!).gridColumnStart).toBe("span 12");
+    expect(
+      Math.round(narrowItems[1]!.getBoundingClientRect().top),
+    ).toBeGreaterThan(Math.round(narrowItems[0]!.getBoundingClientRect().top));
+    expect(inspectOverflow(doc)).toEqual([]);
+
+    await setContainerWidth(900);
+    const mediumItems = items();
+    expect(getComputedStyle(mediumItems[0]!).gridColumnStart).toBe("span 6");
+    expect(getComputedStyle(mediumItems[1]!).gridColumnStart).toBe("span 6");
+    expect(getComputedStyle(mediumItems[2]!).gridColumnStart).toBe("span 12");
+    expect(
+      Math.abs(
+        mediumItems[0]!.getBoundingClientRect().top -
+          mediumItems[1]!.getBoundingClientRect().top,
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.round(mediumItems[2]!.getBoundingClientRect().top),
+    ).toBeGreaterThan(Math.round(mediumItems[0]!.getBoundingClientRect().top));
+    expect(inspectOverflow(doc)).toEqual([]);
+
+    await setContainerWidth(1200);
+    const wideItems = items();
+    expect(getComputedStyle(wideItems[0]!).gridColumnStart).toBe("span 4");
+    expect(getComputedStyle(wideItems[1]!).gridColumnStart).toBe("span 4");
+    expect(getComputedStyle(wideItems[2]!).gridColumnStart).toBe("span 4");
+    expect(
+      Math.abs(
+        wideItems[0]!.getBoundingClientRect().top -
+          wideItems[2]!.getBoundingClientRect().top,
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect(inspectOverflow(doc)).toEqual([]);
+  }, 20000);
+
+  it.each([
+    ["Stack", "Light5"],
+    ["Inline", "Light3"],
+    ["Inline", "Light4"],
+    ["Split", "Light5"],
+    ["GridItem", "Light7"],
+  ])(
+    "keeps %s (%s) child min-width:0 wrappers free of overflow with long unbroken text",
+    async (component, story) => {
+      for (const width of ["normal", "narrow"] as const) {
+        const { doc, slot } = await catalogStory(
+          component,
+          story,
+          width,
+          "125%",
+        );
+        const wrappers = [
+          ...slot.querySelectorAll<HTMLElement>(".scroll-flex"),
+        ];
+        expect(wrappers.length).toBeGreaterThan(0);
+        for (const wrapper of wrappers) {
+          const style = getComputedStyle(wrapper);
+          if (!wrapper.classList.contains("wrap-slot"))
+            expect(style.minWidth).toBe("0px");
+          expect(style.minHeight).toBe("0px");
+        }
+        expect(inspectOverflow(doc)).toEqual([]);
+      }
+    },
+    20000,
+  );
+
+  it.each([
+    ["Light0", 232],
+    ["Light1", 56],
+    ["Light2", 384],
+    ["Light3", 320],
+  ])(
+    "sizes Split fixed pane (%s) to %dpx at wide width and wraps cleanly at narrow width",
+    async (story, expectedPx) => {
+      const wide = await catalogStory("Split", story, "normal", "100%");
+      const splitWide = wide.slot.querySelector<HTMLElement>(
+        "[data-catalog-content] > div",
+      );
+      if (splitWide === null) throw new Error("split missing");
+      const fixedWide = splitWide.children[0] as HTMLElement;
+      const flexWide = splitWide.children[1] as HTMLElement;
+      expect(Math.round(fixedWide.getBoundingClientRect().width)).toBe(
+        expectedPx,
+      );
+      expect(
+        Math.abs(
+          fixedWide.getBoundingClientRect().top -
+            flexWide.getBoundingClientRect().top,
+        ),
+      ).toBeLessThanOrEqual(1);
+      expect(inspectOverflow(wide.doc)).toEqual([]);
+
+      const narrow = await catalogStory("Split", story, "narrow", "125%");
+      expect(inspectOverflow(narrow.doc)).toEqual([]);
+    },
+    20000,
+  );
+
+  it("renders horizontal and vertical Divider cleanly and stretches vertical Divider inside Toolbar", async () => {
+    const horizontal = await catalogStory(
+      "Divider",
+      "Light0",
+      "normal",
+      "100%",
+    );
+    const sepH =
+      horizontal.slot.querySelector<HTMLElement>('[role="separator"]');
+    if (sepH === null) throw new Error("horizontal divider missing");
+    expect(Math.round(sepH.getBoundingClientRect().height)).toBe(1);
+    expect(sepH.getBoundingClientRect().width).toBeGreaterThan(100);
+    expect(inspectOverflow(horizontal.doc)).toEqual([]);
+
+    const toolbar = await catalogStory("Toolbar", "Light0", "normal", "100%");
+    const sepV = toolbar.slot.querySelector<HTMLElement>(
+      '[role="separator"][aria-orientation="vertical"]',
+    );
+    if (sepV === null) throw new Error("vertical divider in toolbar missing");
+    expect(Math.round(sepV.getBoundingClientRect().width)).toBe(1);
+    expect(sepV.getBoundingClientRect().height).toBeGreaterThanOrEqual(28);
+    expect(inspectOverflow(toolbar.doc)).toEqual([]);
+  }, 20000);
+
+  it.each(["Light0", "Light1", "Light2"])(
+    "keeps Page (%s) free of overflow across normal and narrow slots at 100%% and 125%%",
+    async (story) => {
+      for (const width of ["normal", "narrow"] as const) {
+        for (const scale of ["100%", "125%"] as const) {
+          const { doc } = await catalogStory("Page", story, width, scale);
+          expect(inspectOverflow(doc)).toEqual([]);
+        }
+      }
+    },
+    20000,
+  );
+});

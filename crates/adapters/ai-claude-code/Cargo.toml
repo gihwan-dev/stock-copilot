@@ -11,7 +11,9 @@ workspace = true
 application = { path = "../../application" }
 domain = { path = "../../domain" }
 serde_json.workspace = true
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "rt-multi-thread", "sync", "time", "io-util"] }
 
 [dev-dependencies]
 proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
 testkit = { path = "../../testkit" }
+testkit-ports = { path = "../../testkit-ports" }
