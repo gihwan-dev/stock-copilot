@@ -1,10 +1,11 @@
 use application::{
     AccessDenial, AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, AuditEntry, AuditIntegrity,
-    AuditLog, BrokerRead, ChatHistory, ChatQueueAcquisition, ChatQueuePort, ChatRepository,
-    ChatRunLedger, ChatRunLedgerEntry, ChatSessionId, ChatSessionRecord, ChatSessionSummary,
-    CollectedObservation, ConditionalDraftOutcome, DataAvailability, EstimateRepository,
-    FeedCursor, FeedSource, FinancialStatement, Fundamentals, FxRateQuery, HoldingsObservation,
-    HttpStatus, InformationError, IsolationCheck, MacroObservation, MacroSeries, MacroSeriesId,
+    AuditLog, BrokerRead, ChatHistory, ChatNumberEvidence, ChatNumberEvidenceSet,
+    ChatQueueAcquisition, ChatQueuePort, ChatRepository, ChatRunLedger, ChatRunLedgerEntry,
+    ChatSessionId, ChatSessionRecord, ChatSessionSummary, CollectedObservation,
+    ConditionalDraftOutcome, DataAvailability, EstimateRepository, FeedCursor, FeedSource,
+    FinancialStatement, Fundamentals, FxRateQuery, HoldingsObservation, HttpStatus,
+    InformationError, IsolationCheck, MacroObservation, MacroSeries, MacroSeriesId,
     MarketDataRepository, MarketInfo, NewsFeed, NewsMetadata, NewsRepository, Notification,
     Notifier, PortError, PortErrorKind, PortfolioRepository, ProposalRepository, QuoteObservation,
     RankingQuery, ReadEndpoint, RecordOutcome, ResetTime, RetryDelay, RunKind, RunSpec, SecretKey,
@@ -943,6 +944,14 @@ impl ChatRunLedger for Unavailable {
             SystemPort::Repository,
             SystemFailure::Unavailable(RetryDelay::Unknown),
         )))
+    }
+}
+impl ChatNumberEvidence for Unavailable {
+    fn evidence_for_run(
+        &self,
+        _run: &AiRunId,
+    ) -> impl Future<Output = Result<ChatNumberEvidenceSet, SystemPortError>> + Send {
+        std::future::ready(Ok(ChatNumberEvidenceSet::NotConfigured))
     }
 }
 impl ChatQueuePort for Unavailable {

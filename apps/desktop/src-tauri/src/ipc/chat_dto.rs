@@ -1,8 +1,8 @@
 use application::{
     AiRunId, ChatCard, ChatCardKind, ChatChunk, ChatExecutionMode, ChatFailureReason,
-    ChatModelConfig, ChatScreenContext, ChatSessionId, ChatSessionRecord, ChatSource,
-    ChatSourceKind, ChatTurnId, ChatTurnIdentity, ChatTurnStatus, ChatTurnSummary, ModelName,
-    ModelSelection, ReasoningEffort, ResetTime, SendChatOutcome, SendChatRequest,
+    ChatModelConfig, ChatNumberCheck, ChatScreenContext, ChatSessionId, ChatSessionRecord,
+    ChatSource, ChatSourceKind, ChatTurnId, ChatTurnIdentity, ChatTurnStatus, ChatTurnSummary,
+    ModelName, ModelSelection, ReasoningEffort, ResetTime, SendChatOutcome, SendChatRequest,
     StoredChatContent, StoredChatEntry, ToolStatus, UserMessageId,
 };
 use domain::{HorizonSelection, KnownMarket, Symbol, TimeSpan, UntrustedText};
@@ -97,6 +97,13 @@ pub struct CancelChatTurnRequest {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum ChatNumberCheckDto {
+    NoNumbers,
+    Verified,
+    Unverified,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
 pub enum ChatToolStatusDto {
     Running,
     Succeeded,
@@ -186,6 +193,9 @@ pub enum ChatChunkDto {
     },
     Sources {
         items: Vec<ChatSourceDto>,
+    },
+    NumberCheck {
+        status: ChatNumberCheckDto,
     },
     Done {
         session_id: String,
@@ -387,6 +397,22 @@ const fn convert_effort(effort: ChatReasoningEffortDto) -> ReasoningEffort {
         ChatReasoningEffortDto::XHigh => ReasoningEffort::XHigh,
         ChatReasoningEffortDto::Max => ReasoningEffort::Max,
     }
+}
+
+#[must_use]
+pub fn number_check_dto(chunk: &ChatChunk) -> Option<ChatChunkDto> {
+    let ChatChunk::Done(summary) = chunk else {
+        return None;
+    };
+    summary
+        .number_check()
+        .map(|check| ChatChunkDto::NumberCheck {
+            status: match check {
+                ChatNumberCheck::NoNumbers => ChatNumberCheckDto::NoNumbers,
+                ChatNumberCheck::Verified => ChatNumberCheckDto::Verified,
+                ChatNumberCheck::Unverified => ChatNumberCheckDto::Unverified,
+            },
+        })
 }
 
 pub fn chunk_to_dto(chunk: &ChatChunk) -> ChatChunkDto {

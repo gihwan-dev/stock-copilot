@@ -30,6 +30,8 @@ export type ChatCardRef = {
   readonly id: EntityId;
 };
 
+export type ChatNumberCheck = "no-numbers" | "verified" | "unverified";
+
 export type ChatSourceKind = "tool" | "disclosure" | "news" | "web";
 
 export type ChatSource = {
@@ -58,7 +60,8 @@ export type ChatContentChunk =
       readonly status: ChatToolStatus;
     }
   | { readonly kind: "card"; readonly card: ChatCardRef }
-  | { readonly kind: "sources"; readonly items: readonly ChatSource[] };
+  | { readonly kind: "sources"; readonly items: readonly ChatSource[] }
+  | { readonly kind: "number-check"; readonly check: ChatNumberCheck };
 
 export type ChatEndChunk =
   | {

@@ -49,21 +49,21 @@ fn decode_news_source(source: &str) -> rusqlite::Result<NewsSource> {
         _ => Err(invalid(())),
     }
 }
-fn disclosure_source_tag(source: &DisclosureSource) -> &'static str {
+pub(crate) fn disclosure_source_tag(source: &DisclosureSource) -> &'static str {
     match source {
         DisclosureSource::Dart => "dart",
         DisclosureSource::Kind => "kind",
         DisclosureSource::SecEdgar => "sec_edgar",
     }
 }
-fn receipt_text(receipt: &ReceiptNo) -> &str {
+pub(crate) fn receipt_text(receipt: &ReceiptNo) -> &str {
     match receipt {
         ReceiptNo::Dart(value) => value.as_str(),
         ReceiptNo::Kind(value) => value.as_str(),
         ReceiptNo::SecEdgar(value) => value.as_str(),
     }
 }
-fn receipt(source: &str, value: &str) -> rusqlite::Result<ReceiptNo> {
+pub(crate) fn receipt(source: &str, value: &str) -> rusqlite::Result<ReceiptNo> {
     match source {
         "dart" => DartReceiptNo::try_new(value)
             .map(ReceiptNo::Dart)

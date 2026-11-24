@@ -391,6 +391,11 @@ pub use market_tool_reads::{
     OverviewUnit, QuoteToolView, RankingToolKind, RankingToolLine, RankingsToolView,
     SectorToolLine, SectorsToolView, SessionStatus, SessionToolLine, ValueProvenance,
 };
+mod news_tool_reads;
+pub use news_tool_reads::{
+    CollectedItemHandle, CollectedItemQuery, DisclosureToolLine, LookbackDays, NewsKeyword,
+    NewsToolLine, NewsToolReads, ToolQueryTextError,
+};
 mod portfolio_tool_reads;
 pub use portfolio_tool_reads::{
     AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
@@ -602,6 +607,17 @@ pub use chat_types::{
 
 mod chat_ports;
 pub use chat_ports::{ChatChunkSink, ChatQueuePort, ChatRepository, ChatRunLedger, ChatStopSignal};
+
+mod investment_principles;
+pub use investment_principles::{
+    ApplyInvestmentPrinciples, PrinciplesRepository, UpdateInvestmentPrinciples,
+};
+
+mod chat_number_check;
+pub use chat_number_check::{
+    ChatNumberCheck, ChatNumberEvidence, ChatNumberEvidenceSet, NoNumberEvidence,
+    check_chat_numbers,
+};
 
 mod send_chat_message;
 pub use send_chat_message::{

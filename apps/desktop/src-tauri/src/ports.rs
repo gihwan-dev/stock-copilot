@@ -1,11 +1,11 @@
 use crate::database::DatabaseFactory;
 use application::user_presence::UserPresence;
 use application::{
-    AiProvider, AuditLog, BrokerRead, ChatQueuePort, ChatRepository, ChatRunLedger, Clock,
-    EstimateRepository, EventBus, Fundamentals, MacroSeries, MarketDataRepository, MarketInfo,
-    NewsFeed, NewsRepository, Notifier, PortfolioRepository, ProposalRepository, SecretStore,
-    SettingsRepository, SignalRepository, ThesisRepository, TransactionRepository,
-    ValuationRepository, WarmChatRuntime,
+    AiProvider, AuditLog, BrokerRead, ChatNumberEvidence, ChatQueuePort, ChatRepository,
+    ChatRunLedger, Clock, EstimateRepository, EventBus, Fundamentals, MacroSeries,
+    MarketDataRepository, MarketInfo, NewsFeed, NewsRepository, Notifier, PortfolioRepository,
+    ProposalRepository, SecretStore, SettingsRepository, SignalRepository, ThesisRepository,
+    TransactionRepository, ValuationRepository, WarmChatRuntime,
 };
 use domain::AccountId;
 use std::sync::Arc;
@@ -17,7 +17,7 @@ pub trait PortTypes: Send + Sync + 'static {
     type Fundamentals: Fundamentals + 'static;
     type AiProvider: AiProvider + 'static;
     type ChatRepository: ChatRepository + 'static;
-    type ChatRunLedger: ChatRunLedger + 'static;
+    type ChatRunLedger: ChatRunLedger + ChatNumberEvidence + 'static;
     type ChatQueuePort: ChatQueuePort + 'static;
     type WarmChatRuntime: WarmChatRuntime + 'static;
     type PortfolioRepository: PortfolioRepository + 'static;

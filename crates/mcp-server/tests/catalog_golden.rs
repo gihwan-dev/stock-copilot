@@ -9,7 +9,9 @@ mod tests {
     };
     use serde_json::Value;
     use testkit_ports::SteppedClock;
-    use testkit_ports::tool_read_fakes::{FixedMarketToolReads, FixedPortfolioToolReads};
+    use testkit_ports::tool_read_fakes::{
+        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
+    };
 
     fn golden_text() -> String {
         let exe = testkit::test_executable().expect("test executable");
@@ -34,6 +36,7 @@ mod tests {
         let ports = AnalysisCatalogPorts {
             portfolio: Arc::new(FixedPortfolioToolReads::default()),
             market: Arc::new(FixedMarketToolReads::default()),
+            news: Arc::new(FixedNewsToolReads::default()),
         };
         build_analysis_catalog(&ports, &cursors).expect("제품 카탈로그 조립")
     }
