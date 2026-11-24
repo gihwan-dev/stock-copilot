@@ -11,6 +11,7 @@ domain = { path = "../../../crates/domain" }
 platform-macos = { path = "../../../crates/adapters/platform-macos" }
 store-sqlite = { path = "../../../crates/adapters/store-sqlite" }
 broker-toss = { path = "../../../crates/adapters/broker-toss" }
+scheduler = { path = "../../../crates/scheduler" }
 sources = { path = "../../../crates/adapters/sources" }
 tauri = { workspace = true }
 tauri-specta = { workspace = true }
@@ -18,6 +19,7 @@ specta = { workspace = true }
 specta-typescript = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "sync", "time"] }
 
 [build-dependencies]
 tauri-build = { workspace = true }
