@@ -346,6 +346,40 @@ struct SnapshotInputs {
     reported: SnapshotAmounts,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedSnapshotPosition {
+    pub instrument: InstrumentId,
+    pub book: Result<crate::SavedLotBook, LotError>,
+    pub candle: Option<Candle>,
+    pub value: Result<Money, SnapshotError>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedValuationSnapshot {
+    pub dates: SnapshotDates,
+    pub price_dates: SnapshotDates,
+    pub kr_basis: SnapshotPriceBasis,
+    pub us_basis: SnapshotPriceBasis,
+    pub settlement_date: CalendarDate,
+    pub valuation_at: Timestamp,
+    pub recorded_at: Timestamp,
+    pub fx: Option<FxRate>,
+    pub source: SnapshotSource,
+    pub stock_krw: Result<Money, SnapshotError>,
+    pub stock_usd: Result<Money, SnapshotError>,
+    pub cash_basis: SnapshotCashBasis,
+    pub cash_krw: Result<Money, SnapshotError>,
+    pub cash_usd: Result<Money, SnapshotError>,
+    pub buying_power: Option<(crate::BuyingPower, crate::BuyingPower)>,
+    pub periods: Option<(
+        crate::SavedConfirmedFlowPeriod,
+        crate::SavedConfirmedFlowPeriod,
+    )>,
+    pub exchanges: Vec<crate::Transaction>,
+    pub reported_krw: Result<Money, SnapshotError>,
+    pub reported_usd: Result<Money, SnapshotError>,
+    pub positions: Vec<SavedSnapshotPosition>,
+    pub observed_close_evidence: Vec<ObservedCloseEvidence>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValuationSnapshot {
     context: SnapshotContext,
     source: SnapshotSource,
@@ -475,6 +509,134 @@ impl ValuationSnapshot {
             assumptions,
             observed_close_evidence: Vec::new(),
         }
+    }
+    #[must_use]
+    pub fn saved_state(&self) -> SavedValuationSnapshot {
+        SavedValuationSnapshot {
+            dates: self.context.dates,
+            price_dates: self.context.price_dates,
+            kr_basis: self.context.kr_basis,
+            us_basis: self.context.us_basis,
+            settlement_date: self.context.settlement_date,
+            valuation_at: self.context.valuation_at,
+            recorded_at: self.context.recorded_at,
+            fx: self.context.fx,
+            source: self.source,
+            stock_krw: self.inputs.stocks.get(Currency::Krw),
+            stock_usd: self.inputs.stocks.get(Currency::Usd),
+            cash_basis: self.inputs.cash.basis,
+            cash_krw: self.inputs.cash.values.get(Currency::Krw),
+            cash_usd: self.inputs.cash.values.get(Currency::Usd),
+            buying_power: self.inputs.cash.buying_power,
+            periods: self
+                .inputs
+                .cash
+                .periods
+                .as_ref()
+                .map(|(kr, us)| (kr.saved_state(), us.saved_state())),
+            exchanges: self.inputs.cash.exchanges.clone(),
+            reported_krw: self.inputs.reported.get(Currency::Krw),
+            reported_usd: self.inputs.reported.get(Currency::Usd),
+            positions: self
+                .positions
+                .iter()
+                .map(|position| SavedSnapshotPosition {
+                    instrument: position.instrument.clone(),
+                    book: position
+                        .book
+                        .as_ref()
+                        .map(LotBook::saved_state)
+                        .map_err(|error| *error),
+                    candle: position.candle.clone(),
+                    value: position.value,
+                })
+                .collect(),
+            observed_close_evidence: self.observed_close_evidence.clone(),
+        }
+    }
+    fn validate_saved_currencies(saved: &SavedValuationSnapshot) -> Result<(), SnapshotError> {
+        let check_currency = |entry: Result<Money, SnapshotError>, expected: Currency| {
+            if let Ok(money) = entry
+                && money.currency() != expected
+            {
+                return Err(SnapshotError::CalendarMismatch);
+            }
+            Ok(())
+        };
+        check_currency(saved.stock_krw, Currency::Krw)?;
+        check_currency(saved.stock_usd, Currency::Usd)?;
+        check_currency(saved.cash_krw, Currency::Krw)?;
+        check_currency(saved.cash_usd, Currency::Usd)?;
+        check_currency(saved.reported_krw, Currency::Krw)?;
+        check_currency(saved.reported_usd, Currency::Usd)?;
+        if let Some((kr_power, us_power)) = saved.buying_power
+            && (kr_power.currency() != Currency::Krw || us_power.currency() != Currency::Usd)
+        {
+            return Err(SnapshotError::CalendarMismatch);
+        }
+        Ok(())
+    }
+    fn restore_saved_positions(
+        saved_positions: Vec<SavedSnapshotPosition>,
+    ) -> Result<Vec<SnapshotPosition>, SnapshotError> {
+        let mut positions = Vec::with_capacity(saved_positions.len());
+        for position in saved_positions {
+            let book = match position.book {
+                Ok(saved_book) => Ok(
+                    LotBook::restore_from_saved_state(saved_book).map_err(SnapshotError::Lot)?
+                ),
+                Err(error) => Err(error),
+            };
+            positions.push(SnapshotPosition {
+                instrument: position.instrument,
+                book,
+                candle: position.candle,
+                value: position.value,
+            });
+        }
+        Ok(positions)
+    }
+    pub fn restore_from_saved_state(saved: SavedValuationSnapshot) -> Result<Self, SnapshotError> {
+        if saved.recorded_at < saved.valuation_at {
+            return Err(SnapshotError::WrongPeriod);
+        }
+        Self::validate_saved_currencies(&saved)?;
+        let periods = match saved.periods {
+            Some((kr_saved, us_saved)) => {
+                let kr = crate::ConfirmedFlowPeriod::restore_from_saved_state(kr_saved)?;
+                let us = crate::ConfirmedFlowPeriod::restore_from_saved_state(us_saved)?;
+                if kr.currency() != Currency::Krw || us.currency() != Currency::Usd {
+                    return Err(SnapshotError::CalendarMismatch);
+                }
+                Some((kr, us))
+            }
+            None => None,
+        };
+        let positions = Self::restore_saved_positions(saved.positions)?;
+        let context = SnapshotContext {
+            dates: saved.dates,
+            price_dates: saved.price_dates,
+            kr_basis: saved.kr_basis,
+            us_basis: saved.us_basis,
+            settlement_date: saved.settlement_date,
+            valuation_at: saved.valuation_at,
+            recorded_at: saved.recorded_at,
+            fx: saved.fx,
+        };
+        let inputs = SnapshotInputs {
+            stocks: SnapshotAmounts::new(saved.stock_krw, saved.stock_usd),
+            cash: SnapshotCashData {
+                basis: saved.cash_basis,
+                values: SnapshotAmounts::new(saved.cash_krw, saved.cash_usd),
+                buying_power: saved.buying_power,
+                periods,
+                exchanges: saved.exchanges,
+            },
+            reported: SnapshotAmounts::new(saved.reported_krw, saved.reported_usd),
+        };
+        let mut snapshot = Self::finish(context, saved.source, inputs, positions);
+        snapshot.observed_close_evidence = saved.observed_close_evidence;
+        Ok(snapshot)
     }
     #[must_use]
     pub fn observed_close_evidence(&self) -> &[ObservedCloseEvidence] {

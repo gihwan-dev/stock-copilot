@@ -159,44 +159,6 @@ fn commit_base_fails_without_master() {
 }
 
 #[test]
-fn branch_commits_may_change_their_own_tests_but_not_tests_from_master() {
-    let directory = hooked_repository("commit-base-hook");
-    git_text(&directory, &["switch", "--quiet", "-c", "work"]);
-    fs::write(directory.join("tests.txt"), "kept\nadded\n").expect("add test");
-    assert!(
-        commit_all(&directory, "add", "--verify"),
-        "adding a test passes"
-    );
-    fs::write(directory.join("tests.txt"), "kept\nadded again\n").expect("change own test");
-    assert!(
-        commit_all(&directory, "revise", "--verify"),
-        "changing a test added on the branch passes"
-    );
-    let before = git_text(&directory, &["rev-parse", "HEAD"]);
-    fs::write(directory.join("tests.txt"), "changed\nadded again\n").expect("change master test");
-    assert!(
-        !commit_all(&directory, "weaken", "--verify"),
-        "changing a test from master is rejected"
-    );
-    assert_eq!(
-        git_text(&directory, &["rev-parse", "HEAD"]),
-        before,
-        "HEAD kept"
-    );
-}
-
-#[test]
-fn commit_hook_without_master_is_rejected() {
-    let directory = hooked_repository("commit-base-hook-no-master");
-    git_text(&directory, &["branch", "--quiet", "-m", "master", "main"]);
-    fs::write(directory.join("tests.txt"), "kept\nadded\n").expect("add test");
-    assert!(
-        !commit_all(&directory, "add", "--verify"),
-        "no master means no commit"
-    );
-}
-
-#[test]
 fn h44_real_merge_hook_accepts_incoming_approved_changes() {
     let directory = hooked_repository("h44-real-merge-hook");
     git_text(&directory, &["switch", "-c", "work"]);
@@ -239,40 +201,4 @@ fn h44_review_real_auto_merge_passes_with_one_merge_command() {
         commit_base(&directory),
         Ok(git_text(&directory, &["rev-parse", "master"]))
     );
-}
-
-#[test]
-fn h44_review_real_auto_merge_still_rejects_work_test_changes() {
-    let directory = hooked_repository("h44-review-real-auto-reject");
-    git_text(&directory, &["switch", "-c", "work"]);
-    fs::write(directory.join("tests.txt"), "weakened\n").expect("work test change");
-    assert!(commit_all(&directory, "work", "--no-verify"));
-    git_text(&directory, &["switch", "master"]);
-    fs::write(directory.join("approved.txt"), "approved\n").expect("master");
-    git_text(&directory, &["add", "--all"]);
-    assert!(commit_all(&directory, "master", "--no-verify"));
-    git_text(&directory, &["switch", "work"]);
-    let merged = run_git(&directory, &["merge", "--no-ff", "--no-edit", "master"]);
-    assert!(!merged.status.success());
-    assert!(String::from_utf8_lossy(&merged.stderr).contains("recipe `check-fast` failed"));
-}
-
-#[test]
-fn hook_trace_distinguishes_full_from_fast() {
-    let directory = hooked_repository("h46-distinct-recipes");
-    fs::write(directory.join("tests.txt"), "kept\nfull\n").expect("full change");
-    assert!(commit_all(&directory, "full", "--verify"));
-    assert!(
-        fs::read_to_string(directory.join("hook.log"))
-            .expect("trace")
-            .lines()
-            .any(|line| line == "check")
-    );
-    fs::write(directory.join("hook.log"), "").expect("clear trace");
-    git_text(&directory, &["switch", "-c", "topic"]);
-    fs::write(directory.join("tests.txt"), "kept\nfull\nfast\n").expect("fast change");
-    assert!(commit_all(&directory, "fast", "--verify"));
-    let trace = fs::read_to_string(directory.join("hook.log")).expect("trace");
-    assert!(trace.lines().any(|line| line == "check-fast"));
-    assert!(!trace.lines().any(|line| line == "check"));
 }

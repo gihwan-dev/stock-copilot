@@ -42,3 +42,23 @@ sha256 = "3ca8969d7037814b80623db44995726103048e074ca877cb92ba714d7cff0483"
 number = 9
 file = "0009_instrument_mapping_history.sql"
 sha256 = "b6e60a6119333d85641ea8073b26f04673105104d97493a36a40be319f8a25fb"
+
+[[migration]]
+number = 10
+file = "0010_estimates_and_valuations.sql"
+sha256 = "e872e682a11ddfa90d0582de18add09f406e502cb5cbb56eae9e8b65ac5a3877"
+
+[[migration]]
+number = 11
+file = "0011_proposals_and_signals.sql"
+sha256 = "fdb81878e025fe5c41e89cc4e1c9841133b7331675e98de9f861b64865d67562"
+
+[[migration]]
+number = 12
+file = "0012_audit_log.sql"
+sha256 = "45c3fd10363fae257b80a0d24f82bab4b297ddf58ab697253975c3cf268c26c4"
+
+[[migration]]
+number = 13
+file = "0013_chat_and_run_ledgers.sql"
+sha256 = "dc1710434598326318541fc04ea42be7834b36873d69118c58735a7925b0151f"

@@ -1,3 +1,11 @@
+CREATE UNIQUE INDEX audit_log_entry ON audit_log(at_payload, kind, payload);
+CREATE INDEX chat_entries_user_message ON chat_entries(session_id, user_message_id, position);
+CREATE INDEX chat_run_ledger_run ON chat_run_ledger(run_id);
+CREATE INDEX daily_valuation_snapshots_lookup ON daily_valuation_snapshots(account, as_of_seconds, as_of_nanos, id);
+CREATE INDEX estimate_calibrations_lookup ON estimate_calibrations(key_hash, position DESC);
+CREATE INDEX estimate_resolution_unavailable_task ON estimate_resolution_unavailable(task_id, id);
+CREATE INDEX estimate_submission_records_instrument ON estimate_submission_records(instrument, id);
+CREATE INDEX estimate_submissions_instrument ON estimate_submissions(instrument, id);
 CREATE INDEX instrument_mapping_events_instrument_seq ON instrument_mapping_events(instrument_id, seq);
 CREATE UNIQUE INDEX instrument_mappings_active_retired_id_key ON instrument_mappings(instrument_id) WHERE status IN ('active', 'retired');
 CREATE UNIQUE INDEX instrument_mappings_active_retired_isin_key ON instrument_mappings(upper(isin)) WHERE status IN ('active', 'retired');
@@ -5,8 +13,105 @@ CREATE UNIQUE INDEX instrument_mappings_active_retired_symbol_key ON instrument_
 CREATE INDEX instrument_mappings_isin_key ON instrument_mappings(upper(isin));
 CREATE UNIQUE INDEX instrument_mappings_superseded_event_key ON instrument_mappings(superseded_event_seq) WHERE superseded_event_seq IS NOT NULL;
 CREATE INDEX instrument_mappings_symbol_key ON instrument_mappings(market, upper(symbol));
+CREATE INDEX proposal_drafts_instrument_current ON proposal_drafts(instrument, state, id DESC);
+CREATE INDEX proposal_drafts_proposal ON proposal_drafts(proposal_id, id DESC);
 CREATE INDEX proposal_validation_reports_lookup ON proposal_validation_reports(proposal_id, id);
+CREATE INDEX signal_occurrences_instrument ON signal_occurrences(instrument_id, id);
+CREATE INDEX signal_occurrences_symbol ON signal_occurrences(market, symbol, id);
+CREATE INDEX tool_call_ledger_run ON tool_call_ledger(run_id, id);
 CREATE INDEX transaction_entries_account_id ON transaction_entries(account, id);
+CREATE TABLE audit_log (
+    seq INTEGER PRIMARY KEY CHECK (seq >= 1),
+    at_payload TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    prev_hash TEXT NOT NULL CHECK (length(prev_hash) = 64),
+    hash TEXT NOT NULL UNIQUE CHECK (length(hash) = 64)
+) STRICT;
+CREATE TABLE chat_entries (
+    session_id TEXT NOT NULL REFERENCES chat_sessions(session_id),
+    position INTEGER NOT NULL CHECK (position >= 1),
+    user_message_id TEXT,
+    entry_payload TEXT NOT NULL,
+    PRIMARY KEY (session_id, position)
+) STRICT;
+CREATE TABLE chat_run_ledger (
+    id INTEGER PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    entry_payload TEXT NOT NULL UNIQUE
+) STRICT;
+CREATE TABLE chat_sessions (
+    session_id TEXT PRIMARY KEY,
+    created_payload TEXT NOT NULL,
+    updated_payload TEXT NOT NULL,
+    entry_count INTEGER NOT NULL CHECK (entry_count >= 0)
+) STRICT;
+CREATE TABLE daily_valuation_days (
+    id INTEGER PRIMARY KEY,
+    account INTEGER NOT NULL,
+    day_year INTEGER NOT NULL CHECK (day_year BETWEEN 1 AND 9999),
+    day_month INTEGER NOT NULL CHECK (day_month BETWEEN 1 AND 12),
+    day_number INTEGER NOT NULL CHECK (day_number BETWEEN 1 AND 31),
+    result_hash TEXT NOT NULL,
+    result_payload TEXT NOT NULL,
+    UNIQUE (account, day_year, day_month, day_number)
+) STRICT;
+CREATE TABLE daily_valuation_snapshots (
+    id INTEGER PRIMARY KEY,
+    account INTEGER NOT NULL,
+    as_of_seconds INTEGER NOT NULL,
+    as_of_nanos INTEGER NOT NULL CHECK (as_of_nanos >= 0 AND as_of_nanos < 1000000000),
+    as_of_offset INTEGER NOT NULL CHECK (as_of_offset BETWEEN -86340 AND 86340 AND as_of_offset % 60 = 0),
+    snapshot_hash TEXT NOT NULL,
+    snapshot_payload TEXT NOT NULL,
+    UNIQUE (account, snapshot_hash)
+) STRICT;
+CREATE TABLE estimate_calibrations (
+    id INTEGER PRIMARY KEY,
+    key_hash TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    key_payload TEXT NOT NULL,
+    table_hash TEXT NOT NULL,
+    table_payload TEXT NOT NULL,
+    UNIQUE (key_hash, position)
+) STRICT;
+CREATE TABLE estimate_resolution_unavailable (
+    id INTEGER PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES estimate_submission_records(task_id),
+    reason_payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE estimate_resolutions (
+    id INTEGER PRIMARY KEY,
+    task_key_hash TEXT NOT NULL UNIQUE,
+    task_payload TEXT NOT NULL,
+    outcome_payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE estimate_submission_records (
+    id INTEGER PRIMARY KEY,
+    task_id TEXT NOT NULL UNIQUE REFERENCES estimate_tasks(task_id),
+    run_id TEXT NOT NULL,
+    instrument TEXT NOT NULL,
+    record_payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE estimate_submissions (
+    id INTEGER PRIMARY KEY,
+    instrument TEXT NOT NULL,
+    submission_hash TEXT NOT NULL UNIQUE,
+    submission_payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE estimate_task_resolutions (
+    id INTEGER PRIMARY KEY,
+    task_id TEXT NOT NULL UNIQUE REFERENCES estimate_submission_records(task_id),
+    outcome_payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE estimate_tasks (
+    id INTEGER PRIMARY KEY,
+    task_id TEXT NOT NULL UNIQUE,
+    run_id TEXT NOT NULL,
+    instrument TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('available', 'consumed')),
+    task_payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE holdings_snapshots (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL,
@@ -140,6 +245,20 @@ CREATE TABLE migration_ledger (
 CREATE TABLE proposal_consumptions (
     proposal_id TEXT PRIMARY KEY
 ) STRICT;
+CREATE TABLE proposal_drafts (
+    id INTEGER PRIMARY KEY,
+    proposal_id TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('standalone', 'guarded')),
+    instrument TEXT NOT NULL,
+    account INTEGER NOT NULL,
+    expires_seconds INTEGER NOT NULL,
+    expires_nanos INTEGER NOT NULL CHECK (expires_nanos >= 0 AND expires_nanos < 1000000000),
+    expires_offset INTEGER NOT NULL CHECK (expires_offset BETWEEN -86340 AND 86340 AND expires_offset % 60 = 0),
+    state TEXT NOT NULL CHECK (state IN ('current', 'superseded')),
+    snapshot_payload TEXT,
+    evidence_payload TEXT NOT NULL,
+    CHECK ((mode = 'standalone' AND snapshot_payload IS NULL) OR (mode = 'guarded' AND snapshot_payload IS NOT NULL))
+) STRICT;
 CREATE TABLE proposal_validation_reports (
     id INTEGER PRIMARY KEY,
     proposal_id TEXT NOT NULL,
@@ -155,6 +274,37 @@ CREATE TABLE proposal_validation_reports (
     c10 TEXT NOT NULL CHECK (c10 IN ('passed', 'failed', 'unknown')),
     c11 TEXT NOT NULL CHECK (c11 IN ('passed', 'failed', 'unknown')),
     c12 TEXT NOT NULL CHECK (c12 IN ('passed', 'failed', 'unknown'))
+) STRICT;
+CREATE TABLE signal_discarded_submissions (
+    id INTEGER PRIMARY KEY,
+    instrument TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    UNIQUE (instrument, task_id)
+) STRICT;
+CREATE TABLE signal_masters (
+    instrument_id TEXT PRIMARY KEY,
+    master_payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE signal_occurrences (
+    id INTEGER PRIMARY KEY,
+    occurrence_id TEXT NOT NULL UNIQUE,
+    instrument_id TEXT NOT NULL,
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    occurrence_payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE signal_selected_account (
+    slot INTEGER PRIMARY KEY CHECK (slot = 1),
+    account INTEGER NOT NULL
+) STRICT;
+CREATE TABLE signal_sources (
+    task_id TEXT PRIMARY KEY,
+    sources_payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE signal_states (
+    instrument TEXT PRIMARY KEY,
+    revision INTEGER NOT NULL CHECK (revision >= 0),
+    current_payload TEXT
 ) STRICT;
 CREATE TABLE snapshot_holdings (
     snapshot INTEGER NOT NULL REFERENCES holdings_snapshots(id) ON DELETE CASCADE,
@@ -184,6 +334,18 @@ CREATE TABLE thesis_history (
 ) STRICT;
 CREATE TABLE thesis_notes (
     instrument TEXT PRIMARY KEY
+) STRICT;
+CREATE TABLE tool_call_ledger (
+    id INTEGER PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    request_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    arguments_json TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK (outcome IN ('succeeded', 'tool_error', 'rejected')),
+    started_payload TEXT NOT NULL,
+    finished_payload TEXT NOT NULL,
+    protocol_version TEXT NOT NULL
 ) STRICT;
 CREATE TABLE transaction_entries (
     id INTEGER PRIMARY KEY,
@@ -226,6 +388,44 @@ CREATE TABLE transaction_sources (
     row_id INTEGER PRIMARY KEY REFERENCES transaction_rows(id),
     source TEXT NOT NULL
 ) STRICT;
+CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+CREATE TRIGGER audit_log_seq BEFORE INSERT ON audit_log WHEN NEW.seq IS NOT (SELECT coalesce(max(seq), 0) + 1 FROM audit_log) BEGIN SELECT RAISE(ABORT, 'audit_log seq must be contiguous'); END;
+CREATE TRIGGER chat_entries_contiguous BEFORE INSERT ON chat_entries WHEN NEW.position IS NOT (SELECT coalesce(max(position), 0) + 1 FROM chat_entries WHERE session_id = NEW.session_id) BEGIN SELECT RAISE(ABORT, 'chat entry position must be contiguous'); END;
+CREATE TRIGGER chat_entries_no_delete BEFORE DELETE ON chat_entries BEGIN SELECT RAISE(ABORT, 'chat entries are append only'); END;
+CREATE TRIGGER chat_entries_no_update BEFORE UPDATE ON chat_entries BEGIN SELECT RAISE(ABORT, 'chat entries are append only'); END;
+CREATE TRIGGER chat_run_ledger_no_delete BEFORE DELETE ON chat_run_ledger BEGIN SELECT RAISE(ABORT, 'chat run ledger is append only'); END;
+CREATE TRIGGER chat_run_ledger_no_update BEFORE UPDATE ON chat_run_ledger BEGIN SELECT RAISE(ABORT, 'chat run ledger is append only'); END;
+CREATE TRIGGER chat_sessions_fixed_identity BEFORE UPDATE OF session_id, created_payload ON chat_sessions BEGIN SELECT RAISE(ABORT, 'chat session identity is fixed'); END;
+CREATE TRIGGER chat_sessions_no_delete BEFORE DELETE ON chat_sessions BEGIN SELECT RAISE(ABORT, 'chat sessions are kept'); END;
+CREATE TRIGGER daily_valuation_days_no_delete BEFORE DELETE ON daily_valuation_days BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;
+CREATE TRIGGER daily_valuation_days_no_replace BEFORE INSERT ON daily_valuation_days WHEN EXISTS (SELECT 1 FROM daily_valuation_days WHERE account = NEW.account AND day_year = NEW.day_year AND day_month = NEW.day_month AND day_number = NEW.day_number) BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;
+CREATE TRIGGER daily_valuation_days_no_update BEFORE UPDATE ON daily_valuation_days BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;
+CREATE TRIGGER daily_valuation_snapshots_no_delete BEFORE DELETE ON daily_valuation_snapshots BEGIN SELECT RAISE(ABORT, 'daily valuation snapshots are append only'); END;
+CREATE TRIGGER daily_valuation_snapshots_no_replace BEFORE INSERT ON daily_valuation_snapshots WHEN EXISTS (SELECT 1 FROM daily_valuation_snapshots WHERE account = NEW.account AND snapshot_hash = NEW.snapshot_hash) BEGIN SELECT RAISE(ABORT, 'daily valuation snapshots are append only'); END;
+CREATE TRIGGER daily_valuation_snapshots_no_update BEFORE UPDATE ON daily_valuation_snapshots BEGIN SELECT RAISE(ABORT, 'daily valuation snapshots are append only'); END;
+CREATE TRIGGER estimate_calibrations_no_delete BEFORE DELETE ON estimate_calibrations BEGIN SELECT RAISE(ABORT, 'estimate calibrations are append only'); END;
+CREATE TRIGGER estimate_calibrations_no_replace BEFORE INSERT ON estimate_calibrations WHEN EXISTS (SELECT 1 FROM estimate_calibrations WHERE key_hash = NEW.key_hash AND position = NEW.position) BEGIN SELECT RAISE(ABORT, 'estimate calibrations are append only'); END;
+CREATE TRIGGER estimate_calibrations_no_update BEFORE UPDATE ON estimate_calibrations BEGIN SELECT RAISE(ABORT, 'estimate calibrations are append only'); END;
+CREATE TRIGGER estimate_resolution_unavailable_after_resolved BEFORE INSERT ON estimate_resolution_unavailable WHEN EXISTS (SELECT 1 FROM estimate_task_resolutions WHERE task_id = NEW.task_id) BEGIN SELECT RAISE(ABORT, 'resolved estimate cannot record unavailable'); END;
+CREATE TRIGGER estimate_resolution_unavailable_no_delete BEFORE DELETE ON estimate_resolution_unavailable BEGIN SELECT RAISE(ABORT, 'estimate unavailable records are append only'); END;
+CREATE TRIGGER estimate_resolution_unavailable_no_update BEFORE UPDATE ON estimate_resolution_unavailable BEGIN SELECT RAISE(ABORT, 'estimate unavailable records are append only'); END;
+CREATE TRIGGER estimate_resolutions_no_delete BEFORE DELETE ON estimate_resolutions BEGIN SELECT RAISE(ABORT, 'estimate resolutions are append only'); END;
+CREATE TRIGGER estimate_resolutions_no_replace BEFORE INSERT ON estimate_resolutions WHEN EXISTS (SELECT 1 FROM estimate_resolutions WHERE task_key_hash = NEW.task_key_hash) BEGIN SELECT RAISE(ABORT, 'estimate resolutions are append only'); END;
+CREATE TRIGGER estimate_resolutions_no_update BEFORE UPDATE ON estimate_resolutions BEGIN SELECT RAISE(ABORT, 'estimate resolutions are append only'); END;
+CREATE TRIGGER estimate_submission_records_no_delete BEFORE DELETE ON estimate_submission_records BEGIN SELECT RAISE(ABORT, 'estimate submission records are append only'); END;
+CREATE TRIGGER estimate_submission_records_no_replace BEFORE INSERT ON estimate_submission_records WHEN EXISTS (SELECT 1 FROM estimate_submission_records WHERE task_id = NEW.task_id) BEGIN SELECT RAISE(ABORT, 'estimate submission records are append only'); END;
+CREATE TRIGGER estimate_submission_records_no_update BEFORE UPDATE ON estimate_submission_records BEGIN SELECT RAISE(ABORT, 'estimate submission records are append only'); END;
+CREATE TRIGGER estimate_submissions_no_delete BEFORE DELETE ON estimate_submissions BEGIN SELECT RAISE(ABORT, 'estimate submissions are append only'); END;
+CREATE TRIGGER estimate_submissions_no_replace BEFORE INSERT ON estimate_submissions WHEN EXISTS (SELECT 1 FROM estimate_submissions WHERE submission_hash = NEW.submission_hash) BEGIN SELECT RAISE(ABORT, 'estimate submissions are append only'); END;
+CREATE TRIGGER estimate_submissions_no_update BEFORE UPDATE ON estimate_submissions BEGIN SELECT RAISE(ABORT, 'estimate submissions are append only'); END;
+CREATE TRIGGER estimate_task_resolutions_no_delete BEFORE DELETE ON estimate_task_resolutions BEGIN SELECT RAISE(ABORT, 'estimate task resolutions are append only'); END;
+CREATE TRIGGER estimate_task_resolutions_no_replace BEFORE INSERT ON estimate_task_resolutions WHEN EXISTS (SELECT 1 FROM estimate_task_resolutions WHERE task_id = NEW.task_id) BEGIN SELECT RAISE(ABORT, 'estimate task resolutions are append only'); END;
+CREATE TRIGGER estimate_task_resolutions_no_update BEFORE UPDATE ON estimate_task_resolutions BEGIN SELECT RAISE(ABORT, 'estimate task resolutions are append only'); END;
+CREATE TRIGGER estimate_tasks_consume_only BEFORE UPDATE ON estimate_tasks WHEN OLD.status != 'available' OR NEW.status != 'consumed' OR NEW.id != OLD.id OR NEW.task_id != OLD.task_id OR NEW.run_id != OLD.run_id OR NEW.instrument != OLD.instrument OR NEW.task_payload != OLD.task_payload BEGIN SELECT RAISE(ABORT, 'estimate task can only transition from available to consumed'); END;
+CREATE TRIGGER estimate_tasks_insert_available_only BEFORE INSERT ON estimate_tasks WHEN NEW.status != 'available' BEGIN SELECT RAISE(ABORT, 'estimate task must start available'); END;
+CREATE TRIGGER estimate_tasks_no_delete BEFORE DELETE ON estimate_tasks BEGIN SELECT RAISE(ABORT, 'estimate tasks are append only'); END;
+CREATE TRIGGER estimate_tasks_no_replace BEFORE INSERT ON estimate_tasks WHEN EXISTS (SELECT 1 FROM estimate_tasks WHERE task_id = NEW.task_id) BEGIN SELECT RAISE(ABORT, 'estimate task cannot be replaced'); END;
 CREATE TRIGGER instrument_id_issuer_monotonic BEFORE UPDATE ON instrument_id_issuer WHEN NEW.slot != OLD.slot OR NEW.last_issued <= OLD.last_issued BEGIN SELECT RAISE(ABORT, 'instrument id issuer cursor must advance monotonically'); END;
 CREATE TRIGGER instrument_id_issuer_no_delete BEFORE DELETE ON instrument_id_issuer BEGIN SELECT RAISE(ABORT, 'instrument id issuer cursor cannot be deleted'); END;
 CREATE TRIGGER instrument_id_issuer_single_insert BEFORE INSERT ON instrument_id_issuer WHEN EXISTS (SELECT 1 FROM instrument_id_issuer) BEGIN SELECT RAISE(ABORT, 'instrument id issuer cursor already exists'); END;
@@ -239,6 +439,16 @@ CREATE TRIGGER instrument_mappings_retire_only BEFORE UPDATE ON instrument_mappi
 CREATE TRIGGER proposal_consumptions_no_delete BEFORE DELETE ON proposal_consumptions BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
 CREATE TRIGGER proposal_consumptions_no_replace BEFORE INSERT ON proposal_consumptions WHEN EXISTS (SELECT 1 FROM proposal_consumptions WHERE proposal_id = NEW.proposal_id) BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
 CREATE TRIGGER proposal_consumptions_no_update BEFORE UPDATE ON proposal_consumptions BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
+CREATE TRIGGER proposal_drafts_no_delete BEFORE DELETE ON proposal_drafts BEGIN SELECT RAISE(ABORT, 'proposal drafts are append only'); END;
+CREATE TRIGGER proposal_drafts_supersede_only BEFORE UPDATE ON proposal_drafts WHEN OLD.state != 'current' OR NEW.state != 'superseded' OR NEW.id != OLD.id OR NEW.proposal_id != OLD.proposal_id OR NEW.mode != OLD.mode OR NEW.instrument != OLD.instrument OR NEW.account != OLD.account OR NEW.expires_seconds != OLD.expires_seconds OR NEW.expires_nanos != OLD.expires_nanos OR NEW.expires_offset != OLD.expires_offset OR coalesce(NEW.snapshot_payload, '') != coalesce(OLD.snapshot_payload, '') OR (NEW.snapshot_payload IS NULL) != (OLD.snapshot_payload IS NULL) OR NEW.evidence_payload != OLD.evidence_payload BEGIN SELECT RAISE(ABORT, 'proposal draft can only transition from current to superseded'); END;
+CREATE TRIGGER signal_discarded_submissions_no_delete BEFORE DELETE ON signal_discarded_submissions BEGIN SELECT RAISE(ABORT, 'signal discarded submissions are append only'); END;
+CREATE TRIGGER signal_discarded_submissions_no_replace BEFORE INSERT ON signal_discarded_submissions WHEN EXISTS (SELECT 1 FROM signal_discarded_submissions WHERE instrument = NEW.instrument AND task_id = NEW.task_id) BEGIN SELECT RAISE(ABORT, 'signal discarded submissions are append only'); END;
+CREATE TRIGGER signal_discarded_submissions_no_update BEFORE UPDATE ON signal_discarded_submissions BEGIN SELECT RAISE(ABORT, 'signal discarded submissions are append only'); END;
+CREATE TRIGGER signal_occurrences_no_delete BEFORE DELETE ON signal_occurrences BEGIN SELECT RAISE(ABORT, 'signal occurrences are append only'); END;
+CREATE TRIGGER signal_occurrences_no_replace BEFORE INSERT ON signal_occurrences WHEN EXISTS (SELECT 1 FROM signal_occurrences WHERE occurrence_id = NEW.occurrence_id) BEGIN SELECT RAISE(ABORT, 'signal occurrences are append only'); END;
+CREATE TRIGGER signal_occurrences_no_update BEFORE UPDATE ON signal_occurrences BEGIN SELECT RAISE(ABORT, 'signal occurrences are append only'); END;
 CREATE TRIGGER thesis_history_no_delete BEFORE DELETE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
 CREATE TRIGGER thesis_history_no_replace BEFORE INSERT ON thesis_history WHEN EXISTS (SELECT 1 FROM thesis_history WHERE instrument = NEW.instrument AND sequence = NEW.sequence) BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
 CREATE TRIGGER thesis_history_no_update BEFORE UPDATE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
+CREATE TRIGGER tool_call_ledger_no_delete BEFORE DELETE ON tool_call_ledger BEGIN SELECT RAISE(ABORT, 'tool call ledger is append only'); END;
+CREATE TRIGGER tool_call_ledger_no_update BEFORE UPDATE ON tool_call_ledger BEGIN SELECT RAISE(ABORT, 'tool call ledger is append only'); END;

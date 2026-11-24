@@ -1,10 +1,19 @@
-use crate::{AiRunId, DeliveryReport, EventBus, ReasoningEffort, SystemPortError};
+use crate::{AiRunId, DeliveryReport, EventBus, ReasoningEffort, RecordOutcome, SystemPortError};
 use domain::{
-    CalibrationEstimateId, DomainEvent, EstimateAssignmentError, EstimateAssignments,
-    EstimateMetadata, EstimateNarrative, EstimateRecordError, EstimateSubmissionRecord,
-    SignalSubmission,
+    CalibrationEstimateId, CostEligibleTask, DomainEvent, EstimateAssignmentError,
+    EstimateAssignments, EstimateMetadata, EstimateNarrative, EstimateRecordError,
+    EstimateSubmissionRecord, SignalSubmission,
 };
 use std::future::Future;
+
+pub trait EstimateTaskRepository: Send + Sync {
+    fn issue_task(
+        &self,
+        id: &CalibrationEstimateId,
+        run: &AiRunId,
+        task: &CostEligibleTask,
+    ) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimateSubmissionInput {

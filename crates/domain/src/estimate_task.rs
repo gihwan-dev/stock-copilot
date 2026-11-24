@@ -30,6 +30,20 @@ pub enum NoEstimateTask {
     CoefficientRegression,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedEstimateTask {
+    pub symbol: crate::Symbol,
+    pub market: crate::KnownMarket,
+    pub reference_price: crate::Price,
+    pub reference_at: Timestamp,
+    pub created_at: Timestamp,
+    pub volatility: Volatility,
+    pub horizon: Horizon,
+    pub appetite: RiskAppetite,
+    pub target: crate::Ratio,
+    pub stop: crate::Ratio,
+    pub base_probability: crate::Ratio,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimateTask {
     context: EstimateContext,
     volatility: Volatility,
@@ -135,6 +149,69 @@ impl EstimateTask {
             volatility: ProposalVolatility::from_daily(self.volatility.daily()),
             horizon: self.horizon,
         }
+    }
+    #[must_use]
+    pub fn saved_state(&self) -> SavedEstimateTask {
+        let market = match self.context.reference.instrument().market() {
+            crate::Market::Kr => crate::KnownMarket::Kr,
+            crate::Market::Us | crate::Market::Unknown(_) => crate::KnownMarket::Us,
+        };
+        let days = self.horizon.as_ratio().as_decimal();
+        let selection = if days == rust_decimal::Decimal::new(25, 2) {
+            HorizonSelection::Hours
+        } else if days == rust_decimal::Decimal::from(5_u32) {
+            HorizonSelection::FewDays
+        } else if days == rust_decimal::Decimal::from(40_u32) {
+            HorizonSelection::WeeksToMonths
+        } else {
+            HorizonSelection::HalfYearOrMore
+        };
+        SavedEstimateTask {
+            symbol: self.context.reference.instrument().symbol().clone(),
+            market,
+            reference_price: self.context.reference.price(),
+            reference_at: self.context.reference.observed_at(),
+            created_at: self.context.created_at,
+            volatility: self.volatility.clone(),
+            horizon: Horizon::new(selection),
+            appetite: self.appetite,
+            target: crate::Ratio::new(self.target.as_decimal()),
+            stop: crate::Ratio::new(self.stop.as_decimal()),
+            base_probability: crate::Ratio::new(self.base_probability.as_decimal()),
+        }
+    }
+    pub fn restore_from_saved_state(saved: SavedEstimateTask) -> Result<Self, NoEstimateTask> {
+        let order = crate::ResolvedOrderInstrument::from_known_market(saved.symbol, saved.market);
+        let reference = PriceObservation::from_identified_quote_parts(
+            saved.volatility.instrument().clone(),
+            order,
+            saved.reference_price,
+            saved.reference_at,
+        )
+        .or(Err(NoEstimateTask::InvalidReference))?;
+        let permission = match saved.horizon.selection() {
+            HorizonSelection::Hours => {
+                HoursPermission::restore_from_saved_state(HoursPermissionState::Enabled)
+            }
+            HorizonSelection::FewDays
+            | HorizonSelection::WeeksToMonths
+            | HorizonSelection::HalfYearOrMore => HoursPermission::default(),
+        };
+        let rebuilt = Self::create(
+            EstimateContext::new(reference, saved.created_at),
+            saved.volatility,
+            saved.horizon,
+            permission,
+            saved.appetite,
+        )?;
+        if rebuilt.target().as_decimal() != saved.target.as_decimal()
+            || rebuilt.stop().as_decimal() != saved.stop.as_decimal()
+            || rebuilt.base_probability().as_decimal() != saved.base_probability.as_decimal()
+            || rebuilt.created_at().offset_seconds() != saved.created_at.offset_seconds()
+        {
+            return Err(NoEstimateTask::CoefficientRegression);
+        }
+        Ok(rebuilt)
     }
 }
 

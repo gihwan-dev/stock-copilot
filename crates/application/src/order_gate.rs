@@ -3,12 +3,13 @@ use crate::{
     ValidationReportRepository,
 };
 use domain::{
-    AccountDisplayFact, BrokerAccountKeySelection, BrokerAccountRows, BrokerOrderSet, BuyingPower,
-    CommissionRateFact, Currency, Draft, DraftOrderIntent, InstrumentNameFact, KnownMarket,
-    MarketCalendar, MarketOrderPolicy, MasterInstrument, MasterInstrumentError, OrderFxRates,
-    OrderGateFacts, OrderSide, PolicySecurityFacts, PortfolioValuation, PriceLimits,
-    PriceObservation, Proposal, ProposalId, QuoteInstrument, SectorAssignments,
-    SellableQuantityFact, StockWarnings, Timestamp, Validated, ValidationReport,
+    AccountDisplayFact, AccountId, BrokerAccountKeySelection, BrokerAccountRows, BrokerOrderSet,
+    BuyingPower, CommissionRateFact, Currency, Draft, DraftOrderIntent, GateCheckDecision,
+    InstrumentNameFact, KnownMarket, Market, MarketCalendar, MarketOrderPolicy, MasterInstrument,
+    MasterInstrumentError, OrderFxRates, OrderGateFacts, OrderIntent, OrderSide,
+    PolicySecurityFacts, PortfolioValuation, PriceLimits, PriceObservation, Proposal, ProposalId,
+    QuoteInstrument, ResolvedOrderInstrument, SectorAssignments, SellableQuantityFact,
+    StockWarnings, Timestamp, Validated, ValidationReport, recheck_intent_gate,
     select_brokerage_account_by_id,
 };
 
@@ -44,6 +45,17 @@ pub enum OrderGateOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IntentRecheckOutcome {
+    Passed {
+        checked_at: Timestamp,
+        observation: PriceObservation,
+    },
+    Rejected {
+        report: ValidationReport,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OrderGateError {
     Broker(PortError),
     Storage(SystemPortError),
@@ -51,6 +63,13 @@ pub enum OrderGateError {
     UnknownMarket,
     MissingQuote,
     InvalidObservation,
+}
+
+struct LiveDataTarget<'a> {
+    account_id: &'a AccountId,
+    instrument: &'a ResolvedOrderInstrument,
+    side: OrderSide,
+    market: Market,
 }
 
 struct LiveOrderGateData {
@@ -116,9 +135,13 @@ where
     ) -> Result<OrderGateOutcome, OrderGateError> {
         let draft_intent = proposal.intent();
         let proposal_id = proposal.id().clone();
-        let live = self
-            .collect_live_data(&draft_intent, &context.master)
-            .await?;
+        let target = LiveDataTarget {
+            account_id: draft_intent.account_id(),
+            instrument: draft_intent.instrument(),
+            side: draft_intent.side(),
+            market: draft_intent.market(),
+        };
+        let live = self.collect_live_data(&target, &context.master).await?;
         let now = self.clock.now();
         let calendars = [live.calendar];
         let facts = OrderGateFacts {
@@ -155,12 +178,52 @@ where
         )
     }
 
+    pub async fn recheck_intent(
+        &self,
+        intent: &OrderIntent,
+        context: &OrderGatePolicyContext,
+    ) -> Result<IntentRecheckOutcome, OrderGateError> {
+        let target = LiveDataTarget {
+            account_id: intent.account_id(),
+            instrument: intent.instrument(),
+            side: intent.side(),
+            market: intent.market(),
+        };
+        let live = self.collect_live_data(&target, &context.master).await?;
+        let now = self.clock.now();
+        let calendars = [live.calendar];
+        let facts = OrderGateFacts {
+            master: &context.master,
+            accounts: &live.accounts,
+            calendars: &calendars,
+            market_order_policy: &context.market_order_policy,
+            valuation: &context.valuation,
+            assignments: &context.assignments,
+            security_facts: &context.security_facts,
+            buying_power: live.buying_power,
+            sellable_quantity: live.sellable_quantity.as_ref(),
+            open_orders: live.open_orders.as_ref(),
+            stock_warnings: live.stock_warnings.as_ref(),
+            price_limits: Some(&live.price_limits),
+            commission_rate: live.commission_rate.as_ref(),
+            order_fx_rates: live.order_fx_rates,
+        };
+        let (decision, report) = recheck_intent_gate(intent, now, &live.observation, &facts);
+        match decision {
+            GateCheckDecision::Passed => Ok(IntentRecheckOutcome::Passed {
+                checked_at: now,
+                observation: live.observation,
+            }),
+            GateCheckDecision::Rejected => Ok(IntentRecheckOutcome::Rejected { report }),
+        }
+    }
+
     async fn collect_live_data(
         &self,
-        draft_intent: &DraftOrderIntent,
+        target: &LiveDataTarget<'_>,
         master: &MasterInstrument,
     ) -> Result<LiveOrderGateData, OrderGateError> {
-        let known_market = KnownMarket::try_from_market(&draft_intent.market())
+        let known_market = KnownMarket::try_from_market(&target.market)
             .map_err(|_error| OrderGateError::UnknownMarket)?;
         let quote_instrument = master.quote_instrument().map_err(OrderGateError::Master)?;
         let accounts = self
@@ -174,7 +237,7 @@ where
             .await
             .map_err(OrderGateError::Broker)?;
         let observation = self
-            .fetch_observation(draft_intent.side(), master, &quote_instrument)
+            .fetch_observation(target.side, master, &quote_instrument)
             .await?;
         let price_limits = self
             .broker
@@ -184,13 +247,13 @@ where
         let open_orders = match known_market {
             KnownMarket::Kr => Some(
                 self.broker
-                    .open_orders(draft_intent.account_id())
+                    .open_orders(target.account_id)
                     .await
                     .map_err(OrderGateError::Broker)?,
             ),
             KnownMarket::Us => None,
         };
-        let side = self.fetch_side_facts(draft_intent, known_market).await?;
+        let side = self.fetch_side_facts(target, known_market).await?;
         Ok(LiveOrderGateData {
             accounts,
             calendar,
@@ -252,12 +315,12 @@ where
 
     async fn fetch_side_facts(
         &self,
-        draft_intent: &DraftOrderIntent,
+        target: &LiveDataTarget<'_>,
         known_market: KnownMarket,
     ) -> Result<SideFacts, OrderGateError> {
         let commission_rate = self
             .broker
-            .commission_rate(draft_intent.account_id(), known_market)
+            .commission_rate(target.account_id, known_market)
             .await
             .ok();
         let order_fx_rates = match known_market {
@@ -267,7 +330,7 @@ where
             },
             KnownMarket::Kr => OrderFxRates::missing(),
         };
-        match draft_intent.side() {
+        match target.side {
             OrderSide::Buy => {
                 let currency = match known_market {
                     KnownMarket::Kr => Currency::Krw,
@@ -275,12 +338,12 @@ where
                 };
                 let buying_power = self
                     .broker
-                    .buying_power(draft_intent.account_id(), currency)
+                    .buying_power(target.account_id, currency)
                     .await
                     .map_err(OrderGateError::Broker)?;
                 let warnings = self
                     .broker
-                    .stock_warnings(draft_intent.instrument())
+                    .stock_warnings(target.instrument)
                     .await
                     .map_err(OrderGateError::Broker)?;
                 Ok(SideFacts {
@@ -294,7 +357,7 @@ where
             OrderSide::Sell => {
                 let sellable = self
                     .broker
-                    .sellable_quantity(draft_intent.account_id(), draft_intent.instrument())
+                    .sellable_quantity(target.account_id, target.instrument)
                     .await
                     .map_err(OrderGateError::Broker)?;
                 Ok(SideFacts {

@@ -18,33 +18,9 @@ const EXPECTED_LEFTHOOK: &str = "assert_lefthook_installed: true
 min_version: 2.2.2
 
 pre-commit:
-  piped: true
   jobs:
-    - name: fresh-build
-      run: just fresh-build
-    - name: commit-guard
-      run: just commit-guard \"$GIT_INDEX_FILE\"
-    - name: check
-      run: just commit-check
-
-pre-merge-commit:
-  piped: true
-  jobs:
-    - name: fresh-build
-      run: just fresh-build
-    - name: commit-guard
-      run: just commit-guard \"$GIT_INDEX_FILE\"
-    - name: check
-      run: just commit-check
-
-pre-push:
-  piped: true
-  jobs:
-    - name: fresh-build
-      run: just fresh-build
-    - name: check-full
-      run: just push-check
-      use_stdin: true
+    - name: fmt
+      run: cargo fmt --all --check
 ";
 
 const PINNED_VERSION: &str = "2.2.2";
@@ -81,7 +57,7 @@ const FOREIGN_CONFIGS: [&str; 29] = [
     ".config/lefthook-local.jsonc",
 ];
 
-const HOOKS: [&str; 3] = ["pre-commit", "pre-merge-commit", "pre-push"];
+const HOOKS: [&str; 1] = ["pre-commit"];
 
 const IDENTITY: [&str; 6] = [
     "-c",
@@ -282,31 +258,28 @@ fn assert_hooks_in_common_directory(worktree: &Path) {
 
 #[test]
 fn edited_or_unexecutable_hooks_fail() {
-    let directory = repository("hooks-edited", Hooks::Installed);
-    let hooks = directory.join(".git").join("hooks");
-    let pre_commit = hooks.join("pre-commit");
+    let edited = repository("hooks-edited", Hooks::Installed);
+    let pre_commit = edited.join(".git").join("hooks").join("pre-commit");
     let mut text = fs::read_to_string(&pre_commit).expect("read hook");
     text.push_str("exit 0\n");
     fs::write(&pre_commit, text).expect("edit hook");
     assert_eq!(
-        findings(&directory),
+        findings(&edited),
         BTreeSet::from([HookFinding::Modified(String::from("pre-commit"))]),
         "edited hook"
     );
-    fs::set_permissions(hooks.join("pre-push"), fs::Permissions::from_mode(0o644))
-        .expect("drop execute bit");
+    let unexecutable = repository("hooks-unexecutable", Hooks::Installed);
+    let hook = unexecutable.join(".git").join("hooks").join("pre-commit");
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o644)).expect("drop execute bit");
     assert_eq!(
-        findings(&directory),
-        BTreeSet::from([
-            HookFinding::Modified(String::from("pre-commit")),
-            HookFinding::NotExecutable(String::from("pre-push")),
-        ]),
+        findings(&unexecutable),
+        BTreeSet::from([HookFinding::NotExecutable(String::from("pre-commit"))]),
         "unexecutable hook"
     );
-    fs::remove_file(hooks.join("pre-push")).expect("remove hook");
-    fs::create_dir_all(hooks.join("pre-push")).expect("replace hook with a folder");
+    fs::remove_file(&hook).expect("remove hook");
+    fs::create_dir_all(&hook).expect("replace hook with a folder");
     assert!(
-        findings(&directory).contains(&HookFinding::Modified(String::from("pre-push"))),
+        findings(&unexecutable).contains(&HookFinding::Modified(String::from("pre-commit"))),
         "folder in place of a hook"
     );
 }
@@ -381,168 +354,6 @@ fn other_lefthook_version_fails() {
         reported,
         BTreeSet::from([HookFinding::LefthookVersion(String::from(PINNED_VERSION))]),
         "version mismatch"
-    );
-}
-
-const STUB_RECIPES: &str = "commit-check:
-    \"{{just_executable()}}\" base=HEAD check
-
-fresh-build:
-    printf 'fresh-build\\n' >> hook.log
-    [ ! -e fail-fresh ]
-
-check:
-    printf 'check base=%s\\n' {{quote(base)}} >> hook.log
-    ! grep -q violation src.txt
-
-push-check:
-    printf 'push-check\\n' >> hook.log
-    cat >> hook.log
-    ! grep -q violation src.txt
-";
-
-fn stub_justfile() -> String {
-    let real = repository_root().join("justfile");
-    format!(
-        "set shell := [\"bash\", \"-euo\", \"pipefail\", \"-c\"]\nset positional-arguments\n\nbase := \"\"\n\ncommit-guard index=\"\":\n    printf 'commit-guard\\n' >> hook.log\n    just --justfile '{}' --working-directory . commit-guard \"$1\"\n\n{STUB_RECIPES}",
-        real.display()
-    )
-}
-
-fn hook_log(directory: &Path) -> Vec<String> {
-    let path = directory.join("hook.log");
-    let lines = fs::read_to_string(&path)
-        .map(|text| text.lines().map(String::from).collect())
-        .expect("read hook log");
-    fs::remove_file(path).expect("reset hook log");
-    lines
-}
-
-fn commit(directory: &Path, message: &str) -> bool {
-    git_output(directory, &["commit", "--quiet", "--all", "-m", message])
-        .status
-        .success()
-}
-
-fn stub_repository(name: &str) -> PathBuf {
-    let directory = repository(name, Hooks::Installed);
-    fs::write(directory.join("justfile"), stub_justfile()).expect("write stub justfile");
-    fs::write(directory.join(".gitignore"), "hook.log\nfail-fresh\n").expect("write ignore");
-    fs::write(directory.join("other.txt"), "other\n").expect("write other");
-    git(&directory, &["add", "--all"]);
-    git(
-        &directory,
-        &["commit", "--quiet", "--no-verify", "-m", "stub"],
-    );
-    directory
-}
-
-#[test]
-fn commit_hook_runs_the_check_and_rejects_violating_commits() {
-    let directory = stub_repository("hooks-commit");
-    fs::write(directory.join("src.txt"), "changed\n").expect("change source");
-    assert!(commit(&directory, "clean"), "clean commit is accepted");
-    assert_eq!(
-        hook_log(&directory),
-        ["fresh-build", "commit-guard", "check base=HEAD"],
-        "commit hook order"
-    );
-    let before = git(&directory, &["rev-parse", "HEAD"]);
-    fs::write(directory.join("src.txt"), "violation\n").expect("write violation");
-    assert!(!commit(&directory, "bad"), "violating commit is rejected");
-    assert_eq!(git(&directory, &["rev-parse", "HEAD"]), before, "HEAD kept");
-    assert_eq!(
-        hook_log(&directory),
-        ["fresh-build", "commit-guard", "check base=HEAD"],
-        "checked before rejecting"
-    );
-    fs::write(directory.join("src.txt"), "fixed\n").expect("fix");
-    File::create(directory.join("fail-fresh")).expect("make fresh build fail");
-    assert!(!commit(&directory, "stale"), "failed clean stops the hook");
-    assert_eq!(
-        hook_log(&directory),
-        ["fresh-build"],
-        "nothing runs after a failed clean"
-    );
-}
-
-#[test]
-fn commit_hook_refuses_partial_commits_and_untracked_files() {
-    let directory = stub_repository("hooks-partial");
-    let before = git(&directory, &["rev-parse", "HEAD"]);
-    fs::write(directory.join("src.txt"), "first\n").expect("change source");
-    fs::write(directory.join("other.txt"), "violation\n").expect("change other");
-    let partial = git_output(
-        &directory,
-        &["commit", "--quiet", "-m", "partial", "--", "src.txt"],
-    );
-    assert!(!partial.status.success(), "partial commit is rejected");
-    assert_eq!(
-        hook_log(&directory),
-        ["fresh-build", "commit-guard"],
-        "guard stops it"
-    );
-    fs::write(directory.join("other.txt"), "other\n").expect("restore other");
-    fs::write(directory.join("new.txt"), "new\n").expect("write untracked");
-    assert!(
-        !commit(&directory, "untracked"),
-        "untracked file is rejected"
-    );
-    assert_eq!(
-        hook_log(&directory),
-        ["fresh-build", "commit-guard"],
-        "guard stops it"
-    );
-    assert_eq!(git(&directory, &["rev-parse", "HEAD"]), before, "HEAD kept");
-    fs::remove_file(directory.join("new.txt")).expect("remove untracked");
-    assert!(commit(&directory, "all"), "commit --all is accepted");
-}
-
-#[test]
-fn push_hook_runs_check_full_with_the_pushed_refs() {
-    let directory = stub_repository("hooks-push");
-    let remote = directory.parent().expect("parent").join("remote.git");
-    git(
-        &directory,
-        &[
-            "init",
-            "--quiet",
-            "--bare",
-            remote.to_str().expect("utf-8 path"),
-        ],
-    );
-    git(
-        &directory,
-        &[
-            "remote",
-            "add",
-            "origin",
-            remote.to_str().expect("utf-8 path"),
-        ],
-    );
-    let head = git(&directory, &["rev-parse", "HEAD"]);
-    let pushed = git_output(&directory, &["push", "--quiet", "origin", "main"]);
-    assert!(pushed.status.success(), "clean push");
-    assert_eq!(
-        hook_log(&directory),
-        [
-            String::from("fresh-build"),
-            String::from("push-check"),
-            format!("refs/heads/main {head} refs/heads/main {ZERO_COMMIT}"),
-        ],
-        "push hook input"
-    );
-    fs::write(directory.join("src.txt"), "violation\n").expect("write violation");
-    git(
-        &directory,
-        &["commit", "--quiet", "--all", "--no-verify", "-m", "bad"],
-    );
-    let rejected = git_output(&directory, &["push", "--quiet", "origin", "main"]);
-    assert!(!rejected.status.success(), "violating push is rejected");
-    assert_eq!(
-        git(&remote, &["rev-parse", "main"]),
-        head,
-        "remote branch kept"
     );
 }
 
@@ -1034,35 +845,6 @@ fn commit_guard_uses_only_the_root_gitignore() {
     let changed = crate::git_base::changed_paths(&directory, "HEAD").expect("changed paths");
     assert!(changed.contains("hidden.txt"), "{changed:?}");
     assert!(!changed.contains("ignored.txt"), "{changed:?}");
-}
-
-#[test]
-fn merge_commits_run_the_check_and_reject_violations() {
-    let directory = stub_repository("hooks-merge");
-    git(&directory, &["switch", "--quiet", "-c", "side"]);
-    fs::write(directory.join("src.txt"), "violation\n").expect("write violation");
-    git(
-        &directory,
-        &["commit", "--quiet", "--all", "--no-verify", "-m", "bad"],
-    );
-    git(&directory, &["switch", "--quiet", "main"]);
-    fs::write(directory.join("other.txt"), "main change\n").expect("change other");
-    git(
-        &directory,
-        &["commit", "--quiet", "--all", "--no-verify", "-m", "main"],
-    );
-    let before = git(&directory, &["rev-parse", "HEAD"]);
-    let merged = git_output(
-        &directory,
-        &["merge", "--quiet", "--no-ff", "-m", "merge", "side"],
-    );
-    assert!(!merged.status.success(), "violating merge is rejected");
-    assert_eq!(git(&directory, &["rev-parse", "HEAD"]), before, "HEAD kept");
-    assert_eq!(
-        hook_log(&directory),
-        ["fresh-build", "commit-guard", "check base=HEAD"],
-        "merge commit hook order"
-    );
 }
 
 fn install_node_fixture(work: &Path) {

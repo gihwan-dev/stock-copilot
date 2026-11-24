@@ -10,6 +10,11 @@ impl SignalTaskKey {
     pub fn from_task(task: &CostEligibleTask) -> Self {
         Self(task.task().clone())
     }
+    pub fn restore_from_saved_state(
+        saved: crate::SavedEstimateTask,
+    ) -> Result<Self, crate::NoEstimateTask> {
+        EstimateTask::restore_from_saved_state(saved).map(Self)
+    }
     #[must_use]
     pub const fn task(&self) -> &EstimateTask {
         &self.0
