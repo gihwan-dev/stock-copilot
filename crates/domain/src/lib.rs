@@ -716,6 +716,9 @@ pub use candidate_discovery::{
     DiscoverySource, select_discovery_candidates,
 };
 
+mod weekly_review;
+pub use weekly_review::{WeeklyReviewSlot, weekly_review_slot};
+
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
 

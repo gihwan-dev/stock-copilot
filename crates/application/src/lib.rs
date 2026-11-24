@@ -572,6 +572,12 @@ mod candidate_discovery;
 pub use candidate_discovery::{
     DiscoverCandidates, DiscoveryError, DiscoveryList, DiscoveryLists, DiscoveryReport,
 };
+mod weekly_review;
+pub use weekly_review::{
+    RunWeeklyReview, ScorecardRefresh, ScorecardUpdate, WeeklyFindings, WeeklyNarrative,
+    WeeklyReviewCard, WeeklyReviewCards, WeeklyReviewError, WeeklyReviewInputs,
+    WeeklyReviewNarrator, WeeklyReviewRun, WeeklyReviewSource,
+};
 mod deep_research;
 pub use deep_research::{
     AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
