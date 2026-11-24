@@ -1226,7 +1226,7 @@ fn build_primary_history_events(
     us_prev: &InstrumentSource,
     us_next: &InstrumentSource,
     us_mistake: &InstrumentSource,
-) -> Option<Vec<MappingHistoryEvent>> {
+) -> Option<[MappingHistoryEvent; 3]> {
     let action_sym = build_contract_action(
         primary_id,
         parse_date(2026, 10, 28)?,
@@ -1243,7 +1243,7 @@ fn build_primary_history_events(
             ShareCount::try_new(10).ok()?,
         )),
     )?;
-    Some(vec![
+    Some([
         MappingHistoryEvent::IdentifierChanged {
             instrument_id: primary_id.clone(),
             previous: us_prev.clone(),
@@ -1260,7 +1260,7 @@ fn build_primary_history_events(
             disclosure: parse_disclosure_kind("20261102000001")?,
             action: Box::new(action_split),
             note: parse_reason("오연결 분할 기록")?,
-            confirmed_at: parse_timestamp(1_761_000_000, 999_999_999, 0)?,
+            confirmed_at: parse_timestamp(1_763_000_000, 999_999_999, 0)?,
         },
         MappingHistoryEvent::LinkCorrected {
             instrument_id: primary_id.clone(),
@@ -1277,7 +1277,7 @@ fn build_secondary_history_events(
     secondary_id: &InstrumentId,
     kr_prev: &InstrumentSource,
     kr_next: &InstrumentSource,
-) -> Option<Vec<MappingHistoryEvent>> {
+) -> Option<[MappingHistoryEvent; 2]> {
     let action_reverse = build_contract_action(
         secondary_id,
         parse_date(2026, 11, 10)?,
@@ -1286,7 +1286,7 @@ fn build_secondary_history_events(
             ShareCount::try_new(1).ok()?,
         )),
     )?;
-    Some(vec![
+    Some([
         MappingHistoryEvent::IdentifierChanged {
             instrument_id: secondary_id.clone(),
             previous: kr_prev.clone(),
@@ -1301,7 +1301,7 @@ fn build_secondary_history_events(
             source: kr_next.clone(),
             disclosure: parse_disclosure_kind("20261111000004")?,
             note: parse_reason("오폐지 복구")?,
-            corrected_at: parse_timestamp(1_758_000_000, 0, 32_400)?,
+            corrected_at: parse_timestamp(1_761_000_000, 0, 32_400)?,
         },
     ])
 }
@@ -1320,12 +1320,17 @@ pub fn history_contract_dataset() -> Option<HistoryContractDataset> {
     let kr_next = parse_source(KnownMarket::Kr, "005930", "KR7005930999")?;
     let quiet_src = parse_source(KnownMarket::Us, "NVDA", "US67066G1040")?;
 
-    let mut events = build_primary_history_events(&primary_id, &us_prev, &us_next, &us_mistake)?;
-    events.extend(build_secondary_history_events(
-        &secondary_id,
-        &kr_prev,
-        &kr_next,
-    )?);
+    let [primary_first, primary_second, primary_third] =
+        build_primary_history_events(&primary_id, &us_prev, &us_next, &us_mistake)?;
+    let [secondary_first, secondary_second] =
+        build_secondary_history_events(&secondary_id, &kr_prev, &kr_next)?;
+    let events = vec![
+        primary_first,
+        secondary_first,
+        primary_second,
+        secondary_second,
+        primary_third,
+    ];
 
     let records = vec![
         InstrumentMappingRecord::new(

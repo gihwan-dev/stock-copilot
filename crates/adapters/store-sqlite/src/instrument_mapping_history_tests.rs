@@ -11,10 +11,10 @@ use application::{
     MappingStoreError, SystemFailure, SystemPort, SystemPortError,
 };
 use domain::{
-    CorporateAction, CorporateActionKind, DisclosureKey, InstrumentId, InstrumentMappingError,
-    InstrumentMappingRecord, InstrumentMappingStatus, InstrumentSource, IsinCode,
-    IssuedInstrumentId, KnownMarket, MappingAssignment, MappingHistoryEvent, ReceiptNo, Symbol,
-    Timestamp, UserReason,
+    CorporateAction, CorporateActionKind, DartReceiptNo, DisclosureKey, InstrumentId,
+    InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentSource,
+    IsinCode, IssuedInstrumentId, KnownMarket, MappingAssignment, MappingHistoryEvent, Nanosecond,
+    OffsetSeconds, ReceiptNo, Symbol, Timestamp, UnixSeconds, UntrustedText, UserReason,
 };
 use rusqlite::{Connection, Transaction, params};
 use std::collections::BTreeSet;
@@ -883,10 +883,6 @@ fn malformed_event_core_cases() -> Vec<BadEventCase> {
 fn malformed_event_action_cases() -> Vec<BadEventCase> {
     vec![
         BadEventCase {
-            note: String::from("bad\0note"),
-            ..BadEventCase::base_retirement()
-        },
-        BadEventCase {
             event_kind: "link_corrected",
             next_sym: Some("005930"),
             next_isin: Some("kr7005930003"),
@@ -1024,20 +1020,20 @@ fn open_and_history_reads_reject_tampered_event_seq_kind_and_action_columns() {
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "bad event kind", |tx| {
-        tx.execute(history_sql::UPDATE_EVENT_KIND, params![5_i64, "forged"])?;
+        tx.execute(history_sql::UPDATE_EVENT_KIND, params![4_i64, "forged"])?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra next_symbol on retirement", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_NEXT_SYMBOL,
-            params![5_i64, "EXTRA"],
+            params![4_i64, "EXTRA"],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra action_kind on link_corrected", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_KIND,
-            params![3_i64, "split"],
+            params![5_i64, "split"],
         )?;
         Ok(())
     });
@@ -1051,7 +1047,7 @@ fn open_and_history_reads_reject_tampered_event_seq_kind_and_action_columns() {
     assert_event_tamper_rejected(&dataset, "leading zero share count", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_FROM_COUNT,
-            params![2_i64, "01"],
+            params![3_i64, "01"],
         )?;
         Ok(())
     });
@@ -1063,36 +1059,36 @@ fn open_and_history_reads_reject_tampered_event_overflow_date_disclosure_note_an
     assert_event_tamper_rejected(&dataset, "overflow share count", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_FROM_COUNT,
-            params![2_i64, "18446744073709551616"],
+            params![3_i64, "18446744073709551616"],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "invalid calendar date 2026-11-31", |tx| {
-        tx.execute(history_sql::UPDATE_EVENT_ACTION_DAY, params![2_i64, 31_i64])?;
+        tx.execute(history_sql::UPDATE_EVENT_ACTION_DAY, params![3_i64, 31_i64])?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "bad disclosure source", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_DISCLOSURE_SOURCE,
-            params![5_i64, "UNKNOWN"],
+            params![4_i64, "UNKNOWN"],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "whitespace-only unicode note", |tx| {
-        tx.execute(history_sql::UPDATE_EVENT_NOTE, params![5_i64, "\u{3000}"])?;
+        tx.execute(history_sql::UPDATE_EVENT_NOTE, params![4_i64, "\u{3000}"])?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "nanos out of range", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_RECORDED_NANOS,
-            params![5_i64, 1_000_000_000_i64],
+            params![4_i64, 1_000_000_000_i64],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "offset non-minute multiple", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_RECORDED_OFFSET,
-            params![5_i64, 61_i64],
+            params![4_i64, 61_i64],
         )?;
         Ok(())
     });
@@ -1112,12 +1108,12 @@ fn open_rejects_mismatched_superseded_event_seq_and_unbacked_superseded_rows() {
         tx.execute_batch(mapping_fixtures::DROP_GUARD_TRIGGERS)?;
         tx.execute(
             history_sql::UPDATE_SUPERSEDED_SEQ_DIRECT,
-            params![primary_id, "US", "fb.A", "us30303m1027", 2_i64],
+            params![primary_id, "US", "fb.A", "us30303m1027", 3_i64],
         )?;
         tx.execute_batch(mapping_fixtures::RESTORE_GUARD_TRIGGERS)?;
         Ok(())
     }))
-    .expect("point superseded_event_seq to cancelled event 2");
+    .expect("point superseded_event_seq to cancelled event 3");
     rt.block_on(mismatch_db.close()).expect("close");
     assert_eq!(
         Database::open(&mismatch_path, &key(), &clock())
@@ -1141,13 +1137,13 @@ fn open_rejects_mismatched_superseded_event_seq_and_unbacked_superseded_rows() {
                 "005939",
                 "KR7005930777",
                 "superseded",
-                2_i64
+                3_i64
             ],
         )?;
         tx.execute_batch(mapping_fixtures::RESTORE_GUARD_TRIGGERS)?;
         Ok(())
     }))
-    .expect("inject extra superseded row pointing to cancelled seq 2");
+    .expect("inject extra superseded row pointing to cancelled seq 3");
     rt.block_on(extra_row_db.close()).expect("close");
     assert_eq!(
         Database::open(&extra_row_path, &key(), &clock())
@@ -1163,53 +1159,53 @@ fn open_and_history_reads_reject_extra_action_and_next_columns_on_events() {
     assert_event_tamper_rejected(&dataset, "extra next_isin on retirement", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_NEXT_ISIN,
-            params![5_i64, "KR7005930999"],
+            params![4_i64, "KR7005930999"],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra action_year on retirement", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_YEAR,
-            params![5_i64, 2026_i64],
+            params![4_i64, 2026_i64],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra action_month on retirement", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_MONTH,
-            params![5_i64, 11_i64],
+            params![4_i64, 11_i64],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra action_day on retirement", |tx| {
-        tx.execute(history_sql::UPDATE_EVENT_ACTION_DAY, params![5_i64, 24_i64])?;
+        tx.execute(history_sql::UPDATE_EVENT_ACTION_DAY, params![4_i64, 24_i64])?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra action_from_symbol on retirement", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_FROM_SYMBOL,
-            params![5_i64, "EXTRA"],
+            params![4_i64, "EXTRA"],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra action_to_symbol on retirement", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_TO_SYMBOL,
-            params![5_i64, "EXTRA"],
+            params![4_i64, "EXTRA"],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra action_from_count on retirement", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_FROM_COUNT,
-            params![5_i64, "1"],
+            params![4_i64, "1"],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "extra action_to_count on retirement", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_TO_COUNT,
-            params![5_i64, "2"],
+            params![4_i64, "2"],
         )?;
         Ok(())
     });
@@ -1221,7 +1217,7 @@ fn open_and_history_reads_reject_cross_kind_action_columns_and_plus_share_count(
     assert_event_tamper_rejected(&dataset, "plus sign in share count", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_FROM_COUNT,
-            params![2_i64, "+1"],
+            params![3_i64, "+1"],
         )?;
         Ok(())
     });
@@ -1249,14 +1245,14 @@ fn open_and_history_reads_reject_cross_kind_action_columns_and_plus_share_count(
     assert_event_tamper_rejected(&dataset, "split with from_symbol", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_FROM_SYMBOL,
-            params![2_i64, "META"],
+            params![3_i64, "META"],
         )?;
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "split with to_symbol", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_ACTION_TO_SYMBOL,
-            params![2_i64, "MIST"],
+            params![3_i64, "MIST"],
         )?;
         Ok(())
     });
@@ -1270,7 +1266,7 @@ fn open_and_history_reads_reject_cross_kind_action_columns_and_plus_share_count(
     assert_event_tamper_rejected(&dataset, "link_corrected identical source pair", |tx| {
         tx.execute(
             history_sql::UPDATE_EVENT_NEXT_PAIR,
-            params![3_i64, "META", "us30303m1027"],
+            params![5_i64, "META", "us30303m1027"],
         )?;
         Ok(())
     });
@@ -1315,6 +1311,76 @@ fn decoder_rejects_zero_superseded_seq() {
             .failure(),
         SystemFailure::RepositoryIntegrity
     );
+
+    let raw_lookup_fixture = Fixture::new();
+    let raw_lookup_db = open_fixture(&raw_lookup_fixture);
+    rt.block_on(raw_lookup_db.write(|tx| {
+        tx.execute_batch(mapping_fixtures::RECREATE_UNCONSTRAINED_STRICT)?;
+        tx.execute(
+            history_sql::INSERT_WITH_SUPERSEDED_SEQ,
+            params![
+                "inst-0000000000000001",
+                "US",
+                "fb.A",
+                "us30303m1027",
+                "superseded",
+                0_i64
+            ],
+        )?;
+        Ok(())
+    }))
+    .expect("seed zero superseded_event_seq row in unconstrained table");
+    let store = InstrumentMappingStore::new(&raw_lookup_db);
+    let us_prev = source(KnownMarket::Us, "fb.A", "us30303m1027");
+    assert_eq!(
+        rt.block_on(store.lookup(&us_prev)),
+        Err(MappingStoreError::Storage(integrity_system_error()))
+    );
+    rt.block_on(raw_lookup_db.close()).expect("close");
+}
+
+#[test]
+fn open_rejects_active_tip_mismatch_against_retirement_corrected_event() {
+    let rt = runtime();
+    let fixture = Fixture::new();
+    let path = DatabasePath::new(fixture.path());
+    let db = Database::open(&path, &key(), &clock()).expect("open");
+    let target_id = id("inst-0000000000000001");
+    let original = source(KnownMarket::Kr, "005930", "KR7005930003");
+    let event = MappingHistoryEvent::RetirementCorrected {
+        instrument_id: target_id.clone(),
+        source: original.clone(),
+        disclosure: DisclosureKey::from_receipt(ReceiptNo::Dart(
+            DartReceiptNo::try_new("20261124000088").expect("dart"),
+        )),
+        note: UserReason::try_new(UntrustedText::try_new("팁 불일치 시험").expect("text"))
+            .expect("note"),
+        corrected_at: Timestamp::from_parts(
+            UnixSeconds::new(1_763_942_400),
+            Nanosecond::new(0),
+            OffsetSeconds::new(32_400),
+        )
+        .expect("ts"),
+    };
+    rt.block_on(db.write(move |tx| {
+        insert_active_mapping(tx, &target_id, &original)?;
+        apply_seed_retirement_corrected(tx, 1, &event, &target_id, &original)?;
+        tx.execute_batch(mapping_fixtures::DROP_GUARD_TRIGGERS)?;
+        tx.execute(
+            mapping_fixtures::UPDATE_CORRUPT_SYMBOL,
+            params![target_id.as_str(), "005931"],
+        )?;
+        tx.execute_batch(mapping_fixtures::RESTORE_GUARD_TRIGGERS)?;
+        Ok(())
+    }))
+    .expect("corrupt active tip after retirement_corrected");
+    rt.block_on(db.close()).expect("close");
+    assert_eq!(
+        Database::open(&path, &key(), &clock())
+            .expect_err("open must reject active tip mismatch via verify_persisted_mapping_ledger")
+            .failure(),
+        SystemFailure::RepositoryIntegrity
+    );
 }
 
 #[test]
@@ -1345,7 +1411,7 @@ fn verify_superseded_event_links_rejects_unmatched_correction_and_duplicate_link
     let dataset = history_contract_dataset().expect("shared dataset");
     let unmatched_link = crate::instrument_mapping::StoredEvent {
         seq: 1,
-        event: dataset.events.get(2).expect("link_corrected event").clone(),
+        event: dataset.events.get(4).expect("link_corrected event").clone(),
     };
     assert!(
         crate::instrument_mapping::verify_superseded_event_links(&[], &[unmatched_link]).is_err()
@@ -1410,7 +1476,7 @@ fn open_and_history_reads_reject_missing_action_and_next_fields_and_non_positive
         Ok(())
     });
     assert_event_tamper_rejected(&dataset, "missing from_count on split", |tx| {
-        tx.execute(history_sql::CLEAR_EVENT_ACTION_FROM_COUNT, [2_i64])?;
+        tx.execute(history_sql::CLEAR_EVENT_ACTION_FROM_COUNT, [3_i64])?;
         Ok(())
     });
 
@@ -1498,6 +1564,95 @@ fn for_id_rejects_corrupt_unconstrained_records_for_same_id() {
         );
         rt.block_on(db.close()).expect("close");
     }
+}
+
+#[test]
+fn lookup_rejects_multiple_terminal_records_for_same_id_in_partial_slice() {
+    let rt = runtime();
+    let fixture = Fixture::new();
+    let db = open_fixture(&fixture);
+    rt.block_on(db.write(|tx| {
+        tx.execute_batch(mapping_fixtures::RECREATE_UNCONSTRAINED_STRICT)?;
+        for row in [
+            raw_row("005930", "KR7005930003", "active", None),
+            raw_row("005930", "KR7005930999", "retired", None),
+        ] {
+            tx.execute(
+                history_sql::INSERT_WITH_SUPERSEDED_SEQ,
+                params![
+                    "inst-0000000000000001",
+                    row.market,
+                    row.symbol,
+                    row.isin,
+                    row.status,
+                    row.seq
+                ],
+            )?;
+        }
+        Ok(())
+    }))
+    .expect("seed duplicate terminal rows sharing symbol");
+    let store = InstrumentMappingStore::new(&db);
+    assert_eq!(
+        rt.block_on(store.lookup(&source(KnownMarket::Kr, "005930", "KR7005930003"))),
+        Err(MappingStoreError::Storage(integrity_system_error()))
+    );
+    rt.block_on(db.close()).expect("close");
+}
+
+#[test]
+fn history_roundtrips_user_reason_containing_nul_byte() {
+    let rt = runtime();
+    let fixture = Fixture::new();
+    let path = DatabasePath::new(fixture.path());
+    let db = Database::open(&path, &key(), &clock()).expect("open");
+    let target_id = id("inst-0000000000000001");
+    let src = source(KnownMarket::Kr, "005930", "KR7005930003");
+    let nul_note = UserReason::try_new(UntrustedText::try_new("정정\0사유").expect("untrusted"))
+        .expect("note");
+    let event = MappingHistoryEvent::RetirementCorrected {
+        instrument_id: target_id.clone(),
+        source: src.clone(),
+        disclosure: DisclosureKey::from_receipt(ReceiptNo::Dart(
+            DartReceiptNo::try_new("20261124000099").expect("dart"),
+        )),
+        note: nul_note,
+        corrected_at: Timestamp::from_parts(
+            UnixSeconds::new(1_763_942_400),
+            Nanosecond::new(7),
+            OffsetSeconds::new(32_400),
+        )
+        .expect("timestamp"),
+    };
+    let seeded = event.clone();
+    let seeded_id = target_id.clone();
+    rt.block_on(db.write(move |tx| {
+        insert_active_mapping(tx, &seeded_id, &src)?;
+        apply_seed_retirement_corrected(tx, 1, &seeded, &seeded_id, &src)
+    }))
+    .expect("seed event with embedded NUL note");
+    rt.block_on(db.close()).expect("close");
+
+    let reopened = Database::open(&path, &key(), &clock()).expect("reopen with NUL note");
+    let store = InstrumentMappingStore::new(&reopened);
+    assert_eq!(rt.block_on(store.history()), Ok(vec![event.clone()]));
+    assert_eq!(
+        rt.block_on(store.history_for_id(&target_id)),
+        Ok(vec![event])
+    );
+    rt.block_on(reopened.close()).expect("close reopened");
+}
+
+#[test]
+fn migration_schema_tracker_tracks_rename_and_drop_of_tables_indexes_and_triggers() {
+    let mut tracker = crate::instrument_mapping::MigrationSchemaTracker::default();
+    tracker.apply_script(history_sql::TRACKER_RENAME_SCRIPT);
+    assert!(tracker.mapping_objects().is_empty());
+    assert_eq!(tracker.all_triggers().len(), 1);
+
+    tracker.apply_script(history_sql::TRACKER_DROP_SCRIPT);
+    assert!(tracker.mapping_objects().is_empty());
+    assert!(tracker.all_triggers().is_empty());
 }
 
 #[test]

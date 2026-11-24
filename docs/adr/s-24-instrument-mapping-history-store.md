@@ -22,12 +22,12 @@ S-24는 D-55의 `UserIdentityConfirmation` 봉인 경계와 맞물려 있으므�
 
 ## 스키마와 제약 (`0009_instrument_mapping_history.sql`)
 
-마이그레이션 `0009_instrument_mapping_history.sql`(SHA-256 `875b31c198e0f425755dd6a4d2ea8edf2d9819acaf0f4dc494142dad4401a639`)은 기존 `0008`의 `instrument_mappings`를 무손실 이관하면서 감사 사건 표와 확장된 원장 표를 구성한다. 기존 `0008_instrument_mappings.sql`과 `instrument_id_issuer`는 변경하지 않는다.
+마이그레이션 `0009_instrument_mapping_history.sql`(SHA-256 `c46bc37a755478e6c1005aad9ca6d627d1cf0c2232b23e26a08ae5fe730be3f1`)은 기존 `0008`의 `instrument_mappings`를 무손실 이관하면서 감사 사건 표와 확장된 원장 표를 구성한다. 기존 `0008_instrument_mappings.sql`과 `instrument_id_issuer`는 변경하지 않는다.
 
 | 대상 | 종류 | 정의 | 역할 |
 |---|---|---|---|
 | `instrument_mapping_events` | `STRICT` 테이블 | `seq INTEGER PRIMARY KEY CHECK (seq > 0)`, `event_kind`, `instrument_id`, `market`, `prev_symbol`, `prev_isin`, `next_symbol`, `next_isin`, `disclosure_source`, `disclosure_receipt_no`, `action_kind`, `action_year`, `action_month`, `action_day`, `action_from_symbol`, `action_to_symbol`, `action_from_count`, `action_to_count`, `note`, `recorded_seconds`, `recorded_nanos`, `recorded_offset` | 감사 사건 추가 전용 원장. `Split`/`ReverseSplit` 주수 열은 `MONEY_SEGMENTS` 회피를 위해 `action_from_count`/`action_to_count`(앞자리 `0` 금지 양의 10진 `TEXT`, 최대 20자리)를 사용하며 `u64::MAX`까지 무손실 표현 |
-| 사건 테이블 열·행 `CHECK` | 복합 제약 | 도메인 문법(`InstrumentId`·`KnownMarket`·`Symbol`·`IsinCode`·`DisclosureKey` DART/KIND 14자리 숫자·SEC EDGAR `10-2-6`·`UserReason` NUL 금지·UTF-8 1..512바이트·공백 전용 금지·`Timestamp` 초/나노초/분단위 오프셋) + `event_kind`별 필수/NULL 열 일치 + `link_corrected`·`identifier_changed` 대소문자 무시 변경 검증 + `SymbolChange`/`Split`/`ReverseSplit` 변형별 열 및 비율 방향 정합 | 깨진 사건 직렬화 행 삽입을 DB 계층에서 1차 차단(유니코드 공백·달력 일자 유효성·오프셋 적용 연도 범위·`u64::MAX` 초과는 Rust 디코더와 `domain`이 닫힘 검증) |
+| 사건 테이블 열·행 `CHECK` | 복합 제약 | 도메인 문법(`InstrumentId`·`KnownMarket`·`Symbol`·`IsinCode`·`DisclosureKey` DART/KIND 14자리 숫자·SEC EDGAR `10-2-6`·`UserReason` UTF-8 1..512바이트 및 공백 전용 금지 — `0006_thesis_store.sql`과 동일하게 도메인 유효 NUL 바이트 보존·`Timestamp` 초/나노초/분단위 오프셋) + `event_kind`별 필수/NULL 열 일치 + `link_corrected`·`identifier_changed` 대소문자 무시 변경 검증 + `SymbolChange`/`Split`/`ReverseSplit` 변형별 열 및 비율 방향 정합 | 깨진 사건 직렬화 행 삽입을 DB 계층에서 1차 차단(유니코드 공백·달력 일자 유효성·오프셋 적용 연도 범위·`u64::MAX` 초과는 Rust 디코더와 `domain`이 닫힘 검증) |
 | `instrument_mapping_events_instrument_seq` | `INDEX` | `(instrument_id, seq)` | `history_for_id` 및 트리거의 `max(seq) WHERE instrument_id = ...` 점조회(풀스캔 0건) |
 | `instrument_mapping_events_no_update` / `no_delete` | `BEFORE UPDATE` / `BEFORE DELETE` 트리거 | 모든 수정·삭제에 `RAISE(ABORT, ...)` | 감사 사건 추가 전용 불변성 강제 |
 | `instrument_mapping_events_monotonic_seq` | `BEFORE INSERT` 트리거 | `NEW.seq != coalesce((SELECT max(seq) FROM instrument_mapping_events), 0) + 1` 시 `RAISE(ABORT, ...)` | `1..=N` 공백 없는 단조 순번 강제(`INSERT OR REPLACE` 포함 차단) |
@@ -83,6 +83,7 @@ S-24는 D-55의 `UserIdentityConfirmation` 봉인 경계와 맞물려 있으므�
 3. **쓰기 원자성·중간 실패·두 연결 경쟁 테스트**: `link_confirmed_change`/`correct_retirement`/`correct_link` 도중 트리거 중단·0행 영향 롤백(사건·원장 부분 반영 0건), 두 연결 동시 변경/정정/`ensure`/`retire` 경쟁, 잠금 시간 초과(`Unavailable`) 롤백.
 4. **가짜·SQLite 쓰기 공유 계약(`testkit-ports`)**: `MemoryInstrumentMappingRepository`의 쓰기 3연산 구현 및 가짜·SQLite 동일 쓰기 계약 + 거짓 통과 방지 음성 테스트 + `MemoryInstrumentMappingHistoryStore`와 통합 검토.
 5. **도메인↔SQLite 상태 기계 차등 속성 테스트**: H-64 보호 시험용 발급 가짜를 사용해 임의의 `ensure`/`retire`/`link_confirmed_change`/`correct_retirement`/`correct_link` 시퀀스 뒤 SQLite 재열기 및 `history`/`for_id`/`lookup`/`resolve` 완전 동등성 검증.
+6. **폐지 정정 후 재폐지·재활성화 회귀 테스트**: `correct_retirement` 이후 다시 `retire`된 종목을 새 `UserIdentityConfirmation`과 새 `retirement_corrected` 사건 없이 재활성화하려는 경로가 2단계 쓰기 경계에서 항상 거부되고, 정식 재정정 시 새 `seq`의 `retirement_corrected` 사건이 추가됨을 검증.
 
 ## 기존 테스트 변경 (기계적 고정 개수 갱신)
 
@@ -102,23 +103,66 @@ S-24는 D-55의 `UserIdentityConfirmation` 봉인 경계와 맞물려 있으므�
 ```toml
 [[approval]]
 task = "S-24"
-finding = "test-diff:modified:store-sqlite migration_tests::fresh_open_records_clock_and_reopen_preserves_ledger"
 path = "crates/adapters/store-sqlite/src/migration_tests.rs"
 before_sha256 = "d62952637a9c9e99a314ba9e8d229b89295351668e5c26d8004fd29f7160df8f"
 after_sha256 = "240cc894071421b0f04205cfba0dce04c67f4ff0880c5db44623c77330911a75"
-assertion_change = true
+finding = "test-diff:modified:store-sqlite migration_tests::fresh_open_records_clock_and_reopen_preserves_ledger"
+decision = "approved"
 reason = "마이그레이션 0009_instrument_mapping_history.sql 추가에 따라 원장 개수 기대값을 8에서 9로 갱신"
+assertion_change = true
 
 [[approval]]
 task = "S-24"
-finding = "test-diff:modified:store-sqlite tests::raw_key_is_independently_readable_and_debug_is_closed"
 path = "crates/adapters/store-sqlite/src/tests.rs"
 before_sha256 = "1f82f383ed3a04d89cb8059535fcf6676146399c89db050429dea9fdf1ba30e0"
 after_sha256 = "306405fff3ab503eeaaec63e626300deb913f81321040c382e19e33b3f02ef50"
-assertion_change = true
+finding = "test-diff:modified:store-sqlite tests::raw_key_is_independently_readable_and_debug_is_closed"
+decision = "approved"
 reason = "마이그레이션 0009 추가(+9: 이벤트 테이블 1, 이벤트 인덱스 1, 이벤트 트리거 3, 원장 부분 고유 인덱스 4)에 따라 스키마 객체 기대값을 55에서 64로 갱신"
+assertion_change = true
 ```
 
 ## 실측 및 손 변형
 
-(테스트·커버리지·손 변형·`mutants-daily` 완료 후 실측 값으로 채운다.)
+### 정적 검사·테스트·커버리지·자동 변이 (`4c13d306ed6190f2fbd970822a92ddf88f1a7529` 기준)
+
+| 항목 | 실측 결과 |
+|---|---|
+| 정적 검사 (`just check-fast-static`) | 17종 전 항목 통과(`deny`·`gen-schema`·`fmt`·`arch-check`·`source-check`·`sql-check`·`sqlcipher`·`migration-check`·`capability-check`·`raw-types`·`disable-check`·`source-tree`·`config-files`·`claude-hooks/hashes`·`codex-hooks/config`·`workflow-policy`·`review-records` 위반 0건) |
+| 신규 검사 끄기 (`disable-report-fast`) | `4c13d306ed6190f2fbd970822a92ddf88f1a7529 이후 새 끄기 0건 (Rust 0건, TS 0건)` |
+| Clippy (`--all-targets -- -D warnings`) | `domain`·`application`·`testkit-ports`·`store-sqlite` 경고 0건 |
+| 테스트 (`cargo nextest run --locked`) | `domain`·`application`·`testkit-ports`·`store-sqlite` 전체 통과 |
+| 기존 테스트 변경 (`test-diff-fast`) | 위 표의 기계적 고정 개수 갱신 2건(`migration_tests.rs` `8→9`, `tests.rs` `55→64`)만 보고, 그 외 0건 |
+| 커버리지 (`cargo llvm-cov`) | `domain/src/disclosure.rs` 영역 237/237(100.00%)·함수 20/20(100.00%)·줄 165/165(100.00%); `domain/src/instrument_mapping.rs` 영역 816/816(100.00%)·함수 64/64(100.00%)·줄 617/617(100.00%); `domain/src/instrument_mapping_change.rs` 영역 198/198(100.00%)·함수 28/28(100.00%)·줄 224/224(100.00%); `adapters/store-sqlite/src/instrument_mapping.rs` 함수 98/98(100.00%)·줄 892/896(99.55%)·영역 1443/1526(94.56%) |
+| 자동 변경분 변이 (`just mutants-daily 4c13d306ed6190f2fbd970822a92ddf88f1a7529 0/1`) | `mutants: 선택 변이 158개` / `158 mutants tested in 51m: 120 caught, 38 unviable` / `mutants: 위반 없음` (생존 0건, 시간 초과 0건) |
+| 손 변형 (`target/S-24/work`) | 격리 사본에서 25건(M01~M25) 실제 컴파일·실행, **25/25 검출(생존 0건)** 후 `target/S-24` 삭제 확인 |
+
+### 손 변형 목록 (M01~M25, 격리 사본 실측)
+
+| 번호 | 대상 파일 | 변형 내용 | 결과 및 검출 테스트 |
+|---|---|---|---|
+| M01 | `crates/domain/src/instrument_mapping_change.rs` | `validate_change_action`에서 `action.receipt().is_some()` 거부 제거 | 검출 (`domain::instrument_mapping_history_verify::tests::verify_rejects_invalid_event_evidence_and_attached_receipt`) |
+| M02 | `crates/domain/src/disclosure.rs` | `DisclosureKey::source`를 `DisclosureSource::Dart`로 고정 | 검출 (`domain::instrument_mapping_history_verify::tests::disclosure_key_from_receipt_preserves_source_and_receipt_number`) |
+| M03 | `crates/domain/src/instrument_mapping.rs` | `apply_identifier_changed`에서 `previous.market() != next.market()` 검사 제거 | 검출 (`domain::instrument_mapping_history_verify::tests::verify_rejects_invalid_event_evidence_and_attached_receipt`) |
+| M04 | `crates/domain/src/instrument_mapping.rs` | `apply_identifier_changed`에서 `superseded_contains_normalized(next)` 거부 제거 | 검출 (`domain::instrument_mapping_history_verify::tests::verify_rejects_unlinked_and_branching_transitions_within_same_id`) |
+| M05 | `crates/domain/src/instrument_mapping.rs` | `ReplaySourceIndex::remove`에서 심볼 `EntryPresence::Occupied` 유지 조건 제거 | 검출 (`domain::instrument_mapping_history_verify::tests::verify_keeps_shared_symbol_owner_across_link_correction`) |
+| M06 | `crates/domain/src/instrument_mapping.rs` | `ReplaySourceIndex::remove`에서 ISIN `EntryPresence::Occupied` 유지 조건 제거 | 검출 (`domain::instrument_mapping_history_verify::tests::verify_keeps_shared_isin_owner_across_link_correction`) |
+| M07 | `crates/domain/src/instrument_mapping.rs` | `apply_link_corrected`에서 `live_index.remove(unlinked_next)` 생략 | 검출 (`domain::instrument_mapping_history_verify::tests::verify_frees_unlinked_isin_for_other_id`) |
+| M08 | `crates/domain/src/instrument_mapping.rs` | `apply_retirement_corrected`에서 `live_index.insert(instrument_id, source)` 생략 | 검출 (`domain::instrument_mapping_history_verify::tests::verify_rejects_cross_id_previous_and_retirement_index_conflicts`) |
+| M09 | `crates/domain/src/instrument_mapping.rs` | `verify_persisted_mapping_ledger`에서 이력 없는 ID의 고아 `Superseded` 검사 제거 | 검출 (`domain::instrument_mapping_history_verify::tests::verify_rejects_terminal_and_market_violations_in_stored_records`) |
+| M10 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `validate_ledger`에서 `verify_superseded_event_links` 호출 생략 | 검출 (`store-sqlite::instrument_mapping_history_tests::open_rejects_mismatched_superseded_event_seq_and_unbacked_superseded_rows`) |
+| M11 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `validate_ledger`에서 `verify_persisted_mapping_ledger` 호출 생략 | 검출 (`store-sqlite::instrument_mapping_history_tests::open_rejects_active_tip_mismatch_against_retirement_corrected_event`) |
+| M12 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `load_all_events`에서 `entry.seq != expected_seq` 연속성 검사 생략 | 검출 (`store-sqlite::instrument_mapping_history_tests::open_and_history_reads_reject_tampered_event_seq_kind_and_action_columns`) |
+| M13 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `load_events_for_id`에서 `entry.seq <= previous_seq` 단조 검사 생략 | 검출 (`store-sqlite::instrument_mapping_history_tests::history_for_id_rejects_duplicate_seq_in_unconstrained_events`) |
+| M14 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `decode_status`에서 `seq > 0`을 `seq >= 0`으로 완화 | 검출 (`store-sqlite::instrument_mapping_history_tests::decoder_rejects_zero_superseded_seq`) |
+| M15 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `decode_share_count`에서 `raw.starts_with('0')` 거부 제거 | 검출 (`store-sqlite::instrument_mapping_history_tests::open_and_history_reads_reject_tampered_event_seq_kind_and_action_columns`) |
+| M16 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `decode_share_count`에서 ASCII 숫자 전용 검사 제거(`+1` 허용) | 검출 (`store-sqlite::instrument_mapping_history_tests::open_and_history_reads_reject_cross_kind_action_columns_and_plus_share_count`) |
+| M17 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `decode_event_body` `link_corrected`에서 `reject_unchanged_source` 생략 | 검출 (`store-sqlite::instrument_mapping_history_tests::open_and_history_reads_reject_cross_kind_action_columns_and_plus_share_count`) |
+| M18 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `validate_records`에서 `RequireEveryIdTerminal`의 `*count != 1` 검사 제거 | 검출 (`store-sqlite::instrument_mapping_history_tests::for_id_rejects_corrupt_unconstrained_records_for_same_id`) |
+| M19 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `MigrationSchemaTracker::apply`에서 `ALTER TABLE ... RENAME TO` 처리 생략 | 검출 (`store-sqlite::instrument_mapping_history_tests::migration_schema_tracker_tracks_rename_and_drop_of_tables_indexes_and_triggers`) |
+| M20 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `MigrationSchemaTracker::mapping_objects`에서 `instrument_mapping_events` 누락 | 검출 (`store-sqlite::instrument_mapping_history_tests::open_rejects_tampered_0009_schema_objects`) |
+| M21 | `migrations/0009_instrument_mapping_history.sql` + `src/sql/instrument_mapping.rs` | `instrument_mapping_events_monotonic_seq` 조건을 `NEW.seq <= 0`으로 약화 | 검출 (`store-sqlite::instrument_mapping_history_tests::event_table_triggers_enforce_append_only_and_monotonic_seq`) |
+| M22 | `migrations/0009_instrument_mapping_history.sql` + `src/sql/instrument_mapping.rs` | `Split` 비율 방향 `CHECK`(`action_to_count > action_from_count`) 제거 | 검출 (`store-sqlite::instrument_mapping_history_tests::event_table_checks_reject_malformed_event_rows`) |
+| M23 | `crates/testkit-ports/src/memory.rs` | `MemoryInstrumentMappingHistoryStore::try_from_verified`에서 `verify_persisted_mapping_ledger` 생략 | 검출 (`testkit-ports::instrument_mapping_history_contract::tests::memory_history_store_passes_shared_populated_history_contract_and_rejects_inconsistent_seed`) |
+| M24 | `crates/testkit-ports/src/memory.rs` | `MemoryInstrumentMappingHistoryStore::history_for_id`에서 ID 필터 제거 | 검출 (`testkit-ports::instrument_mapping_history_contract::tests::memory_history_store_passes_shared_populated_history_contract_and_rejects_inconsistent_seed`) |
+| M25 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `RecordSetValidator::observe`에서 `*counter > 1`을 `*counter < 1`로 변경 | 검출 (`store-sqlite::instrument_mapping_history_tests::lookup_rejects_multiple_terminal_records_for_same_id_in_partial_slice`) |

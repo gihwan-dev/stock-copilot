@@ -525,16 +525,14 @@ enum SourceConflictCheck {
 
 struct OwnerSourceEntries {
     owner: InstrumentId,
-    sources: BTreeSet<(KnownMarket, Symbol, IsinCode)>,
+    first_source: (KnownMarket, Symbol, IsinCode),
 }
 
 impl OwnerSourceEntries {
     fn new(owner: &InstrumentId, source: &InstrumentSource) -> Self {
-        let mut sources = BTreeSet::new();
-        sources.insert(source.normalized_key());
         Self {
             owner: owner.clone(),
-            sources,
+            first_source: source.normalized_key(),
         }
     }
 
@@ -546,13 +544,8 @@ impl OwnerSourceEntries {
         }
     }
 
-    fn insert(&mut self, source: &InstrumentSource) {
-        self.sources.insert(source.normalized_key());
-    }
-
-    fn remove(&mut self, source: &InstrumentSource) -> EntryPresence {
-        self.sources.remove(&source.normalized_key());
-        if self.sources.is_empty() {
+    fn remove(&self, source: &InstrumentSource) -> EntryPresence {
+        if self.first_source == source.normalized_key() {
             EntryPresence::Empty
         } else {
             EntryPresence::Occupied
@@ -599,26 +592,30 @@ impl ReplaySourceIndex {
     fn insert(&mut self, owner: &InstrumentId, source: &InstrumentSource) {
         self.symbols
             .entry(source.symbol_key())
-            .and_modify(|entry| entry.insert(source))
             .or_insert_with(|| OwnerSourceEntries::new(owner, source));
         self.isins
             .entry(source.isin_key())
-            .and_modify(|entry| entry.insert(source))
             .or_insert_with(|| OwnerSourceEntries::new(owner, source));
     }
 
     fn remove(&mut self, source: &InstrumentSource) {
         let symbol_key = source.symbol_key();
-        if let Some(entry) = self.symbols.get_mut(&symbol_key)
-            && entry.remove(source) == EntryPresence::Empty
+        match self
+            .symbols
+            .get(&symbol_key)
+            .map(|entry| entry.remove(source))
         {
-            self.symbols.remove(&symbol_key);
+            Some(EntryPresence::Empty) => {
+                self.symbols.remove(&symbol_key);
+            }
+            Some(EntryPresence::Occupied) | None => {}
         }
         let isin_key = source.isin_key();
-        if let Some(entry) = self.isins.get_mut(&isin_key)
-            && entry.remove(source) == EntryPresence::Empty
-        {
-            self.isins.remove(&isin_key);
+        match self.isins.get(&isin_key).map(|entry| entry.remove(source)) {
+            Some(EntryPresence::Empty) => {
+                self.isins.remove(&isin_key);
+            }
+            Some(EntryPresence::Occupied) | None => {}
         }
     }
 }

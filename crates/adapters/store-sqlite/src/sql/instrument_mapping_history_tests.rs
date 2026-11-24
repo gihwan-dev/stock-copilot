@@ -130,3 +130,7 @@ pub(crate) const UPDATE_SUPERSEDED_SEQ_DIRECT: &str = "UPDATE instrument_mapping
 pub(crate) const INSERT_WITH_SUPERSEDED_SEQ: &str = "INSERT INTO instrument_mappings(instrument_id, market, symbol, isin, status, superseded_event_seq) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
 pub(crate) const SELECT_SUPERSEDED_SEQ: &str = "SELECT superseded_event_seq FROM instrument_mappings WHERE instrument_id = ?1 AND market = ?2 AND symbol = ?3 AND isin = ?4";
+
+pub(crate) const TRACKER_RENAME_SCRIPT: &str = "CREATE TABLE instrument_id_issuer (slot INTEGER PRIMARY KEY) STRICT;\nCREATE INDEX legacy_only_idx ON instrument_id_issuer(slot);\nCREATE TRIGGER legacy_only_trg BEFORE DELETE ON instrument_id_issuer BEGIN SELECT 1; END;\nALTER TABLE instrument_id_issuer RENAME TO instrument_id_issuer_legacy;\n";
+
+pub(crate) const TRACKER_DROP_SCRIPT: &str = "DROP TABLE instrument_id_issuer_legacy;\n";

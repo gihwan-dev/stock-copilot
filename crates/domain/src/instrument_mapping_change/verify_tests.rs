@@ -7,10 +7,11 @@ use super::{
 use crate::{
     CalendarDate, CalendarYear, Cancellation, CorporateAction, CorporateActionId,
     CorporateActionKind, Currency, DartReceiptNo, DayNumber, DisclosureKey,
-    IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappings, InstrumentSource, IsinCode,
-    KnownMarket, Market, Money, MonthNumber, Nanosecond, NumericInput, OffsetSeconds, ReceiptNo,
-    Settlement, ShareCount, ShareRatio, Symbol, Timestamp, Transaction, TransactionData,
-    TransactionKind, UnixSeconds, UntrustedText, UserReason, verify_persisted_mapping_ledger,
+    IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappingRecord, InstrumentMappingStatus,
+    InstrumentMappings, InstrumentSource, IsinCode, KnownMarket, MappingHistoryEvent, Market,
+    Money, MonthNumber, Nanosecond, NumericInput, OffsetSeconds, ReceiptNo, Settlement, ShareCount,
+    ShareRatio, Symbol, Timestamp, Transaction, TransactionData, TransactionKind, UnixSeconds,
+    UntrustedText, UserReason, verify_persisted_mapping_ledger,
 };
 use proptest::{
     prelude::{Strategy, prop},
@@ -204,16 +205,16 @@ enum Op {
 
 fn op_strategy() -> impl Strategy<Value = Op> {
     prop::strategy::Union::new(vec![
-        (0_usize..6, 0_usize..3)
+        (0_usize..8, 0_usize..3)
             .prop_map(|(source, id_slot)| Op::Ensure { source, id_slot })
             .boxed(),
-        (0_usize..6)
+        (0_usize..8)
             .prop_map(|source| Op::Retire { source })
             .boxed(),
         (
             0_usize..3,
-            0_usize..6,
-            0_usize..6,
+            0_usize..8,
+            0_usize..8,
             prop::bool::ANY,
             1_700_000_000_i64..1_800_000_000_i64,
         )
@@ -229,7 +230,7 @@ fn op_strategy() -> impl Strategy<Value = Op> {
                 timestamp,
             })
             .boxed(),
-        (0_usize..3, 0_usize..6, 1_700_000_000_i64..1_800_000_000_i64)
+        (0_usize..3, 0_usize..8, 1_700_000_000_i64..1_800_000_000_i64)
             .prop_map(|(id_slot, source, timestamp)| Op::CorrectRetirement {
                 id_slot,
                 source,
@@ -238,8 +239,8 @@ fn op_strategy() -> impl Strategy<Value = Op> {
             .boxed(),
         (
             0_usize..3,
-            0_usize..6,
-            0_usize..6,
+            0_usize..8,
+            0_usize..8,
             1_700_000_000_i64..1_800_000_000_i64,
         )
             .prop_map(|(id_slot, prev, next, timestamp)| Op::CorrectLink {
@@ -308,7 +309,7 @@ fn correction_confirmation(
 
 fn apply_op(
     mappings: &mut InstrumentMappings,
-    sources: &[InstrumentSource; 6],
+    sources: &[InstrumentSource; 8],
     ids: &[InstrumentId; 3],
     step: usize,
     op: Op,
@@ -375,14 +376,55 @@ fn apply_op(
     }
 }
 
+fn assert_corrupted_state_rejected(
+    records: &[InstrumentMappingRecord],
+    history: &[MappingHistoryEvent],
+) {
+    if let Some(first) = records.first() {
+        let mut duplicated = records.to_vec();
+        duplicated.push(first.clone());
+        assert!(verify_persisted_mapping_ledger(&duplicated, history).is_err());
+
+        let mut flipped = records.to_vec();
+        if let Some(terminal) = flipped.iter_mut().find(|entry| match entry.status() {
+            InstrumentMappingStatus::Active | InstrumentMappingStatus::Retired => true,
+            InstrumentMappingStatus::Superseded => false,
+        }) {
+            *terminal = InstrumentMappingRecord::new(
+                terminal.source().clone(),
+                terminal.id().clone(),
+                InstrumentMappingStatus::Superseded,
+            );
+            assert!(verify_persisted_mapping_ledger(&flipped, history).is_err());
+        }
+    }
+    if !history.is_empty()
+        && let Some(pos) = records.iter().position(|entry| {
+            history
+                .iter()
+                .any(|event| event.instrument_id() == entry.id())
+        })
+    {
+        let dropped: Vec<_> = records
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| *idx != pos)
+            .map(|(_, entry)| entry.clone())
+            .collect();
+        assert!(verify_persisted_mapping_ledger(&dropped, history).is_err());
+    }
+}
+
 fn verify_ops_sequence(ops: Vec<Op>) {
     let sources = [
         source(KnownMarket::Kr, "005930", "KR7005930003"),
+        source(KnownMarket::Kr, "005930", "kr7005930003"),
         source(KnownMarket::Kr, "005931", "KR7005930003"),
         source(KnownMarket::Kr, "005930", "KR7005930999"),
-        source(KnownMarket::Kr, "005932", "KR7005930888"),
-        source(KnownMarket::Us, "FB", "US30303M1027"),
-        source(KnownMarket::Us, "META", "US30303M1027"),
+        source(KnownMarket::Us, "fb.A", "us30303m1027"),
+        source(KnownMarket::Us, "FB.a", "US30303M1027"),
+        source(KnownMarket::Us, "meta", "US30303M1027"),
+        source(KnownMarket::Us, "META", "us30303m9999"),
     ];
     let mut id_lookup = IndependentInstrumentIdIssuer::new();
     let ids = [
@@ -404,6 +446,7 @@ fn verify_ops_sequence(ops: Vec<Op>) {
             verify_persisted_mapping_ledger(&all_records, mappings.history()),
             Ok(())
         );
+        assert_corrupted_state_rejected(&all_records, mappings.history());
     }
 }
 

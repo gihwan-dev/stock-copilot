@@ -469,7 +469,7 @@ fn decode_sequence_hex(raw: &str) -> rusqlite::Result<IssuerSequence> {
 }
 
 #[derive(Default)]
-struct MigrationSchemaTracker {
+pub(crate) struct MigrationSchemaTracker {
     objects: BTreeMap<(String, String), (String, String)>,
 }
 
@@ -482,7 +482,7 @@ impl MigrationSchemaTracker {
         tracker
     }
 
-    fn apply_script(&mut self, source: &str) {
+    pub(crate) fn apply_script(&mut self, source: &str) {
         for raw in source.split(";\n") {
             let statement = raw.trim();
             let cleaned = statement.strip_suffix(';').unwrap_or(statement);
@@ -553,7 +553,7 @@ impl MigrationSchemaTracker {
         }
     }
 
-    fn mapping_objects(&self) -> BTreeSet<String> {
+    pub(crate) fn mapping_objects(&self) -> BTreeSet<String> {
         self.objects
             .values()
             .filter(|(owner, _)| {
@@ -568,7 +568,7 @@ impl MigrationSchemaTracker {
             .collect()
     }
 
-    fn all_triggers(&self) -> BTreeSet<String> {
+    pub(crate) fn all_triggers(&self) -> BTreeSet<String> {
         self.objects
             .iter()
             .filter(|((kind, _), _)| kind == "trigger")

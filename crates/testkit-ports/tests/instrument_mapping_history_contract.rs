@@ -110,6 +110,93 @@ mod tests {
         }
     }
 
+    struct GroupedByIdHistoryFake {
+        events: Vec<MappingHistoryEvent>,
+    }
+
+    impl InstrumentMappingHistoryRepository for GroupedByIdHistoryFake {
+        fn history(
+            &self,
+        ) -> impl Future<Output = Result<Vec<MappingHistoryEvent>, SystemPortError>> + Send
+        {
+            let mut copy = self.events.clone();
+            copy.sort_by(|left, right| {
+                left.instrument_id()
+                    .as_str()
+                    .cmp(right.instrument_id().as_str())
+            });
+            std::future::ready(Ok(copy))
+        }
+
+        fn history_for_id(
+            &self,
+            id: &InstrumentId,
+        ) -> impl Future<Output = Result<Vec<MappingHistoryEvent>, SystemPortError>> + Send
+        {
+            let filtered = self
+                .events
+                .iter()
+                .filter(|event| event.instrument_id() == id)
+                .cloned()
+                .collect();
+            std::future::ready(Ok(filtered))
+        }
+    }
+
+    fn event_ts(event: &MappingHistoryEvent) -> domain::Timestamp {
+        match event {
+            MappingHistoryEvent::IdentifierChanged { confirmed_at, .. } => *confirmed_at,
+            MappingHistoryEvent::RetirementCorrected { corrected_at, .. }
+            | MappingHistoryEvent::LinkCorrected { corrected_at, .. } => *corrected_at,
+        }
+    }
+
+    struct TimestampSortedHistoryFake {
+        events: Vec<MappingHistoryEvent>,
+        descending: TimestampSortOrder,
+    }
+
+    #[derive(Clone, Copy)]
+    enum TimestampSortOrder {
+        Ascending,
+        Descending,
+    }
+
+    impl TimestampSortedHistoryFake {
+        fn sort_slice(&self, slice: &mut [MappingHistoryEvent]) {
+            slice.sort_by(|left, right| match self.descending {
+                TimestampSortOrder::Ascending => event_ts(left).cmp(&event_ts(right)),
+                TimestampSortOrder::Descending => event_ts(right).cmp(&event_ts(left)),
+            });
+        }
+    }
+
+    impl InstrumentMappingHistoryRepository for TimestampSortedHistoryFake {
+        fn history(
+            &self,
+        ) -> impl Future<Output = Result<Vec<MappingHistoryEvent>, SystemPortError>> + Send
+        {
+            let mut copy = self.events.clone();
+            self.sort_slice(&mut copy);
+            std::future::ready(Ok(copy))
+        }
+
+        fn history_for_id(
+            &self,
+            id: &InstrumentId,
+        ) -> impl Future<Output = Result<Vec<MappingHistoryEvent>, SystemPortError>> + Send
+        {
+            let mut filtered: Vec<_> = self
+                .events
+                .iter()
+                .filter(|event| event.instrument_id() == id)
+                .cloned()
+                .collect();
+            self.sort_slice(&mut filtered);
+            std::future::ready(Ok(filtered))
+        }
+    }
+
     #[test]
     #[should_panic(expected = "순번 순서")]
     fn populated_history_contract_rejects_reversed_order_implementation() {
@@ -126,6 +213,38 @@ mod tests {
         let dataset = history_contract_dataset().expect("공유 계약 데이터셋");
         let broken = UnfilteredHistoryFake {
             events: dataset.events.clone(),
+        };
+        run(populated_history_contract(&broken, &dataset));
+    }
+
+    #[test]
+    #[should_panic(expected = "순번 순서")]
+    fn populated_history_contract_rejects_grouped_by_id_implementation() {
+        let dataset = history_contract_dataset().expect("공유 계약 데이터셋");
+        let broken = GroupedByIdHistoryFake {
+            events: dataset.events.clone(),
+        };
+        run(populated_history_contract(&broken, &dataset));
+    }
+
+    #[test]
+    #[should_panic(expected = "순번 순서")]
+    fn populated_history_contract_rejects_timestamp_descending_implementation() {
+        let dataset = history_contract_dataset().expect("공유 계약 데이터셋");
+        let broken = TimestampSortedHistoryFake {
+            events: dataset.events.clone(),
+            descending: TimestampSortOrder::Descending,
+        };
+        run(populated_history_contract(&broken, &dataset));
+    }
+
+    #[test]
+    #[should_panic(expected = "순번 순서")]
+    fn populated_history_contract_rejects_timestamp_ascending_implementation() {
+        let dataset = history_contract_dataset().expect("공유 계약 데이터셋");
+        let broken = TimestampSortedHistoryFake {
+            events: dataset.events.clone(),
+            descending: TimestampSortOrder::Ascending,
         };
         run(populated_history_contract(&broken, &dataset));
     }
