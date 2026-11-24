@@ -469,6 +469,12 @@ pub use stock_web_collection::{
     WebCollectionStore, WebFinding, plan_stock_web_collection,
 };
 
+mod important_disclosures;
+pub use important_disclosures::{
+    DisclosureCardFact, DisclosureCardLevel, DisclosureTriggerLog, GetImportantDisclosureCards,
+    ImportantDisclosureCard,
+};
+
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
