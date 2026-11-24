@@ -1,6 +1,5 @@
 export type { CopyState, KeyProblem } from "./connection";
 export {
-  gateView,
   useConnectionGate,
   useIpCopy,
   useKeySubmission,

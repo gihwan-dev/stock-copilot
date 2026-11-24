@@ -131,7 +131,7 @@ export const noDomValues = {
               ? checker.getAliasedSymbol(reference)
               : reference;
           if (
-            [
+            ([
               "inputEventValue",
               "chatEventValue",
               "chatCommit",
@@ -140,14 +140,23 @@ export const noDomValues = {
               "chartNavigation",
               "shellDismiss",
             ].includes(symbol?.name) &&
-            (symbol?.declarations ?? []).some(
-              (d) =>
-                d.getSourceFile().fileName ===
-                ctx.filename.replace(
-                  /\/src\/.*$/u,
-                  "/src/shared/platform/input.ts",
-                ),
-            )
+              (symbol?.declarations ?? []).some(
+                (d) =>
+                  d.getSourceFile().fileName ===
+                  ctx.filename.replace(
+                    /\/src\/.*$/u,
+                    "/src/shared/platform/input.ts",
+                  ),
+              )) ||
+            (symbol?.name === "useCandleCanvas" &&
+              (symbol?.declarations ?? []).some(
+                (d) =>
+                  d.getSourceFile().fileName ===
+                  ctx.filename.replace(
+                    /\/src\/.*$/u,
+                    "/src/shared/platform/canvasTheme.ts",
+                  ),
+              ))
           )
             return;
         }

@@ -59,6 +59,8 @@ pub struct ClaudeCodeConfig {
     mcp_token: Option<SecretValue>,
     collection_json_schema: Option<String>,
     model_defaults: ModelDefaults,
+    cli_projects_dir: Option<PathBuf>,
+    sandbox: Option<crate::sandbox::SandboxLayer>,
 }
 
 impl fmt::Debug for ClaudeCodeConfig {
@@ -78,6 +80,8 @@ impl fmt::Debug for ClaudeCodeConfig {
                 &self.collection_json_schema.is_some(),
             )
             .field("model_defaults", &self.model_defaults)
+            .field("has_cli_projects_dir", &self.cli_projects_dir.is_some())
+            .field("has_sandbox", &self.sandbox.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -106,6 +110,33 @@ impl ClaudeCodeConfig {
             mcp_token: None,
             collection_json_schema: None,
             model_defaults: ModelDefaults::new(highest, fast),
+            cli_projects_dir: None,
+            sandbox: None,
+        })
+    }
+
+    #[must_use]
+    pub fn with_sandbox(mut self, layer: crate::sandbox::SandboxLayer) -> Self {
+        self.sandbox = Some(layer);
+        self
+    }
+
+    #[must_use]
+    pub fn without_sandbox(mut self) -> Self {
+        self.sandbox = None;
+        self
+    }
+
+    #[must_use]
+    pub fn with_cli_projects_dir(mut self, dir: PathBuf) -> Self {
+        self.cli_projects_dir = Some(dir);
+        self
+    }
+
+    pub(crate) fn cli_projects_dir(&self) -> Option<PathBuf> {
+        self.cli_projects_dir.clone().or_else(|| {
+            self.host_env_home()
+                .map(|home| PathBuf::from(home).join(".claude").join("projects"))
         })
     }
 
@@ -202,7 +233,11 @@ impl ClaudeCodeConfig {
             host_env: self.host_env.as_ref(),
             mcp_token: self.mcp_token.as_ref(),
         };
-        build_command_plan(&input)
+        let plan = build_command_plan(&input)?;
+        Ok(match &self.sandbox {
+            Some(layer) => plan.wrapped_in_sandbox(layer),
+            None => plan,
+        })
     }
 
     fn mcp_source_for(&self, kind: RunKind) -> Result<McpConfigSource<'_>, CommandBuildError> {
@@ -348,6 +383,7 @@ impl ClaudeCodeProvider {
             clock: self.clock.as_ref().map(Arc::clone),
             last_cli_version: Arc::clone(&self.last_cli_version),
             tx,
+            record_cleanup: RecordCleanup::new(self.config.cli_projects_dir(), &workspace),
             workspace,
         };
         let spawned_thread = std::thread::Builder::new()
@@ -361,6 +397,7 @@ impl ClaudeCodeProvider {
         Ok(ClaudeEventStream {
             rx,
             finished: StreamState::Open,
+            structured_output: None,
             _cancel_guard: cancel_guard,
         })
     }
@@ -441,6 +478,7 @@ enum StreamItem {
 #[derive(Debug)]
 enum ChannelMessage {
     Event(AiEvent),
+    Structured(serde_json::Value),
     Control(StreamItem),
 }
 
@@ -453,6 +491,7 @@ enum StreamState {
 pub struct ClaudeEventStream {
     rx: mpsc::Receiver<ChannelMessage>,
     finished: StreamState,
+    structured_output: Option<serde_json::Value>,
     _cancel_guard: ChildCancelGuard,
 }
 
@@ -460,24 +499,37 @@ impl fmt::Debug for ClaudeEventStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClaudeEventStream")
             .field("finished", &self.finished)
+            .field("has_structured_output", &self.structured_output.is_some())
             .finish_non_exhaustive()
+    }
+}
+
+impl ClaudeEventStream {
+    #[must_use]
+    pub const fn structured_output(&self) -> Option<&serde_json::Value> {
+        self.structured_output.as_ref()
     }
 }
 
 impl AiEventStream for ClaudeEventStream {
     async fn next(&mut self) -> Result<Option<AiEvent>, InformationError> {
-        if self.finished == StreamState::Closed {
-            return Ok(None);
-        }
-        match self.rx.recv().await {
-            Some(ChannelMessage::Event(event)) => Ok(Some(event)),
-            Some(ChannelMessage::Control(StreamItem::End)) | None => {
-                self.finished = StreamState::Closed;
-                Ok(None)
+        loop {
+            if self.finished == StreamState::Closed {
+                return Ok(None);
             }
-            Some(ChannelMessage::Control(StreamItem::Error(error))) => {
-                self.finished = StreamState::Closed;
-                Err(error)
+            match self.rx.recv().await {
+                Some(ChannelMessage::Event(event)) => return Ok(Some(event)),
+                Some(ChannelMessage::Structured(value)) => {
+                    self.structured_output = Some(value);
+                }
+                Some(ChannelMessage::Control(StreamItem::End)) | None => {
+                    self.finished = StreamState::Closed;
+                    return Ok(None);
+                }
+                Some(ChannelMessage::Control(StreamItem::Error(error))) => {
+                    self.finished = StreamState::Closed;
+                    return Err(error);
+                }
             }
         }
     }
@@ -513,7 +565,53 @@ struct ReaderContext {
     clock: Option<Arc<dyn Clock>>,
     last_cli_version: Arc<Mutex<Option<String>>>,
     tx: mpsc::Sender<ChannelMessage>,
+    record_cleanup: RecordCleanup,
     workspace: RunWorkspace,
+}
+
+struct RecordCleanup {
+    projects_dir: Option<PathBuf>,
+    work_dirs: Vec<PathBuf>,
+}
+
+impl RecordCleanup {
+    fn new(projects_dir: Option<PathBuf>, workspace: &RunWorkspace) -> Self {
+        let declared = workspace.work_dir().to_path_buf();
+        let mut work_dirs = vec![declared.clone()];
+        if let Ok(resolved) = std::fs::canonicalize(&declared)
+            && resolved != declared
+        {
+            work_dirs.push(resolved);
+        }
+        Self {
+            projects_dir,
+            work_dirs,
+        }
+    }
+
+    fn run(&self) {
+        if let Some(dir) = &self.projects_dir {
+            let _outcome = crate::chat_session::cleanup_cli_project_records(dir, &self.work_dirs);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StdinRelease {
+    Keep,
+    Close,
+}
+
+pub(crate) const fn stdin_release_after_line(
+    line_kind: DecodedLineKind,
+    preflight_result: PreflightZeroSeen,
+) -> StdinRelease {
+    match (line_kind, preflight_result) {
+        (DecodedLineKind::Result, PreflightZeroSeen::No) => StdinRelease::Close,
+        (DecodedLineKind::Result, PreflightZeroSeen::Yes) | (DecodedLineKind::Other, _) => {
+            StdinRelease::Keep
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -538,7 +636,7 @@ enum RealTurnSeen {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PreflightZeroSeen {
+pub(crate) enum PreflightZeroSeen {
     No,
     Yes,
 }
@@ -607,6 +705,7 @@ fn run_reader_loop(mut ctx: ReaderContext) {
     };
     ctx.active_runs.unregister_blocking(&ctx.run_id);
     ctx.workspace.cleanup();
+    ctx.record_cleanup.run();
     finalize_stream(
         stop,
         decoder,
@@ -707,13 +806,11 @@ fn continue_after_preflight(
         let _closed_stdin = stdin;
         return StopReason::DecodeError(InformationError::Unavailable(ResetTime::NotProvided));
     }
-    {
-        let _closed_stdin = stdin;
-    }
-    decode_stdout_loop(reader, decoder, sinks)
+    decode_stdout_loop(Some(stdin), reader, decoder, sinks)
 }
 
 fn decode_stdout_loop(
+    mut held_stdin: Option<std::process::ChildStdin>,
     reader: &mut BufReader<std::process::ChildStdout>,
     decoder: &mut ClaudeEventDecoder,
     sinks: &mut StreamSinks<'_>,
@@ -733,6 +830,25 @@ fn decode_stdout_loop(
             Ok(items) => items,
             Err(error) => return StopReason::DecodeError(error.to_information_error()),
         };
+        let preflight_result = match &filter {
+            EchoFilterState::Watching { .. }
+                if is_zero_preflight_result(
+                    decoder.last_line_kind(),
+                    decoder.last_result_num_turns(),
+                    &events,
+                ) =>
+            {
+                PreflightZeroSeen::Yes
+            }
+            EchoFilterState::Watching { .. } | EchoFilterState::PassedThrough { .. } => {
+                PreflightZeroSeen::No
+            }
+        };
+        if stdin_release_after_line(decoder.last_line_kind(), preflight_result)
+            == StdinRelease::Close
+        {
+            let _closed_stdin = held_stdin.take();
+        }
         if let Some(stop) = process_decoded_line(
             &mut filter,
             events,
@@ -741,6 +857,17 @@ fn decode_stdout_loop(
             sinks,
         ) {
             return stop;
+        }
+        if let (DecodedLineKind::Result, PreflightZeroSeen::No, Some(value)) = (
+            decoder.last_line_kind(),
+            preflight_result,
+            decoder.last_structured_output(),
+        ) && sinks
+            .tx
+            .blocking_send(ChannelMessage::Structured(value.clone()))
+            .is_err()
+        {
+            return StopReason::ReceiverClosed;
         }
     }
 }

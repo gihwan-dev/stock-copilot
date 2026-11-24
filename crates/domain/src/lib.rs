@@ -8,6 +8,7 @@ pub use money_display::{
 };
 
 mod account_id;
+mod ai_job_id;
 mod briefing_id;
 pub use briefing_id::{BriefingId, BriefingKind};
 mod client_order_id;
@@ -19,6 +20,7 @@ mod instrument_master;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
+pub use ai_job_id::{AiJobId, AiJobIdError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
 pub use instrument_issuer::{
@@ -630,6 +632,11 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod order_button;
+pub use order_button::{
+    OrderButtonHiddenReason, OrderButtonState, ProposalAvailability, order_button_state,
+    saved_order_permission,
+};
 mod risk_settings;
 pub use risk_settings::{OrderPermission, RiskSettings};
 

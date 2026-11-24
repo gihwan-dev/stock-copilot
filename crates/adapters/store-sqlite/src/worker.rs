@@ -80,6 +80,24 @@ impl Writer {
             .map_err(|_error| failure::integrity())?
     }
 
+    pub(crate) async fn execute_connection<T, F>(&self, operation: F) -> Result<T, SystemPortError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Connection) -> Result<T, SystemPortError> + Send + 'static,
+    {
+        let (sender, receiver) = oneshot::channel();
+        let job =
+            Box::new(
+                move |connection: &mut Connection| match sender.send(operation(connection)) {
+                    Ok(()) | Err(_) => {}
+                },
+            );
+        self.requests
+            .send(Request::Run(job))
+            .map_err(|_error| failure::integrity())?;
+        receiver.await.map_err(|_error| failure::integrity())?
+    }
+
     pub(crate) fn submit<T, F>(
         &self,
         operation: F,

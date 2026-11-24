@@ -75,6 +75,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       "app/main.tsx",
       "shared/platform/index.ts",
       "shared/platform/input.ts",
+      "shared/platform/canvasTheme.ts",
     ])
       writeFileSync(
         join(folder, "src", path),
@@ -86,9 +87,15 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     );
     compile();
     const input = join(folder, "src/shared/platform/input.ts");
-    for (const result of await make().lintFiles([main, platform, input]))
+    const canvasTheme = join(folder, "src/shared/platform/canvasTheme.ts");
+    for (const result of await make().lintFiles([
+      main,
+      platform,
+      input,
+      canvasTheme,
+    ]))
       assert.deepEqual(result.messages, []);
-    const program = ts.createProgram([platform, input], {
+    const program = ts.createProgram([platform, input, canvasTheme], {
       noEmit: true,
       strict: true,
     });
@@ -96,7 +103,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     const symbol = checker.getSymbolAtLocation(program.getSourceFile(platform));
     assert.deepEqual(
       checker.getExportsOfModule(symbol).map((s) => s.name),
-      ["mountApp"],
+      ["mountApp", "readCanvasTheme", "useCanvasChartTheme"],
     );
     const exported = checker.getExportsOfModule(symbol)[0];
     assert.deepEqual(
@@ -109,6 +116,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     assert.deepEqual(DOM_ACCESS_FILES, [
       "src/shared/platform/index.ts",
       "src/shared/platform/input.ts",
+      "src/shared/platform/canvasTheme.ts",
       "src/shared/ipc/timer.ts",
       "src/shared/ds/testing/overflow.ts",
       "src/shared/ds/testing/overflow-geometry.ts",
@@ -148,7 +156,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId,parseFreeText} from "./brand"; export type {InputValue,BrandError,FreeText} from "./brand"; export {err} from "./result"; export type {Result} from "./result";',
+      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId,parseFreeText,parseCanvasColor} from "./brand"; export type {InputValue,BrandError,FreeText,CanvasColor} from "./brand"; export type {CandleCanvasScene,CandleThemePalette,CanvasCandleMark} from "./canvas-chart"; export {err} from "./result"; export type {Result} from "./result";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(
