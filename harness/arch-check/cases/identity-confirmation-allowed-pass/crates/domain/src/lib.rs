@@ -1,0 +1,2 @@
+mod instrument_mapping_change;
+pub use instrument_mapping_change::UserIdentityConfirmation;

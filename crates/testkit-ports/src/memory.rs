@@ -1410,6 +1410,37 @@ impl MemoryInstrumentMappingRepository {
         }
     }
 
+    pub fn link_confirmed_change(
+        &self,
+        change: domain::ConfirmedIdentifierChange,
+    ) -> Result<InstrumentId, domain::MappingTransitionError> {
+        self.mappings.write().link_confirmed_change(change)
+    }
+
+    pub fn correct_retirement(
+        &self,
+        correction: domain::ConfirmedRetirementCorrection,
+    ) -> Result<InstrumentId, domain::MappingTransitionError> {
+        self.mappings.write().correct_retirement(correction)
+    }
+
+    pub fn correct_link(
+        &self,
+        correction: domain::ConfirmedLinkCorrection,
+    ) -> Result<InstrumentId, domain::MappingTransitionError> {
+        self.mappings.write().correct_link(correction)
+    }
+
+    #[must_use]
+    pub fn history(&self) -> Vec<domain::MappingHistoryEvent> {
+        self.mappings.write().history().to_vec()
+    }
+
+    #[must_use]
+    pub fn history_for_id(&self, id: &InstrumentId) -> Vec<domain::MappingHistoryEvent> {
+        self.mappings.write().history_for_id(id)
+    }
+
     fn ensure_now(
         &self,
         source: &InstrumentSource,

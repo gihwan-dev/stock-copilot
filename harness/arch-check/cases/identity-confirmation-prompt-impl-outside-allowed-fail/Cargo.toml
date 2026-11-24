@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/application",
+    "crates/adapters/store-sqlite",
+    "crates/adapters/broker-toss",
+    "crates/adapters/ai-claude-code",
+    "crates/adapters/sources",
+    "crates/mcp-server",
+    "crates/scheduler",
+    "crates/testkit-ports",
+]
