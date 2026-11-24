@@ -169,3 +169,23 @@ mod instrument_mapping_correction_tests;
 mod instrument_mapping_history_tests;
 #[cfg(test)]
 mod instrument_mapping_tests;
+
+mod estimates;
+pub use estimates::{EstimateStore, ValuationStore};
+#[cfg(test)]
+mod estimates_tests;
+
+mod signals;
+pub use signals::SignalStore;
+#[cfg(test)]
+mod signals_tests;
+
+mod audit;
+pub use audit::AuditStore;
+#[cfg(test)]
+mod audit_tests;
+
+mod chat;
+pub use chat::ChatStore;
+#[cfg(test)]
+mod chat_tests;

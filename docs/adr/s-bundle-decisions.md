@@ -1,0 +1,15 @@
+# S 묶음 설계 결정 기록
+
+| 작업 | 정한 것 | 다른 선택지 |
+|---|---|---|
+| S-18 | 도메인(`Volatility`, `EstimateTask`, `CostEligibleTask`, `EstimateAssignments`, `EstimateOutcome`, `CalibrationFact`, `LotBook`, `ConfirmedFlowPeriod`, `QuoteInstrument`, `ValuationSnapshot`, `ValuationDayResult`)에 기존 `SavedInvestorProfile` 선례와 같은 검증형 `Saved*` + `saved_state()`/`restore_from_saved_state()`를 추가하되 `ResolvedOrderInstrument` 등 봉인 생성자는 공개하지 않음 | `store-sqlite`가 원본 일봉·거래내역 전체를 매번 재실행해 복원하거나 도메인 필드를 공개 |
+| S-18 | 과제 발급 영속화를 위해 `EstimateTaskRepository::issue_task` 포트를 추가하고 `ValuationDayRepository` 기존 시그니처는 유지 | 기존 `EstimateSubmissionRepository`·`ValuationDayRepository` 시그니처를 깨고 메서드를 변경 |
+| S-18 | 추정 과제·제출·판정·보정표·일별 평가를 단일 마이그레이션 `0010_estimates_and_valuations.sql`에 STRICT 테이블과 수정·삭제·덮어쓰기 차단 트리거로 배치하고, 중첩 구조는 `thesis` 선례와 같은 길이 접두 정규 코덱으로 저장 | `serde_json` 의존성 추가 또는 수십 개 조인 테이블로 정규화 |
+| S-22 | `ProposalLifetime::as_seconds`와 `CollectedItem::from_saved_source` 최소 접근자·복원자만 도메인에 추가하고, `Proposal<Validated>`·`ResolvedOrderInstrument`·`IssuedEstimateTaskId` 봉인 경계는 유지 | `store-sqlite`가 초안 수명·수집 출처를 손실 저장하거나 도메인 내부 필드를 공개 |
+| S-22 | `SignalStore`가 `SignalRepository`, `SignalInvalidationRepository`, `ProposalRepository`를 단일 SQLite DB 위에서 구현하고 `estimate_submission_records`·`estimate_calibrations`와 직접 연결하며, `proposal_drafts`는 삭제 차단·`current`→`superseded` 전이만 허용하는 트리거와 만료 시각·오프셋 보존 컬럼으로 저장 | 초안 저장소와 신호 저장소를 별도 DB·포트 구조로 분리하거나 초안을 덮어쓰기 업데이트 |
+| S-08 | `AuditStore`가 `AuditLog`를 구현한다. 마이그레이션 `0012_audit_log.sql`(STRICT, 수정·삭제 금지 트리거, 연속 순번 트리거), 해시는 `SHA-256(길이 접두 seq·시각·종류·페이로드·이전 해시)`, 첫 행의 이전 해시는 0 64개. 같은 (시각, 종류, 페이로드)를 다시 넣으면 `AlreadyRecorded` | 순번만으로 중복 허용 |
+| S-08 | 연결 단위 authorizer(쓰기·읽기 연결 모두, 마이그레이션 뒤에도 다시 설치)가 `audit_log`의 UPDATE·DELETE·DROP·ALTER와 트리거·색인·테이블 생성을 거부하고, rusqlite가 모르는 동작도 거부한다 | 마이그레이션 실행기만 authorizer를 씀 |
+| S-08 | `SQLITE_DBCONFIG_DEFENSIVE`는 켜지 않았다. 기존 테스트 `instrument_mapping_tests::open_rejects_writable_schema_disguised_triggers`가 쓰기 연결에서 `writable_schema` 주입을 전제로 하므로, 켜려면 그 테스트의 주입 경로를 원시 연결로 옮기는 사용자 서명 변경이 필요하다. 그동안 `writable_schema`로 고친 감사 트리거와 지운 감사 트리거는 다시 열 때 스키마 검증이 거부한다(테스트로 확인) | 기존 테스트를 고치고 DEFENSIVE를 켬 |
+| S-09 | `ChatStore` 하나가 `ChatRepository`·`ChatRunLedger`·`ToolCallLedger`를 구현한다(마이그레이션 `0013_chat_and_run_ledgers.sql`). 대화 항목·실행 원장·MCP 호출 원장은 수정·삭제 금지 트리거, 대화 항목은 세션별 연속 위치 트리거. 세션 목록은 세션 ID 순(가짜의 `BTreeMap`과 같게) | 세션·원장마다 별도 저장소 타입 |
+| S-09 | 실행 원장은 같은 항목 전체를 다시 넣으면 `AlreadyRecorded`(가짜와 같음), MCP 호출 원장은 가짜처럼 매번 새 행으로 추가한다. MCP 결과는 포트가 주는 JSON 그대로 저장하고 해시로 줄이지 않는다 | 결과 해시만 저장 |
+| S-09 | "AI 작업 원장"은 `application`에 채팅 실행 원장 밖의 포트가 없어 `ChatRunLedger`까지만 구현했다. 백그라운드 AI 작업 원장은 포트가 생기면 같은 마이그레이션 방식으로 더한다 | 포트 없이 테이블만 먼저 만듦 |

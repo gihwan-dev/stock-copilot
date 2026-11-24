@@ -1734,6 +1734,8 @@ impl application::InstrumentMappingHistoryRepository for MemoryInstrumentMapping
         })
     }
 }
+mod estimates;
+pub use estimates::{MemoryEstimateLedger, MemoryValuationDayRepository};
 mod signal_repository;
 pub use signal_repository::MemorySignalEvaluationRepository;
 pub use signal_repository::MemorySignalEvaluationRepository as MemorySignalRepository;

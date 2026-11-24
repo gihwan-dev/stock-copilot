@@ -115,6 +115,13 @@ pub struct CalibrationInstant {
     nanosecond: Nanosecond,
 }
 impl CalibrationInstant {
+    pub fn from_parts(
+        seconds: UnixSeconds,
+        nanosecond: Nanosecond,
+    ) -> Result<Self, crate::TimeError> {
+        let timestamp = Timestamp::from_parts(seconds, nanosecond, crate::OffsetSeconds::new(0))?;
+        Ok(Self::from_timestamp(timestamp))
+    }
     #[must_use]
     pub fn from_timestamp(value: Timestamp) -> Self {
         Self {
@@ -148,6 +155,15 @@ pub struct CalibrationInterval {
     end: CalibrationInstant,
 }
 impl CalibrationInterval {
+    pub fn try_new(
+        start: CalibrationInstant,
+        end: CalibrationInstant,
+    ) -> Result<Self, crate::TimeIntervalError> {
+        if start >= end {
+            return Err(crate::TimeIntervalError::NonIncreasing);
+        }
+        Ok(Self { start, end })
+    }
     #[must_use]
     pub fn from_interval(value: TimeInterval) -> Self {
         Self {
@@ -215,6 +231,15 @@ impl CalibrationEstimate {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedCalibrationFact {
+    pub id: CalibrationEstimateId,
+    pub instrument: InstrumentId,
+    pub key: CalibrationKey,
+    pub interval: CalibrationInterval,
+    pub predicted_probability: AiProbability,
+    pub outcome: CalibrationOutcome,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalibrationFact {
     estimate: CalibrationEstimate,
     outcome: CalibrationOutcome,
@@ -223,6 +248,19 @@ impl CalibrationFact {
     #[must_use]
     pub(crate) fn new(estimate: CalibrationEstimate, outcome: CalibrationOutcome) -> Self {
         Self { estimate, outcome }
+    }
+    #[must_use]
+    pub fn restore_from_saved_state(saved: SavedCalibrationFact) -> Self {
+        Self {
+            estimate: CalibrationEstimate {
+                id: saved.id,
+                instrument: saved.instrument,
+                key: saved.key,
+                interval: saved.interval,
+                predicted_probability: saved.predicted_probability,
+            },
+            outcome: saved.outcome,
+        }
     }
     #[must_use]
     pub const fn estimate(&self) -> &CalibrationEstimate {
@@ -468,6 +506,10 @@ fn repetition(
     Ok(FactRepetition::New)
 }
 impl Calibration {
+    #[must_use]
+    pub const fn key(&self) -> &CalibrationKey {
+        &self.key
+    }
     #[must_use]
     pub fn capacity(&self) -> CalibrationCapacity {
         if self.facts.len() >= 65_536 {
