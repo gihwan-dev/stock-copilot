@@ -691,3 +691,9 @@ pub use order_query_proof::{
     OrderPageExhaustion, OrderQueryFilterState, OrderRowIntake, OrderSymbolFilter,
     OrderedAtDateBounds, ProvenClosedOrderSet,
 };
+mod external_url;
+pub use external_url::{
+    AuthorizedExternalUrl, CanonicalHttpsUrl, ExternalUrlAllowance, ExternalUrlHost,
+    ExternalUrlInput, ExternalUrlPath, ExternalUrlPort, ExternalUrlQuery, ExternalUrlRejection,
+    ExternalUrlScheme, FixedExternalUrl, ParsedExternalUrl,
+};

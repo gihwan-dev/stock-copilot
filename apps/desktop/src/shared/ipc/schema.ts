@@ -24,3 +24,12 @@ export const commandErrorSchema = z
   .object({ kind: z.enum(["user-fixable", "retryable", "bug", "no-data"]) })
   .strict()
   .readonly();
+
+export type OpenExternalStatus = "opened";
+
+export type OpenExternalResult = { readonly status: OpenExternalStatus };
+
+export const openExternalResultSchema = z
+  .object({ status: z.literal("opened") })
+  .strict()
+  .readonly();

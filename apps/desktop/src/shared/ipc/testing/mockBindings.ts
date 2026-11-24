@@ -10,6 +10,10 @@ export const commands = {
     typedError<AppVersion, IpcError>(
       __TAURI_INVOKE("app_version", { request }),
     ),
+  openExternal: (request: OpenExternalRequest) =>
+    typedError<OpenExternalResponse, IpcError>(
+      __TAURI_INVOKE("open_external", { request }),
+    ),
 };
 
 /** Events */
@@ -33,6 +37,16 @@ export type IpcError = {
 };
 
 export type IpcErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
+
+export type OpenExternalRequest = {
+  url: string;
+};
+
+export type OpenExternalResponse = {
+  status: OpenExternalStatus;
+};
+
+export type OpenExternalStatus = "opened";
 
 export type UiDisclosureKey = {
   source: UiDisclosureSource;
@@ -711,6 +725,9 @@ export type MockCommandHandlers = {
   appVersion: (args: {
     request: AppVersionRequest;
   }) => AppVersion | Promise<AppVersion>;
+  openExternal: (args: {
+    request: OpenExternalRequest;
+  }) => OpenExternalResponse | Promise<OpenExternalResponse>;
 };
 
 /**
@@ -744,6 +761,12 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.appVersion,
             "app_version",
+            args,
+          );
+        case "open_external":
+          return mockCommandHandler(
+            mockHandlers.openExternal,
+            "open_external",
             args,
           );
         default:

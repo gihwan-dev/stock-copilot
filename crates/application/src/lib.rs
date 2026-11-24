@@ -429,3 +429,8 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
+mod open_external;
+pub use open_external::{
+    CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
+    OpenExternalError, OpenExternalOutcome, OpenExternalUrl,
+};
