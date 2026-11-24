@@ -689,6 +689,12 @@ pub use deep_research_claims::{
     ResearchClaimText, ResearchDraft, ResearchStance, VerifiedClaim,
 };
 
+mod deep_research_review;
+pub use deep_research_review::{
+    ResearchCount, ResearchSourceWarning, ResearchTally, research_source_warnings,
+    tally_research_claims,
+};
+
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
 
