@@ -9,6 +9,8 @@ pub use money_display::{
 
 mod account_id;
 mod ai_job_id;
+mod briefing_id;
+pub use briefing_id::{BriefingId, BriefingKind};
 mod client_order_id;
 mod instrument_id;
 mod instrument_issuer;

@@ -135,6 +135,39 @@ pub enum UiDataSource {
     Fred,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub enum UiBriefingKind {
+    Morning,
+    ClosingReview,
+    PreUsMarket,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiBriefingId {
+    pub kind: UiBriefingKind,
+    pub date: String,
+}
+
+impl From<domain::BriefingId> for UiBriefingId {
+    fn from(value: domain::BriefingId) -> Self {
+        let kind = match value.kind() {
+            domain::BriefingKind::Morning => UiBriefingKind::Morning,
+            domain::BriefingKind::ClosingReview => UiBriefingKind::ClosingReview,
+            domain::BriefingKind::PreUsMarket => UiBriefingKind::PreUsMarket,
+        };
+        let date = value.date();
+        Self {
+            kind,
+            date: format!(
+                "{:04}-{:02}-{:02}",
+                date.year().as_i32(),
+                date.month().as_u8(),
+                date.day().as_u8()
+            ),
+        }
+    }
+}
+
 impl From<domain::DataSource> for UiDataSource {
     fn from(value: domain::DataSource) -> Self {
         match value {
@@ -201,6 +234,7 @@ pub enum UiEvent {
     DisclosureTriggerRecorded(UiDisclosureKey),
     SourceStatusChanged(UiDataSource),
     AiJobFinished(String),
+    BriefingFinished(UiBriefingId),
 }
 
 impl From<DomainEvent> for UiEvent {
@@ -264,6 +298,7 @@ impl From<DomainEvent> for UiEvent {
             }
             DomainEvent::SourceStatusChanged(source) => Self::SourceStatusChanged(source.into()),
             DomainEvent::AiJobFinished(id) => Self::AiJobFinished(id.as_str().to_owned()),
+            DomainEvent::BriefingFinished(id) => Self::BriefingFinished(id.into()),
         }
     }
 }

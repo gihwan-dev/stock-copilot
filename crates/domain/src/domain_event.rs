@@ -1,6 +1,6 @@
 use crate::{
-    AccountId, AiJobId, ClientOrderId, DataSource, DisclosureKey, FxPair, InformationSource,
-    InstrumentId, KnownMarket, ProposalId,
+    AccountId, AiJobId, BriefingId, ClientOrderId, DataSource, DisclosureKey, FxPair,
+    InformationSource, InstrumentId, KnownMarket, ProposalId,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +45,7 @@ pub enum DomainEvent {
     DisclosureTriggerRecorded(DisclosureKey),
     SourceStatusChanged(DataSource),
     AiJobFinished(AiJobId),
+    BriefingFinished(BriefingId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -89,6 +90,7 @@ pub enum DomainEventKind {
     DisclosureTriggerRecorded,
     SourceStatusChanged,
     AiJobFinished,
+    BriefingFinished,
 }
 
 impl DomainEvent {
@@ -135,6 +137,7 @@ impl DomainEvent {
             Self::DisclosureTriggerRecorded(_) => DomainEventKind::DisclosureTriggerRecorded,
             Self::SourceStatusChanged(_) => DomainEventKind::SourceStatusChanged,
             Self::AiJobFinished(_) => DomainEventKind::AiJobFinished,
+            Self::BriefingFinished(_) => DomainEventKind::BriefingFinished,
         }
     }
 }
@@ -412,6 +415,19 @@ mod tests {
                 DomainEventKind::AiJobFinished,
                 "AiJobFinished",
             ),
+            (
+                DomainEvent::BriefingFinished(crate::BriefingId::new(
+                    crate::BriefingKind::Morning,
+                    crate::CalendarDate::from_parts(
+                        crate::CalendarYear::new(2026),
+                        crate::MonthNumber::new(11),
+                        crate::DayNumber::new(25),
+                    )
+                    .expect("가짜 날짜"),
+                )),
+                DomainEventKind::BriefingFinished,
+                "BriefingFinished",
+            ),
         ]
     }
     fn cases() -> Vec<(DomainEvent, DomainEventKind, &'static str)> {
@@ -473,6 +489,7 @@ mod tests {
             }
             DomainEvent::SourceStatusChanged(id) => format!("SourceStatusChanged({id:?})"),
             DomainEvent::AiJobFinished(id) => format!("AiJobFinished({id:?})"),
+            DomainEvent::BriefingFinished(id) => format!("BriefingFinished({id:?})"),
         }
     }
     #[test]
@@ -582,7 +599,7 @@ mod tests {
         payloads
     }
     fn pending_contract(rows: &[[String; 8]]) -> Result<(), ContractMismatch> {
-        let expected = BTreeMap::from([("BriefingFinished".to_owned(), "J-03".to_owned())]);
+        let expected = BTreeMap::new();
         let mut actual = BTreeMap::new();
         for [
             name,
@@ -705,7 +722,17 @@ mod tests {
             check_contract(&source, &payload),
             Err(ContractMismatch::Payload)
         );
-        let missing_pending = replace_row(&document, "BriefingFinished", "");
+        let missing_pending = replace_column(
+            &replace_column(
+                &replace_column(&document, "AiJobFinished", 5, "정의 대기"),
+                "AiJobFinished",
+                6,
+                "AI-17",
+            ),
+            "AiJobFinished",
+            7,
+            "실행 ID 미정",
+        );
         assert_eq!(
             check_contract(&source, &missing_pending),
             Err(ContractMismatch::Pending)
@@ -757,8 +784,8 @@ mod tests {
             );
         }
         for (name, column, value) in [
-            ("BriefingFinished", 7, ""),
-            ("BriefingFinished", 7, "-"),
+            ("AiJobFinished", 6, "AI-17"),
+            ("BriefingFinished", 7, "사유"),
             ("SettingsChanged", 5, "미확정"),
             ("SettingsChanged", 6, "AI-17"),
         ] {

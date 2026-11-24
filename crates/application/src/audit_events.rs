@@ -79,7 +79,8 @@ fn audit_kind(event: &DomainEvent) -> Option<AuditKind> {
         | DomainEvent::FxRateUpdated(_)
         | DomainEvent::DisclosureTriggerRecorded(_)
         | DomainEvent::AiJobFinished(_)
-        | DomainEvent::SourceStatusChanged(_) => None,
+        | DomainEvent::SourceStatusChanged(_)
+        | DomainEvent::BriefingFinished(_) => None,
     }
 }
 
