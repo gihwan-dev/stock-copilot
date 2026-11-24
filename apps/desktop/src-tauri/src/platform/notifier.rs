@@ -262,7 +262,8 @@ impl<D: NotificationDispatch, L: DisclosureUrgencyLookup> EventSubscriber
             | DomainEvent::AiBudgetChanged
             | DomainEvent::AccountSelectionChanged
             | DomainEvent::StoredDataChanged
-            | DomainEvent::FxRateUpdated(_) => Ok(()),
+            | DomainEvent::FxRateUpdated(_)
+            | DomainEvent::SourceStatusChanged(_) => Ok(()),
         }
     }
 }
