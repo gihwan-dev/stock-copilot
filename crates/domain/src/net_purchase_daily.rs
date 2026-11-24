@@ -1,8 +1,8 @@
 use crate::{
-    ClosedOrderSet, Comparison, Currency, HoldingsDailyCurrency, HoldingsDailyProfit,
-    HoldingsDailySelection, Money, NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError,
-    NetPurchaseScope, PortfolioDailyProfitLoss, SettledRowSet, SnapshotError, TimeInterval,
-    ValuationSnapshot, net_purchase_amount,
+    Comparison, Currency, HoldingsDailyCurrency, HoldingsDailyProfit, HoldingsDailySelection,
+    Money, NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope,
+    PortfolioDailyProfitLoss, ProvenClosedOrderSet, SettledRowSet, SnapshotError, TimeInterval,
+    ValuationSnapshot, proven_net_purchase_amount,
 };
 use std::fmt;
 
@@ -63,13 +63,13 @@ impl fmt::Debug for HoldingsDailyWithOrders {
 pub fn holdings_daily_profit_with_orders(
     today: &ValuationSnapshot,
     previous: Option<&ValuationSnapshot>,
-    orders: &ClosedOrderSet,
+    orders: &ProvenClosedOrderSet,
     currency: Currency,
 ) -> Result<Money, NetPurchaseError> {
     let old = previous.ok_or_else(|| snapshot_error(SnapshotError::MissingPrevious))?;
     let period = TimeInterval::try_new(old.valuation_at(), today.valuation_at())
         .map_err(|_error| snapshot_error(SnapshotError::WrongPeriod))?;
-    let net = net_purchase_amount(orders, period, NetPurchaseScope::Currency(currency))?;
+    let net = proven_net_purchase_amount(orders, period, NetPurchaseScope::Currency(currency))?;
     today
         .stock_value(currency)
         .map_err(snapshot_error)?
@@ -88,7 +88,7 @@ fn snapshot_error(error: SnapshotError) -> NetPurchaseError {
 pub fn compare_holdings_daily_profit_with_orders(
     today: &ValuationSnapshot,
     previous: Option<&ValuationSnapshot>,
-    orders: &ClosedOrderSet,
+    orders: &ProvenClosedOrderSet,
     rows: &SettledRowSet,
     reported: Option<PortfolioDailyProfitLoss>,
 ) -> HoldingsDailyWithOrders {
@@ -147,7 +147,9 @@ mod tests {
         OrderDailyComparison, compare_holdings_daily_profit_with_orders,
         holdings_daily_profit_with_orders,
     };
+    use crate::ProvenClosedOrderSet;
     use crate::net_purchase::tests::{instrument, money, row};
+    use crate::order_query_proof::assume_proven;
     use crate::valuation_snapshot::tests::{at as day_at, reported};
     use crate::{
         AccountId, BrokerOrder, BrokerOrderId, BrokerOrderMoney, ClosedOrderCompleteness,
@@ -192,7 +194,7 @@ mod tests {
         .expect("평가")
     }
 
-    fn inputs() -> (ValuationSnapshot, ValuationSnapshot, ClosedOrderSet) {
+    fn inputs() -> (ValuationSnapshot, ValuationSnapshot, ProvenClosedOrderSet) {
         let old = valuation(2, "1400", Some("7000"));
         let today = valuation(3, "1700", Some("6500"));
         let mut buy = row("buy", OrderSide::Buy, "157", 150);
@@ -215,7 +217,7 @@ mod tests {
             ClosedOrderCompleteness::Complete,
         )
         .expect("종료 조회");
-        (old, today, orders)
+        (old, today, assume_proven(orders))
     }
     #[test]
     fn daily_formula_and_reported_selection_are_connected() {
@@ -263,14 +265,17 @@ mod tests {
     fn incomplete_keeps_toss_and_reason_and_complete_can_differ() {
         let (old, today, orders) = inputs();
         let rows = SettledRowSet::new(AccountId::new(7));
-        let incomplete = ClosedOrderSet::new(
-            orders.account_id().clone(),
-            orders.orders().values().cloned().collect(),
-            orders.covered(),
-            orders.observed_at(),
-            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages),
-        )
-        .expect("불완전");
+        let base = orders.orders();
+        let incomplete = assume_proven(
+            ClosedOrderSet::new(
+                base.account_id().clone(),
+                base.orders().values().cloned().collect(),
+                base.covered(),
+                base.observed_at(),
+                ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages),
+            )
+            .expect("불완전"),
+        );
         let result = compare_holdings_daily_profit_with_orders(
             &today,
             Some(&old),
@@ -377,20 +382,23 @@ mod tests {
     #[test]
     fn daily_arithmetic_failure_is_input_error_with_reported_value_retained() {
         let (before, after, orders) = inputs();
-        let sells = orders
+        let base = orders.orders();
+        let sells = base
             .orders()
             .values()
             .filter(|order| order.side() == OrderSide::Sell)
             .cloned()
             .collect();
-        let sold = ClosedOrderSet::new(
-            orders.account_id().clone(),
-            sells,
-            orders.covered(),
-            orders.observed_at(),
-            ClosedOrderCompleteness::Complete,
-        )
-        .expect("매도");
+        let sold = assume_proven(
+            ClosedOrderSet::new(
+                base.account_id().clone(),
+                sells,
+                base.covered(),
+                base.observed_at(),
+                ClosedOrderCompleteness::Complete,
+            )
+            .expect("매도"),
+        );
         let old = valuation(2, "1", Some("0"));
         let today = valuation(3, "79228162514264337593543950335", Some("0"));
         let expected = NetPurchaseError::InvalidInput(NetPurchaseInputError::Arithmetic(

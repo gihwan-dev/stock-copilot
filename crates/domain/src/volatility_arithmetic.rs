@@ -13,6 +13,16 @@ impl ApproximateRoot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DailyVolatility(Decimal);
 impl DailyVolatility {
+    pub fn try_new(value: crate::Ratio) -> Result<Self, VolatilityError> {
+        if value.as_decimal() < Decimal::ZERO {
+            return Err(VolatilityError::Arithmetic);
+        }
+        Ok(Self(value.as_decimal()))
+    }
+    #[must_use]
+    pub fn as_ratio(self) -> crate::Ratio {
+        crate::Ratio::new(self.0)
+    }
     pub(crate) const fn as_decimal(&self) -> Decimal {
         self.0
     }

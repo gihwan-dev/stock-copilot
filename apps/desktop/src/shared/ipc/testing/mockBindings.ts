@@ -534,6 +534,13 @@ export type StoredChatEntryDto_Serialize = {
 
 export type StoredChatEntryRoleDto = "User" | "Assistant";
 
+export type UiBriefingId = {
+  kind: UiBriefingKind;
+  date: string;
+};
+
+export type UiBriefingKind = "Morning" | "ClosingReview" | "PreUsMarket";
+
 export type UiDataSource =
   | "KindDisclosure"
   | "DartDisclosureApi"
@@ -564,6 +571,7 @@ export type UiEvent =
   | "PortfolioSyncRecorded"
   | "TransactionsSyncRecorded"
   | ({ PriceUpdated: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -589,6 +597,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ PriceMoved: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -614,6 +623,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ DisclosureArrived: UiDisclosureKey } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureTriggerRecorded?: never;
       EstimateResolved?: never;
@@ -639,6 +649,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ NewsActivityIncreased: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -664,6 +675,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalCreated: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -689,6 +701,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalExpired: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -714,6 +727,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalApproved: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -739,6 +753,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalRejected: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -764,6 +779,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalSkipped: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -789,6 +805,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ OrderSubmitted: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -814,6 +831,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ OrderOutcomeUnknown: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -844,6 +862,7 @@ export type UiEvent =
   | "OrderSwitchChanged"
   | "WatchlistChanged"
   | ({ ThesisUpdated: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -870,6 +889,7 @@ export type UiEvent =
     })
   | "SelfCheckChanged"
   | ({ MarketSessionChanged: UiMarket } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -895,6 +915,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ SignalRaised: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -920,6 +941,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ SignalCleared: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -945,6 +967,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ EstimateSubmitted: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -970,6 +993,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ EstimateResolved: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -996,6 +1020,7 @@ export type UiEvent =
     })
   | "ValuationSnapshotTaken"
   | ({ OrderRejected: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -1021,6 +1046,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ OrderOutcomeResolved: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -1049,6 +1075,7 @@ export type UiEvent =
   | "OrderCancelled"
   | "OrderModified"
   | ({ CollectionFinished: UiInformationSource } & {
+      BriefingFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
       EstimateResolved?: never;
@@ -1074,6 +1101,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ NewsClusterGrew: string } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -1102,6 +1130,7 @@ export type UiEvent =
   | "AccountSelectionChanged"
   | "StoredDataChanged"
   | ({ FxRateUpdated: UiFxPair } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -1127,6 +1156,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ DisclosureTriggerRecorded: UiDisclosureKey } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       EstimateResolved?: never;
@@ -1152,6 +1182,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ SourceStatusChanged: UiDataSource } & {
+      BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -1174,6 +1205,32 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      ThesisUpdated?: never;
+    })
+  | ({ BriefingFinished: UiBriefingId } & {
+      CollectionFinished?: never;
+      DisclosureArrived?: never;
+      DisclosureTriggerRecorded?: never;
+      EstimateResolved?: never;
+      EstimateSubmitted?: never;
+      FxRateUpdated?: never;
+      MarketSessionChanged?: never;
+      NewsActivityIncreased?: never;
+      NewsClusterGrew?: never;
+      OrderOutcomeResolved?: never;
+      OrderOutcomeUnknown?: never;
+      OrderRejected?: never;
+      OrderSubmitted?: never;
+      PriceMoved?: never;
+      PriceUpdated?: never;
+      ProposalApproved?: never;
+      ProposalCreated?: never;
+      ProposalExpired?: never;
+      ProposalRejected?: never;
+      ProposalSkipped?: never;
+      SignalCleared?: never;
+      SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     });
 

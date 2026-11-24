@@ -27,12 +27,14 @@ enum Target {
     Other,
     Endpoint,
     Client,
+    WsConnector,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Factory {
     Forbidden,
     Endpoint,
     Client,
+    WsConnector,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
@@ -79,15 +81,22 @@ impl EndpointCheck<'_> {
                     if self.relative == ENDPOINT
                         && !self.constructor
                         && (ident.unraw() == "PRODUCTION_ORIGIN"
+                            || ident.unraw() == "PRODUCTION_WS_ORIGIN"
                             || ident.unraw() == "Production") =>
                 {
                     self.findings.insert(Rule::TossProduction);
                 }
                 TokenTree::Ident(ident)
                     if (self.relative == ENDPOINT || self.relative == HTTP)
-                        && ["TossEndpoint", "TossHttpClient", "Self"]
-                            .iter()
-                            .any(|name| ident.unraw() == name) =>
+                        && [
+                            "TossEndpoint",
+                            "TossWsEndpoint",
+                            "TossHttpClient",
+                            "TossWsConnector",
+                            "Self",
+                        ]
+                        .iter()
+                        .any(|name| ident.unraw() == name) =>
                 {
                     self.findings.insert(Rule::TossProduction);
                 }
@@ -122,11 +131,16 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
     fn visit_expr_struct(&mut self, i: &'ast syn::ExprStruct) {
         let endpoint = i.path.segments.last().is_some_and(|part| {
             part.ident.unraw() == "TossEndpoint"
+                || part.ident.unraw() == "TossWsEndpoint"
                 || (part.ident.unraw() == "Self" && (self.target == Target::Endpoint))
         });
         let client = i.path.segments.last().is_some_and(|part| {
             part.ident.unraw() == "TossHttpClient"
                 || (part.ident.unraw() == "Self" && (self.target == Target::Client))
+        });
+        let ws_connector = i.path.segments.last().is_some_and(|part| {
+            part.ident.unraw() == "TossWsConnector"
+                || (part.ident.unraw() == "Self" && (self.target == Target::WsConnector))
         });
         let hidden = (self.relative == ENDPOINT || self.relative == HTTP)
             && self.factory == Factory::Forbidden
@@ -142,6 +156,7 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
         if hidden
             || (endpoint && !(self.relative == ENDPOINT && (self.factory == Factory::Endpoint)))
             || (client && !(self.relative == HTTP && (self.factory == Factory::Client)))
+            || (ws_connector && !(self.relative == HTTP && (self.factory == Factory::WsConnector)))
         {
             self.findings.insert(Rule::TossProduction);
         }
@@ -176,6 +191,7 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
                         "header",
                         "classify_status",
                         "configured_client",
+                        "configured_ws_client",
                         "validate_loopback",
                         "receive",
                     ]
@@ -188,12 +204,15 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
     }
     fn visit_item_struct(&mut self, i: &'ast syn::ItemStruct) {
         if self.relative == ENDPOINT
-            && i.ident.unraw() == "TossEndpoint"
+            && (i.ident.unraw() == "TossEndpoint" || i.ident.unraw() == "TossWsEndpoint")
             && i.attrs.iter().any(|attr| !debug_derive(attr))
         {
             self.findings.insert(Rule::TossProduction);
         }
-        if (i.ident.unraw() == "TossEndpoint" || i.ident.unraw() == "TossHttpClient")
+        if (i.ident.unraw() == "TossEndpoint"
+            || i.ident.unraw() == "TossWsEndpoint"
+            || i.ident.unraw() == "TossHttpClient"
+            || i.ident.unraw() == "TossWsConnector")
             && i.fields.iter().any(|field| !private(&field.vis))
         {
             self.findings.insert(Rule::TossProduction);
@@ -214,7 +233,9 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
     }
     fn visit_use_name(&mut self, i: &'ast syn::UseName) {
         if self.relative == ENDPOINT
-            && (i.ident.unraw() == "PRODUCTION_ORIGIN" || i.ident.unraw() == "Production")
+            && (i.ident.unraw() == "PRODUCTION_ORIGIN"
+                || i.ident.unraw() == "PRODUCTION_WS_ORIGIN"
+                || i.ident.unraw() == "Production")
         {
             self.findings.insert(Rule::TossProduction);
         }
@@ -222,14 +243,18 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
     }
     fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
         let outer = self.target;
-        let endpoint = type_named(&i.self_ty, "TossEndpoint");
+        let endpoint =
+            type_named(&i.self_ty, "TossEndpoint") || type_named(&i.self_ty, "TossWsEndpoint");
         let client = type_named(&i.self_ty, "TossHttpClient");
+        let ws_connector = type_named(&i.self_ty, "TossWsConnector");
         self.target = if i.trait_.is_some() {
             Target::Other
         } else if endpoint {
             Target::Endpoint
         } else if client {
             Target::Client
+        } else if ws_connector {
+            Target::WsConnector
         } else {
             Target::Other
         };
@@ -252,6 +277,18 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
         {
             self.findings.insert(Rule::TossProduction);
         }
+        if ws_connector
+            && (self.relative != HTTP
+                || match &i.trait_ {
+                    Some((_, path, _)) => path
+                        .segments
+                        .last()
+                        .is_none_or(|part| part.ident != "Debug"),
+                    None => i.items.iter().any(|item| !closed_ws_connector_method(item)),
+                })
+        {
+            self.findings.insert(Rule::TossProduction);
+        }
         visit::visit_item_impl(self, i);
         self.target = outer;
     }
@@ -263,6 +300,8 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
             Factory::Endpoint
         } else if self.target == Target::Client && i.sig.ident == "new" {
             Factory::Client
+        } else if self.target == Target::WsConnector && i.sig.ident == "new" {
+            Factory::WsConnector
         } else {
             Factory::Forbidden
         };
@@ -278,6 +317,7 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
                 && (name.unraw() == "origin" || name.unraw() == "mode"))
                 || (self.relative == HTTP
                     && self.target != Target::Client
+                    && self.target != Target::WsConnector
                     && (name.unraw() == "origin" || name.unraw() == "client")))
         {
             self.findings.insert(Rule::TossProduction);
@@ -316,7 +356,9 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
         if self.relative == ENDPOINT
             && !self.constructor
             && i.segments.iter().any(|part| {
-                part.ident.unraw() == "PRODUCTION_ORIGIN" || part.ident.unraw() == "Production"
+                part.ident.unraw() == "PRODUCTION_ORIGIN"
+                    || part.ident.unraw() == "PRODUCTION_WS_ORIGIN"
+                    || part.ident.unraw() == "Production"
             })
         {
             self.findings.insert(Rule::TossProduction);
@@ -355,7 +397,27 @@ fn closed_client_method(item: &syn::ImplItem) -> bool {
         "fn new(endpoint: &TossEndpoint, clock: Arc<dyn Clock>, wait: Arc<dyn crate::RequestWait>) -> Result<Self, TossHttpError> {}",
         "async fn get(&self, request: &ReadRequest, token: &SecretValue) -> Result<RawResponse, TossHttpError> {}",
         "async fn send_token(&self, body: SecretValue) -> Result<RawResponse, TossHttpError> {}",
+        "async fn get_public_doc(&self, route: PublicDocsRoute) -> Result<RawResponse, TossHttpError> {}",
     ].iter().any(|text| syn::parse_str::<syn::ImplItemFn>(text).is_ok_and(|expected| expected.sig.to_token_stream().to_string() == actual.to_token_stream().to_string()))
+}
+
+fn closed_ws_connector_method(item: &syn::ImplItem) -> bool {
+    use quote::ToTokens;
+    let syn::ImplItem::Fn(method) = item else {
+        return false;
+    };
+    let mut actual = method.sig.clone();
+    actual.inputs = actual.inputs.into_iter().collect();
+    [
+        "fn new(endpoint: &TossWsEndpoint) -> Result<Self, TossHttpError> {}",
+        "async fn open_upgrade(&self, token: &SecretValue, ws_key: &str, expected_accept: &str) -> Result<WsUpgradeOutcome, TossHttpError> {}",
+    ]
+    .iter()
+    .any(|text| {
+        syn::parse_str::<syn::ImplItemFn>(text).is_ok_and(|expected| {
+            expected.sig.to_token_stream().to_string() == actual.to_token_stream().to_string()
+        })
+    })
 }
 
 fn debug_derive(attr: &syn::Attribute) -> bool {
@@ -387,7 +449,7 @@ fn origin_constant(item: &syn::Item) -> bool {
     let syn::Item::Const(value) = item else {
         return false;
     };
-    if value.ident != "PRODUCTION_ORIGIN" {
+    if value.ident != "PRODUCTION_ORIGIN" && value.ident != "PRODUCTION_WS_ORIGIN" {
         return false;
     }
     let syn::Visibility::Inherited = &value.vis else {

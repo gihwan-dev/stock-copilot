@@ -28,6 +28,7 @@ import {
 import { ChatPanel } from "../features/chat";
 import { queryKeys, text, type AppRoutePath } from "../shared/lib";
 import { describeIpcFailure, useAppVersion } from "./query";
+import { SettingsSections } from "./settings";
 
 type NavigateFn = (path: AppRoutePath) => void;
 
@@ -125,11 +126,7 @@ const SettingsPlaceholder = (): ReactElement => {
         },
       }}
     >
-      <Section title={text("app.settingsTitle", "ko")}>
-        <Card title={text("app.settingsTitle", "ko")}>
-          <Text>{text("app.readySummary", "ko")}</Text>
-        </Card>
-      </Section>
+      <SettingsSections />
     </Page>
   );
 };
