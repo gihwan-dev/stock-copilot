@@ -702,6 +702,9 @@ pub use deep_research_review::{
     tally_research_claims,
 };
 
+mod deep_research_window;
+pub use deep_research_window::{DeepResearchWindow, deep_research_window};
+
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
 

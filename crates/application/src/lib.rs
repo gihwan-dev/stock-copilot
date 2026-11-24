@@ -573,6 +573,10 @@ pub use deep_research::{
     ResearchPrincipleCheck, ResearchStage, ResearchWebCollector, ResearchWebOutcome,
     ResearchWebStore, RunDeepResearch, VerifyResearchClaims,
 };
+pub use deep_research::{
+    DeepResearchCycleError, DeepResearchCycleProgress, DeepResearchCycleReport, DeepResearchJob,
+    DeepResearchPause, DeepResearchTargetOutcome, RunDeepResearchCycle,
+};
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
