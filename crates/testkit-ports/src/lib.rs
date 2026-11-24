@@ -1,3 +1,5 @@
+mod ai_job_records;
+pub use ai_job_records::MemoryAiJobRecords;
 mod script;
 pub use script::Script;
 mod instrument_id_issuer;
@@ -22,3 +24,4 @@ pub mod memory;
 pub mod proposal_memory;
 pub mod spec_check;
 pub mod system_fakes;
+pub mod tool_read_fakes;

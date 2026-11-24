@@ -72,6 +72,16 @@ impl Database {
         self.write(|_| Ok(application::WriteCompleted)).await
     }
 
+    pub async fn reclaim_space(&self) -> Result<application::WriteCompleted, SystemPortError> {
+        self.write(|transaction| {
+            let mut statement = transaction.prepare(sql::INCREMENTAL_VACUUM)?;
+            let mut rows = statement.query([])?;
+            while rows.next()?.is_some() {}
+            Ok(application::WriteCompleted)
+        })
+        .await
+    }
+
     pub(crate) async fn read<T, F>(&self, operation: F) -> Result<T, SystemPortError>
     where
         T: Send + 'static,
@@ -181,7 +191,7 @@ pub use signals::SignalStore;
 mod signals_tests;
 
 mod audit;
-pub use audit::AuditStore;
+pub use audit::{AnchoredAuditStore, AuditStore};
 #[cfg(test)]
 mod audit_tests;
 
@@ -194,3 +204,24 @@ mod settings;
 pub use settings::{SettingsStore, TossSpecHash, TossSpecHashError};
 #[cfg(test)]
 mod settings_tests;
+
+#[cfg(test)]
+mod maintenance_tests;
+
+#[cfg(test)]
+mod audit_anchor_tests;
+
+mod backup;
+pub use backup::{BackupDirectory, BackupOutcome, create_backup, restore_latest_backup};
+#[cfg(test)]
+mod backup_tests;
+
+mod order_rate;
+pub use order_rate::OrderRateStore;
+#[cfg(test)]
+mod order_rate_tests;
+
+mod status;
+pub use status::{NewsDataSettingsStore, SourceStatusStore, SpecStatusStore};
+#[cfg(test)]
+mod status_tests;

@@ -25,6 +25,7 @@ import {
   Stack,
   Text,
 } from "../shared/ds";
+import { ChatPanel } from "../features/chat";
 import { queryKeys, text, type AppRoutePath } from "../shared/lib";
 import { describeIpcFailure, useAppVersion } from "./query";
 import { SettingsSections } from "./settings";
@@ -41,12 +42,10 @@ const SidebarPlaceholder = (): ReactElement => (
   </Stack>
 );
 
-const ChatPlaceholder = (): ReactElement => (
+const ChatSlot = (): ReactElement => (
   <Stack gap="space-2">
     <Text variant="label">{text("shell.chat", "ko")}</Text>
-    <Text variant="body-sm" tone="ink-muted">
-      {text("app.chatReady", "ko")}
-    </Text>
+    <ChatPanel context={undefined} />
   </Stack>
 );
 
@@ -150,7 +149,7 @@ const StatusPlaceholder = (): ReactElement => {
 };
 
 const ShellLayout = (): ReactElement => (
-  <AppShell list={<SidebarPlaceholder />} chat={<ChatPlaceholder />}>
+  <AppShell list={<SidebarPlaceholder />} chat={<ChatSlot />}>
     <Outlet />
   </AppShell>
 );

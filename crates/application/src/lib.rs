@@ -273,7 +273,8 @@ mod confirm_instrument_identity;
 pub use confirm_instrument_identity::{ConfirmInstrumentIdentity, IdentityConfirmationOutcome};
 mod audit_log;
 pub use audit_log::{
-    AuditEntry, AuditIntegrity, AuditKind, AuditLog, WebSearchAuditError, WebSearchAuditOutcome,
+    AuditChainHash, AuditEntry, AuditHead, AuditHeadAnchor, AuditHeadError, AuditIntegrity,
+    AuditKind, AuditLog, AuditSequence, WebSearchAuditError, WebSearchAuditOutcome,
     WebSearchAuditRecord, WebSearchQueryMode,
 };
 mod instrument_mapping;
@@ -330,6 +331,11 @@ pub use ai_request::{
     RunSpec, StoredUserMessage, UserMessageId, Utilization,
 };
 
+mod ai_job_record;
+pub use ai_job_record::{
+    AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
+    AiJobTimingError, AiJobUsageMeter, ListAiJobUsage, ListAiJobUsageError, RecordAiJobFinished,
+};
 mod ai_provider;
 pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
@@ -378,6 +384,21 @@ pub use market_overview::{
     OverviewFreshness, OverviewObservation, OverviewRequest,
 };
 
+mod market_tool_reads;
+pub use market_tool_reads::{
+    CandleToolLine, CandleWindow, CandleWindowError, CandlesToolView, InvestorFlowToolLine,
+    InvestorFlowToolView, MarketOverviewToolView, MarketToolReads, OverviewItem, OverviewToolLine,
+    OverviewUnit, QuoteToolView, RankingToolKind, RankingToolLine, RankingsToolView,
+    SectorToolLine, SectorsToolView, SessionStatus, SessionToolLine, ValueProvenance,
+};
+mod portfolio_tool_reads;
+pub use portfolio_tool_reads::{
+    AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
+    BenchmarkReturnLine, BuyingPowerLine, ConcentrationLine, HoldingToolLine, PerformanceBenchmark,
+    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, RiskMetrics,
+    SampleSufficiency, TransactionAdmission, TransactionToolFilter, TransactionToolKind,
+    TransactionToolLine, TransactionsToolView,
+};
 mod portfolio_views;
 pub use portfolio_views::{
     GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,
@@ -396,6 +417,36 @@ mod submit_estimate;
 pub use submit_estimate::{
     EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository,
     EstimateTaskRepository, SubmitEstimate, SubmitEstimateError,
+};
+
+mod analysis_tools;
+pub use analysis_tools::{
+    GetProfile, GetScorecard, GetScorecardError, ProfileView, ScorecardObservationRepository,
+    ScorecardSelection, ScorecardView,
+};
+
+mod estimate_cycle;
+pub use estimate_cycle::{
+    BackgroundBudget, CycleAdmission, CycleProgress, EstimateCycleReport, RunEstimateCycle,
+    SingleEstimateOutcome, SingleEstimateRunner,
+};
+
+mod skip_signal;
+pub use skip_signal::{SignalSkip, SignalSkipRepository, SkipReason, SkipReasonError, SkipSignal};
+
+mod prompt_replay;
+pub use prompt_replay::{
+    ComparePromptReplay, PromptReplayRunner, ReplayCase, ReplayComparison, ReplayCount,
+    ReplayMetrics, ReplayOutput,
+};
+
+mod prompt_file;
+pub use prompt_file::{PromptFile, PromptFileError};
+
+mod submit_estimate_tool;
+pub use submit_estimate_tool::{
+    EstimateRunContext, EstimateToolArguments, SubmitEstimateTool, SubmitEstimateToolError,
+    ToolCallHistory,
 };
 
 mod transaction_observation;
@@ -460,6 +511,18 @@ pub use open_external::{
     CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
     OpenExternalError, OpenExternalOutcome, OpenExternalUrl,
 };
+mod watchlist;
+pub use watchlist::{
+    ManageWatchlist, TrackedUniverse, TrackingOrigin, TrackingTarget, Watchlist, WatchlistCount,
+    WatchlistEntry, WatchlistError, WatchlistMembership, WatchlistOutcome, WatchlistRepository,
+    WatchlistStoreOutcome,
+};
+mod estimate_tasks;
+pub use estimate_tasks::{
+    CreateEstimateTask, CreateEstimateTaskError, CreateEstimateTaskInput,
+    CreateEstimateTaskOutcome, EstimateAssignmentRepository, EstimateTaskView, GetEstimateTask,
+    GetEstimateTaskError, GetEstimateTaskInput,
+};
 
 mod source_status;
 pub use source_status::{
@@ -500,6 +563,16 @@ pub use news_data_settings::{
     SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
+mod deep_research;
+pub use deep_research::{
+    AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
+    DeepResearchRun, DeepResearchStages, DraftResearchCases, FinishResearch, FinishResearchError,
+    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchAnalyst,
+    ResearchCaseError, ResearchCases, ResearchCheckpoint, ResearchCheckpointStore,
+    ResearchConcluder, ResearchConclusion, ResearchEvidenceSource, ResearchModels, ResearchOutcome,
+    ResearchPrincipleCheck, ResearchStage, ResearchWebCollector, ResearchWebOutcome,
+    ResearchWebStore, RunDeepResearch, VerifyResearchClaims,
+};
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
@@ -538,6 +611,8 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod order_button;
+pub use order_button::ReadOrderButton;
 mod order_rate_limit;
 pub use order_rate_limit::{CheckOrderRateLimit, OrderRateRepository};
 
@@ -553,3 +628,5 @@ pub use warm_chat::{
     WarmChatProbe, WarmChatReadiness, WarmChatRejection, WarmChatRequest, WarmChatRuntime,
     WarmChatSession, WarmFreshness, WarmMatch,
 };
+mod database_restore;
+pub use database_restore::{RestoreOutcome, announce_restore};

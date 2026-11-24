@@ -1,0 +1,274 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Weights by sector, country and currency with concentration indicators computed by the app.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_allocation"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Stored daily candles for one symbol, newest first, paginated with limit and cursor. Includes the collection time.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 32,
+          "minLength": 32,
+          "type": "string"
+        },
+        "days": {
+          "maximum": 250,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "market": {
+          "enum": [
+            "KR",
+            "US"
+          ],
+          "type": "string"
+        },
+        "symbol": {
+          "maxLength": 12,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "type": "object"
+    },
+    "name": "get_candles"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Stored foreign, institutional and individual net buying and short selling ratio for one domestic symbol, with the collection time.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "market": {
+          "enum": [
+            "KR"
+          ],
+          "type": "string"
+        },
+        "symbol": {
+          "maxLength": 12,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "type": "object"
+    },
+    "name": "get_investor_flow"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Domestic indices, government bond yields, USD/KRW and market session status, plus US indices, rates, commodities and the dollar. Each value states whether it is official or an ETF-based approximation and when it was collected.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_market_overview"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Period returns (time-weighted and money-weighted), benchmark returns and risk metrics computed by the app. Risk metrics are withheld when the sample is insufficient.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "period": {
+          "enum": [
+            "1m",
+            "3m",
+            "6m",
+            "1y",
+            "since_start"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_performance"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Holdings, weights, profit and loss, and buying power per currency. The cash slot is buying power because the broker reports no deposit balance. Total assets are approximate. Only the last four account digits are shown.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_portfolio"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Latest stored price for one listed symbol with the time it was collected.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "market": {
+          "enum": [
+            "KR",
+            "US"
+          ],
+          "type": "string"
+        },
+        "symbol": {
+          "maxLength": 12,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "type": "object"
+    },
+    "name": "get_quote"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Stored market rankings by trading amount, price change or investor net buying, with the collection time.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "trading_amount",
+            "gainers",
+            "losers",
+            "foreign_net_buy",
+            "institution_net_buy"
+          ],
+          "type": "string"
+        },
+        "market": {
+          "enum": [
+            "KR",
+            "US"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "name": "get_rankings"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Stored sector ranking by price change with the collection time.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "market": {
+          "enum": [
+            "KR",
+            "US"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_sectors"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Stored transaction history (trades, dividends, deposits and withdrawals), newest first, paginated with limit and cursor.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 32,
+          "minLength": 32,
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "all",
+            "trades",
+            "dividends",
+            "cash_flows"
+          ],
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_transactions"
+  }
+]
