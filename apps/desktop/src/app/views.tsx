@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "@tanstack/react-router";
 import type { ReactElement } from "react";
+import { AboutSection } from "../features/about";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
 import { SettingsScreen } from "../features/settings";
@@ -34,6 +35,9 @@ const ChatPlaceholder = (): ReactElement => (
     <Text variant="label">{text("shell.chat", "ko")}</Text>
     <Text variant="body-sm" tone="ink-muted">
       {text("app.chatReady", "ko")}
+    </Text>
+    <Text variant="caption" tone="ink-subtle">
+      {text("notice.chatData", "ko")}
     </Text>
   </Stack>
 );
@@ -140,7 +144,16 @@ export const SettingsRouteView = (): ReactElement => {
       onOpenStatus={(): void => {
         go("/settings/status");
       }}
-      system={system === "shown" ? <SettingsSections key="system" /> : null}
+      system={
+        <Stack key="system" gap="space-8">
+          {[
+            ...(system === "shown"
+              ? [<SettingsSections key="sections" />]
+              : []),
+            <AboutSection key="about" />,
+          ]}
+        </Stack>
+      }
     />
   );
 };
