@@ -278,8 +278,9 @@ pub use audit_log::{
 };
 mod instrument_mapping;
 pub use instrument_mapping::{
-    InstrumentIdIssuer, InstrumentMappingRepository, InstrumentMasterAuthority,
-    InstrumentMasterObservation, InstrumentMasterSession, MappingStoreError,
+    InstrumentIdIssuer, InstrumentMappingCorrectionRepository, InstrumentMappingHistoryRepository,
+    InstrumentMappingRepository, InstrumentMasterAuthority, InstrumentMasterObservation,
+    InstrumentMasterSession, MappingStoreError, MappingTransitionStoreError,
 };
 mod storage_ports;
 pub use storage_ports::ValuationCloseEvidenceRepository;

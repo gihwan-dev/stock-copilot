@@ -1,0 +1,14 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/orders",
+  "method": "get",
+  "status": "429",
+  "schema": "#/components/responses/RateLimitExceeded/content/application~1json/schema",
+  "body": {
+    "error": {
+      "requestId": "synthetic-orders-429",
+      "code": "rate-limit-exceeded",
+      "message": "요청 한도를 초과했습니다."
+    }
+  }
+}

@@ -106,7 +106,7 @@ PostToolUse가 시작 결과의 threadId와 브리프 브랜치를 메인 세션
 
 수정 1차 헤드리스는 계약 2회·운영 회귀 2회·전체 소스 Stop 3회로 7회다. 운영 회귀는 마지막 실행도 실제 상태 기준 10/10 통과했다. 첫 전체 Stop에서 테스트의 중첩 샌드박스와 T3 결과 해석 결함을 발견해 수정했다. 둘째 전체 Stop은 status=passed·깨끗한 HEAD를 기록했다. 셋째는 실제 경로 별칭 보정 뒤 pwd 성공·Stop status=passed·깨끗한 HEAD를 함께 확인했다. 패치·Git 권한·HOME 변경 검사는 모델 없이 했다. Codex의 실제 Seatbelt 셸은 CODEX_SANDBOX=seatbelt를 준다. justfile은 이를 기존 SANDBOX_RUNTIME=1 계약에 연결해 중첩 불가 환경을 인식한다. 샌드박스 밖에서는 기존 표식의 값이 유지된다. 실제 OS 권한을 풀거나 테스트 단언을 바꾸지 않는다. pnpm 12 실측에서 npm_config_store_dir·PNPM_STORE_DIR는 적용되지 않고 pnpm_config_store_dir만 적용됐다. 자동 저장소 선택은 프로젝트와 검사 임시 사본에서 서로 다른 폴더를 골라 offline tarball 실패를 냈다. 컴퓨터별 출력에서 이 환경 변수로 허용된 홈 캐시를 고정하고 config get store-dir와 실제 오프라인 도구 복구 테스트로 확인한다. 키·계좌 데이터는 다루지 않았다. 홈 설정을 바꾸지 않았다는 당시 보고는 수정 3차에서 정정한다. 검사 끄기는 추가하지 않았다.
 
-known-gaps: 64건 (eslint 7건, hook 6건, adr 51건(문서만(예제 없음)))
+known-gaps: 69건 (eslint 7건, hook 6건, adr 56건(문서만(예제 없음)))
 
 
 ## 수정 2차 결정과 실측

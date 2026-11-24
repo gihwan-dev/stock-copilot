@@ -25,7 +25,9 @@ pub use instrument_issuer::{
 };
 pub use instrument_mapping::{
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
-    InstrumentSource, InstrumentSourceConflict, MappingAssignment, instrument_source_conflicts,
+    InstrumentSource, InstrumentSourceConflict, MappingAssignment, MappingLedgerIntegrityError,
+    instrument_source_conflicts, plan_confirmed_identifier_change, plan_confirmed_link_correction,
+    plan_confirmed_retirement_correction, verify_persisted_mapping_ledger,
 };
 pub use instrument_mapping_change::{
     ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,
@@ -543,7 +545,7 @@ mod net_purchase_closed;
 mod net_purchase_daily;
 pub use net_purchase::{
     NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope, NetPurchases,
-    net_purchase_amount, net_purchases,
+    net_purchase_amount, net_purchases, proven_net_purchase_amount, proven_net_purchases,
 };
 pub use net_purchase_closed::{ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet};
 pub use net_purchase_daily::{
@@ -684,11 +686,17 @@ pub use draft_order_intent::{
     DraftOrderIntent, HistoricalDecimalText, HistoricalOrderAmount, HistoricalOrderTerms,
     HistoricalSellQuantity, HistoricalWholeQuantity,
 };
-
 mod web_search_query;
 pub use web_search_query::{
     ApprovedWebSearchQuery, RejectedWebSearchQuery, SensitiveAccountNumber, SensitiveContextError,
     SensitivePersonalName, WebSearchCandidateQuery, WebSearchDigestError, WebSearchInspection,
     WebSearchQueryDigest, WebSearchQueryText, WebSearchRejectionReason, WebSearchSensitiveContext,
     inspect_web_search_query,
+};
+mod order_query_proof;
+pub use order_query_proof::{
+    ClosedOrderCompletenessProof, ClosedOrderPageCollector, ClosedOrderQueryScope,
+    OpenOrderCollector, OpenOrderQueryScope, OrderDateFilter, OrderPageBoundary,
+    OrderPageExhaustion, OrderQueryFilterState, OrderRowIntake, OrderSymbolFilter,
+    OrderedAtDateBounds, ProvenClosedOrderSet,
 };

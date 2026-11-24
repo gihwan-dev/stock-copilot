@@ -7,11 +7,11 @@
 | 역할 | 누가 | 하는 일 | 강제 |
 |---|---|---|---|
 | 메인 에이전트 | 사용자와 대화하는 세션 | 작업 선정, 브리프 작성, 평가, 수정 여부 판단, 리뷰 기록, 푸시, 사용자 보고. 코드를 직접 쓰지 않는다 | 편집 훅이 메인에게 `docs/**`(보호 문서 제외)만 허용 |
-| 구현 에이전트 | T3의 새 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다). sol high, terra max (별도 작업 사본) | 작업 하나를 구현하고 `just check`를 통과시킨다 | Codex 종료 훅이 적용된 세션에서는 `just check`를 돌린다 |
-| 적대적 리뷰어 | T3의 새 Opus 5.5 (`adversarial-reviewer`, 별도 작업 사본) | 구현을 깨뜨릴 방법을 찾고 등급을 매긴다. 판정하지 않는다 | 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
-| 비판자 | T3의 새 Codex `gpt-6.1-sol` (별도 작업 사본) | 리뷰 지적을 하나씩 실행으로 반박해 본다 | 리뷰어와 같음 |
+| 구현 에이전트 | T3의 최상위 Antigravity `gemini-4-neon`(thought_level `xhigh`, 별도 작업 사본) | 작업 하나를 구현하고 변경분 검사(`just check-fast`)·회귀·손 변형을 통과시키며, 독립 리뷰·비판 위임과 자기 작업 브랜치 푸시(`git push origin <현재 브랜치>`)를 수행한다 | Antigravity `.agents/hooks.json`(`harness/antigravity-hooks/`, 5개 조건으로 구현 담당 구분), Git 커밋·푸시 훅(`xtask push-check`), 원격 CI 전체 검사·변이, 독립 리뷰·비판 (남은 빈틈은 [harness.md](harness.md) 7.4와 `just known-gaps`) |
+| 적대적 리뷰어 | T3의 새 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`, `adversarial-reviewer`, 별도 작업 사본) | 구현을 깨뜨릴 방법을 찾고 등급을 매긴다. 판정하지 않는다 | 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
+| 비판자 | T3의 새 Antigravity `gemini-4-neon`(thought_level `high`, 별도 작업 사본) | 리뷰 지적을 하나씩 실행으로 반박해 본다 | Antigravity `.agents/hooks.json`(비-`xhigh`·detached HEAD `ROLE.reviewer` 쓰기·위임 차단), 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
 
-"새"는 앞 단계의 대화 맥락을 물려받지 않는다는 뜻이다. 각 에이전트는 브리프와 저장소만 본다. native Claude Agent 위임은 허용하지 않는다. T3 Codex는 `target.driverKind=codex`다. 구현·수정 회차는 T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다)가 한다. 기본 추론 강도는 sol은 high, terra는 max다. 조사·비판은 `gpt-6.1-sol`(high), 적대적 리뷰는 Claude Opus 5.5다. 구현 위임은 `role=implementation`을 명시한다. Terra는 이 역할에서만 허용하며 역할 생략·research·review(비판)는 sol만 받는다. 적대적 리뷰는 `target.driverKind=claudeAgent`, `target.model=claude-opus-5-5`, `role=review`다. 모두 `isolation=worktree`다. 포크와 재개는 쓰지 않는다.
+"새"는 앞 단계의 대화 맥락을 물려받지 않는다는 뜻이다. 각 에이전트는 브리프와 저장소만 본다. native Claude Agent 위임은 허용하지 않는다. 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(`thought_level=high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`, 기기별 인스턴스 이름 허용)가 한다. Codex(`codex`, gpt 계열)는 쓰지 않는다. Antigravity `delegate_task`는 `target.driverKind=antigravity`, `target.model=gemini-4-neon`에 `role`과 `thought_level`(`implementation`은 `xhigh`, `research`·`review`는 `high`)을 명시한다. 모두 `isolation=worktree`다. 포크와 재개는 쓰지 않는다.
 
 ## 2. 순서
 
@@ -21,13 +21,14 @@
 3. 적대적 리뷰  adversarial-reviewer가 지적 목록을 만든다
 4. 비판        review-critic이 지적마다 확정·기각·불확실을 판정한다
 5. 평가        메인이 지적별로 수정·보류·기각을 결정한다
-6. 수정        같은 Codex 스레드에서 수정할 수 있다. 차단·중요 등급을 고쳤으면 3으로 돌아간다
+6. 수정        같은 구현 스레드에서 수정할 수 있다. 차단·중요 등급을 고쳤으면 3으로 돌아간다
 7. 완료        메인이 리뷰 기록과 tasks.md를 갱신하고 푸시한 뒤 사용자에게 보고한다
 ```
 
 - 병합은 메인 에이전트가 `git merge --no-ff`로 한다. 병합 커밋도 훅의 검사를 거친다. 2.8의 조건을 통과한 경우 정적 검사만 다시 한다. fast-forward가 된 경우에는 병합 직후 `just base=<병합 전 기준 브랜치 끝> check`를 돌린다 (ADR 0015).
 - 검사 명령은 `just base=<HEAD 또는 40자리 커밋 ID> check`다. 브리프의 기준 커밋을 `base`로 준다 (ADR 0013).
 - 푸시는 메인 에이전트만 한다. 서브에이전트는 푸시하지 않는다. 작업 브랜치는 로컬 커밋 범위 검사(`just check-fast`)·로컬 푸시 훅(`just check-full`)과 원격 서명 검사(`signatures.yml`, `lock-point.txt` 설정 후 활성)만 거치고, 전체 원격 CI(`ci.yml`: Linux·macOS·병렬 변경분 변이)는 `master`와 `merge/**` 병합 커밋 푸시에서만 실행한다. CI의 서명 검사는 푸시 뒤에 도는 사후 탐지다 ([harness.md](harness.md) 7.6).
+- `master`·`main`·`merge/*` 푸시와 병합은 메인 에이전트만 한다. 구현 담당은 별도 기기에서 메인이 브랜치를 받아 병합하거나 원격 작업 브랜치에 올린 병합 커밋을 받을 수 있도록 자기 작업 브랜치의 `git push origin <현재 브랜치>`와 `git merge --ff-only origin/<현재 브랜치>` 2종만 허용되며, 리뷰어·비판자·하위 스레드는 모두 거부된다. CI의 서명 검사는 푸시 뒤에 도는 사후 탐지다 ([harness.md](harness.md) 7.6).
 
 ### 2.1 브리프
 
@@ -63,18 +64,18 @@
 
 ### 2.2 구현
 
-- 작업 하나에 브랜치 하나, 커밋은 작게. 구현 에이전트는 푸시하지 않고 서명 옵션을 쓰지 않는다.
+- 작업 하나에 브랜치 하나, 커밋은 작게. 구현 에이전트는 서명 옵션을 쓰지 않고, 자기 작업 브랜치의 `git push origin <현재 브랜치>`(`/usr/bin/git` 포함)와 독립 리뷰·비판(`isolation=worktree`) 위임만 수행하며 병합과 `master`·`main`·`merge/*` 푸시는 하지 않는다.
 - `just check`가 통과해야 끝난 것이다. 통과시키기 위해 검사를 끄거나 테스트를 지우거나 약하게 만들지 않는다. 기존 테스트의 삭제·변경은 `xtask test-diff`가 실패시킨다.
 - 하네스가 막으면 우회하지 않고 멈춘 뒤 "막힘:"으로 보고한다 ([harness.md](harness.md) 8장).
-- Codex Stop 훅이 적용된 세션은 전체 검사를 돌린다. 실패하면 계속 고치게 하고, 계속된 회차가 "막힘:"으로 보고하면 실패 상태로 끝낼 수 있다. T3가 훅을 적용하지 않은 세션에서는 메인이 직접 검사와 대상 스냅숏을 확인한다.
-- 보고 형식: 첫 줄 "완료" 또는 "막힘: <한 줄 이유>", 커밋 SHA와 바꾼 파일, 완료 기준별 충족 근거(테스트 이름, 명령과 출력), `just check` 마지막 요약 줄, 확신이 없는 부분과 범위 밖에서 발견한 문제.
+- Antigravity 세션은 `.agents/hooks.json`(`harness/antigravity-hooks/`)이 보호 경로·홈 읽기·리뷰어 쓰기·토스 실API 명령·미커밋 종료를 검사하며, Git 커밋 훅 실행과 직접 돌린 검사 결과, 원격 CI 전체 검사와 대상 스냅숏을 메인이 확인한다. 훅이 미적용된 세션이면 리뷰 기록 `세션 훅` 행에 사실대로 적는다. (Codex를 다시 쓸 때만 해당: Codex Stop 훅이 적용된 세션은 전체 검사를 돌린다. 실패하면 계속 고치게 하고, 계속된 회차가 "막힘:"으로 보고하면 실패 상태로 끝낼 수 있다. T3가 훅을 적용하지 않은 세션에서는 메인이 직접 검사와 대상 스냅숏을 확인한다.)
+- 보고 형식: 첫 줄 "완료" 또는 "막힘: <한 줄 이유>", 커밋 SHA와 바꾼 파일, 완료 기준별 충족 근거(테스트 이름, 명령과 출력), `just check-fast`(또는 전체 `just check`) 마지막 요약 줄, 확신이 없는 부분과 범위 밖에서 발견한 문제.
 
 구현이 끝나면 메인이 확인한다:
 
 | 확인 | 기준 |
 |---|---|
-| 하네스 기록 | 실제 종료 코드와 `just check` 출력이 있는가. T3 Codex 결과를 Claude의 `PostToolUse(Agent)` 기록으로 취급하지 않는다 |
-| 실제 모델 | 구현·수정은 메인이 정한 sol 또는 terra, 조사·비판은 sol, 적대적 리뷰는 Opus 5.5인가. 실제 사용한 구현 모델과 추론 강도를 기록했는가 |
+| 하네스 기록 | 실제 종료 코드와 검사 출력, Git 커밋 훅 실행 여부가 있는가. T3 Antigravity·Codex 결과를 Claude의 `PostToolUse(Agent)` 기록으로 취급하지 않는다 |
+| 실제 모델 | 구현·수정은 Antigravity `gemini-4-neon`(`xhigh`), 조사·비판은 Antigravity `gemini-4-neon`(`high`), 적대적 리뷰는 Claude(`driverKind=claudeAgent`) `claude-opus-5-5`인가. 실제 사용한 제공자·모델·옵션을 기록했는가 |
 | 범위 | 대상 커밋의 변경 파일이 브리프의 "손댈 범위" 안에 있는가 |
 | 작업 사본 | `git status`에 커밋되지 않은 파일, 특히 보호 대상이 될 새 파일이 없는가 |
 | 막힘 | "막힘:"이면 2.7로 간다 |
@@ -143,7 +144,7 @@
 
 ### 2.6 수정과 재검토
 
-- 수정은 같은 T3 Codex 스레드에 새 브리프를 보내 이어 갈 수 있다. 적대적 리뷰어는 매번 새 Claude 서브에이전트다.
+- 수정은 같은 T3 구현 스레드에 새 브리프를 보내 이어 갈 수 있다. 적대적 리뷰어는 매번 새 Claude(`driverKind=claudeAgent`) `claude-opus-5-5` 하위 작업이다.
 - 수정 브리프에는 원래 브리프, 새 기준 커밋(앞 단계의 대상 SHA), 평가 결과, 고칠 지적을 넣는다.
 - 차단이나 중요 등급을 고쳤으면 3단계부터 다시 한다. 리뷰어와 비판자도 새로 띄운다.
 - 사소 등급만 고쳤으면 메인이 차이와 하네스 기록을 확인하고 끝낸다.
@@ -203,7 +204,7 @@ git --no-replace-objects diff --quiet --no-ext-diff --no-textconv master <branch
 |---|---|
 | 브리프 | 브리프 전문 |
 | 커밋 | 기준 SHA, 구현마다 대상 SHA |
-| 구현 기록 | 회차별 실제 모델, 브리프 기준 SHA, 검사 대상 HEAD, 검사 종료 코드, 훅 적용 여부, "막힘" 여부와 이유. Claude 상태 기록과 Codex 결과를 혼동하지 않는다 |
+| 구현 기록 | 회차별 실제 제공자·모델·옵션, 브리프 기준 SHA, 검사 대상 HEAD, 검사 종료 코드, 세션 훅·Git 훅 적용 여부, "막힘" 여부와 이유. Claude 상태 기록과 T3 Antigravity·Codex 결과를 혼동하지 않는다 |
 | 리뷰 | 회차별 지적 목록 (등급, 재현 증거, 추정 여부) |
 | 비판 | 지적별 판정과 증거, 고친 등급, 추가 지적 |
 | 평가 | 지적별 결정과 이유, 기각을 뒤집은 경우 그 이유 |
@@ -231,29 +232,41 @@ git --no-replace-objects diff --quiet --no-ext-diff --no-textconv master <branch
 
 ## 부록: 운영 규칙
 
-역할과 Codex는 ADR 0021을 따르되, 2026-11-17 사용자 결정인 [H-50](adr/h-50-implementer-models.md)이 구현 모델·추론 강도·옵션 키 제한을 이 문서와 함께 대체한다. 제공자·격리·기준·소유권 규칙은 ADR 0021을 유지한다.
+2026-11-23 사용자 결정(H-60)이 [ADR 0021](adr/0021-codex-compatible-harness.md)과 [ADR 0125](adr/0125-implementer-models.md)(H-50)의 제공자·모델·옵션·리뷰 계정 규칙을 대체한다. 격리·기준·소유권·리뷰 보고 차단 규칙은 그대로 유지한다.
 
-- 메인 Claude 세션은 원본 저장소에서 연다. Codex는 T3가 만든 등록된 작업 사본에서 연다. Codex의 프로젝트 설정과 훅 신뢰는 각각 확인한다.
-- 구현·수정 회차는 T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다)가 한다. 기본 추론 강도는 sol은 high, terra는 max다. 조사·비판은 `gpt-6.1-sol`(high), 적대적 리뷰는 Claude Opus 5.5다. 브리프에는 `- 기준 커밋: <SHA>, 브랜치 \`<이름>\`` 줄이 반드시 있고, 그 브랜치는 `master`가 아닌 등록된 작업 사본이어야 한다.
-- 수정 회차는 T3가 새 Codex에게 수정 브리프로 한다. 앞 단계의 브리프 기준 검사 성공이 확인되지 않았으면 기준은 `master` 끝이다.
-- 구현자가 끝내려 하면 종료 훅이 `just base=<기준 SHA> check`를 네트워크가 막힌 채 돈다(3~5분). 작업 트리가 깨끗해야 한다.
-- 병합 충돌은 구현자가 자기 브랜치에서 `git merge master`로 푼다. `rebase`는 쓰지 않는다.
-- 기존 테스트를 바꿔야 하는 변경은 커밋 훅이 막는다. 사용자 서명 커밋으로만 들어간다.
+- 메인 Claude 세션은 원본 저장소에서 연다. 구현 에이전트는 T3가 만든 등록된 작업 사본에서 Antigravity `gemini-4-neon`(`thought_level=xhigh`)으로 연다.
+- 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(`thought_level=high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`)가 한다. Codex(gpt 계열)는 쓰지 않는다. 브리프에는 `- 기준 커밋: <SHA>, 브랜치 \`<이름>\`` 줄이 반드시 있고, 그 브랜치는 `master`가 아닌 등록된 작업 사본이어야 한다.
+- 수정 회차는 같은 T3 구현 스레드에 수정 브리프를 보내 이어 가거나 새 Antigravity 스레드로 시작한다. 앞 단계의 브리프 기준 검사 성공이 확인되지 않았으면 기준은 `master` 끝이다.
+- 작업 끝의 전체 검사는 원격 GitHub Actions CI에서 돈다(사용자 결정 2026-11-23). 구현자는 구현·수정 회차마다 `just base=<기준 SHA> check-fast`와 손 변형을 실행하고, Git 커밋 훅 실행 여부와 세션 훅 적용 여부(`적용(.agents/hooks.json)` 또는 `미적용(사유)`)를 리뷰 기록의 측정 표에 적는다.
+- 병합 충돌은 구현자가 자기 브랜치에서 `git merge --no-ff --no-edit master`로 푼다. `rebase`는 쓰지 않는다.
+- 기존 테스트를 바꿔야 하는 변경은 커밋 훅이 막는다. 사전 승인된 변경(2.9) 또는 사용자 서명 커밋으로만 들어간다.
 - Claude Code를 업그레이드한 뒤에는 `just claude-regression`을 돌린다. "미확정"이 있으면 다시 돌리고, 실패면 결과 폴더(`target/claude-regression/`)와 `claude --version`을 기록한 뒤 하네스 작업으로 넘긴다.
-- Codex를 올린 뒤 `just codex-regression`을 수동으로 돌린다. 구독 사용량을 쓰므로 `just check`에는 넣지 않는다. 알려진 빈틈은 `just known-gaps`로 본다.
+- 알려진 빈틈은 `just known-gaps`로 본다.
 
-## H-41 운영 규칙
+### Codex를 다시 쓸 때만 해당
 
-- Claude SendMessage는 계속 금지한다. Codex 수정 회차는 T3의 소유 스레드 가드로 통제한다.
-- 메인은 이 프로젝트의 T3 문맥에서 t3_thread_launch로 구현을 시작한다. modelSelection은 provider=codex, model은 정확히 gpt-6.1-sol 또는 gpt-6.1-terra다. sol의 운영 기본 요청은 reasoningEffort=high다. 기존 호환을 위해 options 생략·빈 객체·빈 배열도 허용하므로 이 경로의 실제 강도는 T3의 상속·기본값에 따르고 high를 보장하지 않는다. Terra options는 reasoningEffort=max를 명시하며 생략·빈 객체·빈 배열은 거부한다. 기존 effort 키도 같은 값만 허용하며 두 키를 섞지 않는다. Terra 시작 브리프에는 정확히 한 개의 `- 역할: implementation` 줄을 넣는다. 정확히 이 형식인 줄만 역할 선언으로 센다. 인식된 선언이 없거나 중복되거나 implementation이 아니면 Terra를 거부한다. 다른 들여쓰기·목록 표기와 코드 펜스에 역할을 쓰지 않는다. 가드는 본문 의미와 코드 펜스를 해석하지 않는다. 조사·비판은 delegate_task의 research·review 역할로 sol에 맡긴다. workspaceStrategy는 type=worktree, branch=브리프 브랜치, 로컬은 baseRef=브리프 SHA·startFromOrigin=false다. 원격은 baseRef=origin/master·startFromOrigin=true이며 브리프 SHA는 그 원격 추적 끝과 같아야 한다.
-- projectId·environmentId·scratch·다른 제공자·권한 확대는 넘기지 않는다. 현재 프로젝트와 환경을 상속한다. runtimeMode는 생략 또는 approval-required다.
-- 실행 결과의 threadId를 메인 세션 소유 기록에 저장한다. 그 기록과 등록된 worktree가 있는 스레드만 t3_thread_read·t3_thread_wait·t3_thread_send로 접근한다. 허용 인자 밖은 거부한다.
-- 수정은 같은 스레드의 t3_thread_send(mode=auto 또는 생략)로 계속할 수 있다. 수정 브리프는 기준 SHA와 기존 브랜치를 포함한다. SHA는 master 끝의 자손이며 해당 작업 사본 HEAD의 조상이어야 한다. 메인이 앞 구현의 전체 검사와 리뷰 판정을 확인한다. Claude의 passedTargets가 없어도 같은 스레드 수정은 가능하다.
-- 적대적 리뷰어는 매번 새 Claude Opus 5.5다. 구현자 보고를 넘기지 않고 격리·오염 감지를 그대로 적용한다.
+아래 절차는 Codex를 구현 제공자로 되돌려 다시 사용할 때만 적용한다(H-60에서 삭제하지 않고 보존).
+
+- Codex는 T3가 만든 등록된 작업 사본에서 열고, 프로젝트 설정 신뢰와 훅 정의 해시 신뢰를 각각 확인한다.
+- Codex 실험·회귀는 임시 `CODEX_HOME`에서만 수행한다(ADR 0021).
+- Codex 종료 훅이 적용된 세션에서는 구현자가 끝내려 할 때 `just base=<기준 SHA> check`가 네트워크 차단 상태로 돈다(3~5분, 작업 트리 깨끗함 필수).
+- Codex를 업그레이드한 뒤 `just codex-regression`을 수동으로 돌린다(구독 사용량을 쓰므로 `just check`에 넣지 않는다).
+
+## H-41·H-60 운영 규칙
+
+- Claude `SendMessage`와 native `Agent` 위임은 계속 금지한다. 구현 수정 회차는 T3의 소유 스레드 가드로 통제한다.
+- 메인은 이 프로젝트의 T3 문맥에서 `t3_thread_launch`로 구현을 시작한다. `modelSelection`은 `provider=antigravity`, `model=gemini-4-neon`, `options={ thought_level: "xhigh" }`이며(`instanceId`는 생략 또는 `antigravity`), 옵션 생략·빈 객체·빈 배열·다른 키(`effort`, `reasoningEffort` 등)·혼합 키는 거부한다. 시작 브리프에는 정확히 한 개의 `- 역할: implementation` 줄을 넣는다. 정확히 이 형식인 줄만 역할 선언으로 센다. 인식된 선언이 없거나 중복되거나 `implementation`이 아니면 거부한다. 다른 들여쓰기·목록 표기와 코드 펜스에 역할을 쓰지 않는다. 가드는 본문 의미와 코드 펜스를 해석하지 않는다.
+- `delegate_task`의 Antigravity 위임은 `driverKind=antigravity`, `providerInstanceId` 생략 또는 `antigravity`, `model=gemini-4-neon`, `isolation=worktree`만 허용한다. `role`은 반드시 명시한다: `implementation`은 `options={ thought_level: "xhigh" }`, `research`·`review`(비판)는 `options={ thought_level: "high" }`만 허용한다. 역할 생략이나 다른 역할·옵션 생략·다른 키는 거부한다.
+- 적대적 리뷰는 `delegate_task`의 `driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`, `isolation=worktree`만 허용한다. `providerInstanceId`는 기기마다 다를 수 있으므로(`claudeAgent`, `claudeAgent_claude2` 등) 생략하거나 비어 있지 않은 Claude 인스턴스 문자열을 허용하고 빈 문자열·`null`·타 드라이버 이름은 거부한다. `options`는 생략 또는 `{ effort: "high" }`만 허용한다. Codex(`codex`, gpt 계열)는 모두 거부한다.
+- `workspaceStrategy`는 `type=worktree`, `branch=브리프 브랜치`, 로컬은 `baseRef=브리프 SHA`·`startFromOrigin=false`다. 원격은 `baseRef=origin/master`·`startFromOrigin=true`이며 브리프 SHA는 그 원격 추적 끝과 같아야 한다.
+- `projectId`·`environmentId`·`scratch`·다른 제공자·권한 확대는 넘기지 않는다. 현재 프로젝트와 환경을 상속한다. `runtimeMode`는 생략 또는 `inherit`·`approval-required`다.
+- 실행 결과의 `threadId`를 메인 세션 소유 기록에 저장한다. 그 기록과 등록된 worktree가 있는 스레드만 `t3_thread_read`·`t3_thread_wait`·`t3_thread_send`로 접근한다. 허용 인자 밖은 거부한다.
+- 수정은 같은 스레드의 `t3_thread_send`(`mode=auto` 또는 생략)로 계속할 수 있다. 수정 브리프는 기준 SHA와 기존 브랜치를 포함한다. SHA는 `master` 끝의 자손이며 해당 작업 사본 HEAD의 조상이어야 한다. 메인이 앞 구현의 검사와 리뷰 판정을 확인한다. Claude의 `passedTargets`가 없어도 같은 스레드 수정은 가능하다.
+- 적대적 리뷰어는 매번 새 Claude(`driverKind=claudeAgent`) Opus 5.5다. 구현자 보고를 넘기지 않고 격리·오염 감지를 그대로 적용한다.
 - 새 가드 적용 전에 시작된 스레드는 소유 기록이 없다. 자동으로 외부 스레드를 채택하지 않는다. 메인은 새 가드로 시작한 스레드부터 이 절차를 적용한다.
-- 구현 담당은 docs/progress.md를 편집하지 않는다. 진행 상태는 보고서에 쓰고 메인이 한 줄 메모나 완료 행을 반영한다.
+- 구현 담당은 `docs/progress.md`를 편집하지 않는다. 진행 상태는 보고서에 쓰고 메인이 한 줄 메모나 완료 행을 반영한다.
 
-T3 도구는 전체 matcher에서 기본 거부한다. 허용된 launch·send·read·wait와 project_list·orchestrator_capabilities·background_wait만 쓴다. configure·queue 편집으로 모델이나 브리프를 바꾸지 않는다. 하네스 프로필 삭제와 잠금 전 prelock 절차는 ADR 0021 B를 따른다.
+T3 도구는 전체 matcher에서 기본 거부한다. 허용된 launch·send·read·wait와 `project_list`·`orchestrator_capabilities`·`background_wait`만 쓴다. `configure`·`queue` 편집으로 모델이나 브리프를 바꾸지 않는다. Codex를 다시 쓸 때의 하네스 프로필 삭제와 잠금 전 prelock 절차는 ADR 0021 B를 따른다.
 
 ## H-51 로컬 전체 정리
 
