@@ -204,8 +204,7 @@ impl HostEnvironment {
         if kind == RunKind::Analysis
             && let Some(secret) = mcp_token
         {
-            let token_text = expose_validated_token(secret)?;
-            entries.push((String::from(MCP_TOKEN_ENV_KEY), token_text));
+            let _validated = validate_token_str(secret)?;
         }
         Ok(entries)
     }
@@ -227,14 +226,14 @@ fn validate_required_env(
     Ok(String::from(raw))
 }
 
-pub(crate) fn expose_validated_token(secret: &SecretValue) -> Result<String, CommandBuildError> {
+pub(crate) fn validate_token_str(secret: &SecretValue) -> Result<&str, CommandBuildError> {
     let Ok(text) = std::str::from_utf8(secret.as_exposed_secret()) else {
         return Err(CommandBuildError::InvalidToken);
     };
     if text.is_empty() || text.contains(['\0', '\r', '\n']) {
         return Err(CommandBuildError::InvalidToken);
     }
-    Ok(String::from(text))
+    Ok(text)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -312,8 +311,8 @@ fn verify_no_secret_in_text(
     secret: Option<&SecretValue>,
 ) -> Result<(), CommandBuildError> {
     if let Some(secret_value) = secret {
-        let token = expose_validated_token(secret_value)?;
-        if text.contains(&token) {
+        let token = validate_token_str(secret_value)?;
+        if text.contains(token) {
             return Err(CommandBuildError::SecretInConfig);
         }
     }
@@ -504,22 +503,29 @@ fn write_private_file(path: &Path, content: &str) -> Result<(), CommandBuildErro
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TokenEnvInclusion {
+    Included,
+    Omitted,
+}
+
 pub struct CommandPlan {
     executable: PathBuf,
     args: Vec<String>,
     work_dir: PathBuf,
     env: Vec<(String, String)>,
+    mcp_token_env: TokenEnvInclusion,
 }
 
 impl fmt::Debug for CommandPlan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let env_keys: Vec<&str> = self.env.iter().map(|(key, _)| key.as_str()).collect();
+        let env_keys = self.env_keys();
         f.debug_struct("CommandPlan")
             .field("executable", &self.executable)
             .field("args", &self.args)
             .field("work_dir", &self.work_dir)
             .field("env_keys", &env_keys)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -541,11 +547,29 @@ impl CommandPlan {
 
     #[must_use]
     pub fn env_keys(&self) -> Vec<&str> {
-        self.env.iter().map(|(key, _)| key.as_str()).collect()
+        let mut keys: Vec<&str> = self.env.iter().map(|(key, _)| key.as_str()).collect();
+        if self.mcp_token_env == TokenEnvInclusion::Included {
+            keys.push(MCP_TOKEN_ENV_KEY);
+        }
+        keys
     }
 
-    pub(crate) fn into_parts(self) -> (PathBuf, Vec<String>, PathBuf, Vec<(String, String)>) {
-        (self.executable, self.args, self.work_dir, self.env)
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        PathBuf,
+        Vec<String>,
+        PathBuf,
+        Vec<(String, String)>,
+        TokenEnvInclusion,
+    ) {
+        (
+            self.executable,
+            self.args,
+            self.work_dir,
+            self.env,
+            self.mcp_token_env,
+        )
     }
 }
 
@@ -584,11 +608,17 @@ pub fn build_command_plan(input: &CommandPlanInput<'_>) -> Result<CommandPlan, C
     let env = host_env.build_child_env(input.kind, input.mcp_token)?;
     let args = build_profile_args(input)?;
     verify_args_contain_no_secret(&args, input.mcp_token)?;
+    let mcp_token_env = if input.kind == RunKind::Analysis && input.mcp_token.is_some() {
+        TokenEnvInclusion::Included
+    } else {
+        TokenEnvInclusion::Omitted
+    };
     Ok(CommandPlan {
         executable: input.executable.to_path_buf(),
         args,
         work_dir: input.work_dir.to_path_buf(),
         env,
+        mcp_token_env,
     })
 }
 
@@ -680,8 +710,8 @@ fn verify_args_contain_no_secret(
     secret: Option<&SecretValue>,
 ) -> Result<(), CommandBuildError> {
     if let Some(secret_value) = secret {
-        let token = expose_validated_token(secret_value)?;
-        if args.iter().any(|arg| arg.contains(&token)) {
+        let token = validate_token_str(secret_value)?;
+        if args.iter().any(|arg| arg.contains(token)) {
             return Err(CommandBuildError::SecretInConfig);
         }
     }
