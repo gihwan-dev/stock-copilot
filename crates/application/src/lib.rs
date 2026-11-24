@@ -517,8 +517,10 @@ pub use news_data_settings::{
 
 mod deep_research;
 pub use deep_research::{
-    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchEvidenceSource,
-    ResearchWebCollector, ResearchWebOutcome, ResearchWebStore,
+    AnalysisFailure, ClaimVerifier, DraftResearchCases, GatherEvidenceError,
+    GatherResearchEvidence, GatheredEvidence, ResearchAnalyst, ResearchCaseError, ResearchCases,
+    ResearchEvidenceSource, ResearchModels, ResearchWebCollector, ResearchWebOutcome,
+    ResearchWebStore, VerifyResearchClaims,
 };
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};

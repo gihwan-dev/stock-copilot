@@ -683,6 +683,12 @@ pub use deep_research::{
     EvidenceKind, ResearchTopic, research_search_plan,
 };
 
+mod deep_research_claims;
+pub use deep_research_claims::{
+    CitedEvidence, ClaimCheckBasis, ClaimSupport, ResearchClaim, ResearchClaimError,
+    ResearchClaimText, ResearchDraft, ResearchStance, VerifiedClaim,
+};
+
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
 
