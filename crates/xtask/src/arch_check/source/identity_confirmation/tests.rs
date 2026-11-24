@@ -537,3 +537,101 @@ impl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock> ConfirmInstrumentIdent
         );
     }
 }
+
+#[test]
+fn defining_file_requires_exact_sealed_struct_and_seal_unit_struct() {
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let canonical_impl = "impl UserIdentityConfirmation { #[must_use] pub const fn issue_after_user_confirmation() -> Self { Self(UserIdentityConfirmationSeal) } }";
+    let seal = "#[derive(Debug, PartialEq, Eq)] struct UserIdentityConfirmationSeal;";
+    for bad in [
+        "#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation {} impl UserIdentityConfirmation { pub const fn issue_after_user_confirmation() -> Self { Self {} } }",
+        "#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation; impl UserIdentityConfirmation { pub const fn issue_after_user_confirmation() -> Self { Self } }",
+        &format!(
+            "{seal}\n#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation {{}}\n{canonical_impl}"
+        ),
+        &format!(
+            "{seal}\n#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(());\n{canonical_impl}"
+        ),
+        &format!(
+            "{seal}\n#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(other::UserIdentityConfirmationSeal);\n{canonical_impl}"
+        ),
+        &format!(
+            "#[derive(Debug, PartialEq, Eq)] struct UserIdentityConfirmationSeal(u8);\n#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);\n{canonical_impl}"
+        ),
+        &format!(
+            "{seal}\n#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);"
+        ),
+    ] {
+        assert_eq!(
+            scan("domain", defining, bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+    let valid_base = format!(
+        "{seal}\n#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);\n{canonical_impl}"
+    );
+    for isolated in [
+        format!(
+            "{seal}\n#[derive(Debug, Clone, PartialEq, Eq)] pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);\n{canonical_impl}"
+        ),
+        format!(
+            "{seal}\n#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);\nimpl UserIdentityConfirmation {{ #[must_use] pub const fn issue_after_user_confirmation() -> Self {{ Self(UserIdentityConfirmationSeal) }} pub fn extra(&self) {{}} }}"
+        ),
+        format!(
+            "{valid_base}\npub fn sneak() -> UserIdentityConfirmation {{ UserIdentityConfirmation(UserIdentityConfirmationSeal) }}"
+        ),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &isolated),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{isolated}"
+        );
+    }
+}
+
+#[test]
+fn reexported_paste_macros_and_trait_arg_macros_are_blocked() {
+    let tauri = "apps/desktop/src-tauri/src/lib.rs";
+    assert!(
+        scan(
+            "src-tauri",
+            tauri,
+            "pub fn ok() { PredefinedMenuItem::paste(&app); }"
+        )
+        .is_empty()
+    );
+    for bad in [
+        "pub fn f() { tauri_specta::internal::_tauri_specta_paste! { domain::[<User IdentityConfirmation>]::[<issue_after _user_confirmation>]() } }",
+        "pub fn f() { specta::internal::paste! { domain::[<User IdentityConfirmation>]::[<issue_after _user_confirmation>]() } }",
+        "use tauri_specta::internal::_tauri_specta_paste as m; pub fn f() { m! { impl X {} } }",
+        "use specta::internal::paste as p; pub fn f() { p! { impl X {} } }",
+        "use tauri_specta::internal::*;",
+        "use specta::internal as si; pub fn f() { si::paste! {} }",
+        "use tauri_specta as ts; pub fn f() { ts::internal::_tauri_specta_paste! {} }",
+        "pub fn f() { outer!(paste! { x }); }",
+    ] {
+        assert_eq!(
+            scan("src-tauri", tauri, bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+    assert_eq!(
+        scan_with_aliases(
+            "src-tauri",
+            &BTreeMap::from([(String::from("ts"), vec![String::from("tauri_specta")])]),
+            tauri,
+            "use ts::internal::*;",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationIssuance])
+    );
+    assert_eq!(
+        scan(
+            "store-sqlite",
+            "crates/adapters/store-sqlite/src/lib.rs",
+            "pub fn f() { external_macro!(application::identity_confirmation_prompt::IdentityConfirmationPrompt); }",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
+    );
+}

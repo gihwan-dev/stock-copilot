@@ -1,0 +1,9 @@
+[package]
+name = "src-tauri"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+tauri-specta = "0.1.0"
+specta = "0.1.0"

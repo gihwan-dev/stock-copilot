@@ -872,3 +872,20 @@ findings = [
     { rule = "external-location", subject = "src-tauri => paste" },
     { rule = "external-location", subject = "store-sqlite => paste" },
 ]
+
+[[case]]
+name = "identity-confirmation-reexported-paste-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/e2e-app/src/lib.rs" },
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/aliased_specta.rs" },
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/aliased_tauri_specta.rs" },
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/direct_specta.rs" },
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/direct_tauri_specta.rs" },
+    { rule = "identity-confirmation-prompt-impl", subject = "crates/adapters/store-sqlite/src/lib.rs" },
+]
+
+[[case]]
+name = "identity-confirmation-empty-struct-tampering-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "crates/domain/src/instrument_mapping_change.rs" },
+]
