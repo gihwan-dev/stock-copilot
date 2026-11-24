@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let clock = platform_macos::SystemClock::new()
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let shared_clock = Arc::new(clock);
+    let (events, scheduler_events) = product_event_bus();
     let ports = Ports::<ProductPorts> {
         broker_read: Arc::new(Unavailable),
         market_info: Arc::new(Unavailable),
@@ -60,18 +61,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         news_feeds: Vec::new(),
         clock: Arc::clone(&shared_clock),
         presence: Arc::new(platform_macos::MacOsRiskDialogPresence::unavailable()),
-        events: application::EventBusBuilder::default().build(),
+        events,
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(shared_clock)),
     };
-    let app = build_app(
-        tauri::Builder::default().manage(ExternalLinkRuntime::new(
-            Arc::new(Unavailable),
-            Arc::new(Unavailable),
-        )),
-        ports,
-        context,
-    )?;
+    let app = build_app(product_builder(scheduler_events), ports, context)?;
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
             .app_data_dir()?
@@ -87,6 +81,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         InstanceAcquisition::SecondaryNotified => Ok(()),
     }
+}
+
+fn product_builder(
+    scheduler_events: Arc<scheduler::SchedulerEventBridge>,
+) -> tauri::Builder<tauri::Wry> {
+    tauri::Builder::default()
+        .manage(ExternalLinkRuntime::new(
+            Arc::new(Unavailable),
+            Arc::new(Unavailable),
+        ))
+        .manage(scheduler_events)
+}
+
+fn product_event_bus() -> (application::EventBus, Arc<scheduler::SchedulerEventBridge>) {
+    let bridge = Arc::new(scheduler::SchedulerEventBridge::new());
+    let mut builder = application::EventBusBuilder::default();
+    builder.subscribe(
+        scheduler::SchedulerEventBridge::subscribed_kinds(),
+        scheduler::BridgedSchedulerEvents(Arc::clone(&bridge)),
+    );
+    (builder.build(), bridge)
 }
 
 fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseFactory {

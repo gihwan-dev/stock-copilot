@@ -10,6 +10,7 @@ mod notifier;
 mod process_cleanup;
 mod residency;
 mod responsiveness;
+mod scheduling;
 mod startup;
 pub(crate) mod support;
 

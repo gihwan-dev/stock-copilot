@@ -11,8 +11,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
     )]
     let commands = collect_commands![
         app_version::app_version::<tauri::Wry>,
-        settings::get_settings,
-        settings::set_order_permission,
+        settings::get_settings::<tauri::Wry>,
+        settings::set_order_permission::<tauri::Wry>,
         chat::send_chat_message::<tauri::Wry>,
         chat::get_chat_history::<tauri::Wry>,
         chat::resubscribe_chat_turn::<tauri::Wry>,

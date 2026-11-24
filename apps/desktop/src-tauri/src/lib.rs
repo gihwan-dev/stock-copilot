@@ -55,15 +55,17 @@ pub fn build_app<R: Runtime, P: PortTypes>(
                 publish_main(app.handle(), data)
             }))?;
             app.manage(ipc::state::ScreenState::from_ports(&ports));
+            let chat_state = ipc::chat_hub::ChatIpcState::from_ports(&ports);
+            app.manage(ports);
+            let _scheduling = platform::scheduling::start_background::<R, P>(app);
             let shutdown_hook = prepare_process_shutdown_hook(app);
             app.manage(database.status());
-            app.manage(ipc::chat_hub::ChatIpcState::from_ports(&ports));
+            app.manage(chat_state);
             app.manage(Lifecycle::with_shutdown_hook(
                 refresh,
                 database,
                 shutdown_hook,
             ));
-            app.manage(ports);
             ensure_default_runtimes(app);
             Ok(())
         })
