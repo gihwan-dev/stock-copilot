@@ -62,9 +62,8 @@ impl AiJobRun {
     pub const fn new(job: AiJobId, kind: RunKind, purpose: RunPurpose) -> Self {
         Self { job, kind, purpose }
     }
-    #[must_use]
-    pub fn of_spec(spec: &crate::RunSpec) -> Self {
-        Self::new(spec.id().job_id().clone(), spec.kind(), spec.purpose())
+    pub fn of_spec(spec: &crate::RunSpec) -> Result<Self, crate::IdentifierError> {
+        Ok(Self::new(spec.id().job_id()?, spec.kind(), spec.purpose()))
     }
 }
 

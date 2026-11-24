@@ -193,7 +193,7 @@ impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
             args.get("limit").and_then(Value::as_u64),
             args.get("cursor").and_then(Value::as_str),
         )?;
-        let view = require(self.reads.candles(&symbol, market, window).await)?;
+        let view = require(self.reads.candles(&symbol, market, window.clone()).await)?;
         let mut lines: Vec<&CandleToolLine> = view.lines.iter().collect();
         lines.sort_by(|left, right| {
             let left_at = *left.opened_at.utc_seconds().as_i64();
@@ -217,7 +217,7 @@ impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
             "{}|{}|{}",
             symbol.as_str(),
             market_code(market),
-            window.days()
+            window.as_u16()
         );
         let context = PaginationContext {
             cursors: &self.cursors,

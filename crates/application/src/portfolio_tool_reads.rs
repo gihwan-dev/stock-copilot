@@ -113,51 +113,48 @@ pub enum TransactionToolFilter {
 impl TransactionToolFilter {
     #[must_use]
     pub const fn admits(self, kind: TransactionToolKind) -> TransactionAdmission {
-        let admitted = match self {
-            Self::All => true,
-            Self::Trades => matches_trade(kind),
-            Self::Dividends => matches_dividend(kind),
-            Self::CashFlows => matches_cash_flow(kind),
-        };
-        if admitted {
-            TransactionAdmission::Admitted
-        } else {
-            TransactionAdmission::Excluded
+        match self {
+            Self::All => TransactionAdmission::Admitted,
+            Self::Trades => trade_admission(kind),
+            Self::Dividends => dividend_admission(kind),
+            Self::CashFlows => cash_flow_admission(kind),
         }
     }
 }
 
-const fn matches_trade(kind: TransactionToolKind) -> bool {
+const fn trade_admission(kind: TransactionToolKind) -> TransactionAdmission {
     match kind {
-        TransactionToolKind::Buy | TransactionToolKind::Sell => true,
+        TransactionToolKind::Buy | TransactionToolKind::Sell => TransactionAdmission::Admitted,
         TransactionToolKind::Dividend
         | TransactionToolKind::Deposit
         | TransactionToolKind::Withdrawal
         | TransactionToolKind::Fee
-        | TransactionToolKind::Other => false,
+        | TransactionToolKind::Other => TransactionAdmission::Excluded,
     }
 }
 
-const fn matches_dividend(kind: TransactionToolKind) -> bool {
+const fn dividend_admission(kind: TransactionToolKind) -> TransactionAdmission {
     match kind {
-        TransactionToolKind::Dividend => true,
+        TransactionToolKind::Dividend => TransactionAdmission::Admitted,
         TransactionToolKind::Buy
         | TransactionToolKind::Sell
         | TransactionToolKind::Deposit
         | TransactionToolKind::Withdrawal
         | TransactionToolKind::Fee
-        | TransactionToolKind::Other => false,
+        | TransactionToolKind::Other => TransactionAdmission::Excluded,
     }
 }
 
-const fn matches_cash_flow(kind: TransactionToolKind) -> bool {
+const fn cash_flow_admission(kind: TransactionToolKind) -> TransactionAdmission {
     match kind {
-        TransactionToolKind::Deposit | TransactionToolKind::Withdrawal => true,
+        TransactionToolKind::Deposit | TransactionToolKind::Withdrawal => {
+            TransactionAdmission::Admitted
+        }
         TransactionToolKind::Buy
         | TransactionToolKind::Sell
         | TransactionToolKind::Dividend
         | TransactionToolKind::Fee
-        | TransactionToolKind::Other => false,
+        | TransactionToolKind::Other => TransactionAdmission::Excluded,
     }
 }
 
