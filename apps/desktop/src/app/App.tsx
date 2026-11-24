@@ -1,7 +1,9 @@
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { useState, type ReactElement } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { FirstRunGate, OnboardingClientProvider } from "../features/onboarding";
 import { EmptyState, Page } from "../shared/ds";
+import { unavailableSettingsClient, type SettingsClient } from "../shared/ipc";
 import { text, type AppRoutePath } from "../shared/lib";
 import { createAppQueryClient } from "./query";
 import { AppRouter } from "./router";
@@ -9,6 +11,7 @@ import { AppRouter } from "./router";
 type AppProps = {
   readonly initialPath?: AppRoutePath | undefined;
   readonly queryClient?: QueryClient | undefined;
+  readonly settingsClient?: SettingsClient | undefined;
 };
 
 const AppErrorFallback = (props: Readonly<FallbackProps>): ReactElement => (
@@ -33,7 +36,13 @@ export const App = (props: AppProps): ReactElement => {
   return (
     <ErrorBoundary FallbackComponent={AppErrorFallback}>
       <QueryClientProvider client={client}>
-        <AppRouter initialPath={props.initialPath} />
+        <OnboardingClientProvider
+          client={props.settingsClient ?? unavailableSettingsClient}
+        >
+          <FirstRunGate>
+            <AppRouter initialPath={props.initialPath} />
+          </FirstRunGate>
+        </OnboardingClientProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
