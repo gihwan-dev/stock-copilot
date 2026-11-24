@@ -361,7 +361,11 @@ pub use sync_transactions::{
 mod sync_portfolio;
 pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
 mod change_risk_settings;
-pub use change_risk_settings::{ChangeRiskSettings, RiskSettingsChangeOutcome};
+pub use change_risk_settings::{
+    ChangeRiskSettings, RiskAudit, RiskAuditSink, RiskSettingsChangeOutcome, WithoutRiskAudit,
+};
+mod audit_events;
+pub use audit_events::{AuditEventRecorder, AuditEventSink};
 
 mod update_investor_profile;
 pub use update_investor_profile::{
