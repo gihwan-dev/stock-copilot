@@ -40,7 +40,7 @@ export const groups = {
     "DataText",
     "TimestampText",
   ],
-  차트: ["LineChart", "AreaChart", "DonutChart", "Treemap"],
+  차트: ["LineChart", "AreaChart", "DonutChart", "Treemap", "CandleChart"],
   콘텐츠: ["Markdown", "ChatInput"],
 };
 const states = {

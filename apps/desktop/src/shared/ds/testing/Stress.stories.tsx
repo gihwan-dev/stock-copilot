@@ -56,6 +56,7 @@ type Component =
   | "AreaChart"
   | "DonutChart"
   | "Treemap"
+  | "CandleChart"
   | "Money"
   | "Percent"
   | "Quantity"

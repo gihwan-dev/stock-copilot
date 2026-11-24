@@ -21,6 +21,13 @@ const catalog = {
   "ds.chartTreemapOrder": {
     ko: "왼쪽부터 아래 목록의 순서예요. 값이 0인 항목은 제외해요" as UiText,
   },
+  "ds.candleOpen": { ko: "시가" as UiText },
+  "ds.candleHigh": { ko: "고가" as UiText },
+  "ds.candleLow": { ko: "저가" as UiText },
+  "ds.candleClose": { ko: "종가" as UiText },
+  "ds.candleOrder": {
+    ko: "화살표 키로 봉을 옮겨 시가·고가·저가·종가를 살펴볼 수 있어요" as UiText,
+  },
   "ds.chartInvalid": { ko: "차트 값을 읽을 수 없어요" as UiText },
   "ds.chartSeparator": { ko: " · " as UiText },
   "number.jo": { ko: "조" as UiText },
@@ -91,7 +98,6 @@ const catalog = {
   "app.errorBody": { ko: "잠시 뒤 다시 시도해 주세요." as UiText },
   "app.retry": { ko: "다시 시도" as UiText },
   "app.stockListEmpty": { ko: "표시할 종목이 없어요" as UiText },
-  "app.chatReady": { ko: "현황을 보면서 바로 질문할 수 있어요." as UiText },
   "app.sectionOverview": { ko: "요약" as UiText },
   "app.readySummary": { ko: "앱이 준비됐어요." as UiText },
   "app.ipcRetryable": { ko: "잠시 뒤 다시 시도해 주세요." as UiText },
@@ -111,7 +117,7 @@ const catalog = {
     ko: "AI 제안 · 원금 손실 가능 · 승인 전 직접 확인" as UiText,
   },
   "notice.chatData": {
-    ko: "AI를 쓰면 보유 종목·비중·손익·거래내역·투자 원칙·노트가 선택한 AI 제공자(Anthropic 또는 OpenAI)의 서버로 전송됩니다. 토스 키와 전체 계좌번호는 보내지 않습니다." as UiText,
+    ko: "AI를 쓰면 보유 주식·비중·손익·거래내역·투자 원칙·노트가 선택한 AI 제공자(Anthropic 또는 OpenAI)의 서버로 전송됩니다. 토스 키와 전체 계좌번호는 보내지 않습니다." as UiText,
   },
   "notice.appInfo": {
     ko: "개인 본인용 도구입니다. 금융투자업자(투자자문·투자일임)가 아니며, 다른 사람에게 투자 조언을 제공하지 않습니다." as UiText,

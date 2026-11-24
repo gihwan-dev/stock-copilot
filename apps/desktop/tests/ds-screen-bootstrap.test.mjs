@@ -82,6 +82,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       "shared/platform/input.ts",
       "shared/platform/detach.ts",
       "shared/platform/useCoreEvent.ts",
+      "shared/platform/canvasTheme.ts",
     ])
       writeFileSync(
         join(folder, "src", path),
@@ -95,16 +96,18 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     const input = join(folder, "src/shared/platform/input.ts");
     const detachFile = join(folder, "src/shared/platform/detach.ts");
     const coreEventFile = join(folder, "src/shared/platform/useCoreEvent.ts");
+    const canvasTheme = join(folder, "src/shared/platform/canvasTheme.ts");
     for (const result of await make().lintFiles([
       main,
       platform,
       input,
       detachFile,
       coreEventFile,
+      canvasTheme,
     ]))
       assert.deepEqual(result.messages, []);
     const program = ts.createProgram(
-      [platform, input, detachFile, coreEventFile],
+      [platform, input, detachFile, coreEventFile, canvasTheme],
       {
         noEmit: true,
         strict: true,
@@ -114,7 +117,13 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     const symbol = checker.getSymbolAtLocation(program.getSourceFile(platform));
     assert.deepEqual(
       checker.getExportsOfModule(symbol).map((s) => s.name),
-      ["detach", "useCoreEvent", "mountApp"],
+      [
+        "detach",
+        "useCoreEvent",
+        "mountApp",
+        "readCanvasTheme",
+        "useCanvasChartTheme",
+      ],
     );
     const platformFunctions = checker.getExportsOfModule(symbol);
     assert.deepEqual(
@@ -129,11 +138,14 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         ["detach", ["void"]],
         ["useCoreEvent", ["void"]],
         ["mountApp", ["void"]],
+        ["readCanvasTheme", ["CandleThemePalette | undefined"]],
+        ["useCanvasChartTheme", ["CandleThemePalette | undefined"]],
       ],
     );
     assert.deepEqual(DOM_ACCESS_FILES, [
       "src/shared/platform/index.ts",
       "src/shared/platform/input.ts",
+      "src/shared/platform/canvasTheme.ts",
       "src/shared/ipc/timer.ts",
       "src/shared/ds/testing/overflow.ts",
       "src/shared/ds/testing/overflow-geometry.ts",
@@ -173,7 +185,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'export * from "./brand"; export * from "./money"; export * from "./result"; export * from "./query-keys";',
+      'export * from "./brand"; export * from "./money"; export * from "./result"; export * from "./query-keys"; export * from "./canvas-chart";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(

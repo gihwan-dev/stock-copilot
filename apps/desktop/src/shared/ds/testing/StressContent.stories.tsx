@@ -12,6 +12,7 @@ import { LineChart } from "../LineChart";
 import { AreaChart } from "../AreaChart";
 import { DonutChart } from "../DonutChart";
 import { Treemap } from "../Treemap";
+import { CandleChart } from "../CandleChart";
 import {
   DataText,
   Money,
@@ -33,6 +34,7 @@ type ContentStory = {
     | "AreaChart"
     | "DonutChart"
     | "Treemap"
+    | "CandleChart"
     | "Money"
     | "Percent"
     | "Quantity"
@@ -57,6 +59,17 @@ const points =
     ? stressFixtures.holdings
         .slice(0, 2)
         .map((id) => ({ id, label, value: chartValue.value }))
+    : [];
+const candles =
+  chartValue.kind === "ok"
+    ? stressFixtures.holdings.slice(0, 2).map((id) => ({
+        id,
+        label,
+        open: chartValue.value,
+        high: chartValue.value,
+        low: chartValue.value,
+        close: chartValue.value,
+      }))
     : [];
 const markdown = parseFreeText(
   [
@@ -91,6 +104,17 @@ export const contentStressStories: readonly ContentStory[] = [
       };
     },
   ),
+  {
+    component: "CandleChart",
+    render: (theme = "light"): ReactElement => (
+      <CandleChart
+        data={candles}
+        label={label}
+        empty={stressFixtures.empty}
+        theme={theme}
+      />
+    ),
+  },
   {
     component: "Money",
     render: (): ReactElement | null =>

@@ -19,7 +19,7 @@ const jobsKey = ["scheduled-jobs"] as const;
 type AiReply = Result<AiSettings, IpcFailure>;
 type JobsReply = Result<ScheduledJobs, IpcFailure>;
 
-export type Loaded<T> =
+type Loaded<T> =
   | { readonly status: "loading" }
   | { readonly status: "error" }
   | { readonly status: "ready"; readonly data: T };

@@ -631,6 +631,11 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod order_button;
+pub use order_button::{
+    OrderButtonHiddenReason, OrderButtonState, ProposalAvailability, order_button_state,
+    saved_order_permission,
+};
 mod risk_settings;
 pub use risk_settings::{OrderPermission, RiskSettings};
 
@@ -677,6 +682,12 @@ pub use valuation_price_evidence::{
 };
 
 mod valuation_recompute_contract;
+
+mod deep_research;
+pub use deep_research::{
+    EvidenceBundle, EvidenceBundleError, EvidenceItem, EvidenceItemId, EvidenceItemIdError,
+    EvidenceKind, ResearchTopic, research_search_plan,
+};
 
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};

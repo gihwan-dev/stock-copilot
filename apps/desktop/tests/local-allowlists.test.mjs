@@ -19,6 +19,7 @@ const expectedLists = {
   PLATFORM_FILE_ALLOWLIST: [
     "src/shared/platform/index.ts",
     "src/shared/platform/input.ts",
+    "src/shared/platform/canvasTheme.ts",
     "src/shared/platform/detach.ts",
     "src/shared/platform/useCoreEvent.ts",
     "src/shared/platform/useDocumentTitle.ts",
@@ -34,6 +35,7 @@ const expectedLists = {
     "src/shared/ds/LineChart.tsx",
     "src/shared/ds/DonutChart.tsx",
     "src/shared/ds/Treemap.tsx",
+    "src/shared/ds/CandleChart.tsx",
   ],
   RAW_TYPE_ALLOWLIST: [
     "src/shared/ds/testing/overflow.ts",
@@ -41,6 +43,7 @@ const expectedLists = {
     "src/shared/ds/testing/stress.ts",
     "src/shared/ds/Markdown.tsx",
     "src/shared/platform/input.ts",
+    "src/shared/platform/canvasTheme.ts",
     "src/shared/lib/brand.ts",
     "src/shared/lib/money.ts",
     "src/shared/lib/format.ts",

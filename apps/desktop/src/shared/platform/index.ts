@@ -10,3 +10,4 @@ export const mountApp = (app: Readonly<ReactElement>): void => {
     createRoot(container).render(app);
   }
 };
+export { readCanvasTheme, useCanvasChartTheme } from "./canvasTheme";

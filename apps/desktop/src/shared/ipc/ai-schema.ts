@@ -5,7 +5,7 @@ import {
   usagePercentSchema,
 } from "./schema";
 
-export const aiTasks = [
+const aiTasks = [
   "chat",
   "estimate",
   "deep-research",
@@ -47,7 +47,7 @@ export const aiSettingsSchema = z
   .readonly();
 export type AiSettings = z.infer<typeof aiSettingsSchema>;
 
-export const scheduledJobs = [
+const scheduledJobs = [
   "morning-briefing",
   "market-watch",
   "closing-review",

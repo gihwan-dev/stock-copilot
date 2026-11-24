@@ -3980,6 +3980,26 @@
       "row": "허용 목록",
       "expect": []
     },
+    "src/shared/ds/CandleChart.tsx": {
+      "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/platform/canvasTheme.ts": {
+      "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/ds/canvas-boundary.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ds에서 platform의 canvasTheme.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/app/canvas-boundary.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: app에서 platform의 canvasTheme.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
     "src/shared/lib/reader-export.ts": {
       "row": "숫자",
       "expect": [

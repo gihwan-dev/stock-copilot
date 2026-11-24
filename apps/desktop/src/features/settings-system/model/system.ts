@@ -41,7 +41,7 @@ const accountChanged = (
     })
     .then(() => queryClient.setQueryData<AccountsReply>(accountsKey, reply));
 
-export type ChangeState = "idle" | "pending" | "failed";
+type ChangeState = "idle" | "pending" | "failed";
 
 export type AccountChange = {
   readonly state: ChangeState;

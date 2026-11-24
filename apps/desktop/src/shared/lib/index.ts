@@ -39,11 +39,28 @@ export { emptyInputValue, parseInputValue } from "./brand";
 
 export type { ChartDecimal, ChartCoordinate, ChartPath } from "./brand";
 export { parseChartDecimal, chartCoordinate, chartPath } from "./brand";
-export type { FreeText, ExternalUrl } from "./brand";
-export { parseFreeText, emptyFreeText, parseExternalUrl } from "./brand";
+export type { FreeText, ExternalUrl, CanvasColor } from "./brand";
+export {
+  appendFreeText,
+  emptyFreeText,
+  parseCanvasColor,
+  parseExternalUrl,
+  parseFreeText,
+} from "./brand";
+export type {
+  CandleThemePalette,
+  CanvasCandleMark,
+  CandleCanvasScene,
+} from "./canvas-chart";
 export {
   queryKeys,
   screenKeys,
   type AppQueryKey,
   type AppRoutePath,
 } from "./query-keys";
+export {
+  chatIdSchema,
+  countSchema,
+  externalUrlSchema,
+  freeTextSchema,
+} from "./brand";

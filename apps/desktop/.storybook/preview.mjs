@@ -48,7 +48,7 @@ export default {
             "TimestampText",
           ],
           "차트",
-          ["LineChart", "AreaChart", "DonutChart", "Treemap"],
+          ["LineChart", "AreaChart", "DonutChart", "Treemap", "CandleChart"],
           "콘텐츠",
           ["Markdown", "ChatInput"],
         ],
