@@ -1,3 +1,4 @@
+mod chat_session;
 mod command;
 mod decoder;
 mod discovery;
@@ -7,6 +8,11 @@ mod parse;
 mod process;
 mod provider;
 mod quota;
+
+pub use chat_session::{
+    ChatProcessReuse, ChatTurnConfig, ChatTurnOutput, CliRecordCleanup, PersistentChatSession,
+    cleanup_cli_project_records, encode_claude_project_dir_name,
+};
 
 pub use command::{
     ALLOWED_HOST_ENV_KEYS, ApiKeyEnvState, CommandBuildError, CommandPlan, CommandPlanInput,

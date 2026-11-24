@@ -154,6 +154,14 @@ impl ClaudeCodeConfig {
         &self.executable_path
     }
 
+    pub(crate) fn host_env_home(&self) -> Option<&str> {
+        self.host_env.as_ref().and_then(HostEnvironment::home)
+    }
+
+    pub(crate) fn mcp_token(&self) -> Option<&SecretValue> {
+        self.mcp_token.as_ref()
+    }
+
     #[must_use]
     pub fn expectation_for(&self, kind: RunKind) -> IsolationExpectation {
         match kind {
@@ -275,7 +283,7 @@ impl ClaudeCodeProvider {
         self.last_cli_version.lock().await.clone()
     }
 
-    fn prepare_spawn(
+    pub(crate) fn prepare_spawn(
         &self,
         spec: &RunSpec,
     ) -> Result<(RunWorkspace, SpawnSpec, TokenEnvInclusion), CommandBuildError> {
@@ -1000,7 +1008,7 @@ const fn topic_label(topic: CollectionTopic) -> &'static str {
     }
 }
 
-fn format_resumed_prompt(history: &ChatHistory, message: &UntrustedText) -> String {
+pub(crate) fn format_resumed_prompt(history: &ChatHistory, message: &UntrustedText) -> String {
     if history.messages().is_empty() {
         return String::from(message.as_untrusted_str());
     }
