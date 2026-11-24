@@ -6,6 +6,7 @@ import {
   chartComponentStories,
   numberComponentStories,
   contentComponentStories,
+  layoutComponentStories,
   catalogAdditionalStories,
 } from "../src/shared/ds/stories.ts";
 import { stressComponentStories } from "../src/shared/ds/testing/Stress.stories.tsx";
@@ -18,6 +19,7 @@ const samples = catalogSamples({
   chartComponentStories,
   numberComponentStories,
   contentComponentStories,
+  layoutComponentStories,
   catalogAdditionalStories,
   stressComponentStories,
 });

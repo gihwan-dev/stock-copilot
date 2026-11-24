@@ -406,6 +406,36 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:col-span-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -3091,6 +3121,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -4277,6 +4312,36 @@
     },
     {
       "name": "@content-wide:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -6966,6 +7031,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -8162,6 +8232,36 @@
     },
     {
       "name": "active:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -10851,6 +10951,11 @@
       "generated": "yes"
     },
     {
+      "name": "active:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -12061,6 +12166,36 @@
       "generated": "yes"
     },
     {
+      "name": "col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "col-span-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -12632,6 +12767,36 @@
     },
     {
       "name": "disabled:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15321,6 +15486,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -16732,6 +16902,36 @@
     },
     {
       "name": "focus-visible:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -19421,6 +19621,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -20607,6 +20812,36 @@
     },
     {
       "name": "focus:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -23296,6 +23531,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -24827,6 +25067,36 @@
     },
     {
       "name": "hover:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -27516,6 +27786,11 @@
       "generated": "yes"
     },
     {
+      "name": "hover:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -29202,6 +29477,36 @@
     },
     {
       "name": "motion-reduce:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -31891,6 +32196,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -34196,6 +34506,11 @@
       "generated": "yes"
     },
     {
+      "name": "self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -35377,6 +35692,36 @@
     },
     {
       "name": "window-lg:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -38066,6 +38411,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -39252,6 +39602,36 @@
     },
     {
       "name": "window-md:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:col-span-12",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:col-span-3",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:col-span-4",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:col-span-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:col-span-8",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:col-span-9",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -41941,6 +42321,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:self-stretch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:shadow-popover",
       "kind": "allowed",
       "generated": "yes"
@@ -43101,6 +43486,30 @@
     },
     {
       "selector": ".\\@content-medium\\:chat-input",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:col-span-12",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:col-span-3",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:col-span-4",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:col-span-6",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:col-span-8",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:col-span-9",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
@@ -45252,6 +45661,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:self-stretch",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:shadow-popover",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -46105,6 +46518,30 @@
     },
     {
       "selector": ".\\@content-wide\\:chat-input",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:col-span-12",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:col-span-3",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:col-span-4",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:col-span-6",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:col-span-8",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:col-span-9",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -48256,6 +48693,10 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:self-stretch",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:shadow-popover",
       "context": ["@container (width >= 75rem)"]
     },
@@ -49117,6 +49558,30 @@
     },
     {
       "selector": ".active\\:chat-input:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:col-span-12:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:col-span-3:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:col-span-4:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:col-span-6:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:col-span-8:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:col-span-9:active",
       "context": []
     },
     {
@@ -51268,6 +51733,10 @@
       "context": []
     },
     {
+      "selector": ".active\\:self-stretch:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:shadow-popover:active",
       "context": []
     },
@@ -52136,6 +52605,30 @@
       "context": []
     },
     {
+      "selector": ".col-span-12",
+      "context": []
+    },
+    {
+      "selector": ".col-span-3",
+      "context": []
+    },
+    {
+      "selector": ".col-span-4",
+      "context": []
+    },
+    {
+      "selector": ".col-span-6",
+      "context": []
+    },
+    {
+      "selector": ".col-span-8",
+      "context": []
+    },
+    {
+      "selector": ".col-span-9",
+      "context": []
+    },
+    {
       "selector": ".cursor-not-allowed",
       "context": []
     },
@@ -52593,6 +53086,30 @@
     },
     {
       "selector": ".disabled\\:chat-input:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:col-span-12:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:col-span-3:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:col-span-4:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:col-span-6:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:col-span-8:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:col-span-9:disabled",
       "context": []
     },
     {
@@ -54744,6 +55261,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:self-stretch:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:shadow-popover:disabled",
       "context": []
     },
@@ -55777,6 +56298,30 @@
     },
     {
       "selector": ".focus-visible\\:chat-input:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:col-span-12:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:col-span-3:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:col-span-4:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:col-span-6:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:col-span-8:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:col-span-9:focus-visible",
       "context": []
     },
     {
@@ -57928,6 +58473,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:self-stretch:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:shadow-popover:focus-visible",
       "context": []
     },
@@ -58781,6 +59330,30 @@
     },
     {
       "selector": ".focus\\:chat-input:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:col-span-12:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:col-span-3:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:col-span-4:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:col-span-6:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:col-span-8:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:col-span-9:focus",
       "context": []
     },
     {
@@ -60932,6 +61505,10 @@
       "context": []
     },
     {
+      "selector": ".focus\\:self-stretch:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:shadow-popover:focus",
       "context": []
     },
@@ -62061,6 +62638,30 @@
     },
     {
       "selector": ".hover\\:chat-input:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:col-span-12:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:col-span-3:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:col-span-4:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:col-span-6:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:col-span-8:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:col-span-9:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -64212,6 +64813,10 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:self-stretch:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:shadow-popover:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -65465,6 +66070,30 @@
     },
     {
       "selector": ".motion-reduce\\:chat-input",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:col-span-12",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:col-span-3",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:col-span-4",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:col-span-6",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:col-span-8",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:col-span-9",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -67616,6 +68245,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:self-stretch",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:shadow-popover",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -69360,6 +69993,10 @@
       "context": []
     },
     {
+      "selector": ".self-stretch",
+      "context": []
+    },
+    {
       "selector": ".shadow-popover",
       "context": []
     },
@@ -70205,6 +70842,30 @@
     },
     {
       "selector": ".window-lg\\:chat-input",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:col-span-12",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:col-span-3",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:col-span-4",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:col-span-6",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:col-span-8",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:col-span-9",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -72356,6 +73017,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:self-stretch",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:shadow-popover",
       "context": ["@media (width >= 80rem)"]
     },
@@ -73209,6 +73874,30 @@
     },
     {
       "selector": ".window-md\\:chat-input",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:col-span-12",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:col-span-3",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:col-span-4",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:col-span-6",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:col-span-8",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:col-span-9",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
@@ -75357,6 +76046,10 @@
     },
     {
       "selector": ".window-md\\:select-none",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:self-stretch",
       "context": ["@media (width >= 67.5rem)"]
     },
     {

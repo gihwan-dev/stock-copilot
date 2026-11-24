@@ -303,6 +303,24 @@ test("DS19 component dimension exceptions equal the approved exact file token pa
         "h-chart-height-lg",
       ],
     ],
+    [
+      "src/shared/ds/Page.tsx",
+      ["min-h-toolbar-height", "max-w-content-max", "wrap-slot"],
+    ],
+    [
+      "src/shared/ds/Split.tsx",
+      [
+        "w-sidebar-width",
+        "w-sidebar-collapsed",
+        "w-chat-width",
+        "w-chat-width-min",
+        "wrap-slot",
+      ],
+    ],
+    [
+      "src/shared/ds/Divider.tsx",
+      ["h-border-hairline", "w-border-hairline", "min-h-control-height-sm"],
+    ],
   ]);
   for (const [file, values] of LENGTH_EXCEPTIONS) {
     for (const value of [...values, ...values.map((v) => `hover:${v}`)]) {

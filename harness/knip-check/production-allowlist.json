@@ -320,6 +320,82 @@
     {
       "issue": "files src/shared/ds/testing/stress.ts src/shared/ds/testing/stress.ts",
       "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+    },
+    {
+      "issue": "files src/shared/ds/Divider.tsx src/shared/ds/Divider.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Grid.tsx src/shared/ds/Grid.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/GridItem.tsx src/shared/ds/GridItem.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Inline.tsx src/shared/ds/Inline.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Layout.stories.tsx src/shared/ds/Layout.stories.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Page.tsx src/shared/ds/Page.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Section.tsx src/shared/ds/Section.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Split.tsx src/shared/ds/Split.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Stack.tsx src/shared/ds/Stack.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Toolbar.tsx src/shared/ds/Toolbar.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/grid-spans-a.ts src/shared/ds/grid-spans-a.ts",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/grid-spans-b.ts src/shared/ds/grid-spans-b.ts",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/grid-spans-c.ts src/shared/ds/grid-spans-c.ts",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/inline-classes-a.ts src/shared/ds/inline-classes-a.ts",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/inline-classes-b.ts src/shared/ds/inline-classes-b.ts",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/inline-classes-c.ts src/shared/ds/inline-classes-c.ts",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/inline-classes-d.ts src/shared/ds/inline-classes-d.ts",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/layout-children.tsx src/shared/ds/layout-children.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/testing/StressLayout.stories.tsx src/shared/ds/testing/StressLayout.stories.tsx",
+      "reason": "DS-11 레이아웃 부하 이야기 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
     }
   ]
 }
