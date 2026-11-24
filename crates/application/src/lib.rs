@@ -488,6 +488,13 @@ pub use important_disclosures::{
     ImportantDisclosureCard,
 };
 
+mod news_data_settings;
+pub use news_data_settings::{
+    AliasName, GetNewsDataSettings, NewsDataSettings, NewsDataSettingsChange,
+    NewsDataSettingsError, NewsDataSettingsRepository, NewsSettingValueError, SecContactSetting,
+    SourceSwitch, StockAlias, UpdateNewsDataSettings,
+};
+
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
