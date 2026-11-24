@@ -31,8 +31,8 @@ pub const fn press_domains(source: &NewsSource) -> &'static [&'static str] {
         NewsSource::Hankyung => &["hankyung.com"],
         NewsSource::Maekyung => &["mk.co.kr"],
         NewsSource::Edaily => &["edaily.co.kr"],
-        NewsSource::Yonhap
-        | NewsSource::BankOfKorea
+        NewsSource::Yonhap => &["yna.co.kr"],
+        NewsSource::BankOfKorea
         | NewsSource::FederalReserve
         | NewsSource::GoogleNews
         | NewsSource::YahooFinance => &[],
@@ -215,7 +215,8 @@ where
         build_object_schema(props, &["handle"]),
         None,
     )?
-    .with_result_omitted_from_ledger();
+    .with_result_omitted_from_ledger()
+    .with_open_world();
     registry.register(Arc::new(ReadArticleTool {
         spec,
         port: Arc::clone(port),

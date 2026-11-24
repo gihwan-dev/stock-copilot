@@ -1154,3 +1154,10 @@ pub(crate) fn format_resumed_prompt(history: &ChatHistory, message: &UntrustedTe
     combined.push_str(message.as_untrusted_str());
     combined
 }
+
+impl application::CliVersionSource for ClaudeCodeProvider {
+    async fn observed_version(&self) -> Option<application::CliVersion> {
+        let observed = self.last_cli_version.lock().await.clone()?;
+        application::CliVersion::try_new(&observed).ok()
+    }
+}
