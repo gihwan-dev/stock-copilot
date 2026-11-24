@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fixtureSource, waitForText } from "./screen-fixtures.mjs";
+import { fixtureSource } from "./screen-fixtures.mjs";
 import { screenDom } from "./screen-dom.mjs";
 
 test("J-07 briefing card and past briefing screen show loading, empty, error and ready states from the core briefing IPC", async () => {
@@ -14,7 +14,17 @@ test("J-07 briefing card and past briefing screen show loading, empty, error and
     import { mockCommands } from MOCK_IPC_ENTRY;
     import { responses } from RESPONSES_ENTRY;
     ${fixtureSource}
-    ${waitForText}
+    window.waitText = async (view, needle) => {
+      await waitFor(
+        () => {
+          if (!(view.container.textContent ?? "").includes(needle)) {
+            throw new Error("missing text: " + needle);
+          }
+        },
+        { timeout: 15000 },
+      );
+      return view.container.textContent ?? "";
+    };
     window.cleanup = cleanup;
     window.clearMocks = clearMocks;
     window.click = (element) => fireEvent.click(element);
