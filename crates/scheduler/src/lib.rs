@@ -2,6 +2,7 @@ mod ai_queue;
 mod briefing_jobs;
 mod code_jobs;
 mod engine;
+mod intraday_watch;
 mod market_hours;
 mod registry;
 mod schedule_settings;
@@ -22,6 +23,9 @@ pub use code_jobs::{
 pub use engine::{
     DEFAULT_TICK_INTERVAL_SECONDS, DiscardJobRecords, JobRecordSink, JobTriggers, Scheduler,
     SchedulerEventSubscriber, SchedulerOptions, SchedulerWakeSignal,
+};
+pub use intraday_watch::{
+    IntradayReviewPort, IntradayWatchInbox, IntradayWatchJob, IntradayWatchSubscriber, WatchCause,
 };
 pub use market_hours::{MarketCalendarSource, NoMarketCalendar, trading_status_now};
 pub use registry::{JobFuture, JobRegistry, RegisteredJobMeta, RegistryError, ScheduledJob};
@@ -52,6 +56,8 @@ mod code_jobs_tests;
 mod engine_tests;
 #[cfg(test)]
 mod fixture_tests;
+#[cfg(test)]
+mod intraday_watch_tests;
 #[cfg(test)]
 mod schedule_settings_tests;
 #[cfg(test)]
