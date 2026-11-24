@@ -632,6 +632,11 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod order_reconciliation;
+pub use order_reconciliation::{
+    BrokerOrderCoverage, LocalSubmission, LocalSubmissionResult, ReconciliationIssue,
+    ReconciliationReport, ReconciliationStatus, reconcile_orders,
+};
 mod order_button;
 pub use order_button::{
     OrderButtonHiddenReason, OrderButtonState, ProposalAvailability, order_button_state,
