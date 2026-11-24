@@ -15,7 +15,8 @@ mod tests {
     use serde_json::{Map, Value};
     use testkit_ports::SteppedClock;
     use testkit_ports::tool_read_fakes::{
-        FixedMarketToolReads, FixedPortfolioToolReads, MarketReadCall, PortfolioReadCall,
+        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads, MarketReadCall,
+        NewsReadCall, PortfolioReadCall,
     };
 
     const STATE_CHANGING_ALLOWED: [&str; 0] = [];
@@ -48,6 +49,7 @@ mod tests {
         registry: ToolRegistry,
         portfolio: Arc<FixedPortfolioToolReads>,
         market: Arc<FixedMarketToolReads>,
+        news: Arc<FixedNewsToolReads>,
     }
 
     fn catalog() -> Catalog {
@@ -62,6 +64,7 @@ mod tests {
         let ports = AnalysisCatalogPorts {
             portfolio: Arc::new(FixedPortfolioToolReads::default()),
             market: Arc::new(FixedMarketToolReads::default()),
+            news: Arc::new(FixedNewsToolReads::default()),
         };
         let registry =
             build_analysis_catalog(&ports, &make_cursor_store(clock)).expect("카탈로그 조립");
@@ -69,6 +72,7 @@ mod tests {
             registry,
             portfolio: ports.portfolio,
             market: ports.market,
+            news: ports.news,
         }
     }
 
@@ -196,6 +200,15 @@ mod tests {
                 | PortfolioReadCall::Allocation
                 | PortfolioReadCall::Transactions
                 | PortfolioReadCall::Performance(_) => {}
+            }
+        }
+        assert!(
+            !catalog.news.calls().is_empty(),
+            "뉴스 도구 본문까지 닿아야 한다"
+        );
+        for call in catalog.news.calls() {
+            match call {
+                NewsReadCall::SearchNews(_) | NewsReadCall::Disclosures(_) => {}
             }
         }
         for call in catalog.market.calls() {

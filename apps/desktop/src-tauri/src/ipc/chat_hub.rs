@@ -15,10 +15,10 @@ use crate::ports::{PortTypes, Ports};
 
 use super::chat_dto::{
     ActiveChatTurnDto, ActiveTurnStateDto, CancelChatTurnRequest, CancelChatTurnResponse,
-    CancelOutcomeDto, ChatChunkEvent, GetChatHistoryRequest, GetChatHistoryResponse,
+    CancelOutcomeDto, ChatChunkDto, ChatChunkEvent, GetChatHistoryRequest, GetChatHistoryResponse,
     ResubscribeChatTurnRequest, ResubscribeChatTurnResponse, SendChatMessageRequest,
-    SendChatMessageResponse, chunk_to_dto, into_domain_request, outcome_to_response,
-    session_entries_to_dto,
+    SendChatMessageResponse, chunk_to_dto, into_domain_request, number_check_dto,
+    outcome_to_response, session_entries_to_dto,
 };
 use super::error::{IpcError, IpcErrorKind};
 
@@ -102,8 +102,18 @@ impl ChatStreamHub {
     }
 
     pub async fn publish(&self, turn_id: &str, chunk: &ChatChunk) {
-        let is_terminal = is_terminal_chunk(chunk);
-        let dto = chunk_to_dto(chunk);
+        if let Some(check) = number_check_dto(chunk) {
+            self.publish_dto(turn_id, check, ChunkEnd::Continuing).await;
+        }
+        let end = if is_terminal_chunk(chunk) {
+            ChunkEnd::Terminal
+        } else {
+            ChunkEnd::Continuing
+        };
+        self.publish_dto(turn_id, chunk_to_dto(chunk), end).await;
+    }
+
+    async fn publish_dto(&self, turn_id: &str, dto: ChatChunkDto, end: ChunkEnd) {
         let mut guard = self.turns.lock().await;
         let Some(turn) = guard.get_mut(turn_id) else {
             return;
@@ -116,7 +126,7 @@ impl ChatStreamHub {
             chunk: dto,
         };
         turn.chunks.push(event.clone());
-        if is_terminal {
+        if end == ChunkEnd::Terminal {
             turn.state = ActiveTurnStateDto::Finished;
         }
         turn.subscribers
@@ -199,6 +209,12 @@ impl ChatStreamHub {
             outcome,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChunkEnd {
+    Terminal,
+    Continuing,
 }
 
 const fn is_terminal_chunk(chunk: &ChatChunk) -> bool {
@@ -300,7 +316,8 @@ impl<P: PortTypes> ChatBackend for PortsChatBackend<P> {
                 self.chat_ledger.as_ref(),
                 self.chat_queue.as_ref(),
                 self.clock.as_ref(),
-            );
+            )
+            .with_number_evidence(self.chat_ledger.as_ref());
             let use_case =
                 SendWarmChatMessage::with_default_max_age(sender, self.warm_chat.as_ref());
             use_case.execute(request, &mut sink, stop.as_ref()).await
