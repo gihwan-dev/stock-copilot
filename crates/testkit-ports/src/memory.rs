@@ -6,11 +6,12 @@ use application::{
     ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
-    AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
-    FxRate, FxRateKind, InstrumentId, InstrumentMappingRecord, InstrumentMappings,
-    InstrumentSource, InvestorProfile, MappingAssignment, NewsItem, Portfolio, PriceAdjustment,
-    Proposal, ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey,
-    SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
+    AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, DraftRestoreEvidence,
+    EstimateOutcome, FxPair, FxRate, FxRateKind, InstrumentId, InstrumentMappingRecord,
+    InstrumentMappings, InstrumentSource, InvestorProfile, MappingAssignment, MasterInstrument,
+    NewsItem, Portfolio, PriceAdjustment, Proposal, ProposalId, Quote, RiskSettings, SettledRowSet,
+    SignalSubmission, SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp,
+    ValuationSnapshot,
 };
 use std::{future::poll_fn, task::Poll};
 
@@ -844,7 +845,7 @@ impl EstimateRepository for MemoryEstimateRepository {
 }
 #[derive(Debug, Default)]
 struct ProposalRepositoryState {
-    records: Vec<(ProposalId, Proposal<Draft>)>,
+    records: Vec<(ProposalId, DraftRestoreEvidence)>,
 }
 #[derive(Debug, Default)]
 pub struct MemoryProposalRepository {
@@ -886,7 +887,7 @@ impl ProposalRepository for MemoryProposalRepository {
         &self,
         _instrument: &InstrumentId,
         _expected: &application::SignalSnapshot,
-        _proposal: &Proposal<Draft>,
+        _candidate: application::DraftStoreCandidate<'_>,
         _check: application::DraftCheck<'_>,
     ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
     {
@@ -898,6 +899,8 @@ impl ProposalRepository for MemoryProposalRepository {
     async fn store_draft(
         &self,
         proposal: &Proposal<Draft>,
+        evidence: &DraftRestoreEvidence,
+        master: &MasterInstrument,
     ) -> Result<WriteCompleted, SystemPortError> {
         self.calls
             .write()
@@ -911,10 +914,13 @@ impl ProposalRepository for MemoryProposalRepository {
         {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
+                evidence
+                    .verify_matches_proposal(proposal, master)
+                    .map_err(|_error| proposal_integrity_error())?;
                 let mut state = self.state.write();
                 state
                     .records
-                    .push((proposal.id().clone(), proposal.clone()));
+                    .push((proposal.id().clone(), evidence.clone()));
                 Ok(WriteCompleted)
             }
         }
@@ -922,6 +928,7 @@ impl ProposalRepository for MemoryProposalRepository {
     async fn draft(
         &self,
         proposal: &ProposalId,
+        master: &MasterInstrument,
     ) -> Result<Option<Proposal<Draft>>, SystemPortError> {
         self.calls
             .write()
@@ -932,16 +939,28 @@ impl ProposalRepository for MemoryProposalRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let state = self.state.write();
-                Ok(state
+                state
                     .records
                     .iter()
                     .rev()
                     .find(|(key, _)| key == proposal)
-                    .map(|(_, value)| value.clone()))
+                    .map(|(_, value)| {
+                        value
+                            .restore(master)
+                            .map_err(|_error| proposal_integrity_error())
+                    })
+                    .transpose()
             }
         }
     }
 }
+fn proposal_integrity_error() -> SystemPortError {
+    SystemPortError::new(
+        application::SystemPort::Repository,
+        application::SystemFailure::RepositoryIntegrity,
+    )
+}
+
 #[derive(Debug, Default)]
 struct ValuationRepositoryState {
     records: Vec<(AccountId, ValuationSnapshot)>,

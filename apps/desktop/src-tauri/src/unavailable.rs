@@ -12,14 +12,15 @@ use application::{
     ThesisRepository, TransactionRead, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
-    AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuySignalRecord,
-    BuyingPower, CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
-    CommissionRateFact, CreditTrade, Currency, Draft, EstimateOutcome, FlowInterval, FxPair,
-    FxRate, FxRateKind, IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow,
-    InvestorProfile, InvestorTradingRankings, IssuedEstimateTaskId, KnownMarket, MarketCalendar,
-    MarketIndicatorCandle, MarketIndicatorQuote, NewsItem, OrderFxRates, Orderbook, Portfolio,
-    PriceAdjustment, PriceLimits, ProgramTrade, Proposal, ProposalId, Quote, QuoteInstrument,
-    RaisedSignal, RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog,
+    AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
+    CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
+    CommissionRateFact, CreditTrade, Currency, Draft, DraftRestoreEvidence, EstimateOutcome,
+    FlowInterval, FxPair, FxRate, FxRateKind, HistoricalSignal, HistoricalSignalOccurrence,
+    IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
+    InvestorTradingRankings, IssuedEstimateTaskId, KnownMarket, MarketCalendar,
+    MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrument, NewsItem, OrderFxRates,
+    Orderbook, Portfolio, PriceAdjustment, PriceLimits, ProgramTrade, Proposal, ProposalId, Quote,
+    QuoteInstrument, RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog,
     SectorComposition, SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending,
     SellableQuantityFact, SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission,
     SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, Thesis, TimeInterval,
@@ -682,7 +683,7 @@ impl SignalRepository for Unavailable {
         &self,
         _instrument: &InstrumentId,
         _identity: &ResolvedOrderInstrument,
-    ) -> impl Future<Output = Result<Vec<BuySignalRecord>, SystemPortError>> + Send {
+    ) -> impl Future<Output = Result<Vec<HistoricalSignalOccurrence>, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
             SystemPort::Repository,
             SystemFailure::Unavailable(RetryDelay::Unknown),
@@ -700,7 +701,7 @@ impl SignalRepository for Unavailable {
     fn current(
         &self,
         _instrument: &InstrumentId,
-    ) -> impl Future<Output = Result<Vec<RaisedSignal>, SystemPortError>> + Send {
+    ) -> impl Future<Output = Result<Vec<HistoricalSignal>, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
             SystemPort::Repository,
             SystemFailure::Unavailable(RetryDelay::Unknown),
@@ -724,7 +725,7 @@ impl ProposalRepository for Unavailable {
         &self,
         _instrument: &InstrumentId,
         _expected: &SignalSnapshot,
-        _proposal: &Proposal<Draft>,
+        _candidate: application::DraftStoreCandidate<'_>,
         _check: application::DraftCheck<'_>,
     ) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
@@ -735,6 +736,8 @@ impl ProposalRepository for Unavailable {
     fn store_draft(
         &self,
         _proposal: &Proposal<Draft>,
+        _evidence: &DraftRestoreEvidence,
+        _master: &MasterInstrument,
     ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
             SystemPort::Repository,
@@ -744,6 +747,7 @@ impl ProposalRepository for Unavailable {
     fn draft(
         &self,
         _proposal: &ProposalId,
+        _master: &MasterInstrument,
     ) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
             SystemPort::Repository,

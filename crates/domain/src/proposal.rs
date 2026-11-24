@@ -145,10 +145,6 @@ pub enum ProposalExecutionError {
 }
 impl<State> Proposal<State> {
     #[must_use]
-    pub fn intent(&self) -> &OrderIntent {
-        &self.intent
-    }
-    #[must_use]
     pub fn id(&self) -> &ProposalId {
         &self.id
     }
@@ -173,6 +169,11 @@ impl<State> Proposal<State> {
     }
 }
 impl Proposal<Draft> {
+    #[must_use]
+    pub fn intent(&self) -> crate::DraftOrderIntent {
+        crate::DraftOrderIntent::from_intent(&self.intent)
+    }
+
     pub fn new(
         id: ProposalId,
         intent: OrderIntent,
@@ -303,6 +304,11 @@ impl Proposal<Draft> {
     }
 }
 impl Proposal<Validated> {
+    #[must_use]
+    pub fn intent(&self) -> &OrderIntent {
+        &self.intent
+    }
+
     pub fn into_execution(
         self,
         now: Timestamp,
@@ -512,6 +518,18 @@ mod tests {
             ProposalLifetime::default(),
         )
         .expect("제안")
+    }
+    struct OriginalDraft(Proposal<Draft>);
+    impl OriginalDraft {
+        fn intent(&self) -> &OrderIntent {
+            &self.0.intent
+        }
+    }
+    impl std::ops::Deref for OriginalDraft {
+        type Target = Proposal<Draft>;
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
     }
     fn passed(
         proposal: &Proposal<Draft>,
@@ -904,7 +922,7 @@ mod tests {
                 Err(crate::ProposalRangeError::NonPositive)
             );
         }
-        let proposal = draft();
+        let proposal = OriginalDraft(draft());
         assert_eq!(
             Proposal::new(
                 ProposalId::new(ClientOrderId::try_new("other").expect("ID")),
@@ -981,7 +999,7 @@ mod tests {
             .expect_err("통화"),
             ProposalError::CurrencyMismatch
         );
-        let original = draft();
+        let original = OriginalDraft(draft());
         let wrong = ProposalPriceRange::from_estimate_task(
             estimate_facts(
                 instrument("OTHER"),

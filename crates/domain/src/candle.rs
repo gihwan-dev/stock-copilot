@@ -18,6 +18,15 @@ pub enum PriceAdjustment {
     Raw,
     Adjusted(AdjustmentBasis),
 }
+impl PriceAdjustment {
+    #[must_use]
+    pub const fn adjustment_basis(self) -> Option<AdjustmentBasis> {
+        match self {
+            Self::Raw => None,
+            Self::Adjusted(basis) => Some(basis),
+        }
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CandlePeriod {
     Daily,
