@@ -1,0 +1,37 @@
+{
+  "latest": {
+    "id": {
+      "kind": "Morning",
+      "date": "2026-11-25"
+    },
+    "finished_at": "2026-11-25T08:20:00+09:00",
+    "status": "completed",
+    "failure": "none",
+    "body": "밤사이 미국장은 올랐습니다 [1]",
+    "sources": [
+      {
+        "title": "연합 기사",
+        "url": "https://example.com/a",
+        "kind": "news"
+      },
+      {
+        "title": "웹 요약",
+        "url": null,
+        "kind": "web"
+      }
+    ]
+  },
+  "past": [
+    {
+      "id": {
+        "kind": "ClosingReview",
+        "date": "2026-11-24"
+      },
+      "finished_at": "2026-11-25T07:20:00+09:00",
+      "status": "failed",
+      "failure": "ai-unavailable",
+      "body": "",
+      "sources": []
+    }
+  ]
+}
