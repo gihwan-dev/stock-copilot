@@ -370,6 +370,7 @@ fn allowlists_hold_only_the_documented_paths() {
             String::from("crates/xtask/src/private_temp.rs"),
             String::from("crates/testkit/src/lib.rs"),
             String::from("crates/testkit/src/bin/fake_ai_cli.rs"),
+            String::from("crates/toss-smoke/src/main.rs"),
         ])
     );
     assert_eq!(

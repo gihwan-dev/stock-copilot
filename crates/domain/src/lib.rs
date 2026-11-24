@@ -38,13 +38,20 @@ pub use instrument_mapping_change::{
 pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentMasterError};
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
 
+mod ai_read_policy;
 mod cluster;
 mod collected_item;
+mod data_source;
 mod disclosure;
 mod news_item;
 
+pub use ai_read_policy::{
+    AiBodyReadPolicy, AiBodyReadSettingError, AiBodyReadToggle, AiNewsInput,
+    SourceAiBodyReadSettings, prepare_news_for_ai,
+};
 pub use cluster::{Cluster, ClusterError};
 pub use collected_item::{CollectedItem, InformationSource, UntrustedText, UntrustedTextError};
+pub use data_source::{DataSource, DataSourceCategory};
 pub use disclosure::{Disclosure, DisclosureKey, DisclosureSource, ReceiptNo, ReceiptNoError};
 pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
 
@@ -684,6 +691,13 @@ pub use draft_order_intent::{
     DraftOrderIntent, HistoricalDecimalText, HistoricalOrderAmount, HistoricalOrderTerms,
     HistoricalSellQuantity, HistoricalWholeQuantity,
 };
+mod web_search_query;
+pub use web_search_query::{
+    ApprovedWebSearchQuery, RejectedWebSearchQuery, SensitiveAccountNumber, SensitiveContextError,
+    SensitivePersonalName, WebSearchCandidateQuery, WebSearchDigestError, WebSearchInspection,
+    WebSearchQueryDigest, WebSearchQueryText, WebSearchRejectionReason, WebSearchSensitiveContext,
+    inspect_web_search_query,
+};
 mod order_query_proof;
 pub use order_query_proof::{
     ClosedOrderCompletenessProof, ClosedOrderPageCollector, ClosedOrderQueryScope,
@@ -691,3 +705,11 @@ pub use order_query_proof::{
     OrderPageExhaustion, OrderQueryFilterState, OrderRowIntake, OrderSymbolFilter,
     OrderedAtDateBounds, ProvenClosedOrderSet,
 };
+mod external_url;
+pub use external_url::{
+    AuthorizedExternalUrl, CanonicalHttpsUrl, ExternalUrlAllowance, ExternalUrlHost,
+    ExternalUrlInput, ExternalUrlPath, ExternalUrlPort, ExternalUrlQuery, ExternalUrlRejection,
+    ExternalUrlScheme, FixedExternalUrl, ParsedExternalUrl,
+};
+mod order_gate;
+pub use order_gate::{OrderGateFacts, validate_proposal};

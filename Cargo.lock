@@ -32,6 +32,8 @@ dependencies = [
  "proptest",
  "serde_json",
  "testkit",
+ "testkit-ports",
+ "tokio",
 ]
 
 [[package]]
@@ -2381,6 +2383,12 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 [[package]]
 name = "order-execution"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "testkit",
+ "testkit-ports",
+]
 
 [[package]]
 name = "pango"
@@ -3184,6 +3192,13 @@ dependencies = [
 [[package]]
 name = "scheduler"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "testkit",
+ "testkit-ports",
+ "tokio",
+]
 
 [[package]]
 name = "schemars"
@@ -3646,6 +3661,20 @@ dependencies = [
 [[package]]
 name = "sources"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "flate2",
+ "form_urlencoded",
+ "quick-xml",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "testkit",
+ "testkit-ports",
+ "time",
+ "tokio",
+]
 
 [[package]]
 name = "specta"
@@ -3724,6 +3753,7 @@ dependencies = [
  "platform-macos",
  "serde",
  "serde_json",
+ "sources",
  "specta",
  "specta-typescript",
  "store-sqlite",
@@ -4453,6 +4483,16 @@ checksum = "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a"
 [[package]]
 name = "toss-smoke"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "broker-toss",
+ "dirs",
+ "domain",
+ "serde_json",
+ "testkit",
+ "testkit-ports",
+ "tokio",
+]
 
 [[package]]
 name = "tower"

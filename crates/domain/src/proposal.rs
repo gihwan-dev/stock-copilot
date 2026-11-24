@@ -169,9 +169,33 @@ impl<State> Proposal<State> {
     }
 }
 impl Proposal<Draft> {
+    pub(crate) fn raw_intent(&self) -> &OrderIntent {
+        &self.intent
+    }
+
     #[must_use]
     pub fn intent(&self) -> crate::DraftOrderIntent {
         crate::DraftOrderIntent::from_intent(&self.intent)
+    }
+
+    #[must_use]
+    pub fn evaluate_gate(
+        &self,
+        now: Timestamp,
+        current: &PriceObservation,
+        facts: &crate::OrderGateFacts<'_>,
+    ) -> ValidationReport {
+        crate::order_gate::evaluate_report(self, now, current, facts)
+    }
+
+    pub fn validate_with_facts(
+        self,
+        now: Timestamp,
+        current: PriceObservation,
+        facts: &crate::OrderGateFacts<'_>,
+    ) -> Result<Proposal<Validated>, ValidationReport> {
+        let report = self.evaluate_gate(now, &current, facts);
+        self.finish_validation(report, now, current)
     }
 
     pub fn new(
