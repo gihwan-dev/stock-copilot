@@ -1,7 +1,7 @@
 use tauri::Runtime;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
-use super::{app_version, chat, open_external, settings};
+use super::{app_version, chat, open_external, order_approval, settings};
 
 #[must_use]
 pub fn specta_builder<R: Runtime>() -> Builder<R> {
@@ -11,13 +11,14 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
     )]
     let commands = collect_commands![
         app_version::app_version::<tauri::Wry>,
-        settings::get_settings,
-        settings::set_order_permission,
+        settings::get_settings::<tauri::Wry>,
+        settings::set_order_permission::<tauri::Wry>,
         chat::send_chat_message::<tauri::Wry>,
         chat::get_chat_history::<tauri::Wry>,
         chat::resubscribe_chat_turn::<tauri::Wry>,
         chat::cancel_chat_turn::<tauri::Wry>,
-        open_external::open_external::<tauri::Wry>
+        open_external::open_external::<tauri::Wry>,
+        order_approval::request_order_approval::<tauri::Wry>
     ];
     Builder::<R>::new()
         .commands(commands)
