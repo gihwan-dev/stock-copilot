@@ -1,6 +1,7 @@
 mod article_reader;
 mod dart_corp_map;
 mod dart_disclosures;
+mod dart_fundamentals;
 mod endpoint;
 mod google_news;
 mod headers;
@@ -22,6 +23,10 @@ pub use dart_disclosures::{
     DartAmendmentKind, DartCorpClass, DartCorpCode, DartCorrectionGroupKey, DartCorrectionStatus,
     DartDisclosureClient, DartDisclosureEntry, DartDisclosureFeed, DartDisclosurePage,
     group_dart_amendments, parse_correction_info,
+};
+pub use dart_fundamentals::{
+    DartFundamentalsClient, DartReportCode, DartStatementScope, build_dart_fundamentals_url,
+    parse_dart_financial_statements,
 };
 pub use endpoint::SourceEndpoint;
 pub use google_news::{
