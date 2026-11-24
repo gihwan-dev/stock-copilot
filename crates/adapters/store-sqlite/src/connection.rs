@@ -84,6 +84,12 @@ pub(crate) fn open(
         .map_err(|error| failure::sqlite(&error))?;
     verify_text(&connection, sql::CIPHER_MEMORY, "1")?;
     apply_key(&connection, key)?;
+    match access {
+        Access::Write => connection
+            .execute_batch(sql::SET_AUTO_VACUUM)
+            .map_err(|error| failure::sqlite(&error))?,
+        Access::Read => {}
+    }
     configure(&connection)?;
     install_audit_guard(&mut connection).map_err(|error| failure::sqlite(&error))?;
     let _: i64 = connection
