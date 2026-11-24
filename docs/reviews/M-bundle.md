@@ -25,3 +25,27 @@ ADR 0173 경량 절차. 2행마다 리뷰 전용 하위 에이전트(Claude Opus
 | 5 | 사소 | 포트 호출 변형 `match`가 동어반복, 섹터 이름 보존 미단언 | 고침. 동어반복 `match`를 지우고 도구별 도달 단언으로 대체, 섹터 이름 단언 추가 |
 
 `check-lite` 중 arch-check가 `fake_cli_end_to_end.rs`의 프로세스 실행(`mcp-server`는 프로세스 실행 금지 crate)을 잡아, 가짜 CLI 실행을 `testkit::PreparedFakeAiCli::run_with_mcp_token`으로 옮겼다(arch-check 위반 0).
+
+## 회차 3 (N-18 90c50625, M-06 5a74babb)
+
+| 번호 | 등급 | 지적 | 처리 |
+|---|---|---|---|
+| 1 | 중요 | `request_web_research`가 종목 순서를 AI가 준 그대로 포트에 넘겨 순서로 최대 약 7비트를 더 실을 수 있음 | 고침. 종목을 코드순 정렬·중복 제거 뒤 넘기고 테스트로 고정 |
+| 2 | 사소 | 추적 실행 64개를 넘으면 사전순 첫 실행을 지워 그 실행의 상한이 다시 열림 | 고침. 지우지 않고 새 실행을 `rate_limited`로 거부(닫힌 실패) |
+| 3 | 사소 | 분석 실행도 `user_message` 모드를 부를 수 있고 채팅 실행 한정 책임이 문서에 없음 | 고침. `RunKind`에 채팅 구분이 없어 포트 책임으로 두고 `WebResearchToolFailure::ModeNotAllowed`(→`forbidden_operation`)를 추가, 결정 표에 명시 |
+| 4 | 사소 | 연합뉴스 거부가 도메인 목록 공백 때문에 걸려 `is_never_readable` 변이가 살아남음 | 고침. 연합뉴스 도메인(`yna.co.kr`)을 표에 넣어 설정이 켜진 가짜에서도 `is_never_readable`만이 막게 함 |
+| 5 | 사소 | M-05에서 `read_article` 본문 경로가 한 번도 돌지 않음 | 고침. 읽을 수 있는 수집 항목을 가짜에 넣고 본문 요청이 한 번 이상 일어났는지 단언. 구조화된 `forbidden_operation`은 도달로 셈 |
+| 6 | 사소 | 외부 웹에 닿는 두 도구가 `openWorldHint:false` | 고침. `ToolSpec::with_open_world`로 `request_web_research`·`read_article`만 `true` |
+| 7 | 사소 | 종목 5개 초과를 조용히 자름 | 고침. 초과 시 `invalid_input` |
+
+## 회차 4 (J-02 f197217d, E-01~E-03 57bd9528)
+
+| 번호 | 등급 | 지적 | 처리 |
+|---|---|---|---|
+| 1 | 중요 | `collected_evidence(handle)`가 실행·종목을 받지 않아 다른 종목 뉴스 핸들 하나로 웹 근거 변경이 "확인 필요"를 건너뛰고 핵심 주장을 `broken`으로 판정할 수 있음(재현됨) | 고침. 포트를 `collected_evidence(run, instrument, handle)`로 바꿔 그 종목으로 수집한 항목만 근거로 인정, 다른 종목 핸들 거부 테스트 추가 |
+| 2 | 중요 | `tool:` 근거를 형식만 보고 원장과 대조하지 않음 | 고침. `ToolCallHistory`로 같은 실행의 성공한 호출 요청 ID와 대조(`submit_estimate`와 같은 `tool:<요청 ID>` 규칙), 호출한 적 없는 참조 거부 테스트 추가 |
+| 3 | 중요 | M-05가 새 추정 도구 본문(`SubmitEstimateTool::execute`)에 닿지 않음 | 고침. 공용 픽스처 `testkit_ports::estimate_fixtures`로 `run-m05`에 과제 `est-1`을 배정하고 실행 문맥을 정상으로 줘 무작위 제출이 성공 경로까지 가게 함. 무작위 호출 뒤 저장된 추정이 정확히 1건뿐인지 단언 |
+| 4 | 중요 | 30건 경계·`ready` 출력이 테스트되지 않음 | 일부만. 판정된 결과 관측을 만들려면 domain 내부 시험 도우미(거래일 달력·세션)를 공개해야 해 이번 묶음에서는 하지 않았다. 테스트 이름·문구를 실제 검증 범위(판정 없음→보류)로 고치고 남은 항목으로 기록 |
+| 5 | 사소 | 불러오기→적용→저장이 원자적이지 않음 | 그대로 둠. SQLite 어댑터의 이력 앞부분 일치 검사가 덮어쓰기를 막는다 |
+| 6 | 사소 | 낡은 버전 거부 뒤 상태 불변 미확인 | 고침. 거부 뒤 버전·주장 수가 그대로인지 단언 |
+| 7 | 사소 | 출처 없는 `submit_estimate` 허용 | 그대로 둠. est 묶음 결정(E-02, 빈 출처는 `evidence = None`) |

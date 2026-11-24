@@ -336,6 +336,11 @@ pub use ai_job_record::{
     AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
     AiJobTimingError, AiJobUsageMeter, ListAiJobUsage, ListAiJobUsageError, RecordAiJobFinished,
 };
+mod cli_version_gate;
+pub use cli_version_gate::{
+    AiGate, CliVersion, CliVersionGateOutcome, CliVersionGateReport, CliVersionSource,
+    EnsureVerifiedCliVersion, LoginRecheck, VerifiedCliVersions,
+};
 mod ai_provider;
 pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
@@ -400,7 +405,11 @@ mod article_tool;
 pub use article_tool::{
     ArticleBody, ArticleFetchFailure, ArticleLocation, ArticleToolPort, BodyReadingSetting,
 };
+mod estimate_tool_ports;
+pub use estimate_tool_ports::{EstimateRunContextSource, ProfileSource, ReadOnlySettings};
 mod portfolio_tool_reads;
+mod thesis_tool;
+pub use thesis_tool::{ThesisRunMetadata, ThesisToolPort, ThesisUpdateFailure, UpdateThesis};
 mod web_research_tool;
 pub use portfolio_tool_reads::{
     AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
@@ -456,7 +465,8 @@ pub use prompt_replay::{
 
 mod prompt_file;
 pub use prompt_file::{
-    PromptBody, PromptFile, PromptFileError, PromptId, PromptSource, PromptTask, PromptVersion,
+    LoadedPrompt, PromptBody, PromptDigest, PromptFile, PromptFileError, PromptHasher, PromptId,
+    PromptLocationError, PromptRef, PromptSource, PromptTask, PromptVersion,
 };
 
 mod submit_estimate_tool;

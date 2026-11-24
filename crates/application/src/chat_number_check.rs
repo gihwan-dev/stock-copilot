@@ -80,39 +80,48 @@ impl AnswerNumber {
 
 struct NumberToken(String);
 
-fn tokens(source: impl Iterator<Item = char>) -> Vec<NumberToken> {
-    let mut chars = source.peekable();
-    let mut found = Vec::new();
-    let mut current = String::new();
-    let mut seen_dot = false;
-    while let Some(ch) = chars.next() {
-        let next_is_digit = chars.peek().is_some_and(char::is_ascii_digit);
-        if ch.is_ascii_digit() {
-            current.push(ch);
-        } else if !current.is_empty() && ch == ',' && next_is_digit && !seen_dot {
-            current.push(',');
-        } else if !current.is_empty() && ch == '.' && next_is_digit && !seen_dot {
-            seen_dot = true;
-            current.push('.');
-        } else if !current.is_empty() {
-            found.push(NumberToken(current.clone()));
-            current.clear();
-            seen_dot = false;
-        }
-    }
-    if !current.is_empty() {
-        found.push(NumberToken(current));
-    }
-    found
-}
+struct NumberText(String);
 
-fn numbers(chars: impl Iterator<Item = char>) -> Vec<AnswerNumber> {
-    tokens(chars).iter().map(AnswerNumber::from_token).collect()
+impl NumberText {
+    fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    fn tokens(&self) -> Vec<NumberToken> {
+        let mut chars = self.0.chars().peekable();
+        let mut found = Vec::new();
+        let mut current = String::new();
+        let mut seen_dot = false;
+        while let Some(ch) = chars.next() {
+            let next_is_digit = chars.peek().is_some_and(char::is_ascii_digit);
+            if ch.is_ascii_digit() {
+                current.push(ch);
+            } else if !current.is_empty() && ch == ',' && next_is_digit && !seen_dot {
+                current.push(',');
+            } else if !current.is_empty() && ch == '.' && next_is_digit && !seen_dot {
+                seen_dot = true;
+                current.push('.');
+            } else if !current.is_empty() {
+                found.push(NumberToken(current.clone()));
+                current.clear();
+                seen_dot = false;
+            }
+        }
+        if !current.is_empty() {
+            found.push(NumberToken(current));
+        }
+        found
+    }
+
+    fn numbers(&self) -> Vec<AnswerNumber> {
+        self.tokens().iter().map(AnswerNumber::from_token).collect()
+    }
 }
 
 #[must_use]
 pub fn check_chat_numbers(answer: &UntrustedText, evidence: &[ToolPayloadJson]) -> ChatNumberCheck {
-    let claimed: Vec<AnswerNumber> = numbers(answer.as_untrusted_str().chars())
+    let claimed: Vec<AnswerNumber> = NumberText::new(answer.as_untrusted_str())
+        .numbers()
         .into_iter()
         .filter(|number| number.relevance() == NumberRelevance::Checked)
         .collect();
@@ -121,7 +130,7 @@ pub fn check_chat_numbers(answer: &UntrustedText, evidence: &[ToolPayloadJson]) 
     }
     let known: BTreeSet<AnswerNumber> = evidence
         .iter()
-        .flat_map(|payload| numbers(payload.as_str().chars()))
+        .flat_map(|payload| NumberText::new(payload.as_str()).numbers())
         .collect();
     if claimed.iter().all(|number| known.contains(number)) {
         ChatNumberCheck::Verified

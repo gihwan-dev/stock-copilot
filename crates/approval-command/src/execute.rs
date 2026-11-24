@@ -54,6 +54,11 @@ impl UnknownOrderVault {
         let _removed = state.remove(client_order_id);
     }
 
+    pub(crate) fn take(&self, client_order_id: &ClientOrderId) -> Option<UnknownOrderRetry> {
+        let mut state = write_vault(&self.permits);
+        state.remove(client_order_id)
+    }
+
     pub(crate) fn store(&self, permit: UnknownOrderRetry) {
         let mut state = write_vault(&self.permits);
         let key = permit.client_order_id().clone();
@@ -734,7 +739,9 @@ fn map_post_gate_error(
     }
 }
 
-const fn map_rejection_reason(reason: OrderRejectionReason) -> BrokerOrderRejectionReason {
+pub(crate) const fn map_rejection_reason(
+    reason: OrderRejectionReason,
+) -> BrokerOrderRejectionReason {
     match reason {
         OrderRejectionReason::InvalidRequest => BrokerOrderRejectionReason::InvalidRequest,
         OrderRejectionReason::ConfirmHighValueRequired => {
@@ -789,7 +796,7 @@ const fn map_rejection_reason(reason: OrderRejectionReason) -> BrokerOrderReject
     }
 }
 
-const fn map_unknown_cause(cause: OrderUnknownCause) -> UnknownOrderCause {
+pub(crate) const fn map_unknown_cause(cause: OrderUnknownCause) -> UnknownOrderCause {
     match cause {
         OrderUnknownCause::Maintenance => UnknownOrderCause::Maintenance,
         OrderUnknownCause::ServerError => UnknownOrderCause::ServerError,
@@ -799,7 +806,9 @@ const fn map_unknown_cause(cause: OrderUnknownCause) -> UnknownOrderCause {
     }
 }
 
-const fn map_retry_eligibility(eligibility: RetryEligibility) -> UnknownOrderRetryStatus {
+pub(crate) const fn map_retry_eligibility(
+    eligibility: RetryEligibility,
+) -> UnknownOrderRetryStatus {
     match eligibility {
         RetryEligibility::Eligible => UnknownOrderRetryStatus::Eligible,
         RetryEligibility::Forbidden => UnknownOrderRetryStatus::Forbidden,

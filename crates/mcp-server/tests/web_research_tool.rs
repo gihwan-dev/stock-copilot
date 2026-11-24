@@ -167,6 +167,28 @@ mod tests {
     }
 
     #[test]
+    fn symbol_order_from_the_model_is_not_forwarded() {
+        runtime().block_on(async {
+            let fixture = fixture(Ok(outcome("요약")));
+            call(
+                &fixture.registry,
+                "run-order",
+                json!({ "mode": "code_topics", "symbols": ["005930", "000660"], "topics": ["guidance"] }),
+            )
+            .await
+            .expect("성공");
+            assert_eq!(
+                request_calls(&fixture.port),
+                vec![WebResearchToolRequest::CodeTopics {
+                    symbols: vec![symbol("000660"), symbol("005930")],
+                    topics: vec![ResearchTopic::Guidance],
+                }],
+                "종목은 코드순으로 바꿔 넘긴다"
+            );
+        });
+    }
+
+    #[test]
     fn user_message_mode_forwards_only_the_stored_message_marker() {
         runtime().block_on(async {
             let fixture = fixture(Ok(outcome("요약")));

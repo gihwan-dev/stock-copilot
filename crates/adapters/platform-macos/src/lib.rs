@@ -7,3 +7,10 @@ mod system_clock;
 pub use system_clock::SystemClock;
 mod unavailable_presence;
 pub use unavailable_presence::UnavailablePresence;
+mod order_presence;
+pub use order_presence::{
+    AuthenticationReason, DeviceOwnerAuthBackend, DeviceOwnerAuthResponse, MacOsPresence,
+    ORDER_DISCLAIMER, OrderDialogBackend, OrderDialogContent, OrderDialogFacts,
+    OrderDialogResponse, UnavailableDeviceOwnerAuth, UnavailableOrderDialogBackend,
+    build_authentication_reason, build_order_dialog_content,
+};

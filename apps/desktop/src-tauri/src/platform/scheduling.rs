@@ -1,4 +1,5 @@
 use crate::platform::background::{BackgroundRuntime, IdleCollectorWorker};
+use crate::platform::scheduled_ports::{AppSpecWatch, AppStoredJobs};
 use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
 use domain::Timestamp;
@@ -6,9 +7,13 @@ use scheduler::{
     DEFAULT_TICK_INTERVAL_SECONDS, DisabledAiJobQueue, JobError, JobRegistry, NoMarketCalendar,
     PortfolioSyncJob, PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
 };
+use scheduler::{
+    DailyBackupJob, IntradayCompactionJob, RegistryError, TossSpecWatchJob, TransactionsSyncJob,
+};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
+use store_sqlite::SqliteRepositories;
 use tauri::{App, AppHandle, Manager, Runtime};
 
 pub struct AppPortfolioSync<R: Runtime, P: PortTypes> {
@@ -92,6 +97,18 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     {
         return SchedulingStart::InvalidSchedule;
     }
+    if let Some(repositories) = app.try_state::<Arc<SqliteRepositories>>()
+        && register_stored_jobs::<R, P>(
+            &mut registry,
+            app.handle(),
+            repositories.as_ref(),
+            app.try_state::<SpecWatchInputs>()
+                .map(|inputs| inputs.inner().clone()),
+        )
+        .is_err()
+    {
+        return SchedulingStart::InvalidSchedule;
+    }
     let Ok(scheduler) = Scheduler::new(
         Arc::clone(&ports.clock),
         Arc::new(DisabledAiJobQueue),
@@ -107,4 +124,38 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     );
     app.manage(Arc::new(runtime));
     SchedulingStart::Started
+}
+
+#[derive(Debug, Clone)]
+pub struct SpecWatchInputs {
+    pub source: Arc<broker_toss::TossSpecClient>,
+    pub baseline: application::TossSpecBaseline,
+}
+
+pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
+    registry: &mut JobRegistry,
+    app: &AppHandle<R>,
+    repositories: &SqliteRepositories,
+    spec_watch: Option<SpecWatchInputs>,
+) -> Result<(), RegistryError> {
+    let stored = || {
+        Arc::new(AppStoredJobs::<R, P>::new(
+            app.clone(),
+            repositories.clone(),
+        ))
+    };
+    registry.register(IntradayCompactionJob::new(stored()))?;
+    registry.register(DailyBackupJob::new(stored()))?;
+    registry.register(TransactionsSyncJob::new(
+        stored(),
+        Arc::new(NoMarketCalendar),
+    ))?;
+    if let Some(inputs) = spec_watch {
+        registry.register(TossSpecWatchJob::new(Arc::new(AppSpecWatch::new(
+            AppStoredJobs::<R, P>::new(app.clone(), repositories.clone()),
+            inputs.source,
+            inputs.baseline,
+        ))))?;
+    }
+    Ok(())
 }

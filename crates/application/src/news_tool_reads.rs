@@ -61,21 +61,19 @@ impl NewsKeyword {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LookbackDays(u16);
 
 impl LookbackDays {
-    pub const MAX: u16 = 90_u16;
-
     pub const fn try_new(days: u16) -> Result<Self, ToolQueryTextError> {
-        if days == 0_u16 || days > Self::MAX {
+        if days == 0_u16 || days > 90_u16 {
             return Err(ToolQueryTextError::TooLong);
         }
         Ok(Self(days))
     }
 
     #[must_use]
-    pub const fn days(self) -> u16 {
+    pub const fn as_u16(&self) -> u16 {
         self.0
     }
 }

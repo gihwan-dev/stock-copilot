@@ -5,22 +5,41 @@ mod tests {
     use std::sync::Arc;
 
     use application::{AiRunId, ToolName};
-    use application::{ArticleFetchFailure, WebResearchToolOutcome};
-    use domain::{Nanosecond, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText};
+    use application::{
+        ArticleBody, ArticleLocation, CollectedItemHandle, ThesisRunMetadata,
+        WebResearchToolOutcome,
+    };
+    use application::{
+        EstimateSubmissionRepository, EventBusBuilder, RetryDelay, SystemFailure, SystemPort,
+        SystemPortError,
+    };
+    use domain::{CalibrationEstimateId, EstimateAssignments};
+    use domain::{
+        InformationSource, InstrumentId, Nanosecond, NewsSource, NormalizedUrl, OffsetSeconds,
+        Symbol, Timestamp, UnixSeconds, UntrustedText,
+    };
     use mcp_server::{
-        AnalysisCatalogPorts, ToolErrorCode, ToolInvocation, ToolRegistry, build_analysis_catalog,
-        make_cursor_store, validate_arguments_against_schema,
+        AnalysisCatalogPorts, EstimateToolPorts, ToolErrorCode, ToolInvocation, ToolRegistry,
+        build_analysis_catalog, make_cursor_store, validate_arguments_against_schema,
     };
     use proptest::prelude::{BoxedStrategy, Just, Strategy, any, prop, prop_oneof};
     use proptest::test_runner::{Config, TestCaseError, TestRunner};
     use serde_json::{Map, Value};
     use testkit_ports::SteppedClock;
+    use testkit_ports::estimate_fixtures::{
+        sample_cost_eligible_task, sample_estimate_run_context,
+    };
+    use testkit_ports::memory::MemorySignalEvaluationRepository;
+    use testkit_ports::system_fakes::MemoryToolCallLedger;
     use testkit_ports::tool_read_fakes::{
-        FixedArticleToolPort, FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
-        FixedWebResearchToolPort,
+        ArticleCall, FixedArticleToolPort, FixedEstimateAssignments, FixedEstimateRunContext,
+        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads, FixedProfileSource,
+        FixedScorecardObservations, FixedThesisToolPort, FixedWebResearchToolPort,
+        LatestThesisRepository,
     };
 
-    const STATE_CHANGING_ALLOWED: [&str; 1] = ["request_web_research"];
+    const STATE_CHANGING_ALLOWED: [&str; 3] =
+        ["request_web_research", "submit_estimate", "update_thesis"];
 
     const FORBIDDEN_FRAGMENTS: [&str; 16] = [
         "order",
@@ -51,6 +70,8 @@ mod tests {
         portfolio: Arc<FixedPortfolioToolReads>,
         market: Arc<FixedMarketToolReads>,
         news: Arc<FixedNewsToolReads>,
+        article: Arc<FixedArticleToolPort>,
+        estimates: Arc<TestEstimatePorts>,
     }
 
     fn research_fake() -> FixedWebResearchToolPort {
@@ -72,6 +93,44 @@ mod tests {
         )
     }
 
+    type TestEstimatePorts = EstimateToolPorts<
+        FixedEstimateAssignments,
+        MemorySignalEvaluationRepository,
+        MemoryToolCallLedger,
+        FixedEstimateRunContext,
+        FixedProfileSource,
+        FixedScorecardObservations,
+        SteppedClock,
+    >;
+
+    fn m05_assignments() -> EstimateAssignments<AiRunId> {
+        EstimateAssignments::default()
+            .issue(
+                CalibrationEstimateId::try_new("est-1").expect("과제 ID"),
+                AiRunId::try_new("run-m05").expect("실행"),
+                sample_cost_eligible_task().expect("과제"),
+            )
+            .expect("발급")
+    }
+
+    fn estimate_ports(clock: &Arc<SteppedClock>) -> Arc<TestEstimatePorts> {
+        Arc::new(EstimateToolPorts {
+            assignments: Arc::new(FixedEstimateAssignments::new(m05_assignments())),
+            submissions: Arc::new(MemorySignalEvaluationRepository::new(m05_assignments())),
+            history: Arc::new(MemoryToolCallLedger::recording()),
+            context: Arc::new(FixedEstimateRunContext(
+                sample_estimate_run_context("run-m05").ok_or(SystemPortError::new(
+                    SystemPort::Repository,
+                    SystemFailure::Unavailable(RetryDelay::Unknown),
+                )),
+            )),
+            settings: Arc::new(FixedProfileSource(Ok(None))),
+            observations: Arc::new(FixedScorecardObservations(Ok(Vec::new()))),
+            clock: Arc::clone(clock),
+            events: Arc::new(EventBusBuilder::default().build()),
+        })
+    }
+
     fn catalog() -> Catalog {
         let clock = Arc::new(SteppedClock::new(
             Timestamp::from_parts(
@@ -81,16 +140,45 @@ mod tests {
             )
             .expect("시각"),
         ));
+        let estimates = estimate_ports(&clock);
         let ports = AnalysisCatalogPorts {
             portfolio: Arc::new(FixedPortfolioToolReads::default()),
             market: Arc::new(FixedMarketToolReads::default()),
             news: Arc::new(FixedNewsToolReads::default()),
             research: Arc::new(research_fake()),
             article: Arc::new(FixedArticleToolPort::new(
-                Vec::new(),
-                Vec::new(),
-                Err(ArticleFetchFailure::NotFound),
+                vec![(
+                    CollectedItemHandle::try_new("press-ok").expect("핸들"),
+                    ArticleLocation {
+                        source: InformationSource::News(NewsSource::Hankyung),
+                        url: NormalizedUrl::try_new("https://www.hankyung.com/a").expect("주소"),
+                    },
+                )],
+                vec![NewsSource::Hankyung],
+                Ok(ArticleBody {
+                    text: UntrustedText::try_new("본문").expect("본문"),
+                    fetched_at: Timestamp::from_parts(
+                        UnixSeconds::new(1_764_000_000_i64),
+                        Nanosecond::new(0_u32),
+                        OffsetSeconds::new(0_i32),
+                    )
+                    .expect("시각"),
+                }),
             )),
+            thesis: Arc::new(FixedThesisToolPort::new(
+                vec![(
+                    Symbol::try_new("005930").expect("종목"),
+                    InstrumentId::try_new("KR7005930003").expect("종목 ID"),
+                )],
+                Vec::new(),
+                ThesisRunMetadata {
+                    model: UntrustedText::try_new("model-x").expect("모델"),
+                    prompt_version: UntrustedText::try_new("p1").expect("프롬프트"),
+                },
+            )),
+            thesis_repository: Arc::new(LatestThesisRepository::default()),
+            tool_history: Arc::new(MemoryToolCallLedger::recording()),
+            estimates: Arc::clone(&estimates),
         };
         let registry =
             build_analysis_catalog(&ports, &clock, &make_cursor_store(Arc::clone(&clock)))
@@ -100,6 +188,8 @@ mod tests {
             portfolio: ports.portfolio,
             market: ports.market,
             news: ports.news,
+            article: ports.article,
+            estimates,
         }
     }
 
@@ -161,7 +251,7 @@ mod tests {
         }
         match schema.get("type").and_then(Value::as_str) {
             Some("string") => prop_oneof![
-                3 => prop::sample::select(vec!["005930", "000660", "AAPL", "035420"])
+                3 => prop::sample::select(vec!["005930", "000660", "AAPL", "035420", "press-ok", "est-1"])
                     .prop_map(|text| Value::String(text.to_owned())),
                 1 => "[ -~]{0,16}".prop_map(Value::String),
             ]
@@ -197,6 +287,10 @@ mod tests {
                     .prop_map(Value::Array)
                     .boxed()
             }
+            Some("object") => match schema.as_object() {
+                Some(nested) => schema_arguments(nested).prop_map(Value::Object).boxed(),
+                None => any_value(),
+            },
             Some(_) | None => any_value(),
         }
     }
@@ -282,9 +376,9 @@ mod tests {
                 }
             }
             Err(error) => match error.code() {
-                ToolErrorCode::ForbiddenOperation | ToolErrorCode::InternalError => Err(
-                    TestCaseError::fail("읽기 도구가 금지·내부 오류를 내면 안 된다"),
-                ),
+                ToolErrorCode::InternalError => {
+                    Err(TestCaseError::fail("도구가 내부 오류를 내면 안 된다"))
+                }
                 ToolErrorCode::UnknownTool
                 | ToolErrorCode::InvalidInput
                 | ToolErrorCode::InvalidCursor
@@ -293,8 +387,16 @@ mod tests {
                 | ToolErrorCode::LedgerUnavailable
                 | ToolErrorCode::DataUnavailable
                 | ToolErrorCode::UpstreamUnavailable
+                | ToolErrorCode::ForbiddenOperation
                 | ToolErrorCode::RateLimited => Ok(Reach::Body),
             },
+        }
+    }
+
+    const fn matches_fetch(call: &ArticleCall) -> bool {
+        match call {
+            ArticleCall::FetchBody(_) => true,
+            ArticleCall::Locate(_) | ArticleCall::BodyReading(_) => false,
         }
     }
 
@@ -342,6 +444,23 @@ mod tests {
             .saturating_add(catalog.market.calls().len())
             .saturating_add(catalog.news.calls().len());
         assert!(port_calls > 0_usize, "읽기 포트까지 호출이 닿아야 한다");
+        let recorded = rt
+            .block_on(
+                catalog
+                    .estimates
+                    .submissions
+                    .submission_records(&InstrumentId::try_new("sample-a").expect("종목")),
+            )
+            .expect("제출 기록");
+        assert_eq!(
+            recorded.len(),
+            1_usize,
+            "무작위 제출 중 과제당 추정 하나만 기록되고 그 밖의 기록은 없다"
+        );
+        assert!(
+            catalog.article.calls().iter().any(matches_fetch),
+            "read_article 본문 경로도 무작위 인자로 돌아야 한다"
+        );
     }
 
     #[test]

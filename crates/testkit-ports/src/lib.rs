@@ -1,3 +1,5 @@
+mod cli_versions;
+pub use cli_versions::{MemoryVerifiedCliVersions, ScriptedCliVersionSource};
 mod ai_job_records;
 pub use ai_job_records::MemoryAiJobRecords;
 mod script;
@@ -20,6 +22,7 @@ pub use draft_record::DraftRecord;
 mod thesis_record;
 pub use thesis_record::ThesisRecord;
 pub mod chat_fakes;
+pub mod estimate_fixtures;
 pub mod memory;
 pub mod principles_fakes;
 pub mod proposal_memory;

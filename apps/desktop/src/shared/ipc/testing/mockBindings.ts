@@ -48,6 +48,10 @@ export const commands = {
     typedError<OrderApprovalResponse, IpcError>(
       __TAURI_INVOKE("request_order_approval", { request }),
     ),
+  getBriefings: (request: GetBriefingsRequest) =>
+    typedError<UiBriefingsView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_briefings", { request }),
+    ),
 };
 
 /** Events */
@@ -73,6 +77,8 @@ export type AppVersionQuery = "current";
 export type AppVersionRequest = {
   query: AppVersionQuery;
 };
+
+export type BriefingsScope = "recent";
 
 export type CancelChatTurnRequest = {
   turn_id: string;
@@ -467,6 +473,10 @@ export type ChatTurnStatusDto =
   | "RateLimited"
   | "Failed";
 
+export type GetBriefingsRequest = {
+  scope: BriefingsScope;
+};
+
 export type GetChatHistoryRequest = {
   session_id: string;
 };
@@ -517,6 +527,7 @@ export type OrderApprovalReason =
   | "proposal-unavailable"
   | "market-closed"
   | "conditions-changed"
+  | "high-value-rejected"
   | "other";
 
 export type OrderApprovalRequest = {
@@ -631,12 +642,67 @@ export type StoredChatEntryDto_Serialize = {
 
 export type StoredChatEntryRoleDto = "User" | "Assistant";
 
+export type UiBriefing = UiBriefing_Serialize | UiBriefing_Deserialize;
+
+export type UiBriefingFailure =
+  "none" | "ai-unavailable" | "rate-limited" | "empty" | "rejected";
+
 export type UiBriefingId = {
   kind: UiBriefingKind;
   date: string;
 };
 
 export type UiBriefingKind = "Morning" | "ClosingReview" | "PreUsMarket";
+
+export type UiBriefingSource =
+  UiBriefingSource_Serialize | UiBriefingSource_Deserialize;
+
+export type UiBriefingSourceKind = "web" | "news" | "disclosure";
+
+export type UiBriefingSource_Deserialize = {
+  title: string;
+  url?: string | null;
+  kind: UiBriefingSourceKind;
+};
+
+export type UiBriefingSource_Serialize = {
+  title: string;
+  url: string | null;
+  kind: UiBriefingSourceKind;
+};
+
+export type UiBriefingStatus = "completed" | "failed";
+
+export type UiBriefing_Deserialize = {
+  id: UiBriefingId;
+  finished_at: string;
+  status: UiBriefingStatus;
+  failure: UiBriefingFailure;
+  body: string;
+  sources: UiBriefingSource_Deserialize[];
+};
+
+export type UiBriefing_Serialize = {
+  id: UiBriefingId;
+  finished_at: string;
+  status: UiBriefingStatus;
+  failure: UiBriefingFailure;
+  body: string;
+  sources: UiBriefingSource_Serialize[];
+};
+
+export type UiBriefingsView =
+  UiBriefingsView_Serialize | UiBriefingsView_Deserialize;
+
+export type UiBriefingsView_Deserialize = {
+  latest?: UiBriefing_Deserialize | null;
+  past: UiBriefing_Deserialize[];
+};
+
+export type UiBriefingsView_Serialize = {
+  latest: UiBriefing_Serialize | null;
+  past: UiBriefing_Serialize[];
+};
 
 export type UiConnectionState = "connected" | "needs-key";
 
@@ -1556,6 +1622,9 @@ export type MockCommandHandlers = {
   requestOrderApproval: (args: {
     request: OrderApprovalRequest;
   }) => OrderApprovalResponse | Promise<OrderApprovalResponse>;
+  getBriefings: (args: {
+    request: GetBriefingsRequest;
+  }) => UiBriefingsView_Serialize | Promise<UiBriefingsView_Serialize>;
 };
 
 /**
@@ -1637,6 +1706,12 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.requestOrderApproval,
             "request_order_approval",
+            args,
+          );
+        case "get_briefings":
+          return mockCommandHandler(
+            mockHandlers.getBriefings,
+            "get_briefings",
             args,
           );
         default:

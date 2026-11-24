@@ -238,8 +238,13 @@ mod watchlist_tests;
 
 mod briefing;
 pub use briefing::BriefingStore;
+
+mod shared;
+pub use shared::{SharedClosure, SharedDatabase, SqliteRepositories, not_opened};
 #[cfg(test)]
 mod briefing_tests;
+#[cfg(test)]
+mod shared_tests;
 
 #[cfg(test)]
 mod signal_store_boundary_tests;
@@ -248,7 +253,7 @@ mod signal_store_boundary_tests;
 mod close_evidence_tests;
 
 mod ai_jobs;
-pub use ai_jobs::{AiJobStore, PrinciplesStore};
+pub use ai_jobs::{AiJobStore, PrinciplesStore, Sha256PromptHasher};
 #[cfg(test)]
 mod ai_jobs_tests;
 

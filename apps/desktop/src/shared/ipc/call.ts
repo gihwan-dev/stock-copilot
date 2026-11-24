@@ -1,6 +1,7 @@
 import { Channel } from "@tauri-apps/api/core";
 import { err, ok, type EntityId, type ExternalUrl, type Result } from "../lib";
 import { commands, events } from "./bindings";
+import { settleBriefings } from "./briefing-schema";
 import {
   parseChatId,
   parseChatStreamEvent,
@@ -17,6 +18,7 @@ import type {
   ChatTurnSettled,
   ChatTurnStart,
 } from "./chat-types";
+import type { BriefingsView } from "./estimate-views";
 import {
   parseUiEvent,
   settleAppVersion,
@@ -85,37 +87,35 @@ export const getSettings = (): Promise<Result<SettingsView, IpcFailure>> => {
 
 export const openExternal = (
   url: ExternalUrl,
-): Promise<Result<OpenExternalResult, IpcFailure>> => {
-  const timer = createTimeout<OpenExternalResult>();
-  const request = commands
-    .openExternal({ url })
-    .then((outcome): Result<OpenExternalResult, IpcFailure> => {
-      timer.cancel();
-      return settleOpenExternal(outcome);
-    })
-    .catch((): Result<OpenExternalResult, IpcFailure> => {
-      timer.cancel();
-      return err(frameworkFailure);
-    });
-  return Promise.race([request, timer.promise]);
-};
+): Promise<Result<OpenExternalResult, IpcFailure>> =>
+  raceTimeout(
+    commands
+      .openExternal({ url })
+      .then(settleOpenExternal)
+      .catch((): Result<OpenExternalResult, IpcFailure> =>
+        err(frameworkFailure),
+      ),
+  );
+
+export const getBriefings = (): Promise<Result<BriefingsView, IpcFailure>> =>
+  raceTimeout(
+    commands
+      .getBriefings({ scope: "recent" })
+      .then((outcome) => settleBriefings(wireOutcome(outcome)))
+      .catch((): Result<BriefingsView, IpcFailure> => err(frameworkFailure)),
+  );
 
 export const setOrderPermission = (
   permission: OrderPermissionState,
-): Promise<Result<OrderSwitchOutcome, IpcFailure>> => {
-  const timer = createTimeout<OrderSwitchOutcome>();
-  const request = commands
-    .setOrderPermission({ permission })
-    .then((outcome): Result<OrderSwitchOutcome, IpcFailure> => {
-      timer.cancel();
-      return settleOrderSwitchOutcome(outcome);
-    })
-    .catch((): Result<OrderSwitchOutcome, IpcFailure> => {
-      timer.cancel();
-      return err(frameworkFailure);
-    });
-  return Promise.race([request, timer.promise]);
-};
+): Promise<Result<OrderSwitchOutcome, IpcFailure>> =>
+  raceTimeout(
+    commands
+      .setOrderPermission({ permission })
+      .then(settleOrderSwitchOutcome)
+      .catch((): Result<OrderSwitchOutcome, IpcFailure> =>
+        err(frameworkFailure),
+      ),
+  );
 
 export const listenUiEvent = (
   onEvent: (event: CoreUiEvent) => void,

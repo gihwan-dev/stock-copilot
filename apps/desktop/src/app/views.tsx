@@ -1,11 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "@tanstack/react-router";
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { AboutSection } from "../features/about";
+import { BriefingCard, BriefingHistoryScreen } from "../features/briefing";
 import { ChatPanel } from "../features/chat";
+import { InstrumentDetail, InstrumentList } from "../features/instruments";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
 import { SettingsScreen } from "../features/settings";
+import { RiskEditors } from "../features/settings-risk";
+import { ScorecardPanel } from "../features/scorecard";
+import { SignalCards } from "../features/signal";
 import { StatusScreen } from "../features/status";
 import { TransactionsScreen } from "../features/transactions";
 import {
@@ -17,19 +22,11 @@ import {
   Stack,
   Text,
 } from "../shared/ds";
-import { queryKeys, text } from "../shared/lib";
+import { queryKeys, text, type EntityId } from "../shared/lib";
 import { detach } from "../shared/platform";
 import { useNavigate, useSources, useSystemSettings } from "./context";
 import { SettingsSections } from "./settings";
 import { describeIpcFailure, useAppVersion } from "./query";
-
-const SidebarPlaceholder = (): ReactElement => (
-  <Stack gap="space-2">
-    <Text variant="caption" tone="ink-muted">
-      {text("app.stockListEmpty", "ko")}
-    </Text>
-  </Stack>
-);
 
 const ChatSlot = (): ReactElement => (
   <Stack gap="space-2">
@@ -44,20 +41,33 @@ const ChatSlot = (): ReactElement => (
 export const ShellLayout = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
+  const [shown, setShown] = useState<EntityId | undefined>(undefined);
   return (
     <AppShell
-      list={<SidebarPlaceholder />}
+      list={<InstrumentList sources={sources} onSelect={setShown} />}
       chat={<ChatSlot />}
       status={
         <SelfCheckBar
           load={sources.selfCheck}
           onOpenSettings={(): void => {
+            setShown(undefined);
             go("/settings");
           }}
         />
       }
     >
-      <Outlet />
+      {shown === undefined ? (
+        <Outlet />
+      ) : (
+        <InstrumentDetail
+          key={shown}
+          sources={sources}
+          instrument={shown}
+          onClose={(): void => {
+            setShown(undefined);
+          }}
+        />
+      )}
     </AppShell>
   );
 };
@@ -84,12 +94,22 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
       );
     case "ready":
       return (
-        <PortfolioOverview
-          sources={sources}
-          onOpenTransactions={(): void => {
-            go("/transactions");
-          }}
-        />
+        <Stack gap="space-6">
+          <BriefingCard
+            load={sources.briefings}
+            onOpenHistory={(): void => {
+              go("/briefings");
+            }}
+          />
+          <SignalCards sources={sources} />
+          <ScorecardPanel load={sources.scorecard} />
+          <PortfolioOverview
+            sources={sources}
+            onOpenTransactions={(): void => {
+              go("/transactions");
+            }}
+          />
+        </Stack>
       );
   }
 };
@@ -119,6 +139,19 @@ export const HomeView = (): ReactElement => {
   );
 };
 
+export const BriefingsRouteView = (): ReactElement => {
+  const go = useNavigate();
+  const sources = useSources();
+  return (
+    <BriefingHistoryScreen
+      load={sources.briefings}
+      onBack={(): void => {
+        go("/");
+      }}
+    />
+  );
+};
+
 export const TransactionsView = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
@@ -134,6 +167,7 @@ export const TransactionsView = (): ReactElement => {
 
 export const SettingsRouteView = (): ReactElement => {
   const go = useNavigate();
+  const sources = useSources();
   const system = useSystemSettings();
   return (
     <SettingsScreen
@@ -149,6 +183,7 @@ export const SettingsRouteView = (): ReactElement => {
             ...(system === "shown"
               ? [<SettingsSections key="sections" />]
               : []),
+            <RiskEditors key="risk-editors" sources={sources} />,
             <AboutSection key="about" />,
           ]}
         </Stack>

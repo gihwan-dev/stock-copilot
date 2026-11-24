@@ -170,3 +170,116 @@ impl PromptFile {
         &self.body
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptLocationError {
+    Format(PromptFileError),
+    TaskFolderMismatch,
+    VersionFileMismatch,
+    InvalidDigest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptDigest(String);
+
+impl PromptDigest {
+    pub fn try_new(value: &str) -> Result<Self, PromptLocationError> {
+        if value.len() != 64
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(PromptLocationError::InvalidDigest);
+        }
+        Ok(Self(value.to_owned()))
+    }
+    #[must_use]
+    pub fn from_sha256(bytes: [u8; 32]) -> Self {
+        Self(bytes.into_iter().fold(String::with_capacity(64), push_hex))
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptRef {
+    id: PromptId,
+    version: PromptVersion,
+    digest: PromptDigest,
+}
+
+pub trait PromptHasher {
+    fn digest(&self, source: &PromptSource) -> PromptDigest;
+}
+
+impl PromptRef {
+    #[must_use]
+    pub const fn restore(id: PromptId, version: PromptVersion, digest: PromptDigest) -> Self {
+        Self {
+            id,
+            version,
+            digest,
+        }
+    }
+    #[must_use]
+    pub const fn id(&self) -> &PromptId {
+        &self.id
+    }
+    #[must_use]
+    pub const fn version(&self) -> &PromptVersion {
+        &self.version
+    }
+    #[must_use]
+    pub const fn digest(&self) -> &PromptDigest {
+        &self.digest
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadedPrompt {
+    file: PromptFile,
+    digest: PromptDigest,
+}
+
+impl LoadedPrompt {
+    pub fn load<Hasher: PromptHasher>(
+        task_folder: &PromptTask,
+        version_file: &PromptVersion,
+        source: &PromptSource,
+        hasher: &Hasher,
+    ) -> Result<Self, PromptLocationError> {
+        let file = PromptFile::parse(source).map_err(PromptLocationError::Format)?;
+        if file.task() != task_folder {
+            return Err(PromptLocationError::TaskFolderMismatch);
+        }
+        if file.version() != version_file {
+            return Err(PromptLocationError::VersionFileMismatch);
+        }
+        Ok(Self {
+            file,
+            digest: hasher.digest(source),
+        })
+    }
+    #[must_use]
+    pub const fn file(&self) -> &PromptFile {
+        &self.file
+    }
+    #[must_use]
+    pub fn prompt_ref(&self) -> PromptRef {
+        PromptRef {
+            id: self.file.id.clone(),
+            version: self.file.version.clone(),
+            digest: self.digest.clone(),
+        }
+    }
+}
+
+fn push_hex(mut text: String, byte: u8) -> String {
+    use std::fmt::Write;
+    match write!(text, "{byte:02x}") {
+        Ok(()) | Err(_) => {}
+    }
+    text
+}

@@ -1,14 +1,20 @@
 use application::{
     AiRunId, AllocationToolView, ArticleBody, ArticleFetchFailure, ArticleLocation,
     ArticleToolPort, BodyReadingSetting, CandleWindow, CandlesToolView, CollectedItemHandle,
-    CollectedItemQuery, DisclosureToolLine, InvestorFlowToolView, MarketOverviewToolView,
+    CollectedItemQuery, DisclosureToolLine, EstimateAssignmentRepository, EstimateCommitOutcome,
+    EstimateRunContext, EstimateRunContextSource, InvestorFlowToolView, MarketOverviewToolView,
     MarketToolReads, NewsToolLine, NewsToolReads, PerformancePeriod, PerformanceToolView,
-    PortfolioToolReads, PortfolioToolView, QuoteToolView, RankingToolKind, RankingsToolView,
-    SectorsToolView, SystemPortError, TransactionsToolView, WebResearchToolFailure,
-    WebResearchToolOutcome, WebResearchToolPort, WebResearchToolRequest,
+    PortfolioToolReads, PortfolioToolView, ProfileSource, QuoteToolView, RankingToolKind,
+    RankingsToolView, ScorecardObservationRepository, SectorsToolView, SystemFailure, SystemPort,
+    SystemPortError, ThesisRepository, ThesisRunMetadata, ThesisToolPort, TransactionsToolView,
+    WebResearchToolFailure, WebResearchToolOutcome, WebResearchToolPort, WebResearchToolRequest,
+    WriteCompleted,
 };
 
-use domain::{KnownMarket, NewsSource, NormalizedUrl, Symbol};
+use domain::{
+    EstimateAssignments, EvidenceRef, InstrumentId, InvestorProfile, KnownMarket, NewsSource,
+    NormalizedUrl, ScorecardObservation, Symbol, Thesis,
+};
 use std::future::{Future, ready};
 
 use crate::script::State;
@@ -431,5 +437,169 @@ impl ArticleToolPort for FixedArticleToolPort {
     ) -> impl Future<Output = Result<ArticleBody, ArticleFetchFailure>> + Send {
         self.calls.write().push(ArticleCall::FetchBody(url.clone()));
         ready(self.body.clone())
+    }
+}
+
+#[derive(Debug)]
+pub struct FixedThesisToolPort {
+    targets: Vec<(Symbol, InstrumentId)>,
+    evidence: Vec<(InstrumentId, CollectedItemHandle, EvidenceRef)>,
+    metadata: ThesisRunMetadata,
+}
+
+impl FixedThesisToolPort {
+    #[must_use]
+    pub const fn new(
+        targets: Vec<(Symbol, InstrumentId)>,
+        evidence: Vec<(InstrumentId, CollectedItemHandle, EvidenceRef)>,
+        metadata: ThesisRunMetadata,
+    ) -> Self {
+        Self {
+            targets,
+            evidence,
+            metadata,
+        }
+    }
+}
+
+impl ThesisToolPort for FixedThesisToolPort {
+    fn resolve_target(
+        &self,
+        _run: &AiRunId,
+        symbol: &Symbol,
+    ) -> impl Future<Output = Result<Option<InstrumentId>, SystemPortError>> + Send {
+        let found = self
+            .targets
+            .iter()
+            .find(|(known, _id)| known == symbol)
+            .map(|(_known, id)| id.clone());
+        ready(Ok(found))
+    }
+
+    fn collected_evidence(
+        &self,
+        _run: &AiRunId,
+        instrument: &InstrumentId,
+        handle: &CollectedItemHandle,
+    ) -> impl Future<Output = Result<Option<EvidenceRef>, SystemPortError>> + Send {
+        let found = self
+            .evidence
+            .iter()
+            .find(|(owner, known, _evidence)| owner == instrument && known == handle)
+            .map(|(_owner, _known, evidence)| evidence.clone());
+        ready(Ok(found))
+    }
+
+    fn run_metadata(
+        &self,
+        _run: &AiRunId,
+    ) -> impl Future<Output = Result<ThesisRunMetadata, SystemPortError>> + Send {
+        ready(Ok(self.metadata.clone()))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct LatestThesisRepository {
+    records: State<Vec<(InstrumentId, crate::ThesisRecord)>>,
+}
+
+impl LatestThesisRepository {
+    fn load_now(&self, instrument: &InstrumentId) -> Result<Option<Thesis>, SystemPortError> {
+        let records = self.records.write();
+        match records
+            .iter()
+            .rev()
+            .find(|(key, _record)| key == instrument)
+        {
+            None => Ok(None),
+            Some((_key, record)) => record.restore().map(Some).map_err(|_error| {
+                SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData)
+            }),
+        }
+    }
+}
+
+impl ThesisRepository for LatestThesisRepository {
+    fn store(
+        &self,
+        instrument: &InstrumentId,
+        thesis: &Thesis,
+    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+        self.records
+            .write()
+            .push((instrument.clone(), crate::ThesisRecord::from_thesis(thesis)));
+        ready(Ok(WriteCompleted))
+    }
+
+    fn load(
+        &self,
+        instrument: &InstrumentId,
+    ) -> impl Future<Output = Result<Option<Thesis>, SystemPortError>> + Send {
+        ready(self.load_now(instrument))
+    }
+}
+
+#[derive(Debug)]
+pub struct FixedEstimateAssignments {
+    assignments: State<EstimateAssignments<AiRunId>>,
+}
+
+impl FixedEstimateAssignments {
+    #[must_use]
+    pub const fn new(assignments: EstimateAssignments<AiRunId>) -> Self {
+        Self {
+            assignments: State::new(assignments),
+        }
+    }
+}
+
+impl EstimateAssignmentRepository for FixedEstimateAssignments {
+    fn load_assignments(
+        &self,
+    ) -> impl Future<Output = Result<EstimateAssignments<AiRunId>, SystemPortError>> + Send {
+        ready(Ok(self.assignments.write().clone()))
+    }
+
+    fn commit_assignments(
+        &self,
+        _previous: &EstimateAssignments<AiRunId>,
+        next: &EstimateAssignments<AiRunId>,
+    ) -> impl Future<Output = Result<EstimateCommitOutcome, SystemPortError>> + Send {
+        *self.assignments.write() = next.clone();
+        ready(Ok(EstimateCommitOutcome::Committed))
+    }
+}
+
+#[derive(Debug)]
+pub struct FixedEstimateRunContext(pub Result<EstimateRunContext, SystemPortError>);
+
+impl EstimateRunContextSource for FixedEstimateRunContext {
+    fn estimate_context(
+        &self,
+        _run: &AiRunId,
+    ) -> impl Future<Output = Result<EstimateRunContext, SystemPortError>> + Send {
+        ready(self.0.clone())
+    }
+}
+
+#[derive(Debug)]
+pub struct FixedProfileSource(pub Result<Option<InvestorProfile>, SystemPortError>);
+
+impl ProfileSource for FixedProfileSource {
+    fn profile(
+        &self,
+    ) -> impl Future<Output = Result<Option<InvestorProfile>, SystemPortError>> + Send {
+        ready(self.0.clone())
+    }
+}
+
+#[derive(Debug)]
+pub struct FixedScorecardObservations(pub Result<Vec<ScorecardObservation>, SystemPortError>);
+
+impl ScorecardObservationRepository for FixedScorecardObservations {
+    fn scorecard_observations(
+        &self,
+    ) -> impl Future<Output = Result<Vec<ScorecardObservation>, SystemPortError>> + Send {
+        ready(self.0.clone())
     }
 }

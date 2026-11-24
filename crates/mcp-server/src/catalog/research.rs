@@ -97,7 +97,9 @@ impl<W, C> WebResearchTool<W, C> {
             }
         }
         if !budgets.contains_key(&key) && budgets.len() >= MAX_TRACKED_RUNS {
-            budgets.pop_first();
+            return Err(rate_limited(
+                "too many runs requested web research on this server",
+            ));
         }
         let used = budgets.get(&key).map_or(0_u8, |budget| budget.used);
         budgets.insert(
@@ -122,8 +124,14 @@ fn parse_symbols(raw: Option<&Value>) -> Result<Vec<Symbol>, ToolErrorPayload> {
             "code_topics mode needs symbols",
         ));
     };
+    if items.len() > MAX_RESEARCH_SYMBOLS {
+        return Err(ToolErrorPayload::invalid_input(
+            Some("symbols"),
+            "at most 5 symbols are allowed",
+        ));
+    }
     let mut symbols = Vec::new();
-    for item in items.iter().take(MAX_RESEARCH_SYMBOLS) {
+    for item in items {
         let symbol = item
             .as_str()
             .and_then(|text| Symbol::try_new(text).ok())
@@ -137,6 +145,7 @@ fn parse_symbols(raw: Option<&Value>) -> Result<Vec<Symbol>, ToolErrorPayload> {
             symbols.push(symbol);
         }
     }
+    symbols.sort_by(|left, right| left.as_str().cmp(right.as_str()));
     Ok(symbols)
 }
 
@@ -236,6 +245,11 @@ fn failure_payload(failure: WebResearchToolFailure) -> ToolErrorPayload {
             None,
             "the generated search query failed the app safety check",
         ),
+        WebResearchToolFailure::ModeNotAllowed => ToolErrorPayload::non_retryable(
+            ToolErrorCode::ForbiddenOperation,
+            Some("mode"),
+            "user_message mode is only available in chat runs",
+        ),
         WebResearchToolFailure::UserMessageMissing => ToolErrorPayload::invalid_input(
             Some("mode"),
             "there is no stored user message to research",
@@ -276,7 +290,8 @@ where
         ToolAccessKind::StateChanging,
         input_schema(),
         None,
-    )?;
+    )?
+    .with_open_world();
     registry.register(Arc::new(WebResearchTool {
         spec,
         port: Arc::clone(port),

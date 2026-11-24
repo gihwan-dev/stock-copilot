@@ -47,7 +47,10 @@ pub fn order_progress_change(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        BrokerOrder, BrokerOrderStatus, OrderProgress, OrderProgressChange, order_progress,
+        order_progress_change,
+    };
     use crate::net_purchase::tests::row;
     use crate::{BrokerOrderMoney, OrderSide, Quantity};
     use rust_decimal::Decimal;

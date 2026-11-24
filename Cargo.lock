@@ -3786,6 +3786,7 @@ dependencies = [
  "tauri-specta",
  "testkit-ports",
  "tokio",
+ "trade-fakes",
 ]
 
 [[package]]
@@ -4598,6 +4599,11 @@ dependencies = [
 [[package]]
 name = "trade-fakes"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "order-execution",
+]
 
 [[package]]
 name = "try-lock"
