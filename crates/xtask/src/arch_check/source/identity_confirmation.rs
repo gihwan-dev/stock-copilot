@@ -527,9 +527,10 @@ impl<'ast> Visit<'ast> for UnauthorizedFileCheck<'_> {
     }
 
     fn visit_item_impl(&mut self, i: &'ast ItemImpl) {
-        if type_last_name(&i.self_ty).is_some_and(|name| {
+        let forbidden_self = type_last_name(&i.self_ty).is_some_and(|name| {
             name == self.rules.confirmation_type || name == self.rules.seal_type
-        }) {
+        }) || (self.in_domain && tokens_contain_any_confirmation(&i.self_ty));
+        if forbidden_self {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_item_impl(self, i);
@@ -538,18 +539,43 @@ impl<'ast> Visit<'ast> for UnauthorizedFileCheck<'_> {
     fn visit_item_type(&mut self, i: &'ast ItemType) {
         if self.in_domain
             && (tokens_contain(&i.ty, &self.rules.confirmation_type)
-                || tokens_contain(&i.ty, &self.rules.seal_type))
+                || tokens_contain(&i.ty, &self.rules.seal_type)
+                || tokens_contain_any_confirmation(&i.ty))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_item_type(self, i);
     }
 
+    fn visit_impl_item_type(&mut self, i: &'ast ImplItemType) {
+        if self.in_domain
+            && (tokens_contain(i, &self.rules.confirmation_type)
+                || tokens_contain(i, &self.rules.seal_type)
+                || tokens_contain_any_confirmation(i))
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_impl_item_type(self, i);
+    }
+
+    fn visit_trait_item_type(&mut self, i: &'ast TraitItemType) {
+        if self.in_domain
+            && (tokens_contain(i, &self.rules.confirmation_type)
+                || tokens_contain(i, &self.rules.seal_type)
+                || tokens_contain_any_confirmation(i))
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_trait_item_type(self, i);
+    }
+
     fn visit_use_rename(&mut self, i: &'ast UseRename) {
         let original = unraw(&i.ident);
         if original == self.rules.issuer_function
             || original == self.rules.seal_type
-            || (self.in_domain && original == self.rules.confirmation_type)
+            || (self.in_domain
+                && (original == self.rules.confirmation_type
+                    || ALL_CONFIRMATION_TYPES.contains(&original.as_str())))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -620,6 +646,22 @@ fn tokens_contain_any_confirmation(value: &impl ToTokens) -> bool {
     idents
         .iter()
         .any(|ident| ALL_CONFIRMATION_TYPES.contains(&ident.as_str()))
+}
+
+fn tokens_contain_any_or_downcast(value: &impl ToTokens) -> bool {
+    let mut idents = Vec::new();
+    token_idents(value.to_token_stream(), &mut idents);
+    idents
+        .iter()
+        .any(|ident| ident == "Any" || ident.starts_with("downcast"))
+}
+
+fn tokens_contain_confirmation_fields(value: &impl ToTokens) -> bool {
+    let mut idents = Vec::new();
+    token_idents(value.to_token_stream(), &mut idents);
+    idents
+        .iter()
+        .any(|ident| ident == "confirmation" || ident == "origin")
 }
 
 fn unwrap_group_or_paren_type(ty: &Type) -> &Type {
@@ -876,9 +918,14 @@ impl DefiningFileCheck<'_> {
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
+        if self.scope == Scope::Product && self.impl_kind == ImplKind::Trait {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
         if self.scope == Scope::Product
-            && self.impl_kind == ImplKind::Trait
-            && (self.target != DefiningTarget::Other || tokens_contain_any_confirmation(impl_item))
+            && self.target == DefiningTarget::Other
+            && (tokens_contain_any_confirmation(impl_item)
+                || tokens_contain_any_or_downcast(impl_item)
+                || tokens_contain_confirmation_fields(impl_item))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -1007,51 +1054,55 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
     }
 
     fn visit_item_trait(&mut self, i: &'ast ItemTrait) {
-        if self.scope == Scope::Product
-            && (tokens_contain(i, &self.rules.confirmation_type)
-                || tokens_contain(i, &self.rules.seal_type)
-                || tokens_contain_any_confirmation(i))
-        {
+        if self.scope == Scope::Product {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_item_trait(self, i);
     }
 
     fn visit_item_static(&mut self, i: &'ast ItemStatic) {
-        if self.scope == Scope::Product
-            && !private(&i.vis)
-            && tokens_contain_any_confirmation(&i.ty)
-        {
+        if self.scope == Scope::Product {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_item_static(self, i);
     }
 
     fn visit_item_const(&mut self, i: &'ast ItemConst) {
-        if self.scope == Scope::Product
-            && !private(&i.vis)
-            && tokens_contain_any_confirmation(&i.ty)
-        {
+        if self.scope == Scope::Product {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_item_const(self, i);
     }
 
     fn visit_item_fn(&mut self, i: &'ast ItemFn) {
-        if self.scope == Scope::Product
-            && non_wrapper_fn_violates_confirmation_boundary(&i.vis, ImplKind::Inherent, &i.sig)
-        {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        if self.scope == Scope::Product {
+            let visible = !private(&i.vis);
+            let opaque_body_leak = visible
+                && !tokens_contain_any_confirmation(&i.sig)
+                && (tokens_contain_any_confirmation(&i.block)
+                    || tokens_contain_confirmation_fields(&i.block));
+            let forbidden = is_public(&i.vis)
+                || non_wrapper_fn_violates_confirmation_boundary(
+                    &i.vis,
+                    ImplKind::Inherent,
+                    &i.sig,
+                )
+                || (visible && tokens_contain_any_or_downcast(i))
+                || opaque_body_leak;
+            if forbidden {
+                self.findings.insert(Rule::IdentityConfirmationIssuance);
+            }
         }
         visit::visit_item_fn(self, i);
     }
 
     fn visit_type_path(&mut self, i: &'ast TypePath) {
         if self.scope == Scope::Product
-            && !self.in_canonical_seal_field
-            && segment_names(&i.path)
-                .iter()
-                .any(|name| name == &self.rules.seal_type)
+            && (i.qself.is_some()
+                || (!self.in_canonical_seal_field
+                    && segment_names(&i.path)
+                        .iter()
+                        .any(|name| name == &self.rules.seal_type)))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -1113,12 +1164,13 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
 
     fn visit_expr_path(&mut self, i: &'ast ExprPath) {
         if self.scope == Scope::Product && !self.in_canonical_issuer {
-            let forbidden = segment_names(&i.path).iter().any(|name| {
-                name == &self.rules.confirmation_type
-                    || name == &self.rules.seal_type
-                    || name == &self.rules.issuer_function
-                    || (name == "Self" && matches_defining_seal_target(self.target))
-            });
+            let forbidden = i.qself.is_some()
+                || segment_names(&i.path).iter().any(|name| {
+                    name == &self.rules.confirmation_type
+                        || name == &self.rules.seal_type
+                        || name == &self.rules.issuer_function
+                        || (name == "Self" && matches_defining_seal_target(self.target))
+                });
             if forbidden {
                 self.findings.insert(Rule::IdentityConfirmationIssuance);
             }
@@ -1141,11 +1193,7 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
     }
 
     fn visit_item_type(&mut self, i: &'ast ItemType) {
-        if self.scope == Scope::Product
-            && (tokens_contain(&i.ty, &self.rules.confirmation_type)
-                || tokens_contain(&i.ty, &self.rules.seal_type)
-                || tokens_contain_any_confirmation(&i.ty))
-        {
+        if self.scope == Scope::Product {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_item_type(self, i);
@@ -1156,7 +1204,8 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
         if self.scope == Scope::Product
             && (original == self.rules.confirmation_type
                 || original == self.rules.seal_type
-                || original == self.rules.issuer_function)
+                || original == self.rules.issuer_function
+                || ALL_CONFIRMATION_TYPES.contains(&original.as_str()))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -1673,7 +1722,8 @@ fn may_touch_identity_confirmation(
     rules: &IdentityConfirmationRules,
     ctx: &CheckContext<'_>,
 ) -> bool {
-    if ctx.text.contains(&rules.issuer_function)
+    if ctx.crate_name.as_str() == "domain"
+        || ctx.text.contains(&rules.issuer_function)
         || ctx.text.contains(&rules.seal_type)
         || ctx.text.contains(&rules.confirmation_type)
         || ctx.text.contains(&rules.prompt_trait)

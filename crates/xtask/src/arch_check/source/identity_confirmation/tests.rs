@@ -958,6 +958,7 @@ fn h66_r2_defining_file_trait_rebind_and_sink_bypasses_are_blocked() {
         format!(
             "{base}\npub struct Thief;\nimpl crate::ExternalTrait<ConfirmedIdentifierChange> for Thief {{}}"
         ),
+        format!("{base}\npub struct Thief;\nimpl crate::ExternalTrait for Thief {{}}"),
     ] {
         assert_eq!(
             scan("domain", defining, &bad),
@@ -1012,10 +1013,53 @@ pub struct IdentifierChangePrompt { instrument_id: InstrumentId, previous: Instr
         format!(
             "{head}\n{valid_struct}\nimpl IdentifierChangePrompt {{ pub const fn new(instrument_id: InstrumentId, previous: InstrumentSource, next: InstrumentSource, evidence: IdentityChangeEvidence) -> Self {{ Self {{ instrument_id, previous: next, next: previous, evidence }} }} }}"
         ),
+        format!("{head}\nuse fake::Send;\n{valid_struct}\n{valid_impl}"),
     ] {
         assert_eq!(
             scan("application", prompt_file, &bad),
             BTreeSet::from([Rule::IdentityConfirmationPromptImpl]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn h66_r2_followup_blocks_any_erasure_assoc_relay_and_wrapper_renames() {
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let (_, base) = defining_file_base();
+    for bad in [
+        format!(
+            "{base}\npub fn into_any_origin(value: Box<dyn core::any::Any>) -> Box<dyn core::any::Any> {{ match value.downcast::<ConfirmedIdentifierChange>() {{ Ok(change) => Box::new(change.confirmation.origin), Err(other) => other }} }}"
+        ),
+        format!(
+            "{base}\npub static LEAK: fn(Box<dyn core::any::Any>) -> Box<dyn core::any::Any> = |v| v;"
+        ),
+        format!(
+            "{base}\npub struct BoxRelay;\nimpl BoxRelay {{ pub fn strip(value: Box<dyn core::any::Any>) -> Box<dyn core::any::Any> {{ match value.downcast::<ConfirmedIdentifierChange>() {{ Ok(change) => Box::new(change.confirmation.origin), Err(other) => other }} }} }}"
+        ),
+        format!(
+            "{base}\nimpl From<<ChangeToOriginRelay as ConfirmationRelay>::Input> for <ChangeToOriginRelay as ConfirmationRelay>::Output {{ fn from(value: <ChangeToOriginRelay as ConfirmationRelay>::Input) -> Self {{ value.confirmation.origin }} }}"
+        ),
+        format!("{base}\nuse self::ConfirmedIdentifierChange as RenamedChange;"),
+        format!(
+            "{base}\npub(crate) fn opaque_leak(value: Box<dyn core::any::Any>) -> Box<dyn core::any::Any> {{ let _ = value; Box::new(()) }}"
+        ),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+    let sibling = "crates/domain/src/instrument_mapping.rs";
+    for bad in [
+        "pub trait ConfirmationRelay { type Input; type Output; }\npub struct ChangeToOriginRelay;\nimpl ConfirmationRelay for ChangeToOriginRelay { type Input = ConfirmedIdentifierChange; type Output = crate::IdentityConfirmationOrigin; }",
+        "pub trait AssocLeak { type Out = IdentityChangeConfirmation; }",
+        "use crate::instrument_mapping_change::ConfirmedIdentifierChange as C;",
+    ] {
+        assert_eq!(
+            scan("domain", sibling, bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
             "{bad}"
         );
     }

@@ -296,7 +296,7 @@ fn structural_check_catches_same_line_fn_pointer_and_ignores_hostile_cargo_env()
     write_file(
         &fake_cargo_home.join("config.toml"),
         &format!(
-            "[build]\nrustc-wrapper = \"/nonexistent/evil-wrapper\"\nrustflags = [\"{remap}\"]\n\n[env]\nCLIPPY_CONF_DIR = {{ value = \"{}\", force = true }}\n",
+            "[alias]\nclippy = [\"nonexistent-fake-subcommand\"]\n\n[build]\nrustc-wrapper = \"/nonexistent/evil-wrapper\"\nrustflags = [\"{remap}\"]\n\n[env]\nCLIPPY_CONF_DIR = {{ value = \"{}\", force = true }}\n",
             empty_conf.display()
         ),
     );
@@ -305,6 +305,8 @@ fn structural_check_catches_same_line_fn_pointer_and_ignores_hostile_cargo_env()
     let cargo_home_str = fake_cargo_home.to_string_lossy().into_owned();
     let hostile_env = [
         ("CARGO_HOME", cargo_home_str.as_str()),
+        ("CARGO_ALIAS_CLIPPY", "nonexistent-fake-subcommand"),
+        ("CLIPPY_ARGS", "--remap-path-prefix=a=b"),
         ("CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS", remap),
         ("CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS", remap),
         ("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS", remap),
@@ -385,9 +387,11 @@ fn synthetic_sites() -> AllowedStructuralSites {
         defining_test_file: String::from(
             "crates/domain/src/instrument_mapping_change/history_cases.rs",
         ),
-        defining_test_ranges: vec![LineRange {
-            start: 489,
-            end: 499,
+        defining_test_spans: vec![SpanRange {
+            start_line: 489,
+            start_column: 10,
+            end_line: 499,
+            end_column: 2,
         }],
         seal_struct_ranges: vec![LineRange { start: 6, end: 7 }],
         confirmation_struct_ranges: vec![LineRange { start: 9, end: 10 }],
@@ -514,6 +518,7 @@ fn structural_parser_isolates_expansion_defining_line_allowed_line_and_seal_line
     let same_line_other_column_in_allowed = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"column_start":114,"line_end":40,"column_end":169,"is_primary":true,"expansion":null}]}}"#;
     let non_direct_line_in_allowed = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":41,"column_start":28,"line_end":41,"column_end":83,"is_primary":true,"expansion":null}]}}"#;
     let product_line_in_defining = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":25,"column_start":10,"line_end":25,"column_end":65,"is_primary":true,"expansion":null}]}}"#;
+    let before_test_mod_same_line_in_defining = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":489,"column_start":1,"line_end":489,"column_end":9,"is_primary":true,"expansion":null}]}}"#;
     let extra_seal_line_in_defining = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_types"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":25,"column_start":10,"line_end":25,"column_end":40,"is_primary":true,"expansion":null}]}}"#;
 
     for (case_line, expected_subject) in [
@@ -531,6 +536,10 @@ fn structural_parser_isolates_expansion_defining_line_allowed_line_and_seal_line
         ),
         (
             product_line_in_defining,
+            "crates/domain/src/instrument_mapping_change.rs",
+        ),
+        (
+            before_test_mod_same_line_in_defining,
             "crates/domain/src/instrument_mapping_change.rs",
         ),
         (

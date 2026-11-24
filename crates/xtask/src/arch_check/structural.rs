@@ -23,7 +23,7 @@ const LINUX_EXCLUSIONS_PATH: &str = "harness/ci/linux/exclusions.json";
 const ISSUER_DISALLOWED_REASON: &str = "stock-copilot-h66-issuer";
 const SEAL_DISALLOWED_REASON: &str = "stock-copilot-h66-seal";
 
-const CLEARED_ENV_VARS: [&str; 23] = [
+const CLEARED_ENV_VARS: [&str; 37] = [
     "RUSTFLAGS",
     "CARGO_ENCODED_RUSTFLAGS",
     "CARGO_BUILD_RUSTFLAGS",
@@ -46,6 +46,20 @@ const CLEARED_ENV_VARS: [&str; 23] = [
     "CARGO_TARGET_DIR",
     "CARGO_BUILD_TARGET_DIR",
     "CLIPPY_CONF_DIR",
+    "CLIPPY_ARGS",
+    "CARGO_ALIAS_CLIPPY",
+    "CARGO_ENV_CLIPPY_ARGS",
+    "CARGO_ENV_CLIPPY_ARGS_VALUE",
+    "CARGO_ENV_CLIPPY_ARGS_FORCE",
+    "CARGO_ENV_CLIPPY_CONF_DIR",
+    "CARGO_ENV_CLIPPY_CONF_DIR_VALUE",
+    "CARGO_ENV_CLIPPY_CONF_DIR_FORCE",
+    "CARGO_ENV_RUSTFLAGS",
+    "CARGO_ENV_RUSTFLAGS_VALUE",
+    "CARGO_ENV_RUSTFLAGS_FORCE",
+    "CARGO_ENV_RUSTC_WRAPPER",
+    "CARGO_ENV_RUSTC_WRAPPER_VALUE",
+    "CARGO_ENV_RUSTC_WRAPPER_FORCE",
     "TAURI_CONFIG",
 ];
 
@@ -116,7 +130,7 @@ enum SpanLocation {
 struct AllowedStructuralSites {
     defining_file: String,
     defining_test_file: String,
-    defining_test_ranges: Vec<LineRange>,
+    defining_test_spans: Vec<SpanRange>,
     seal_struct_ranges: Vec<LineRange>,
     confirmation_struct_ranges: Vec<LineRange>,
     defining_test_file_ranges: Vec<LineRange>,
@@ -142,7 +156,7 @@ impl<'ast> Visit<'ast> for DirectIssuerCallCollector<'_> {
 }
 
 struct DefiningSites {
-    test_ranges: Vec<LineRange>,
+    test_spans: Vec<SpanRange>,
     seal_ranges: Vec<LineRange>,
     confirmation_ranges: Vec<LineRange>,
     canary: ExpectedCanary,
@@ -183,6 +197,27 @@ fn item_line_range(attrs: &[Attribute], item_span: proc_macro2::Span) -> LineRan
         end = end.max(attr_span.end().line);
     }
     LineRange { start, end }
+}
+
+fn item_span_range(attrs: &[Attribute], item_span: proc_macro2::Span) -> SpanRange {
+    let mut result = SpanRange::from_syn(item_span);
+    for attr in attrs {
+        let attr_range = SpanRange::from_syn(attr.span());
+        if attr_range.start_line < result.start_line
+            || (attr_range.start_line == result.start_line
+                && attr_range.start_column < result.start_column)
+        {
+            result.start_line = attr_range.start_line;
+            result.start_column = attr_range.start_column;
+        }
+        if attr_range.end_line > result.end_line
+            || (attr_range.end_line == result.end_line && attr_range.end_column > result.end_column)
+        {
+            result.end_line = attr_range.end_line;
+            result.end_column = attr_range.end_column;
+        }
+    }
+    result
 }
 
 fn defining_package_for_file<'ws>(
@@ -281,7 +316,7 @@ fn collect_defining_sites(
     rules: &IdentityConfirmationRules,
 ) -> Result<DefiningSites, CheckFailure> {
     let parsed = parse_rust_file(defining_path)?;
-    let mut test_ranges = Vec::new();
+    let mut test_spans = Vec::new();
     let mut seal_ranges = Vec::new();
     let mut confirmation_ranges = Vec::new();
     let mut has_test_issuer = false;
@@ -297,7 +332,7 @@ fn collect_defining_sites(
                 }
             }
             Item::Mod(module) if is_cfg_test_mod(module) => {
-                test_ranges.push(item_line_range(&module.attrs, module.span()));
+                test_spans.push(item_span_range(&module.attrs, module.span()));
                 let mut collector = DirectIssuerCallCollector {
                     rules,
                     spans: Vec::new(),
@@ -331,7 +366,7 @@ fn collect_defining_sites(
         ExpectedCanary::NotExpected
     };
     Ok(DefiningSites {
-        test_ranges,
+        test_spans,
         seal_ranges,
         confirmation_ranges,
         canary,
@@ -391,7 +426,7 @@ fn collect_allowed_sites(
     Ok(AllowedStructuralSites {
         defining_file: rules.defining_file.clone(),
         defining_test_file: rules.defining_test_file.clone(),
-        defining_test_ranges: defining.test_ranges,
+        defining_test_spans: defining.test_spans,
         seal_struct_ranges: defining.seal_ranges,
         confirmation_struct_ranges: defining.confirmation_ranges,
         defining_test_file_ranges,
@@ -472,7 +507,7 @@ fn run_structural_clippy(
     workspace: &Workspace,
     invocation: &ClippyInvocation<'_>,
 ) -> Result<Output, CheckFailure> {
-    let mut command = Command::new("cargo");
+    let mut command = Command::new("cargo-clippy");
     command.current_dir(&workspace.root);
     isolate_cargo_environment(
         &mut command,
@@ -703,11 +738,7 @@ fn is_allowed_issuer_span(
         return false;
     };
     if relative == sites.defining_file {
-        return ranges_contain(
-            &sites.defining_test_ranges,
-            actual_span.start_line,
-            actual_span.end_line,
-        );
+        return span_ranges_contain(&sites.defining_test_spans, actual_span);
     }
     sites
         .allowed_direct_call_spans
@@ -730,9 +761,10 @@ fn is_allowed_seal_span(
     if !span_belongs_to_package(canonical_root, &relative, context) {
         return false;
     }
-    let Some((line_start, line_end)) = span_lines(span) else {
+    let Some(actual_span) = span_range(span) else {
         return false;
     };
+    let (line_start, line_end) = (actual_span.start_line, actual_span.end_line);
     if span_has_expansion(span) {
         let outer = outermost_expansion_span(span);
         let Some(outer_file) = outer.get("file_name").and_then(Value::as_str) else {
@@ -753,7 +785,7 @@ fn is_allowed_seal_span(
     if relative == sites.defining_file {
         return ranges_contain(&sites.seal_struct_ranges, line_start, line_end)
             || ranges_contain(&sites.confirmation_struct_ranges, line_start, line_end)
-            || ranges_contain(&sites.defining_test_ranges, line_start, line_end);
+            || span_ranges_contain(&sites.defining_test_spans, actual_span);
     }
     relative == sites.defining_test_file
         && ranges_contain(&sites.defining_test_file_ranges, line_start, line_end)

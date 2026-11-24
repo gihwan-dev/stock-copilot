@@ -51,6 +51,13 @@ const PROMPT_METHODS: [(&str, &str); 3] = [
     ("confirm_link_correction", "LinkCorrectionPrompt"),
 ];
 
+const PROMPT_DOMAIN_IMPORTS: [&str; 4] = [
+    "IdentityChangeEvidence",
+    "InstrumentId",
+    "InstrumentSource",
+    "MappingCorrectionEvidence",
+];
+
 const DECISION_ALLOWED_DERIVES: [&str; 5] = ["Debug", "Clone", "Copy", "PartialEq", "Eq"];
 
 fn canonical_fields_for(struct_name: &str) -> Option<&'static [(&'static str, &'static str)]> {
@@ -565,11 +572,21 @@ impl PromptDefiningCheck<'_> {
         }
         for entry in use_entries(&use_item.tree) {
             let imported = entry.imported();
-            let shadows_local = imported == self.rules.prompt_trait
-                || imported == DECISION_ENUM
-                || PROMPT_STRUCTS.contains(&imported);
+            let allowed_origin = match entry.path.as_slice() {
+                [root, mid, leaf]
+                    if (root == "std" || root == "core") && mid == "future" && leaf == "Future" =>
+                {
+                    true
+                }
+                [root, leaf]
+                    if root == "domain" && PROMPT_DOMAIN_IMPORTS.contains(&leaf.as_str()) =>
+                {
+                    true
+                }
+                _ => false,
+            };
             match &entry.kind {
-                UseKind::Name if !shadows_local => {}
+                UseKind::Name if allowed_origin => {}
                 UseKind::Name | UseKind::Glob => {
                     self.findings.insert(Rule::IdentityConfirmationPromptImpl);
                 }
