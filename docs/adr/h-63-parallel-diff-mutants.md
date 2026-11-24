@@ -75,7 +75,7 @@ D-54 병합에서 `domain` 선택 변이 130건을 단일 `macos-15` 러너(`mac
 - `store-sqlite` 변경도 CI와 야간 변이가 공유하는 `macos-mutants-slot-{0,1}` 2슬롯 상한 안에서 최대 8조각으로 병렬 실행되고, `diff-mutants-verdict`가 모든 조각의 완료·성공과 건너뛴 플랫폼 항목을 닫힌 실패로 합산한다.
 - 바뀌면 다시 볼 조건: Linux ARM 러너 한도나 `store-sqlite` 변이 규모가 커져 `MUTANTS_PER_SHARD = 20` 또는 `MAX_SHARDS = 8`로 90/150분 안에 끝나지 않을 때, 또는 계정 macOS 러너 한도가 바뀔 때.
 
-## 손 변형 검증 (격리 임시 복제본, 13/13 검출)
+## 손 변형 검증 (격리 임시 복제본, 16/16 검출)
 
 | 번호 | 파일 | 변형 | 잡은 테스트 | 결과 |
 |---|---|---|---|---|
@@ -92,3 +92,6 @@ D-54 병합에서 `domain` 선택 변이 130건을 단일 `macos-15` 러너(`mac
 | M-23 | `harness/ci/remote-check.mjs` | `checkRun`에서 실패한 조각 작업 거부 생략 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
 | M-25 | `harness/ci/diff-mutants-aggregate.mjs` | 건너뛴 플랫폼 작업에 실행 단계가 있어도 허용 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
 | M-26 | `harness/ci/workflow-policy/check.mjs` | CI·야간 macOS 변이 공통 2슬롯 대기열 공유 검사 생략 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-28 | `harness/ci/workflow-policy/check.mjs` | `pushBranchFindings` 작업 조건 `\|\|` → `&&` 약화 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-29 | `harness/ci/workflow-policy/check.mjs` | `repositoryPushBranchIssues` 무조건 분기 검증 생략 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-30 | `harness/ci/workflow-policy/check.mjs` | `pushBranchFindings` 단건 워크플로 분기 검증 생략 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
