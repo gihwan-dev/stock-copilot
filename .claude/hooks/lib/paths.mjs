@@ -251,9 +251,7 @@ const repositoryFindings = (relative, role, project) => {
   }
   if (
     role === ROLE.main &&
-    !rules.paths.mainPatterns.some((pattern) =>
-      patternMatches(pattern, relative),
-    )
+    rules.paths.mainPatterns.length === 0
   ) {
     return [
       finding(
