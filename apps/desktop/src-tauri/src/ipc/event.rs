@@ -237,7 +237,7 @@ pub enum UiEvent {
     BriefingFinished(UiBriefingId),
 }
 
-fn proposal_text(id: &domain::ProposalId) -> String {
+fn proposal_key(id: &domain::ProposalId) -> String {
     id.as_client_order_id().as_str().to_owned()
 }
 
@@ -252,11 +252,11 @@ impl From<DomainEvent> for UiEvent {
             DomainEvent::NewsActivityIncreased(id) => {
                 Self::NewsActivityIncreased(id.as_str().to_owned())
             }
-            DomainEvent::ProposalCreated(id) => Self::ProposalCreated(proposal_text(&id)),
-            DomainEvent::ProposalExpired(id) => Self::ProposalExpired(proposal_text(&id)),
-            DomainEvent::ProposalApproved(id) => Self::ProposalApproved(proposal_text(&id)),
-            DomainEvent::ProposalRejected(id) => Self::ProposalRejected(proposal_text(&id)),
-            DomainEvent::ProposalSkipped(id) => Self::ProposalSkipped(proposal_text(&id)),
+            DomainEvent::ProposalCreated(id) => Self::ProposalCreated(proposal_key(&id)),
+            DomainEvent::ProposalExpired(id) => Self::ProposalExpired(proposal_key(&id)),
+            DomainEvent::ProposalApproved(id) => Self::ProposalApproved(proposal_key(&id)),
+            DomainEvent::ProposalRejected(id) => Self::ProposalRejected(proposal_key(&id)),
+            DomainEvent::ProposalSkipped(id) => Self::ProposalSkipped(proposal_key(&id)),
             DomainEvent::OrderSubmitted(id) => Self::OrderSubmitted(id.as_str().to_owned()),
             DomainEvent::OrderOutcomeUnknown(id) => {
                 Self::OrderOutcomeUnknown(id.as_str().to_owned())
