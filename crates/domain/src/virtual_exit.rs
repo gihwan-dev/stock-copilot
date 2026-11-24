@@ -369,9 +369,29 @@ fn evaluate(
     {
         return Err(OutcomeUnavailable::Adjustment);
     }
-    let (interval, rows, bars) =
-        crate::estimate_outcome::virtual_exit_inputs(signal, calendars, adjustment, candles)?;
+    let crate::estimate_outcome::VirtualExitInputs {
+        interval,
+        horizon,
+        sessions: rows,
+        bars,
+    } = crate::estimate_outcome::virtual_exit_inputs(signal, calendars, adjustment, candles)?;
     let prices = prices(signal, adjustment)?;
+    let minute_scan = match (signal.anchor, horizon.selection()) {
+        (ExitAnchor::Estimate, crate::HorizonSelection::Hours) => MinuteScanMode::AllSessions,
+        (
+            ExitAnchor::Recorded,
+            crate::HorizonSelection::Hours
+            | crate::HorizonSelection::FewDays
+            | crate::HorizonSelection::WeeksToMonths
+            | crate::HorizonSelection::HalfYearOrMore,
+        )
+        | (
+            ExitAnchor::Estimate,
+            crate::HorizonSelection::FewDays
+            | crate::HorizonSelection::WeeksToMonths
+            | crate::HorizonSelection::HalfYearOrMore,
+        ) => MinuteScanMode::EntryOrPartialSession,
+    };
     let date_result = match signal.anchor {
         ExitAnchor::Recorded => signal_dates(signal.entry().observed_at(), calendars),
         ExitAnchor::Estimate => estimate_dates(&rows),
@@ -386,8 +406,14 @@ fn evaluate(
             entry_close: entry_close(signal.entry().observed_at(), calendars),
             exit_close: crate::CheckResult::Failed,
         };
-        evaluate_rows(context, rows, &bars, now)
+        evaluate_rows(context, minute_scan, rows, &bars, now)
     })
+}
+
+#[derive(Clone, Copy)]
+enum MinuteScanMode {
+    AllSessions,
+    EntryOrPartialSession,
 }
 
 fn estimate_dates(rows: &[VirtualExitSession]) -> Result<ExitDates, OutcomeUnavailable> {
@@ -399,6 +425,7 @@ fn estimate_dates(rows: &[VirtualExitSession]) -> Result<ExitDates, OutcomeUnava
 }
 fn evaluate_rows(
     context: ExitContext<'_>,
+    minute_scan: MinuteScanMode,
     rows: Vec<VirtualExitSession>,
     bars: &[&Candle],
     now: Timestamp,
@@ -424,20 +451,27 @@ fn evaluate_rows(
         let daily = bars.iter().copied().find(|bar| {
             bar.time().period() == CandlePeriod::Daily && bar.time().date() == row.date
         });
-        if row.date == context.dates.entry || now < session.end() || end < session.end() {
-            if let Some(value) = minutes(bars, start, end, now, row_context)? {
+        let step = match minute_scan {
+            MinuteScanMode::AllSessions => minutes(bars, start, end, now, row_context)?,
+            MinuteScanMode::EntryOrPartialSession
+                if row.date == context.dates.entry
+                    || now < session.end()
+                    || end < session.end() =>
+            {
+                minutes(bars, start, end, now, row_context)?
+            }
+            MinuteScanMode::EntryOrPartialSession => {
+                daily_exit(daily, bars, session, now, row_context)?
+            }
+        };
+        match step {
+            Some(value) => {
                 result = value;
                 break;
             }
-        } else if let Some(value) = daily_exit(daily, bars, session, now, row_context)? {
-            result = value;
-            break;
-        }
-        if now < end {
-            break;
-        }
-        if end == interval.end() {
-            return Err(OutcomeUnavailable::MissingCandles);
+            None if now < end => break,
+            None if end == interval.end() => return Err(OutcomeUnavailable::MissingCandles),
+            None => {}
         }
     }
     Ok(result)
