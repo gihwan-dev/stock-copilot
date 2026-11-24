@@ -143,7 +143,8 @@ test("guard-edit.mjs answers Claude Code's PreToolUse JSON with the real data fi
     /작업 사본 밖[\s\S]*멈춘 뒤 이유를 보고하라/u,
   );
   const main = write(join(repoRoot, "crates/domain/src/lib.rs"));
-  assert.equal(main.output.hookSpecificOutput.permissionDecision, "deny");
+  assert.equal(main.status, 0, main.stderr);
+  assert.equal(main.stdout, "");
 });
 
 test("guard-edit.mjs fails on unreadable input so onFailure blocks the call", () => {
