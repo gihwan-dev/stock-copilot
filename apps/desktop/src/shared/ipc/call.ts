@@ -1,6 +1,6 @@
 import { Channel } from "@tauri-apps/api/core";
 import { err, ok, type EntityId, type ExternalUrl, type Result } from "../lib";
-import { commands } from "./bindings";
+import { commands, events } from "./bindings";
 import {
   parseChatId,
   parseChatStreamEvent,
@@ -18,14 +18,23 @@ import type {
   ChatTurnStart,
 } from "./chat-types";
 import {
+  parseUiEvent,
   settleAppVersion,
   settleOpenExternal,
   wire,
   wireOutcome,
   type AppVersion,
+  type CoreUiEvent,
   type IpcFailure,
   type OpenExternalResult,
 } from "./schema";
+import {
+  settleOrderSwitchOutcome,
+  settleSettingsView,
+  type OrderPermissionState,
+  type OrderSwitchOutcome,
+  type SettingsView,
+} from "./settings-schema";
 import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
@@ -59,6 +68,21 @@ export const appVersion = (): Promise<Result<AppVersion, IpcFailure>> => {
   return Promise.race([request, timer.promise]);
 };
 
+export const getSettings = (): Promise<Result<SettingsView, IpcFailure>> => {
+  const timer = createTimeout<SettingsView>();
+  const request = commands
+    .getSettings({ scope: "all" })
+    .then((outcome): Result<SettingsView, IpcFailure> => {
+      timer.cancel();
+      return settleSettingsView(outcome);
+    })
+    .catch((): Result<SettingsView, IpcFailure> => {
+      timer.cancel();
+      return err(frameworkFailure);
+    });
+  return Promise.race([request, timer.promise]);
+};
+
 export const openExternal = (
   url: ExternalUrl,
 ): Promise<Result<OpenExternalResult, IpcFailure>> => {
@@ -75,6 +99,33 @@ export const openExternal = (
     });
   return Promise.race([request, timer.promise]);
 };
+
+export const setOrderPermission = (
+  permission: OrderPermissionState,
+): Promise<Result<OrderSwitchOutcome, IpcFailure>> => {
+  const timer = createTimeout<OrderSwitchOutcome>();
+  const request = commands
+    .setOrderPermission({ permission })
+    .then((outcome): Result<OrderSwitchOutcome, IpcFailure> => {
+      timer.cancel();
+      return settleOrderSwitchOutcome(outcome);
+    })
+    .catch((): Result<OrderSwitchOutcome, IpcFailure> => {
+      timer.cancel();
+      return err(frameworkFailure);
+    });
+  return Promise.race([request, timer.promise]);
+};
+
+export const listenUiEvent = (
+  onEvent: (event: CoreUiEvent) => void,
+): Promise<Result<() => void, IpcFailure>> =>
+  events.uiEvent
+    .listen((message): void => {
+      const parsed = parseUiEvent(message.payload);
+      if (parsed.kind === "ok") onEvent(parsed.value);
+    })
+    .then(ok, (): Result<() => void, IpcFailure> => err(frameworkFailure));
 
 const raceTimeout = <T>(
   pending: Promise<Result<T, IpcFailure>>,

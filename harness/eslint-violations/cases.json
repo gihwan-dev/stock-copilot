@@ -3598,6 +3598,14 @@
       "row": "경계",
       "expect": []
     },
+    "src/shared/ipc/event-schema.ts": {
+      "row": "원시 타입",
+      "expect": []
+    },
+    "src/shared/ipc/settings-schema.ts": {
+      "row": "원시 타입",
+      "expect": []
+    },
     "src/shared/ipc/schema.ts": {
       "row": "원시 타입",
       "expect": [
