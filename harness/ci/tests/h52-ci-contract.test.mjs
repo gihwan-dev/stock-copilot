@@ -19,15 +19,22 @@ test("작업 브랜치 push도 macOS 전체 검사와 변경분 변이를 실행
   assert.equal(ci.jobs.macos["timeout-minutes"], 120);
   assert.ok(macos.steps.some((step) => step.run === 'just base="$BASE" check'));
   assert.ok(
-    macos.steps.some((step) => step.run === "node harness/ci/diff-mutants.mjs"),
-  );
-  assert.ok(
     macos.steps.findIndex((step) => step.name === "branch checkout") <
       macos.steps.findIndex((step) => step.name === "just check"),
   );
+  assert.equal(ci.jobs["diff-mutants-plan"].if, "github.event_name == 'push'");
   assert.ok(
-    macos.steps.some(
-      (step) => step.run === "node harness/ci/diff-mutants-verdict.mjs",
+    ci.jobs["diff-mutants-plan"].steps.some(
+      (step) => step.run === "node harness/ci/diff-mutants-plan.mjs",
+    ),
+  );
+  assert.equal(
+    ci.jobs["diff-mutants-verdict"].if,
+    "always() && github.event_name == 'push'",
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-verdict"].steps.some(
+      (step) => step.run === "node harness/ci/diff-mutants-aggregate.mjs",
     ),
   );
 });

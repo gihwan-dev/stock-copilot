@@ -103,14 +103,6 @@ const stepFindings = (job, step, policy, toolSpec) => {
     ...("uses" in step === "run" in step ? [finding("step-shape", job)] : []),
     ...(step.if === undefined ||
     policy.conditions.includes(step.if) ||
-    (["macos", "macos-branch"].includes(job) &&
-      step.name === "diff mutants timeout" &&
-      step.run === "node harness/ci/diff-mutants-verdict.mjs" &&
-      step.if === "steps.mutation.outputs.status == 'deadline'") ||
-    (["macos", "macos-branch"].includes(job) &&
-      step.name === "diff mutants budget" &&
-      step.run === "node harness/ci/diff-mutants-verdict.mjs" &&
-      step.if === "steps.mutation.outputs.status == 'budget'") ||
     (step.if === "always()" &&
       policy.alwaysSteps.some(
         (allowed) =>
@@ -129,7 +121,16 @@ const stepFindings = (job, step, policy, toolSpec) => {
       step["timeout-minutes"] === 330) ||
     (job === "daily-plan" &&
       step.name === "daily plan" &&
-      step["timeout-minutes"] === 15)
+      step["timeout-minutes"] === 15) ||
+    (job === "diff-mutants-plan" &&
+      step.name === "diff mutants plan" &&
+      step["timeout-minutes"] === 20) ||
+    (job === "diff-mutants-linux" &&
+      step.name === "diff mutants shard" &&
+      step["timeout-minutes"] === 90) ||
+    (job === "diff-mutants-macos" &&
+      step.name === "diff mutants shard" &&
+      step["timeout-minutes"] === 150)
       ? []
       : [finding("timeout", job)]),
     ...valueFindings(step.env, policy, job),
@@ -173,18 +174,41 @@ const stepFindings = (job, step, policy, toolSpec) => {
   return found;
 };
 
-const mutationStrategyMatches = (name, strategy, policy) => {
-  const expected =
-    name === "mutants" ? policy.mutationStrategy : policy.dailyMutationStrategy;
+const mutationStrategySpec = (path, name, policy) => {
+  if (path === ".github/workflows/nightly.yml") {
+    if (name === "mutants") {
+      return { expected: policy.mutationStrategy, cap: 2 };
+    }
+    if (name === "mutants-daily") {
+      return { expected: policy.dailyMutationStrategy, cap: 2 };
+    }
+  }
+  if (path === ".github/workflows/ci.yml") {
+    if (name === "diff-mutants-linux") {
+      return { expected: policy.diffLinuxMutationStrategy, cap: 4 };
+    }
+    if (name === "diff-mutants-macos") {
+      return { expected: policy.diffMacosMutationStrategy, cap: 2 };
+    }
+  }
+  return undefined;
+};
+
+const mutationStrategyMatches = (path, name, strategy, policy) => {
+  const spec = mutationStrategySpec(path, name, policy);
+  if (spec === undefined) {
+    return false;
+  }
+  const { expected, cap } = spec;
   const maximum = strategy?.["max-parallel"];
   return (
     isObject(strategy) &&
     isObject(expected) &&
-    expected["max-parallel"] === 2 &&
+    expected["max-parallel"] === cap &&
     Number.isInteger(maximum) &&
     maximum > 0 &&
-    maximum <= 2 &&
-    isDeepStrictEqual({ ...strategy, "max-parallel": 2 }, expected)
+    maximum <= cap &&
+    isDeepStrictEqual({ ...strategy, "max-parallel": cap }, expected)
   );
 };
 
@@ -194,13 +218,15 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
   }
   const expected = policy.jobPermissions[`${path}#${name}`];
   const timeout = job["timeout-minutes"];
-  const isMutationJob =
-    path === ".github/workflows/nightly.yml" &&
-    ["mutants", "mutants-daily"].includes(name);
+  const isMutationJob = mutationStrategySpec(path, name, policy) !== undefined;
   const expectedJobConcurrency =
     policy.expected[path]?.jobs?.[name]?.concurrency;
   const requireJobConcurrency =
-    isMutationJob && "mutants" in jobs && "mutants-daily" in jobs;
+    (path === ".github/workflows/nightly.yml" &&
+      ["mutants", "mutants-daily"].includes(name) &&
+      "mutants" in jobs &&
+      "mutants-daily" in jobs) ||
+    (path === ".github/workflows/ci.yml" && name === "diff-mutants-macos");
   const allowedJobKeys = [
     ...policy.jobKeys,
     ...(isMutationJob ? ["strategy"] : []),
@@ -215,7 +241,8 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
     ...(requireJobConcurrency && !("concurrency" in job)
       ? [finding("missing-key", `jobs.${name}.concurrency`)]
       : []),
-    ...(!isMutationJob || mutationStrategyMatches(name, job.strategy, policy)
+    ...(!isMutationJob ||
+    mutationStrategyMatches(path, name, job.strategy, policy)
       ? []
       : [finding("strategy", name)]),
     ...(isDeepStrictEqual(job.permissions, expected)

@@ -3,7 +3,9 @@ mod daily;
 mod environment;
 mod scope;
 mod test_packages;
-use scope::{diff_scope, jobs_for};
+use scope::{TargetPlatform, diff_scope, filter_platform, jobs_for};
+#[cfg(test)]
+mod h63_tests;
 #[cfg(test)]
 mod tests;
 use std::collections::BTreeSet;
@@ -61,6 +63,8 @@ pub(crate) enum Scope {
     Sharded(String),
     Files(BTreeSet<String>),
     DiffSharded(BTreeSet<String>, String),
+    DiffPlatformPlan(BTreeSet<String>, TargetPlatform),
+    DiffPlatformSharded(BTreeSet<String>, TargetPlatform, String),
     DailyFiles(BTreeSet<String>),
     DailySharded(BTreeSet<String>, String),
 }
@@ -227,6 +231,8 @@ pub(crate) fn target_globs(workspace: &Path) -> Result<Vec<String>, String> {
 pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
     if let Scope::Files(files)
     | Scope::DiffSharded(files, _)
+    | Scope::DiffPlatformPlan(files, _)
+    | Scope::DiffPlatformSharded(files, _, _)
     | Scope::DailyFiles(files)
     | Scope::DailySharded(files, _) = scope
     {
@@ -238,6 +244,8 @@ pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
             Scope::Everything | Scope::Sharded(_) => true,
             Scope::Files(_)
             | Scope::DiffSharded(_, _)
+            | Scope::DiffPlatformPlan(_, _)
+            | Scope::DiffPlatformSharded(_, _, _)
             | Scope::DailyFiles(_)
             | Scope::DailySharded(_, _) => false,
         })
@@ -381,6 +389,8 @@ fn prepare_output(
     match scope {
         Scope::Files(_)
         | Scope::DiffSharded(_, _)
+        | Scope::DiffPlatformPlan(_, _)
+        | Scope::DiffPlatformSharded(_, _, _)
         | Scope::DailyFiles(_)
         | Scope::DailySharded(_, _) => {}
         Scope::Everything | Scope::Sharded(_) => catalog::prepare(root, globs, ignore, &output)?,
@@ -395,8 +405,10 @@ fn configure_selection(
     globs: &[String],
     patch: Option<&Path>,
 ) {
-    if let Scope::Sharded(shard) | Scope::DiffSharded(_, shard) | Scope::DailySharded(_, shard) =
-        scope
+    if let Scope::Sharded(shard)
+    | Scope::DiffSharded(_, shard)
+    | Scope::DiffPlatformSharded(_, _, shard)
+    | Scope::DailySharded(_, shard) = scope
     {
         command.arg("--shard").arg(shard);
     }
@@ -422,6 +434,8 @@ fn run_with_diff(
         return match scope {
             Scope::Files(_)
             | Scope::DiffSharded(_, _)
+            | Scope::DiffPlatformPlan(_, _)
+            | Scope::DiffPlatformSharded(_, _, _)
             | Scope::DailyFiles(_)
             | Scope::DailySharded(_, _) => Ok(Outcomes::default()),
             Scope::Everything | Scope::Sharded(_) => Err(String::from("밤 전체 변이 대상이 없다")),
@@ -454,6 +468,8 @@ fn run_with_diff(
         Scope::Files(_) | Scope::DiffSharded(_, _) => bounded_status(command, workspace, &results)?,
         Scope::Everything
         | Scope::Sharded(_)
+        | Scope::DiffPlatformPlan(_, _)
+        | Scope::DiffPlatformSharded(_, _, _)
         | Scope::DailyFiles(_)
         | Scope::DailySharded(_, _) => command.status().map_err(|error| error.to_string())?,
     };
@@ -468,40 +484,101 @@ fn run_with_diff(
     })
 }
 
+const DIFF_SHARD_RECEIPT: &str = "diff-shard.json";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TestDiffTarget {
+    FullWorkspace,
+    LinuxExclusions,
+}
+
+fn split_exclusions_flag(arguments: &[String]) -> (&[String], TestDiffTarget) {
+    if arguments
+        .last()
+        .is_some_and(|flag| flag == "--linux-exclusions")
+    {
+        (
+            arguments
+                .get(..arguments.len().saturating_sub(1))
+                .unwrap_or(arguments),
+            TestDiffTarget::LinuxExclusions,
+        )
+    } else {
+        (arguments, TestDiffTarget::FullWorkspace)
+    }
+}
+
+fn diff_files_for(
+    root: &Path,
+    base: &str,
+    base_use: crate::git_base::BaseUse,
+) -> Result<BTreeSet<String>, String> {
+    let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
+    let changed = changed_paths(root, &commit)?;
+    let Scope::Files(files) = diff_scope(root, &commit, &target_globs(root)?, &changed) else {
+        return Err(String::from("변경분 변이 파일 선택 실패"));
+    };
+    Ok(files)
+}
+
 fn scope_for(
     root: &Path,
     arguments: &[String],
     base_use: crate::git_base::BaseUse,
 ) -> Result<Scope, String> {
-    match arguments {
-        [] => Ok(Scope::Everything),
+    let (core, exclusions) = split_exclusions_flag(arguments);
+    match core {
+        [] if exclusions == TestDiffTarget::FullWorkspace => Ok(Scope::Everything),
         [flag, shard]
-            if flag == "--shard" && (0_u16..128).any(|index| shard == &format!("{index}/128")) =>
+            if exclusions == TestDiffTarget::FullWorkspace
+                && flag == "--shard"
+                && (0_u16..128).any(|index| shard == &format!("{index}/128")) =>
         {
             Ok(Scope::Sharded(shard.clone()))
         }
-        [flag, base] if flag == "--in-diff" || flag == "--in-diff-plan" => {
-            let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
-            let changed = changed_paths(root, &commit)?;
-            Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
+        [flag, base]
+            if exclusions == TestDiffTarget::FullWorkspace
+                && (flag == "--in-diff" || flag == "--in-diff-plan") =>
+        {
+            Ok(Scope::Files(diff_files_for(root, base, base_use)?))
         }
         [flag, base, option, shard]
-            if flag == "--in-diff"
+            if exclusions == TestDiffTarget::FullWorkspace
+                && flag == "--in-diff"
                 && option == "--shard"
                 && [4_u16, 8, 16, 32, 64, 128]
                     .iter()
                     .any(|parts| (0..*parts).any(|index| shard == &format!("{index}/{parts}"))) =>
         {
-            let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
-            let changed = changed_paths(root, &commit)?;
-            let Scope::Files(files) = diff_scope(root, &commit, &target_globs(root)?, &changed)
-            else {
-                return Err(String::from("변경분 변이 파일 선택 실패"));
-            };
-            Ok(Scope::DiffSharded(files, shard.clone()))
+            Ok(Scope::DiffSharded(
+                diff_files_for(root, base, base_use)?,
+                shard.clone(),
+            ))
+        }
+        [flag, base, platform_flag, platform_value]
+            if flag == "--in-diff-plan" && platform_flag == "--platform" =>
+        {
+            let platform = TargetPlatform::parse(platform_value)?;
+            let files = filter_platform(root, diff_files_for(root, base, base_use)?, platform)?;
+            Ok(Scope::DiffPlatformPlan(files, platform))
+        }
+        [flag, base, platform_flag, platform_value, shard_flag, shard]
+            if flag == "--in-diff"
+                && platform_flag == "--platform"
+                && shard_flag == "--shard"
+                && daily::valid_shard(shard) =>
+        {
+            let platform = TargetPlatform::parse(platform_value)?;
+            if platform == TargetPlatform::All {
+                return Err(String::from(
+                    "조각 실행의 --platform은 linux 또는 macos여야 한다",
+                ));
+            }
+            let files = filter_platform(root, diff_files_for(root, base, base_use)?, platform)?;
+            Ok(Scope::DiffPlatformSharded(files, platform, shard.clone()))
         }
         _ => Err(String::from(
-            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/128..127/128> | --daily <커밋 ID|initial>]",
+            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> [--platform <linux|macos> --shard <0/1..7/8> | --shard <k/n>] | --in-diff-plan <HEAD|커밋 ID> [--platform <all|linux|macos>] | --shard <0/128..127/128> | --daily <커밋 ID|initial>]",
         )),
     }
 }
@@ -511,11 +588,29 @@ pub(crate) fn checked_scope(
     arguments: &[String],
     base_use: crate::git_base::BaseUse,
 ) -> Result<Scope, String> {
+    let (_, exclusions) = split_exclusions_flag(arguments);
     let scope = scope_for(root, arguments, base_use)?;
     if let Some([flag, base, ..]) = arguments.get(..)
         && (flag == "--in-diff" || flag == "--in-diff-plan")
     {
-        let findings = crate::test_diff::check_for(root, base, base_use)?;
+        let linux_platform = match &scope {
+            Scope::DiffPlatformPlan(_, TargetPlatform::Linux)
+            | Scope::DiffPlatformSharded(_, TargetPlatform::Linux, _) => true,
+            Scope::Everything
+            | Scope::Sharded(_)
+            | Scope::Files(_)
+            | Scope::DiffSharded(_, _)
+            | Scope::DiffPlatformPlan(_, TargetPlatform::All | TargetPlatform::Macos)
+            | Scope::DiffPlatformSharded(_, TargetPlatform::All | TargetPlatform::Macos, _)
+            | Scope::DailyFiles(_)
+            | Scope::DailySharded(_, _) => false,
+        };
+        let use_linux = exclusions == TestDiffTarget::LinuxExclusions || linux_platform;
+        let findings = if use_linux {
+            crate::test_diff::check_for_linux(root, base, base_use)?
+        } else {
+            crate::test_diff::check_for(root, base, base_use)?
+        };
         if !findings.is_empty() {
             let details = findings
                 .iter()
@@ -646,32 +741,91 @@ fn diff_patch(root: &Path, base: &str) -> Result<std::path::PathBuf, String> {
     Ok(destination)
 }
 
-pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) -> ExitCode {
-    let result = workspace_root().and_then(|root| {
-        if arguments
-            .first()
-            .is_some_and(|flag| flag.starts_with("--daily"))
-        {
-            return daily::dispatch(&root, arguments, base_use);
-        }
-        let survivors = load_survivors(&root, SURVIVORS_FILE)?;
-        let scope = checked_scope(&root, arguments, base_use)?;
-        let outcomes = if let Some([flag, base, ..]) = arguments.get(..)
-            && (flag == "--in-diff" || flag == "--in-diff-plan")
-        {
-            let patch = diff_patch(&root, base)?;
-            let mutated = list_changed_mutants(&root, &scope, &patch)?;
-            report_nightly_targets(&root, base, &mutated)?;
-            if flag == "--in-diff-plan" || mutated.is_empty() {
-                Outcomes::default()
-            } else {
-                run_with_diff(&root, &scope, IgnoreFiles::Respected, Some(&patch))?
-            }
-        } else {
-            run(&root, &scope, IgnoreFiles::Respected)?
-        };
-        evaluate(&outcomes, &survivors)
+fn write_diff_shard_receipt(
+    root: &Path,
+    base: &str,
+    platform: TargetPlatform,
+    shard: &str,
+) -> Result<(), String> {
+    let mut head_command = crate::git_base::git(root);
+    head_command.args(["rev-parse", "HEAD"]);
+    let head = String::from_utf8(crate::git_base::output(head_command, "HEAD")?)
+        .map_err(|error| error.to_string())?;
+    let output = root.join(OUTPUT_DIRECTORY);
+    fs::create_dir_all(&output).map_err(|error| error.to_string())?;
+    let receipt = serde_json::json!({
+        "base": base,
+        "head": head.trim(),
+        "platform": platform.as_str(),
+        "shard": shard,
     });
+    fs::write(output.join(DIFF_SHARD_RECEIPT), receipt.to_string())
+        .map_err(|error| error.to_string())
+}
+
+fn clear_stale_diff_outputs(root: &Path, scope: &Scope) -> Result<(), String> {
+    let output = prepare_output(root, scope, IgnoreFiles::Respected, &[])?;
+    for name in [DIFF_SHARD_RECEIPT, catalog::FILE] {
+        let path = output.join(name);
+        if path.exists() {
+            fs::remove_file(path).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn run_command(
+    root: &Path,
+    arguments: &[String],
+    base_use: crate::git_base::BaseUse,
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    if arguments
+        .first()
+        .is_some_and(|flag| flag.starts_with("--daily"))
+    {
+        return daily::dispatch(root, arguments, base_use);
+    }
+    let survivors = load_survivors(root, SURVIVORS_FILE)?;
+    let scope = checked_scope(root, arguments, base_use)?;
+    let outcomes = if let Some([flag, base, ..]) = arguments.get(..)
+        && (flag == "--in-diff" || flag == "--in-diff-plan")
+    {
+        let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
+        clear_stale_diff_outputs(root, &scope)?;
+        let patch = diff_patch(root, &commit)?;
+        let mutated = list_changed_mutants(root, &scope, &patch)?;
+        report_nightly_targets(root, &commit, &mutated)?;
+        match &scope {
+            Scope::DiffPlatformSharded(_, platform, shard) => {
+                write_diff_shard_receipt(root, &commit, *platform, shard)?;
+                if mutated.is_empty() {
+                    daily::empty(root)?
+                } else {
+                    run_with_diff(root, &scope, IgnoreFiles::Respected, Some(&patch))?
+                }
+            }
+            Scope::DiffPlatformPlan(_, _) => Outcomes::default(),
+            Scope::Everything
+            | Scope::Sharded(_)
+            | Scope::Files(_)
+            | Scope::DiffSharded(_, _)
+            | Scope::DailyFiles(_)
+            | Scope::DailySharded(_, _) => {
+                if flag == "--in-diff-plan" || mutated.is_empty() {
+                    Outcomes::default()
+                } else {
+                    run_with_diff(root, &scope, IgnoreFiles::Respected, Some(&patch))?
+                }
+            }
+        }
+    } else {
+        run(root, &scope, IgnoreFiles::Respected)?
+    };
+    evaluate(&outcomes, &survivors)
+}
+
+pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) -> ExitCode {
+    let result = workspace_root().and_then(|root| run_command(&root, arguments, base_use));
     if result
         .as_ref()
         .is_err_and(|failure| failure == environment::DEADLINE)

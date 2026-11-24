@@ -1157,6 +1157,117 @@
       "namepath": "mutants-diff-plan",
       "shebang": false
     },
+    "mutants-diff-plan-platform": {
+      "attributes": [],
+      "body": [
+        [
+          "if [ \"$2\" = \"macos\" ]; then cargo run --locked --quiet --package xtask -- mutants --in-diff-plan \"$1\" --platform \"$2\"; else cargo run --locked --quiet --package xtask -- mutants --in-diff-plan \"$1\" --platform \"$2\" --linux-exclusions; fi"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-diff-plan-platform",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "platform",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-diff-plan-platform",
+      "shebang": false
+    },
+    "mutants-diff-platform-shard": {
+      "attributes": [],
+      "body": [
+        [
+          "if [ \"$2\" = \"linux\" ]; then cargo run --locked --quiet --package xtask -- mutants --in-diff \"$1\" --platform \"$2\" --shard \"$3\" --linux-exclusions; else cargo run --locked --quiet --package xtask -- mutants --in-diff \"$1\" --platform \"$2\" --shard \"$3\"; fi"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-diff-platform-shard",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "platform",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "shard",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-diff-platform-shard",
+      "shebang": false
+    },
     "mutants-diff-shard": {
       "attributes": [],
       "body": [

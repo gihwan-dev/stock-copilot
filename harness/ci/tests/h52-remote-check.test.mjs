@@ -12,7 +12,12 @@ import {
 
 const sha = "a".repeat(40);
 const other = "b".repeat(40);
-const required = ["linux", "macos-branch"];
+const required = [
+  "linux",
+  "macos-branch",
+  "diff-mutants-plan",
+  "diff-mutants-verdict",
+];
 const run = {
   id: 31,
   run_attempt: 2,
@@ -25,23 +30,34 @@ const run = {
   repository: { full_name: "gihwan-dev/stock-copilot" },
   head_repository: { full_name: "gihwan-dev/stock-copilot" },
 };
-const jobs = required.map((name) => ({
+const stepMap = {
+  linux: [
+    "container visual regression",
+    "linux check",
+    "linux tests without network",
+  ],
+  "macos-branch": ["branch checkout", "just check"],
+  macos: ["just check"],
+  "diff-mutants-plan": ["range", "diff mutants plan"],
+  "diff-mutants-verdict": ["diff mutants aggregate"],
+};
+const makeJob = (name, steps = stepMap[name]) => ({
   name,
   status: "completed",
   conclusion: "success",
   run_attempt: 2,
   head_sha: sha,
-  steps: (name === "linux"
-    ? [
-        "container visual regression",
-        "linux check",
-        "linux tests without network",
-      ]
-    : ["branch checkout", "just check", "diff mutants", "diff mutants verdict"]
-  ).map((step) => ({ name: step, status: "completed", conclusion: "success" })),
-}));
+  steps: steps.map((step) => ({
+    name: step,
+    status: "completed",
+    conclusion: "success",
+  })),
+});
+const jobs = required.map((name) => makeJob(name));
 const check = (candidate = run, entries = jobs, target = sha) =>
   checkRun(target, candidate, entries);
+const replaceJob = (index, override) =>
+  jobs.map((entry, position) => (position === index ? override : entry));
 
 test("같은 SHA의 push 실행에서 모든 필수 작업이 성공한 경우만 승인한다", () => {
   assert.equal(check(), true);
@@ -56,7 +72,7 @@ test("같은 SHA의 push 실행에서 모든 필수 작업이 성공한 경우�
   ]) {
     assert.equal(check({ ...run, conclusion }), false, `${conclusion}`);
     assert.equal(
-      check(run, [{ ...jobs[0], conclusion }, jobs[1]]),
+      check(run, replaceJob(0, { ...jobs[0], conclusion })),
       false,
       `${conclusion}`,
     );
@@ -70,53 +86,65 @@ test("같은 SHA의 push 실행에서 모든 필수 작업이 성공한 경우�
   assert.equal(check(run, null), false);
   assert.equal(check(run, [...jobs, jobs[0]]), false);
   assert.equal(
-    check(run, [{ ...jobs[0], status: "in_progress" }, jobs[1]]),
+    check(run, replaceJob(0, { ...jobs[0], status: "in_progress" })),
     false,
   );
-  assert.equal(check(run, [jobs[0], { ...jobs[1], head_sha: other }]), false);
-  assert.equal(check(run, [jobs[0], { ...jobs[1], run_attempt: 1 }]), false);
+  assert.equal(
+    check(run, replaceJob(1, { ...jobs[1], head_sha: other })),
+    false,
+  );
+  assert.equal(
+    check(run, replaceJob(1, { ...jobs[1], run_attempt: 1 })),
+    false,
+  );
 });
 
 test("필수 단계가 빠지거나 실패한 과거 실행은 성공 작업이어도 거부한다", () => {
   assert.equal(
-    check(run, [jobs[0], { ...jobs[1], steps: jobs[1].steps.slice(0, 1) }]),
+    check(run, replaceJob(1, { ...jobs[1], steps: jobs[1].steps.slice(0, 1) })),
     false,
   );
-  assert.equal(check(run, [{ ...jobs[0], steps: [] }, jobs[1]]), false);
-  assert.equal(check(run, [jobs[0], { ...jobs[1], steps: undefined }]), false);
+  assert.equal(check(run, replaceJob(0, { ...jobs[0], steps: [] })), false);
   assert.equal(
-    check(run, [
-      jobs[0],
-      {
-        ...jobs[1],
-        steps: jobs[1].steps.map((step) =>
-          step.name === "diff mutants"
+    check(run, replaceJob(1, { ...jobs[1], steps: undefined })),
+    false,
+  );
+  assert.equal(
+    check(
+      run,
+      replaceJob(2, {
+        ...jobs[2],
+        steps: jobs[2].steps.map((step) =>
+          step.name === "diff mutants plan"
             ? { ...step, status: "in_progress" }
             : step,
         ),
-      },
-    ]),
+      }),
+    ),
     false,
   );
   assert.equal(
-    check(run, [
-      jobs[0],
-      {
-        ...jobs[1],
-        steps: jobs[1].steps.map((step) =>
-          step.name === "diff mutants"
+    check(
+      run,
+      replaceJob(3, {
+        ...jobs[3],
+        steps: jobs[3].steps.map((step) =>
+          step.name === "diff mutants aggregate"
             ? { ...step, conclusion: "skipped" }
             : step,
         ),
-      },
-    ]),
+      }),
+    ),
     false,
   );
   assert.equal(
-    check(run, [
-      jobs[0],
-      { ...jobs[1], steps: [...jobs[1].steps, jobs[1].steps[0]] },
-    ]),
+    check(
+      run,
+      replaceJob(1, {
+        ...jobs[1],
+        steps: [...jobs[1].steps, jobs[1].steps[0]],
+      }),
+    ),
     false,
   );
   const signatureRun = { ...run, path: ".github/workflows/signatures.yml" };
@@ -174,7 +202,7 @@ test("원격 조회는 같은 SHA의 최신 실행과 모든 필수 워크플로
   const answers = {
     ci: { total_count: 1, workflow_runs: [run] },
     signatures: { total_count: 1, workflow_runs: [signatureRun] },
-    ciJobs: { total_count: 2, jobs },
+    ciJobs: { total_count: jobs.length, jobs },
     signatureJobs: { total_count: 1, jobs: [signatureJob] },
   };
   const read = async (path) => {
@@ -213,10 +241,7 @@ test("실행 출처와 이벤트가 다르면 같은 SHA의 성공도 거부한�
   assert.equal(check({ ...run, head_branch: "" }), false);
   assert.equal(check({ ...run, head_branch: "master" }), false);
   assert.equal(
-    check({ ...run, head_branch: "master" }, [
-      jobs[0],
-      { ...jobs[1], name: "macos" },
-    ]),
+    check({ ...run, head_branch: "master" }, replaceJob(1, makeJob("macos"))),
     true,
   );
 });
@@ -317,39 +342,43 @@ test("러너 미배정·취소·시간 초과는 통과가 아닌 재시도 대�
     steps: [],
     conclusion: "cancelled",
   };
-  assert.equal(checkRun(sha, failedRun, [jobs[0], unassigned]), false);
+  const withUnassigned = replaceJob(1, unassigned);
+  assert.equal(checkRun(sha, failedRun, withUnassigned), false);
   assert.equal(
-    failureCode(sha, failedRun, [jobs[0], unassigned]),
+    failureCode(sha, failedRun, withUnassigned),
     "RETRY_RUNNER_UNASSIGNED",
   );
   assert.equal(
-    failureCode(sha, failedRun, [
-      jobs[0],
-      {
+    failureCode(
+      sha,
+      failedRun,
+      replaceJob(1, {
         ...jobs[1],
         conclusion: "cancelled",
         runner_id: 11,
         runner_name: "hosted",
-      },
-    ]),
+      }),
+    ),
     "RETRY_CANCELLED",
   );
   assert.equal(
-    failureCode(sha, failedRun, [
-      jobs[0],
-      {
+    failureCode(
+      sha,
+      failedRun,
+      replaceJob(1, {
         ...jobs[1],
         conclusion: "timed_out",
         runner_id: 12,
         runner_name: "hosted",
-      },
-    ]),
+      }),
+    ),
     "RETRY_TIMED_OUT",
   );
   assert.equal(
-    failureCode(sha, failedRun, [
-      jobs[0],
-      {
+    failureCode(
+      sha,
+      failedRun,
+      replaceJob(1, {
         ...jobs[1],
         conclusion: "failure",
         runner_id: 12,
@@ -357,15 +386,16 @@ test("러너 미배정·취소·시간 초과는 통과가 아닌 재시도 대�
         steps: [
           { name: "just check", status: "completed", conclusion: "timed_out" },
         ],
-      },
-    ]),
+      }),
+    ),
     "RETRY_TIMED_OUT",
   );
   assert.equal(
-    failureCode(sha, { ...run, status: "queued", conclusion: null }, [
-      jobs[0],
-      { ...unassigned, status: "queued", conclusion: null },
-    ]),
+    failureCode(
+      sha,
+      { ...run, status: "queued", conclusion: null },
+      replaceJob(1, { ...unassigned, status: "queued", conclusion: null }),
+    ),
     "PENDING",
   );
   const failingLinux = {
@@ -378,17 +408,17 @@ test("러너 미배정·취소·시간 초과는 통과가 아닌 재시도 대�
     ],
   };
   assert.equal(
-    failureCode(sha, failedRun, [failingLinux, unassigned]),
+    failureCode(sha, failedRun, [failingLinux, unassigned, jobs[2], jobs[3]]),
     "CHECK_FAILED",
   );
   assert.equal(
-    failureCode(other, failedRun, [jobs[0], unassigned]),
+    failureCode(other, failedRun, withUnassigned),
     "INVALID_EVIDENCE",
   );
   const read = async (path) =>
     path.includes("workflows/ci.yml/")
       ? { total_count: 1, workflow_runs: [failedRun] }
-      : { total_count: 2, jobs: [jobs[0], unassigned] };
+      : { total_count: withUnassigned.length, jobs: withUnassigned };
   await assert.rejects(
     remoteCheckFrom(sha, read),
     (error) => error.code === "RETRY_RUNNER_UNASSIGNED",
@@ -397,68 +427,107 @@ test("러너 미배정·취소·시간 초과는 통과가 아닌 재시도 대�
 
 test("변이 시간 제한은 코드 실패와 분리하되 성공으로 인정하지 않는다", () => {
   const failedRun = { ...run, conclusion: "failure" };
-  const deadline = {
-    ...jobs[1],
+  const failedVerdict = {
+    ...jobs[3],
     conclusion: "failure",
     steps: [
-      ...jobs[1].steps.filter((step) => step.name !== "diff mutants verdict"),
       {
-        name: "diff mutants timeout",
+        name: "diff mutants aggregate",
+        status: "completed",
+        conclusion: "failure",
+      },
+    ],
+  };
+  const timedOutShard = {
+    name: "diff-mutants-linux (0/2)",
+    status: "completed",
+    conclusion: "failure",
+    run_attempt: 2,
+    head_sha: sha,
+    runner_id: 21,
+    runner_name: "hosted",
+    steps: [
+      {
+        name: "diff mutants shard",
+        status: "completed",
+        conclusion: "timed_out",
+      },
+      {
+        name: "diff mutants summary",
+        status: "completed",
+        conclusion: "failure",
+      },
+    ],
+  };
+  const passedShard = makeJob("diff-mutants-linux (1/2)", [
+    "diff mutants shard",
+    "diff mutants summary",
+  ]);
+  const withTimeout = [
+    jobs[0],
+    jobs[1],
+    jobs[2],
+    failedVerdict,
+    timedOutShard,
+    passedShard,
+  ];
+  assert.equal(checkRun(sha, failedRun, withTimeout), false);
+  assert.equal(
+    failureCode(sha, failedRun, withTimeout),
+    "RETRY_MUTATION_TIMED_OUT",
+  );
+  const codeFailedShard = {
+    ...timedOutShard,
+    steps: [
+      {
+        name: "diff mutants shard",
         status: "completed",
         conclusion: "failure",
       },
       {
-        name: "diff mutants verdict",
+        name: "diff mutants summary",
         status: "completed",
-        conclusion: "skipped",
+        conclusion: "failure",
       },
     ],
   };
-  assert.equal(checkRun(sha, failedRun, [jobs[0], deadline]), false);
   assert.equal(
-    failureCode(sha, failedRun, [jobs[0], deadline]),
-    "RETRY_MUTATION_TIMED_OUT",
-  );
-  const budget = {
-    ...deadline,
-    steps: deadline.steps.map((step) =>
-      step.name === "diff mutants timeout"
-        ? { ...step, name: "diff mutants budget" }
-        : step,
-    ),
-  };
-  assert.equal(checkRun(sha, failedRun, [jobs[0], budget]), false);
-  assert.equal(
-    failureCode(sha, failedRun, [jobs[0], budget]),
-    "RETRY_MUTATION_BUDGET",
-  );
-  const budgetAndCodeFailure = {
-    ...budget,
-    steps: budget.steps.map((step) =>
-      step.name === "diff mutants" ? { ...step, conclusion: "failure" } : step,
-    ),
-  };
-  assert.equal(
-    failureCode(sha, failedRun, [jobs[0], budgetAndCodeFailure]),
+    failureCode(sha, failedRun, [
+      jobs[0],
+      jobs[1],
+      jobs[2],
+      failedVerdict,
+      codeFailedShard,
+      passedShard,
+    ]),
     "CHECK_FAILED",
   );
-  const codeFailure = {
-    ...deadline,
-    steps: deadline.steps.map((step) =>
-      step.name === "diff mutants" ? { ...step, conclusion: "failure" } : step,
-    ),
-  };
   assert.equal(
-    failureCode(sha, failedRun, [jobs[0], codeFailure]),
+    failureCode(sha, failedRun, [
+      jobs[0],
+      jobs[1],
+      jobs[2],
+      failedVerdict,
+      passedShard,
+    ]),
     "CHECK_FAILED",
   );
-  const noEvidence = {
-    ...deadline,
-    steps: deadline.steps.filter((step) => step.name !== "branch checkout"),
-  };
   assert.equal(
-    failureCode(sha, failedRun, [jobs[0], noEvidence]),
-    "CHECK_FAILED",
+    failureCode(sha, failedRun, [
+      jobs[0],
+      jobs[1],
+      jobs[2],
+      failedVerdict,
+      {
+        ...timedOutShard,
+        runner_id: 0,
+        runner_name: "",
+        steps: [],
+        conclusion: "cancelled",
+      },
+      passedShard,
+    ]),
+    "RETRY_RUNNER_UNASSIGNED",
   );
 });
 

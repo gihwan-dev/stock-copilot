@@ -1,0 +1,51 @@
+# ADR H-63 초안: 변경분 변이의 플랫폼 분리 및 조각 병렬 실행
+
+- 상태: 제안
+- 날짜: 2026-11-24
+- 결정한 사람: 메인 에이전트(사용자 확인 대기)
+- 관련 작업: H-63 (H-59·H-62 후속)
+- 반영한 문서: `.github/workflows/ci.yml`, `crates/xtask/src/{mutants_check,test_diff,nextest_list}*`, `harness/ci/{diff-mutants-plan,diff-mutants-shard,diff-mutants-aggregate,remote-check}.mjs`, `harness/ci/workflow-policy/{check.mjs,policy.json}`, `justfile`
+
+## 맥락
+
+D-54 병합에서 `domain` 선택 변이 130건을 단일 `macos-15` 러너(`macos` / `macos-branch` 120분 예산)로 순차 실행하다가 약 40건 시점에서 시간 예산 초과(`budget`)로 실패했다. 또한 다음 세 가지 제약이 동시에 걸려 있다.
+
+1. **시간·병렬성**: 큰 `domain`·`application`·`order-execution` 변경(100~160건 이상)을 GitHub Actions 단일 작업 예산 안에 끝내려면 여러 실행기로 나눠 병렬로 돌리고 결과를 하나의 판정으로 합쳐야 한다.
+2. **H-59 macOS 러너 점유 상한**: macOS 러너 동시 실행은 상한 2를 지켜야 하며, `store-sqlite`만 macOS CommonCrypto(`harness/ci/linux/exclusions.json`)에 묶여 있고 나머지 변이 대상 크레이트(`domain`, `application`+`testkit-ports`, `order-execution`)는 플랫폼 중립이다.
+3. **H-62 승인 묶음 연계**: 승인된 기존 테스트 변경이 있는 병합 커밋에서 선행 `test-diff`가 H-62 승인 묶음을 통과시키지 못하면 변이가 시작조차 되지 않는다.
+
+## 실측
+
+| 항목 | 명령 | 결과 |
+|---|---|---|
+| Rust 플랫폼 분리·조각 분할·H-62 묶음 선행 연계 실측 | `cargo nextest run --locked -p xtask mutants_check::h63_tests` | 플랫폼 분리(`domain`→Linux, `store-sqlite`→macOS), H-62 승인 묶음 통과 및 변조 거부, 실제 `cargo mutants` 기준 Linux 조각 + macOS 조각 합집합 = 전체 카탈로그 일치 확인 |
+| Node 계획·조각 요약·최종 합산·정책·원격 검사 테스트 | `node --test harness/ci/tests/h63-diff-mutants.test.mjs harness/ci/tests/workflow-policy.test.mjs harness/ci/tests/h52-remote-check.test.mjs` | 조각 누락·실패·시간 초과·취소·건너뜀·중복·비일치·상한 초과·대기열 삭제 모두 실패(닫힌 실패) 확인 |
+| 원격 GitHub Actions 병렬 완주 실측 | 병합 뒤 원격 `ci.yml` 실행 | 브랜치 푸시·병합 후 원격 CI에서 실제 소요 시간 확인 필요(이 기기에는 Docker가 없음) |
+
+## 결정
+
+| 결정 | 근거 | 버린 대안 | 출처 |
+|---|---|---|---|
+| `ci.yml`에서 변경분 변이를 `macos`/`macos-branch` 본체에서 분리해 `diff-mutants-plan` → (`diff-mutants-linux`, `diff-mutants-macos`) → `diff-mutants-verdict` 4작업 파이프라인으로 구성한다 | `just check`와 변이 실행을 분리해 `macos` 120분 예산 고갈을 없애고 여러 러너가 동시에 조각을 처리한다 | 단일 `macos-15` 작업 안에서 `diff-mutants.mjs` 직렬 분할 유지(D-54 130건 완주 불가) | H-63 완료 기준 |
+| `harness/ci/linux/exclusions.json`을 단일 기준으로 삼아 플랫폼 중립 크레이트(`domain`, `application`+`testkit-ports`, `order-execution`) 변이는 `ubuntu-24.04-arm`(`max-parallel: 4`, `offline.mjs` 네트워크 격리)에서 실행하고, macOS 전용 크레이트(`store-sqlite`)만 `macos-15`(`max-parallel: 2`, 2슬롯 `concurrency` 대기열)에서 실행한다 | 대부분의 변경(`domain`/`application`/`order-execution`)이 macOS 러너를 0분만 쓰면서도 4배 병렬로 빠르게 끝난다. `store-sqlite` 변경도 H-59의 macOS 상한 2와 2슬롯 대기열을 그대로 지킨다 | 모든 변경분 변이를 `macos-15`에서만 실행(H-59 상한 2 때문에 130건이 여전히 느리고 macOS 할당량 소모) | H-63·H-59·ADR 0156 |
+| 조각 수는 플랫폼별 선택 변이 수에 따라 `MUTANTS_PER_SHARD = 20`, `MAX_SHARDS = 8` (`0/N..(N-1)/N`)로 계산하고, 선택 변이가 0개인 플랫폼 작업은 건너뛴다 | D-54(130건) 기준 Linux 7조각(조각당 약 19건)으로 `max-parallel: 4` 2파에 여유 있게 완주하며, 문서·TS·단일 플랫폼 변경에서 불필요한 러너를 띄우지 않는다 | 항상 고정 4조각 또는 8조각 실행(소규모 변경에 러너 낭비) | H-63 완료 기준 |
+| 각 조각 작업 끝에 `if: always()` 단계(`diff-mutants-shard.mjs summary`)를 두어 `missed.txt`, `timeout.txt`, `caught.txt`, `unviable.txt`를 표준 출력과 `$GITHUB_STEP_SUMMARY`에 남기고, 영수증(`diff-shard.json`)·카탈로그·조각 일치·Baseline 성공·시간 초과 0건을 검증해 불완전·실패·시간 초과 시 0이 아닌 종료를 낸다 | 조각이 실패·시간 초과·취소되어도 놓친 변이와 시간 초과 증거가 로그와 요약에 영구 보존되며, 불완전한 조각이 성공으로 통과할 수 없다 | `cargo mutants` 종료 코드만 보고 요약 생략 | H-63 완료 기준 |
+| 최종 판정 작업(`diff-mutants-verdict`, `if: always() && github.event_name == 'push'`, 권한 `contents: read, actions: read`)이 `diff-mutants-aggregate.mjs`로 GitHub Actions Jobs API(페이지네이션 전수 조회)를 읽어 `diff-mutants-plan`과 계획된 모든 `diff-mutants-linux (<shard>)`·`diff-mutants-macos (<shard>)` 작업 및 필수 단계(`diff mutants shard`, `diff mutants summary`)의 완료·성공을 닫힌 실패로 검증한다. `notify.needs`와 `remote-check.mjs`도 `diff-mutants-plan`·`diff-mutants-verdict` 및 조각 작업을 필수 검증에 포함한다 | 조각 하나라도 누락·실패·시간 초과·취소·건너뜀·중복·비일치가 있으면 최종 판정과 원격 증거 검사(`remote-check`) 모두 실패로 닫힌다 | GitHub Actions `needs` 상태만 믿고 개별 조각 존재·단계 누락 미검증 | H-63 완료 기준 |
+| Linux 계획·조각 실행의 선행 `test-diff`는 `test_diff::check_for_linux`를 사용한다: 전체 저장소 `.rs` 파일의 AST 변경 비교는 macOS와 동일하게 전부 수행하고, `cargo nextest list`만 `exclusions.json`의 macOS 전용 크레이트를 제외하며, `approval::apply_for_base`를 그대로 호출한다 | Linux에서 빌드할 수 없는 macOS 전용 크레이트 때문에 `nextest list`가 깨지지 않으면서도, macOS 전용 크레이트의 무단 테스트 수정은 AST 비교로 잡히고 H-62 승인 묶음·H-55 승인 행은 Linux와 macOS에서 동일하게 통과한다 | Linux에서 `test-diff`를 건너뛰기(무단 테스트 약화 뒤 변이 실행 위험) | H-62·H-63 완료 기준 |
+| 분할·요약·합산·정책 검증 로직을 `xtask`와 `harness/ci/diff-mutants-{plan,shard,aggregate}.mjs`에 두고 워크플로는 호출만 한다 | 워크플로 YAML/JSON에 로직을 넣지 않아 로컬 단위·부정 변형 테스트로 전 경로를 검증할 수 있다 | 워크플로 인라인 셸 스크립트로 합산 구현 | H-63 완료 기준 |
+
+## 보류 결정과 선택지
+
+1. **`ci.yml`과 `nightly.yml` 간 macOS 변이 슬롯 공유 여부**:
+   - 선택지 A(구현값): `ci.yml`의 `diff-mutants-macos`는 `${{ github.workflow }}-diff-mutants-macos-slot-{0,1}`(CI 내부 합산 ≤ 2)를 쓰고 `nightly.yml`의 H-59 잠금 그룹(`${{ github.workflow }}-mutants-slot-{0,1}`)은 건드리지 않는다.
+   - 선택지 B: `ci.yml`과 `nightly.yml`이 공통 문자열 `macos-mutants-slot-{0,1}`을 써서 CI `store-sqlite` 변이와 야간 변이를 합산 ≤ 2로 묶는다(H-59 테스트·정책과 `nightly.yml` 갱신 필요).
+2. **조각 크기와 Linux 병렬도 튜닝**:
+   - 현재 `MUTANTS_PER_SHARD = 20`, `MAX_SHARDS = 8`, Linux `max-parallel = 4`, 단계 제한 시간 Linux 90분 / macOS 150분이다. 실제 대형 변경의 원격 CI 실행 시간을 관측한 뒤 조정할 수 있다.
+3. **구 `harness/ci/diff-mutants.mjs`·`diff-mutants-verdict.mjs` 정리 시점**:
+   - 현재 기존 H-54 테스트(`h54-diff-mutants.test.mjs`)를 깨지 않도록 두 스크립트를 보존했다. H-63 병합 뒤 원격 안정화가 확인되면 후속 정리 작업에서 폐기 여부를 결정한다.
+
+## 결과
+
+- `domain`·`application`·`order-execution` 대규모 변경(100~160건 이상)이 Linux ARM 병렬 러너에서 macOS 예산 소모 없이 완주한다.
+- `store-sqlite` 변경도 macOS 2슬롯 상한 안에서 최대 8조각으로 병렬 실행되고, `diff-mutants-verdict`가 모든 조각의 완료·성공을 닫힌 실패로 합산한다.
+- 바뀌면 다시 볼 조건: Linux ARM 러너 한도나 `store-sqlite` 변이 규모가 커져 `MUTANTS_PER_SHARD = 20` 또는 `MAX_SHARDS = 8`로 90/150분 안에 끝나지 않을 때, 또는 `ci.yml`과 `nightly.yml`의 동시 macOS 점유가 겹쳐 슬롯 통합이 필요할 때.

@@ -23,9 +23,9 @@ use std::path::Path;
 use std::process::{ExitCode, Stdio};
 use std::thread;
 
-use crate::check_support::{Finding, report, workspace_root};
+use crate::check_support::{Finding, read_text, report, workspace_root};
 use crate::git_base::{git, output};
-use crate::nextest_list::list_tests;
+use crate::nextest_list::{list_tests, list_tests_excluding};
 use crates::crate_roots;
 pub(crate) use modules::STANDARD_MACROS;
 use modules::{ModuleRecord, Scan, Walker, has_tests};
@@ -488,6 +488,32 @@ pub(crate) fn check(root: &Path, base: &str) -> Result<BTreeSet<Finding<Rule>>, 
     check_for(root, base, crate::git_base::BaseUse::Ancestor)
 }
 
+pub(crate) const LINUX_EXCLUSIONS_FILE: &str = "harness/ci/linux/exclusions.json";
+
+pub(crate) fn linux_excluded_crates(root: &Path) -> Result<BTreeSet<String>, String> {
+    let text = read_text(&root.join(LINUX_EXCLUSIONS_FILE))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| format!("{LINUX_EXCLUSIONS_FILE}: {error}"))?;
+    let crates = parsed
+        .get("crates")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| format!("{LINUX_EXCLUSIONS_FILE}: crates 배열이 없다"))?;
+    let mut excluded = BTreeSet::new();
+    for entry in crates {
+        let name = entry
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("{LINUX_EXCLUSIONS_FILE}: crate 이름이 비어 있다"))?;
+        excluded.insert(String::from(name));
+    }
+    Ok(excluded)
+}
+
+fn belongs_to_package(test_id: &str, package: &str) -> bool {
+    test_id.starts_with(&format!("{package} ")) || test_id.starts_with(&format!("{package}::"))
+}
+
 pub(crate) fn check_for(
     root: &Path,
     base: &str,
@@ -499,6 +525,28 @@ pub(crate) fn check_for(
     let mut findings = compare_sources(&texts(&before), &texts(&current));
     let expected: BTreeSet<String> = scan(&before).tests.keys().cloned().collect();
     findings.extend(compare_lists(&expected, &list_tests(root, &[], None)?));
+    approval::apply_for_base(root, &commit, (&before, &current), findings, base_use)
+}
+
+pub(crate) fn check_for_linux(
+    root: &Path,
+    base: &str,
+    base_use: crate::git_base::BaseUse,
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
+    let excluded: Vec<String> = linux_excluded_crates(root)?.into_iter().collect();
+    let before = base_files(root, &commit)?;
+    let current = current_files(root)?;
+    let mut findings = compare_sources(&texts(&before), &texts(&current));
+    let expected: BTreeSet<String> = scan(&before)
+        .tests
+        .into_keys()
+        .filter(|id| !excluded.iter().any(|pkg| belongs_to_package(id, pkg)))
+        .collect();
+    findings.extend(compare_lists(
+        &expected,
+        &list_tests_excluding(root, &excluded, None)?,
+    ));
     approval::apply_for_base(root, &commit, (&before, &current), findings, base_use)
 }
 
