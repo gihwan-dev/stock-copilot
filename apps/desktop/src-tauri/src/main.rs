@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         news_feeds: Vec::new(),
         clock: Arc::clone(&shared_clock),
-        presence: Arc::new(platform_macos::UnavailablePresence),
+        presence: Arc::new(platform_macos::MacOsRiskDialogPresence::unavailable()),
         events: application::EventBusBuilder::default().build(),
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(shared_clock)),
