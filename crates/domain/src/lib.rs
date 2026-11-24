@@ -4,10 +4,12 @@ pub use money::{Amount, AmountError, AmountInput, Currency, Money, MoneyError};
 mod money_display;
 pub use money_display::{
     DisplayDigits, DisplayDirection, DisplayMoney, DisplayMoneyChange, DisplayPrecision,
-    DisplayPrecisionError, MoneyChange, display_change, display_money,
+    DisplayPrecisionError, MoneyChange, display_change, display_money, display_percent,
+    display_quotient_percent,
 };
 
 mod account_id;
+mod ai_job_id;
 mod briefing_id;
 pub use briefing_id::{BriefingId, BriefingKind};
 mod client_order_id;
@@ -19,6 +21,7 @@ mod instrument_master;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
+pub use ai_job_id::{AiJobId, AiJobIdError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
 pub use instrument_issuer::{
@@ -442,6 +445,10 @@ pub use domain_event::{DomainEvent, DomainEventKind};
 mod buy_quantity;
 mod buy_quantity_arithmetic;
 mod buy_signal_history;
+mod investment_principles;
+pub use investment_principles::{
+    CashFloor, ConcentrationFloor, InvestmentPrinciples, PrincipleNote, PrincipleNoteError,
+};
 mod concentration_policy;
 pub use buy_quantity::{
     BuyQuantityConstraint, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, NoBuyQuantity,
@@ -686,6 +693,18 @@ mod deep_research;
 pub use deep_research::{
     EvidenceBundle, EvidenceBundleError, EvidenceItem, EvidenceItemId, EvidenceItemIdError,
     EvidenceKind, ResearchTopic, research_search_plan,
+};
+
+mod deep_research_claims;
+pub use deep_research_claims::{
+    CitedEvidence, ClaimCheckBasis, ClaimSupport, ResearchClaim, ResearchClaimError,
+    ResearchClaimText, ResearchDraft, ResearchStance, VerifiedClaim,
+};
+
+mod deep_research_review;
+pub use deep_research_review::{
+    ResearchCount, ResearchSourceWarning, ResearchTally, research_source_warnings,
+    tally_research_claims,
 };
 
 mod valuation_day_inputs;

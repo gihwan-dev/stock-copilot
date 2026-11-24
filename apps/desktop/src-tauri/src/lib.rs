@@ -54,6 +54,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             let refresh = tauri::async_runtime::block_on(startup::start(&ports, |data| {
                 publish_main(app.handle(), data)
             }))?;
+            app.manage(ipc::state::ScreenState::from_ports(&ports));
             let shutdown_hook = prepare_process_shutdown_hook(app);
             app.manage(database.status());
             app.manage(ipc::chat_hub::ChatIpcState::from_ports(&ports));

@@ -50,7 +50,10 @@ pub fn saved_order_permission(saved: Option<crate::RiskSettings>) -> OrderPermis
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        MarketTradingStatus, OrderButtonHiddenReason, OrderButtonState, OrderPermission,
+        ProposalAvailability, order_button_state, saved_order_permission,
+    };
 
     const PERMISSIONS: [OrderPermission; 2] = [OrderPermission::Disabled, OrderPermission::Enabled];
     const MARKETS: [MarketTradingStatus; 3] = [

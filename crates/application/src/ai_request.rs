@@ -1,22 +1,20 @@
 use crate::IdentifierError;
-use domain::{Probability, Symbol, UntrustedText};
+use domain::{AiJobId, Probability, Symbol, UntrustedText};
 use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AiRunId(String);
+pub struct AiRunId(AiJobId);
 impl AiRunId {
     pub fn try_new(value: &str) -> Result<Self, IdentifierError> {
-        if value.is_empty()
-            || value.len() > 128
-            || !value
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
-        {
-            return Err(IdentifierError::InvalidFormat);
-        }
-        Ok(Self(value.to_owned()))
+        AiJobId::try_new(value)
+            .map(Self)
+            .map_err(|_error| IdentifierError::InvalidFormat)
     }
     #[must_use]
     pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+    #[must_use]
+    pub const fn job_id(&self) -> &AiJobId {
         &self.0
     }
 }

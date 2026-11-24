@@ -88,7 +88,7 @@ fn master_for(instrument_id: &str, symbol: &str) -> MasterInstrument {
     })
     .expect("master")
 }
-fn eligible_task(instrument_id: &str, symbol: &str, high: &str) -> CostEligibleTask {
+pub(crate) fn eligible_task(instrument_id: &str, symbol: &str, high: &str) -> CostEligibleTask {
     let source = master_for(instrument_id, symbol);
     let candles: Vec<_> = (0_i64..61)
         .map(|index| {

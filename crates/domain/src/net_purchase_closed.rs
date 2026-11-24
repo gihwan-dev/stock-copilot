@@ -1,8 +1,6 @@
 use crate::{
     AccountId, BrokerOrder, BrokerOrderId, ClosedOrderCompletenessProof, TimeInterval, Timestamp,
 };
-#[cfg(test)]
-use crate::{BrokerOrderMoney, NetPurchaseInputError, OrderOpenState};
 use std::{collections::BTreeMap, fmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,16 +24,6 @@ pub struct ClosedOrderSet {
     proof: Option<ClosedOrderCompletenessProof>,
 }
 impl ClosedOrderSet {
-    #[cfg(test)]
-    pub(crate) fn new(
-        account: AccountId,
-        orders: Vec<BrokerOrder>,
-        covered: TimeInterval,
-        observed: Timestamp,
-        completeness: ClosedOrderCompleteness,
-    ) -> Result<Self, NetPurchaseInputError> {
-        Self::build(account, orders, covered, observed, completeness)
-    }
     pub(crate) fn from_verified_proof(
         account: AccountId,
         orders: BTreeMap<BrokerOrderId, BrokerOrder>,
@@ -52,33 +40,6 @@ impl ClosedOrderSet {
             completeness,
             proof: Some(proof),
         }
-    }
-    #[cfg(test)]
-    fn build(
-        account: AccountId,
-        orders: Vec<BrokerOrder>,
-        covered: TimeInterval,
-        observed: Timestamp,
-        completeness: ClosedOrderCompleteness,
-    ) -> Result<Self, NetPurchaseInputError> {
-        if covered.end() > observed {
-            return Err(NetPurchaseInputError::InvalidTime);
-        }
-        let mut unique = BTreeMap::new();
-        for order in orders {
-            validate_order(&order, &account, observed)?;
-            if unique.insert(order.order_id().clone(), order).is_some() {
-                return Err(NetPurchaseInputError::DuplicateOrder);
-            }
-        }
-        Ok(Self {
-            account,
-            orders: unique,
-            covered,
-            observed,
-            completeness,
-            proof: None,
-        })
     }
     #[must_use]
     pub const fn account_id(&self) -> &AccountId {
@@ -111,52 +72,80 @@ impl fmt::Debug for ClosedOrderSet {
     }
 }
 #[cfg(test)]
-fn validate_order(
-    order: &BrokerOrder,
-    account: &AccountId,
-    observed: Timestamp,
-) -> Result<(), NetPurchaseInputError> {
-    if order.account_id() != account {
-        return Err(NetPurchaseInputError::AccountMismatch);
-    }
-    if order.status().open_state() != OrderOpenState::Closed {
-        return Err(NetPurchaseInputError::NonClosedOrder);
-    }
-    if order.observed_at() != observed {
-        return Err(NetPurchaseInputError::ObservationMismatch);
-    }
-    if order.ordered_at() > observed
-        || order
-            .filled_at()
-            .is_some_and(|at| at < order.ordered_at() || at > observed)
-    {
-        return Err(NetPurchaseInputError::InvalidTime);
-    }
-    if order.filled_quantity().as_decimal().is_zero()
-        && (order.filled_at().is_some()
-            || match order.filled_amount() {
-                BrokerOrderMoney::Known(amount) => !amount.amount().as_decimal().is_zero(),
-                BrokerOrderMoney::Absent => false,
-            })
-    {
-        return Err(NetPurchaseInputError::ZeroFillMismatch);
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::net_purchase::tests::{facts, interval, money, row, time};
     use crate::{
         AccountId, BrokerOrder, BrokerOrderMoney, BrokerOrderStatus, ClosedOrderCompleteness,
-        ClosedOrderSet, Currency, MasterCode, NetPurchaseInputError, OrderSide, Quantity,
+        ClosedOrderSet, Currency, MasterCode, NetPurchaseInputError, OrderOpenState, OrderSide,
+        Quantity, TimeInterval, Timestamp,
     };
     use rust_decimal::Decimal;
+    use std::collections::BTreeMap;
+
+    pub(crate) fn closed_order_set(
+        account: AccountId,
+        orders: Vec<BrokerOrder>,
+        covered: TimeInterval,
+        observed: Timestamp,
+        completeness: ClosedOrderCompleteness,
+    ) -> Result<ClosedOrderSet, NetPurchaseInputError> {
+        if covered.end() > observed {
+            return Err(NetPurchaseInputError::InvalidTime);
+        }
+        let mut unique = BTreeMap::new();
+        for order in orders {
+            validate_order(&order, &account, observed)?;
+            if unique.insert(order.order_id().clone(), order).is_some() {
+                return Err(NetPurchaseInputError::DuplicateOrder);
+            }
+        }
+        Ok(ClosedOrderSet {
+            account,
+            orders: unique,
+            covered,
+            observed,
+            completeness,
+            proof: None,
+        })
+    }
+
+    fn validate_order(
+        order: &BrokerOrder,
+        account: &AccountId,
+        observed: Timestamp,
+    ) -> Result<(), NetPurchaseInputError> {
+        if order.account_id() != account {
+            return Err(NetPurchaseInputError::AccountMismatch);
+        }
+        if order.status().open_state() != OrderOpenState::Closed {
+            return Err(NetPurchaseInputError::NonClosedOrder);
+        }
+        if order.observed_at() != observed {
+            return Err(NetPurchaseInputError::ObservationMismatch);
+        }
+        if order.ordered_at() > observed
+            || order
+                .filled_at()
+                .is_some_and(|at| at < order.ordered_at() || at > observed)
+        {
+            return Err(NetPurchaseInputError::InvalidTime);
+        }
+        if order.filled_quantity().as_decimal().is_zero()
+            && (order.filled_at().is_some()
+                || match order.filled_amount() {
+                    BrokerOrderMoney::Known(amount) => !amount.amount().as_decimal().is_zero(),
+                    BrokerOrderMoney::Absent => false,
+                })
+        {
+            return Err(NetPurchaseInputError::ZeroFillMismatch);
+        }
+        Ok(())
+    }
     fn sealed(input: crate::BrokerOrderRow) -> BrokerOrder {
         BrokerOrder::from_lookup_result(input).expect("행")
     }
     fn seal(input: crate::BrokerOrderRow) -> Result<ClosedOrderSet, NetPurchaseInputError> {
-        ClosedOrderSet::new(
+        closed_order_set(
             AccountId::new(7),
             vec![sealed(input)],
             interval(0, 300),
@@ -189,7 +178,7 @@ mod tests {
         );
         let order = BrokerOrder::from_lookup_result(base).expect("행");
         assert_eq!(
-            ClosedOrderSet::new(
+            closed_order_set(
                 AccountId::new(7),
                 vec![order.clone(), order],
                 interval(0, 300),
@@ -213,7 +202,7 @@ mod tests {
             assert_eq!(seal(input), Err(NetPurchaseInputError::InvalidTime));
         }
         assert_eq!(
-            ClosedOrderSet::new(
+            closed_order_set(
                 AccountId::new(7),
                 vec![],
                 interval(0, 301),
