@@ -17,7 +17,7 @@ export type IpcFailure =
   | { readonly kind: "invalid-response" }
   | { readonly kind: "timeout" };
 
-type CommandOutcome =
+export type CommandOutcome =
   | { readonly status: "ok"; readonly data: unknown }
   | { readonly status: "error"; readonly error: unknown };
 
@@ -47,7 +47,7 @@ const openExternalResultSchema = z
   .strict()
   .readonly();
 
-const settleWithSchema = <T>(
+export const settleWithSchema = <T>(
   outcome: CommandOutcome,
   schema: Readonly<z.ZodType<T>>,
 ): Result<T, IpcFailure> => {
@@ -76,3 +76,16 @@ export const settleOpenExternal = (
   outcome: CommandOutcome,
 ): Result<OpenExternalResult, IpcFailure> =>
   settleWithSchema(outcome, openExternalResultSchema);
+
+export type Wire = Brand<"Wire">;
+
+export type WireOutcome =
+  | { readonly status: "ok"; readonly data: Wire }
+  | { readonly status: "error"; readonly error: Wire };
+
+export const wire = (raw: unknown): Wire => raw as Wire;
+
+export const wireOutcome = (outcome: CommandOutcome): WireOutcome =>
+  outcome.status === "ok"
+    ? { status: "ok", data: wire(outcome.data) }
+    : { status: "error", error: wire(outcome.error) };
