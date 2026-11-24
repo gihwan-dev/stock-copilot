@@ -109,11 +109,13 @@ pub fn display_change(change: &MoneyChange, precision: DisplayPrecision) -> Disp
 
 #[must_use]
 pub fn display_percent(ratio: &crate::Ratio, precision: DisplayPrecision) -> DisplayDigits {
-    let scaled = crate::exact_arithmetic::multiply(
+    let scaled = match crate::exact_arithmetic::multiply(
         Amount::new(ratio.as_decimal()),
         Amount::new(Decimal::ONE_HUNDRED),
-    )
-    .unwrap_or_else(|_| Amount::new(Decimal::ZERO));
+    ) {
+        Ok(value) => value,
+        Err(_overflow) => Amount::new(Decimal::ZERO),
+    };
     display_digits(scaled, precision)
 }
 
@@ -136,9 +138,13 @@ pub fn display_quotient_percent(
             (ratio.as_decimal(), ratio.original_direction())
         }
     };
-    let scaled =
-        crate::exact_arithmetic::multiply(Amount::new(decimal), Amount::new(Decimal::ONE_HUNDRED))
-            .unwrap_or_else(|_| Amount::new(Decimal::ZERO));
+    let scaled = match crate::exact_arithmetic::multiply(
+        Amount::new(decimal),
+        Amount::new(Decimal::ONE_HUNDRED),
+    ) {
+        Ok(value) => value,
+        Err(_overflow) => Amount::new(Decimal::ZERO),
+    };
     (display_digits(scaled, precision), direction)
 }
 

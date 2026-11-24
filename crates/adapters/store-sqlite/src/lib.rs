@@ -235,3 +235,8 @@ mod watchlist;
 pub use watchlist::{SignalSkipStore, WatchlistStore};
 #[cfg(test)]
 mod watchlist_tests;
+
+mod briefing;
+pub use briefing::BriefingStore;
+#[cfg(test)]
+mod briefing_tests;

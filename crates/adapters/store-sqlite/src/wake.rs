@@ -287,19 +287,36 @@ fn parse_disclosure_source(raw: &str) -> rusqlite::Result<DisclosureSource> {
     }
 }
 
-fn encode_item(item: &CollectedItem) -> String {
-    let mut out = Encoder::new();
-    match item.source() {
+pub(crate) fn put_information_source(out: &mut Encoder, source: &InformationSource) {
+    match source {
         InformationSource::Web => out.push("web"),
-        InformationSource::News(source) => {
+        InformationSource::News(news) => {
             out.push("news");
-            put_news_source(&mut out, source);
+            put_news_source(out, news);
         }
-        InformationSource::Disclosure(source) => {
+        InformationSource::Disclosure(disclosure) => {
             out.push("disclosure");
-            out.push(disclosure_source_tag(source));
+            out.push(disclosure_source_tag(disclosure));
         }
     }
+}
+
+pub(crate) fn take_information_source(
+    input: &mut Decoder<'_>,
+) -> rusqlite::Result<InformationSource> {
+    match input.next()? {
+        "web" => Ok(InformationSource::Web),
+        "news" => Ok(InformationSource::News(take_news_source(input)?)),
+        "disclosure" => Ok(InformationSource::Disclosure(parse_disclosure_source(
+            input.next()?,
+        )?)),
+        _ => Err(invalid(())),
+    }
+}
+
+fn encode_item(item: &CollectedItem) -> String {
+    let mut out = Encoder::new();
+    put_information_source(&mut out, item.source());
     out.push(item.url().as_str());
     out.push(item.title().as_untrusted_str());
     match item.body() {
@@ -314,12 +331,7 @@ fn encode_item(item: &CollectedItem) -> String {
 
 fn decode_item(payload: &str) -> rusqlite::Result<CollectedItem> {
     let mut input = Decoder::new(payload);
-    let source = match input.next()? {
-        "web" => InformationSource::Web,
-        "news" => InformationSource::News(take_news_source(&mut input)?),
-        "disclosure" => InformationSource::Disclosure(parse_disclosure_source(input.next()?)?),
-        _ => return Err(invalid(())),
-    };
+    let source = take_information_source(&mut input)?;
     let url = NormalizedUrl::try_new(input.next()?).map_err(invalid)?;
     let title = UntrustedText::try_new(input.next()?).map_err(invalid)?;
     let body = match input.next()? {

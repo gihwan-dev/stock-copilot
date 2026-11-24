@@ -33,6 +33,11 @@ CREATE TABLE audit_log (
     prev_hash TEXT NOT NULL CHECK (length(prev_hash) = 64),
     hash TEXT NOT NULL UNIQUE CHECK (length(hash) = 64)
 ) STRICT;
+CREATE TABLE briefings (
+    id_key TEXT PRIMARY KEY,
+    seq INTEGER NOT NULL UNIQUE CHECK (seq >= 1),
+    payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE chat_entries (
     session_id TEXT NOT NULL REFERENCES chat_sessions(session_id),
     position INTEGER NOT NULL CHECK (position >= 1),
@@ -460,6 +465,7 @@ CREATE TABLE web_collected_items (
 CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER audit_log_seq BEFORE INSERT ON audit_log WHEN NEW.seq IS NOT (SELECT coalesce(max(seq), 0) + 1 FROM audit_log) BEGIN SELECT RAISE(ABORT, 'audit_log seq must be contiguous'); END;
+CREATE TRIGGER briefings_no_delete BEFORE DELETE ON briefings BEGIN SELECT RAISE(ABORT, 'briefings are replaced, not deleted'); END;
 CREATE TRIGGER chat_entries_contiguous BEFORE INSERT ON chat_entries WHEN NEW.position IS NOT (SELECT coalesce(max(position), 0) + 1 FROM chat_entries WHERE session_id = NEW.session_id) BEGIN SELECT RAISE(ABORT, 'chat entry position must be contiguous'); END;
 CREATE TRIGGER chat_entries_no_delete BEFORE DELETE ON chat_entries BEGIN SELECT RAISE(ABORT, 'chat entries are append only'); END;
 CREATE TRIGGER chat_entries_no_update BEFORE UPDATE ON chat_entries BEGIN SELECT RAISE(ABORT, 'chat entries are append only'); END;
