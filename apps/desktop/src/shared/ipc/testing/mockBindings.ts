@@ -44,6 +44,10 @@ export const commands = {
     typedError<OpenExternalResponse, IpcError>(
       __TAURI_INVOKE("open_external", { request }),
     ),
+  requestOrderApproval: (request: OrderApprovalRequest) =>
+    typedError<OrderApprovalResponse, IpcError>(
+      __TAURI_INVOKE("request_order_approval", { request }),
+    ),
 };
 
 /** Events */
@@ -501,6 +505,35 @@ export type OpenExternalResponse = {
 };
 
 export type OpenExternalStatus = "opened";
+
+export type OrderApprovalReason =
+  | "none"
+  | "presence-denied"
+  | "switch-off"
+  | "hourly-limit"
+  | "dialog-in-progress"
+  | "cooldown"
+  | "already-consumed"
+  | "proposal-unavailable"
+  | "market-closed"
+  | "conditions-changed"
+  | "other";
+
+export type OrderApprovalRequest = {
+  proposal_id: string;
+};
+
+export type OrderApprovalResponse = {
+  status: OrderApprovalStatus;
+  reason: OrderApprovalReason;
+};
+
+export type OrderApprovalStatus =
+  | "submitted"
+  | "rejected"
+  | "broker-rejected"
+  | "outcome-unknown"
+  | "unavailable";
 
 export type ResubscribeChatTurnRequest = {
   turn_id: string;
@@ -1520,6 +1553,9 @@ export type MockCommandHandlers = {
   openExternal: (args: {
     request: OpenExternalRequest;
   }) => OpenExternalResponse | Promise<OpenExternalResponse>;
+  requestOrderApproval: (args: {
+    request: OrderApprovalRequest;
+  }) => OrderApprovalResponse | Promise<OrderApprovalResponse>;
 };
 
 /**
@@ -1595,6 +1631,12 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.openExternal,
             "open_external",
+            args,
+          );
+        case "request_order_approval":
+          return mockCommandHandler(
+            mockHandlers.requestOrderApproval,
+            "request_order_approval",
             args,
           );
         default:
