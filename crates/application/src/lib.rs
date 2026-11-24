@@ -475,6 +475,26 @@ pub use record_wake_trigger::{
     RecordWakeTriggers, TriggerWrite, WakeTriggerOutcome, WakeTriggerRepository,
 };
 
+mod stock_web_collection;
+pub use stock_web_collection::{
+    RunStockWebCollection, STOCK_WEB_TOPICS, StockWebCollectionOutcome, StockWebCollectionReport,
+    StockWebCollectionResult, WebCollectionFailure, WebCollectionReservation, WebCollectionRunner,
+    WebCollectionStore, WebFinding, plan_stock_web_collection,
+};
+
+mod important_disclosures;
+pub use important_disclosures::{
+    DisclosureCardFact, DisclosureCardLevel, DisclosureTriggerLog, GetImportantDisclosureCards,
+    ImportantDisclosureCard,
+};
+
+mod news_data_settings;
+pub use news_data_settings::{
+    AliasName, GetNewsDataSettings, NewsDataSettings, NewsDataSettingsChange,
+    NewsDataSettingsError, NewsDataSettingsRepository, NewsSettingValueError, SecContactSetting,
+    SourceSwitch, StockAlias, UpdateNewsDataSettings,
+};
+
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
