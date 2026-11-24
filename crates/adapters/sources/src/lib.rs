@@ -2,6 +2,7 @@ mod article_reader;
 mod dart_corp_map;
 mod dart_disclosures;
 mod endpoint;
+mod google_news;
 mod headers;
 mod http;
 mod kind_disclosures;
@@ -22,6 +23,11 @@ pub use dart_disclosures::{
     group_dart_amendments, parse_correction_info,
 };
 pub use endpoint::SourceEndpoint;
+pub use google_news::{
+    GOOGLE_NEWS_RETENTION_SECONDS, GoogleNewsDisplayItem, GoogleNewsFeed, GoogleNewsPruneResult,
+    GoogleNewsRetentionStatus, build_google_news_search_url, google_news_retention_status,
+    prune_expired_google_news,
+};
 pub use headers::{
     BROWSER_USER_AGENT, ConditionalValidators, ContactUserAgent, STANDARD_USER_AGENT,
     ValidatorHeader,
