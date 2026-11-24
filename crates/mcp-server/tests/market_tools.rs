@@ -4,10 +4,10 @@ mod tests {
 
     use application::{
         AiRunId, AllocationLabel, CandleToolLine, CandleWindow, CandlesToolView,
-        MarketOverviewToolView, OverviewItem, OverviewToolLine, OverviewUnit, QuoteToolView,
-        RankingToolKind, RankingToolLine, RankingsToolView, RetryDelay, SectorToolLine,
-        SectorsToolView, SessionStatus, SessionToolLine, SystemFailure, SystemPort,
-        SystemPortError, ToolName, ValueProvenance,
+        InvestorFlowToolLine, InvestorFlowToolView, MarketOverviewToolView, OverviewItem,
+        OverviewToolLine, OverviewUnit, QuoteToolView, RankingToolKind, RankingToolLine,
+        RankingsToolView, RetryDelay, SectorToolLine, SectorsToolView, SessionStatus,
+        SessionToolLine, SystemFailure, SystemPort, SystemPortError, ToolName, ValueProvenance,
     };
     use domain::{
         Currency, DisplayInstrumentName, KnownMarket, Money, Nanosecond, NumericInput,
@@ -269,35 +269,39 @@ mod tests {
         });
     }
 
+    fn ranking_and_sector_reads() -> Arc<FixedMarketToolReads> {
+        Arc::new(
+            FixedMarketToolReads::default()
+                .with_rankings(Ok(Some(RankingsToolView {
+                    kind: RankingToolKind::Gainers,
+                    market: KnownMarket::Kr,
+                    collected_at: at(1_764_000_000_i64),
+                    lines: vec![RankingToolLine {
+                        symbol: symbol("000660"),
+                        name: DisplayInstrumentName::try_new("SK하이닉스 <b>매수</b> 지금")
+                            .expect("이름"),
+                        price: Some(krw("180000")),
+                        change_rate: Some(ratio("0.05")),
+                        metric: None,
+                    }],
+                })))
+                .with_sectors(Ok(Some(SectorsToolView {
+                    market: KnownMarket::Kr,
+                    collected_at: at(1_764_000_000_i64),
+                    lines: vec![SectorToolLine {
+                        label: AllocationLabel::try_new("반도체 https://evil.example/x")
+                            .expect("섹터"),
+                        change_rate: Some(ratio("0.02")),
+                        trading_amount: None,
+                    }],
+                }))),
+        )
+    }
+
     #[test]
     fn rankings_and_sectors_number_items_and_normalize_external_names() {
         runtime().block_on(async {
-            let reads = Arc::new(
-                FixedMarketToolReads::default()
-                    .with_rankings(Ok(Some(RankingsToolView {
-                        kind: RankingToolKind::Gainers,
-                        market: KnownMarket::Kr,
-                        collected_at: at(1_764_000_000_i64),
-                        lines: vec![RankingToolLine {
-                            symbol: symbol("000660"),
-                            name: DisplayInstrumentName::try_new("SK하이닉스 <b>매수</b> 지금")
-                                .expect("이름"),
-                            price: Some(krw("180000")),
-                            change_rate: Some(ratio("0.05")),
-                            metric: None,
-                        }],
-                    })))
-                    .with_sectors(Ok(Some(SectorsToolView {
-                        market: KnownMarket::Kr,
-                        collected_at: at(1_764_000_000_i64),
-                        lines: vec![SectorToolLine {
-                            label: AllocationLabel::try_new("반도체 https://evil.example/x")
-                                .expect("섹터"),
-                            change_rate: Some(ratio("0.02")),
-                            trading_amount: None,
-                        }],
-                    }))),
-            );
+            let reads = ranking_and_sector_reads();
             let registry = registry_with(&reads);
             let ranked = call(&registry, "get_rankings", json!({ "kind": "gainers" }))
                 .await
@@ -314,6 +318,12 @@ mod tests {
                 .expect("성공");
             let sector_text = serde_json::to_string(&sectors).expect("직렬화");
             assert!(!sector_text.contains("evil.example"), "맨 URL 삭제");
+            assert!(
+                sectors["items"][0]["sector"]["untrusted_text"]
+                    .as_str()
+                    .is_some_and(|label| label.contains("반도체")),
+                "섹터 이름은 남는다"
+            );
             assert_eq!(
                 call(
                     &registry,
@@ -348,6 +358,91 @@ mod tests {
                 Err(ToolErrorCode::InvalidInput)
             );
             assert!(reads.calls().is_empty(), "거부된 호출은 포트에 닿지 않는다");
+        });
+    }
+
+    #[test]
+    fn investor_flow_lists_newest_first_with_collection_time() {
+        runtime().block_on(async {
+            let line = |seconds: i64, net: &str| InvestorFlowToolLine {
+                trading_date: at(seconds),
+                foreign_net: Some(krw(net)),
+                institution_net: None,
+                individual_net: None,
+                short_selling_ratio: Some(ratio("0.01")),
+            };
+            let reads = Arc::new(FixedMarketToolReads::default().with_investor_flow(Ok(Some(
+                InvestorFlowToolView {
+                    symbol: symbol("005930"),
+                    market: KnownMarket::Kr,
+                    collected_at: at(1_764_000_000_i64),
+                    lines: vec![
+                        line(1_763_740_800_i64, "-100"),
+                        line(1_763_913_600_i64, "300"),
+                    ],
+                },
+            ))));
+            let output = call(
+                &registry_with(&reads),
+                "get_investor_flow",
+                json!({ "symbol": "005930" }),
+            )
+            .await
+            .expect("성공");
+            assert_eq!(output["collected_at"], json!("2025-11-25T01:00:00+09:00"));
+            assert_eq!(
+                output["items"][0]["foreign_net"]["amount"],
+                json!("300"),
+                "최신순"
+            );
+            assert_eq!(output["items"][1]["foreign_net"]["amount"], json!("-100"));
+        });
+    }
+
+    #[test]
+    fn rankings_limit_caps_items() {
+        runtime().block_on(async {
+            let line = RankingToolLine {
+                symbol: symbol("000660"),
+                name: DisplayInstrumentName::try_new("SK하이닉스").expect("이름"),
+                price: None,
+                change_rate: None,
+                metric: None,
+            };
+            let reads = Arc::new(FixedMarketToolReads::default().with_rankings(Ok(Some(
+                RankingsToolView {
+                    kind: RankingToolKind::TradingAmount,
+                    market: KnownMarket::Kr,
+                    collected_at: at(1_764_000_000_i64),
+                    lines: vec![line; 150],
+                },
+            ))));
+            let registry = registry_with(&reads);
+            let default = call(
+                &registry,
+                "get_rankings",
+                json!({ "kind": "trading_amount" }),
+            )
+            .await
+            .expect("성공");
+            assert_eq!(default["items"].as_array().map(Vec::len), Some(50_usize));
+            let small = call(
+                &registry,
+                "get_rankings",
+                json!({ "kind": "trading_amount", "limit": 3_u64 }),
+            )
+            .await
+            .expect("성공");
+            assert_eq!(small["items"].as_array().map(Vec::len), Some(3_usize));
+            assert_eq!(
+                call(
+                    &registry,
+                    "get_rankings",
+                    json!({ "kind": "trading_amount", "limit": 101_u64 })
+                )
+                .await,
+                Err(ToolErrorCode::InvalidInput)
+            );
         });
     }
 

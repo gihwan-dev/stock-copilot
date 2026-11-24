@@ -261,6 +261,13 @@ impl PreparedFakeAiCli {
         &self.capture
     }
 
+    pub fn run_with_mcp_token(&self, token: &str) -> io::Result<std::process::Output> {
+        Command::new(&self.executable)
+            .env_clear()
+            .env("STOCK_MCP_TOKEN", token)
+            .output()
+    }
+
     pub fn read_invocations(&self) -> io::Result<Vec<InvocationRecord>> {
         if !self.capture.exists() {
             return Ok(Vec::new());

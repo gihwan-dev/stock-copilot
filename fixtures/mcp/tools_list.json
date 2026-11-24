@@ -234,6 +234,11 @@
           ],
           "type": "string"
         },
+        "limit": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
         "market": {
           "enum": [
             "KR",
@@ -260,6 +265,11 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "limit": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
         "market": {
           "enum": [
             "KR",
