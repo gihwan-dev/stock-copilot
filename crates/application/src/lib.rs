@@ -396,13 +396,27 @@ pub use market_tool_reads::{
     OverviewUnit, QuoteToolView, RankingToolKind, RankingToolLine, RankingsToolView,
     SectorToolLine, SectorsToolView, SessionStatus, SessionToolLine, ValueProvenance,
 };
+mod news_tool_reads;
+pub use news_tool_reads::{
+    CollectedItemHandle, CollectedItemQuery, DisclosureToolLine, LookbackDays, NewsKeyword,
+    NewsToolLine, NewsToolReads, ToolQueryTextError,
+};
+mod article_tool;
+pub use article_tool::{
+    ArticleBody, ArticleFetchFailure, ArticleLocation, ArticleToolPort, BodyReadingSetting,
+};
 mod portfolio_tool_reads;
+mod web_research_tool;
 pub use portfolio_tool_reads::{
     AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
     BenchmarkReturnLine, BuyingPowerLine, ConcentrationLine, HoldingToolLine, PerformanceBenchmark,
     PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, RiskMetrics,
     SampleSufficiency, TransactionAdmission, TransactionToolFilter, TransactionToolKind,
     TransactionToolLine, TransactionsToolView,
+};
+pub use web_research_tool::{
+    ResearchTopic, WebResearchToolFailure, WebResearchToolOutcome, WebResearchToolPort,
+    WebResearchToolRequest,
 };
 mod portfolio_views;
 pub use portfolio_views::{
@@ -447,7 +461,8 @@ pub use prompt_replay::{
 
 mod prompt_file;
 pub use prompt_file::{
-    LoadedPrompt, PromptDigest, PromptFile, PromptFileError, PromptLocationError, PromptRef,
+    LoadedPrompt, PromptBody, PromptDigest, PromptFile, PromptFileError, PromptId,
+    PromptLocationError, PromptRef, PromptSource, PromptTask, PromptVersion,
 };
 
 mod submit_estimate_tool;
@@ -570,6 +585,21 @@ pub use news_data_settings::{
     SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
+mod candidate_discovery;
+pub use candidate_discovery::{
+    DiscoverCandidates, DiscoveryError, DiscoveryList, DiscoveryLists, DiscoveryReport,
+};
+mod weekly_review;
+pub use weekly_review::{
+    RunWeeklyReview, ScorecardRefresh, ScorecardUpdate, WeeklyFindings, WeeklyNarrative,
+    WeeklyReviewCard, WeeklyReviewCards, WeeklyReviewError, WeeklyReviewInputs,
+    WeeklyReviewNarrator, WeeklyReviewRun, WeeklyReviewSource,
+};
+mod paired_comparison;
+pub use paired_comparison::{
+    ComparisonArm, ComparisonArmResult, ComparisonArmRunner, PairedComparison, PairedComparisonLog,
+    PairingError, PairingRun, RunPairedComparison,
+};
 mod deep_research;
 pub use deep_research::{
     AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
@@ -579,6 +609,10 @@ pub use deep_research::{
     ResearchConcluder, ResearchConclusion, ResearchEvidenceSource, ResearchModels, ResearchOutcome,
     ResearchPrincipleCheck, ResearchStage, ResearchWebCollector, ResearchWebOutcome,
     ResearchWebStore, RunDeepResearch, VerifyResearchClaims,
+};
+pub use deep_research::{
+    DeepResearchCycleError, DeepResearchCycleProgress, DeepResearchCycleReport, DeepResearchJob,
+    DeepResearchPause, DeepResearchTargetOutcome, RunDeepResearchCycle,
 };
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
@@ -629,6 +663,10 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod track_orders;
+pub use track_orders::{OrderHistoryRow, TrackSubmittedOrders, TrackedOrder, TrackedOrderUpdate};
+mod order_reconciliation;
+pub use order_reconciliation::{ReconcileOrdersError, ReconcileSubmittedOrders, SubmissionLedger};
 mod order_button;
 pub use order_button::ReadOrderButton;
 mod order_rate_limit;

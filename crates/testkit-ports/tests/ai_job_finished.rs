@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn run_id_maps_to_the_same_job_id() {
         let run_id = AiRunId::try_new("sched-7.a_b").expect("실행 ID");
-        assert_eq!(run_id.job_id(), &job("sched-7.a_b"));
+        assert_eq!(run_id.job_id(), Ok(job("sched-7.a_b")));
         assert_eq!(run_id.as_str(), "sched-7.a_b");
         let spec = application::RunSpec::new(
             run_id,
@@ -165,11 +165,11 @@ mod tests {
         );
         assert_eq!(
             AiJobRun::of_spec(&spec),
-            AiJobRun::new(
+            Ok(AiJobRun::new(
                 job("sched-7.a_b"),
                 RunKind::Analysis,
                 RunPurpose::MorningBriefing
-            )
+            ))
         );
         assert_eq!(
             AiRunId::try_new("a/b"),

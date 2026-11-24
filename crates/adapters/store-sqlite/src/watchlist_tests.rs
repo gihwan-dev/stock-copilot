@@ -83,7 +83,7 @@ fn signal_skips_append_and_keep_reasons() {
     let skips = vec![
         SignalSkip {
             instrument: id("instrument-a"),
-            reason: SkipReason::try_new("실적 발표 뒤에 다시 본다").expect("사유"),
+            reason: Some(SkipReason::try_new("실적 발표 뒤에 다시 본다").expect("사유")),
             skipped_at: at(10),
         },
         SignalSkip {

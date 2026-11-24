@@ -21,4 +21,11 @@ export const screenKeys = {
   status: [...queryKeys.status, "view"] as const,
 } as const;
 
+export const settingsKeys = {
+  ai: [...queryKeys.settings, "ai"] as const,
+  scheduledJobs: [...queryKeys.settings, "scheduled-jobs"] as const,
+  news: [...queryKeys.settings, "news"] as const,
+  principles: [...queryKeys.settings, "principles"] as const,
+} as const;
+
 export type AppQueryKey = (typeof queryKeys)[keyof typeof queryKeys];

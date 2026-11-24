@@ -637,6 +637,19 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod trade_cost_confirmation;
+pub use trade_cost_confirmation::{
+    ConfirmedTradeCost, EstimatedTradeCost, TradeCostDisplay, trade_cost_display,
+};
+mod order_progress;
+pub use order_progress::{
+    OrderProgress, OrderProgressChange, order_progress, order_progress_change,
+};
+mod order_reconciliation;
+pub use order_reconciliation::{
+    BrokerOrderCoverage, LocalSubmission, LocalSubmissionResult, ReconciliationIssue,
+    ReconciliationReport, ReconciliationStatus, reconcile_orders,
+};
 mod order_button;
 pub use order_button::{
     OrderButtonHiddenReason, OrderButtonState, ProposalAvailability, order_button_state,
@@ -706,6 +719,21 @@ pub use deep_research_review::{
     ResearchCount, ResearchSourceWarning, ResearchTally, research_source_warnings,
     tally_research_claims,
 };
+
+mod deep_research_window;
+pub use deep_research_window::{DeepResearchWindow, deep_research_window};
+
+mod candidate_discovery;
+pub use candidate_discovery::{
+    CapBand, DiscoveryCandidate, DiscoveryInput, DiscoveryQuota, DiscoverySeed, DiscoverySlots,
+    DiscoverySource, select_discovery_candidates,
+};
+
+mod weekly_review;
+pub use weekly_review::{WeeklyReviewSlot, weekly_review_slot};
+
+mod paired_comparison;
+pub use paired_comparison::{PairingDecision, PairingRate, PairingRateError, paired_sample};
 
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};

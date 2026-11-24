@@ -12,8 +12,15 @@ mod untrusted;
 #[cfg(test)]
 mod contract_tests;
 
+pub use catalog::article::{
+    ArticleRefusal, host_matches_press, press_domains, register_read_article_tool,
+};
 pub use catalog::market::register_market_tools;
+pub use catalog::news::register_news_tools;
 pub use catalog::portfolio::register_portfolio_tools;
+pub use catalog::research::{
+    MAX_RESEARCH_REQUESTS_PER_RUN, MIN_RESEARCH_INTERVAL_SECS, register_web_research_tool,
+};
 pub use catalog::{AnalysisCatalogPorts, build_analysis_catalog};
 pub use estimate_input::{
     SUBMIT_ESTIMATE_TOOL, parse_submit_estimate_arguments, submit_estimate_schema,
@@ -41,9 +48,9 @@ pub use token::{
     RunAuthToken, TOKEN_HEX_BYTES, TOKEN_RANDOM_BYTES, TokenError, TokenTtl,
 };
 pub use tools::{
-    MAX_TOOL_ERROR_CHARS, McpTool, RetryPolicy, ToolAccessKind, ToolErrorCode, ToolErrorPayload,
-    ToolFuture, ToolInvocation, ToolLedgerMode, ToolRegistry, ToolRegistryError, ToolSpec,
-    UnconfiguredToolLedger, build_object_schema, make_cursor_store,
+    MAX_TOOL_ERROR_CHARS, McpTool, ResultRetention, RetryPolicy, ToolAccessKind, ToolErrorCode,
+    ToolErrorPayload, ToolFuture, ToolInvocation, ToolLedgerMode, ToolRegistry, ToolRegistryError,
+    ToolSpec, UnconfiguredToolLedger, build_object_schema, make_cursor_store,
     validate_arguments_against_schema,
 };
 pub use untrusted::{

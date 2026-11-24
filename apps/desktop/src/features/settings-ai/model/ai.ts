@@ -11,10 +11,15 @@ import {
   type ScheduledJobs,
   type SettingsClient,
 } from "../../../shared/ipc";
-import { err, parseExternalUrl, type Result } from "../../../shared/lib";
+import {
+  settingsKeys,
+  err,
+  parseExternalUrl,
+  type Result,
+} from "../../../shared/lib";
 
-const aiKey = ["ai-settings"] as const;
-const jobsKey = ["scheduled-jobs"] as const;
+const aiKey = settingsKeys.ai;
+const jobsKey = settingsKeys.scheduledJobs;
 
 type AiReply = Result<AiSettings, IpcFailure>;
 type JobsReply = Result<ScheduledJobs, IpcFailure>;

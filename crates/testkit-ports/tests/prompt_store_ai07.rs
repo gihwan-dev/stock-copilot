@@ -2,7 +2,8 @@
 mod tests {
     use application::{
         AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRun, AiJobTiming, LoadedPrompt,
-        PromptDigest, PromptFileError, PromptLocationError, RunKind, RunPurpose, TokenUsage,
+        PromptDigest, PromptFileError, PromptLocationError, PromptSource, PromptTask,
+        PromptVersion, RunKind, RunPurpose, TokenUsage,
     };
     use domain::{AiJobId, Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
     use testkit_ports::MemoryAiJobRecords;
@@ -27,8 +28,10 @@ mod tests {
         )
         .expect("time")
     }
-    fn estimate_source() -> String {
-        std::fs::read_to_string("../../prompts/estimate/v1.md").expect("추정 프롬프트")
+    fn estimate_source() -> PromptSource {
+        PromptSource::new(
+            &std::fs::read_to_string("../../prompts/estimate/v1.md").expect("추정 프롬프트"),
+        )
     }
     fn digest() -> PromptDigest {
         PromptDigest::try_from_hex(DIGEST).expect("해시")
@@ -55,7 +58,13 @@ mod tests {
                     .and_then(std::ffi::OsStr::to_str)
                     .expect("버전");
                 let source = std::fs::read_to_string(&path).expect("본문");
-                LoadedPrompt::load(&task_name, version, &source, digest()).expect("위치와 형식");
+                LoadedPrompt::load(
+                    &PromptTask::new(&task_name),
+                    &PromptVersion::new(version),
+                    &PromptSource::new(&source),
+                    digest(),
+                )
+                .expect("위치와 형식");
                 loaded = loaded.saturating_add(1);
             }
         }
@@ -66,15 +75,30 @@ mod tests {
     fn misplaced_or_malformed_prompts_are_rejected() {
         let source = estimate_source();
         assert_eq!(
-            LoadedPrompt::load("briefing", "v1", &source, digest()),
+            LoadedPrompt::load(
+                &PromptTask::new("briefing"),
+                &PromptVersion::new("v1"),
+                &source,
+                digest()
+            ),
             Err(PromptLocationError::TaskFolderMismatch)
         );
         assert_eq!(
-            LoadedPrompt::load("estimate", "v2", &source, digest()),
+            LoadedPrompt::load(
+                &PromptTask::new("estimate"),
+                &PromptVersion::new("v2"),
+                &source,
+                digest()
+            ),
             Err(PromptLocationError::VersionFileMismatch)
         );
         assert_eq!(
-            LoadedPrompt::load("estimate", "v1", "본문만", digest()),
+            LoadedPrompt::load(
+                &PromptTask::new("estimate"),
+                &PromptVersion::new("v1"),
+                &PromptSource::new("본문만"),
+                digest()
+            ),
             Err(PromptLocationError::Format(
                 PromptFileError::MissingFrontMatter
             ))
@@ -96,13 +120,18 @@ mod tests {
 
     #[test]
     fn job_record_keeps_prompt_id_version_and_digest() {
-        let loaded =
-            LoadedPrompt::load("estimate", "v1", &estimate_source(), digest()).expect("로드");
+        let loaded = LoadedPrompt::load(
+            &PromptTask::new("estimate"),
+            &PromptVersion::new("v1"),
+            &estimate_source(),
+            digest(),
+        )
+        .expect("로드");
         let reference = loaded.prompt_ref();
         assert_eq!(
             (
-                reference.id(),
-                reference.version(),
+                reference.id().as_str(),
+                reference.version().as_str(),
                 reference.digest().as_str()
             ),
             ("estimate", "v1", DIGEST)

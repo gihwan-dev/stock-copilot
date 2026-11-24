@@ -11,29 +11,104 @@ pub enum PromptFileError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PromptFile {
-    id: String,
-    version: String,
-    task: String,
-    body: String,
+pub struct PromptSource(String);
+
+impl PromptSource {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
-const KEYS: [&str; 6] = ["id", "version", "task", "inputs", "output_schema", "tools"];
-const PROVIDER_TOOL_NAMES: [&str; 9] = [
-    "mcp__",
-    "WebSearch",
-    "WebFetch",
-    "Bash(",
-    "TodoWrite",
-    "web_search_preview",
-    "apply_patch",
-    "functions.",
-    "computer_use",
-];
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptId(String);
+
+impl PromptId {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptVersion(String);
+
+impl PromptVersion {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptTask(String);
+
+impl PromptTask {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptBody(String);
+
+impl PromptBody {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptFile {
+    id: PromptId,
+    version: PromptVersion,
+    task: PromptTask,
+    body: PromptBody,
+}
 
 impl PromptFile {
-    pub fn parse(source: &str) -> Result<Self, PromptFileError> {
+    pub fn parse(source: &PromptSource) -> Result<Self, PromptFileError> {
+        let keys = ["id", "version", "task", "inputs", "output_schema", "tools"];
+        let provider_tool_names = [
+            "mcp__",
+            "WebSearch",
+            "WebFetch",
+            "Bash(",
+            "TodoWrite",
+            "web_search_preview",
+            "apply_patch",
+            "functions.",
+            "computer_use",
+        ];
         let rest = source
+            .as_str()
             .strip_prefix("---\n")
             .ok_or(PromptFileError::MissingFrontMatter)?;
         let (header, body) = rest
@@ -42,7 +117,7 @@ impl PromptFile {
         let mut values: [Option<&str>; 6] = [None; 6];
         for line in header.lines() {
             let (key, raw) = line.split_once(':').ok_or(PromptFileError::MalformedLine)?;
-            let index = KEYS
+            let index = keys
                 .iter()
                 .position(|known| *known == key)
                 .ok_or(PromptFileError::UnknownKey)?;
@@ -61,42 +136,37 @@ impl PromptFile {
         if body.trim().is_empty() {
             return Err(PromptFileError::EmptyBody);
         }
-        if PROVIDER_TOOL_NAMES.iter().any(|name| body.contains(name)) {
+        if provider_tool_names.iter().any(|name| body.contains(name)) {
             return Err(PromptFileError::ProviderToolName);
         }
-        let field = |index: usize| {
-            values
-                .get(index)
-                .copied()
-                .flatten()
-                .map(str::to_owned)
-                .ok_or(PromptFileError::MissingKey)
+        let [Some(id), Some(version), Some(task), ..] = values else {
+            return Err(PromptFileError::MissingKey);
         };
         Ok(Self {
-            id: field(0)?,
-            version: field(1)?,
-            task: field(2)?,
-            body: body.to_owned(),
+            id: PromptId::new(id),
+            version: PromptVersion::new(version),
+            task: PromptTask::new(task),
+            body: PromptBody::new(body),
         })
     }
 
     #[must_use]
-    pub fn id(&self) -> &str {
+    pub const fn id(&self) -> &PromptId {
         &self.id
     }
 
     #[must_use]
-    pub fn version(&self) -> &str {
+    pub const fn version(&self) -> &PromptVersion {
         &self.version
     }
 
     #[must_use]
-    pub fn task(&self) -> &str {
+    pub const fn task(&self) -> &PromptTask {
         &self.task
     }
 
     #[must_use]
-    pub fn body(&self) -> &str {
+    pub const fn body(&self) -> &PromptBody {
         &self.body
     }
 }
@@ -131,18 +201,18 @@ impl PromptDigest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptRef {
-    id: String,
-    version: String,
+    id: PromptId,
+    version: PromptVersion,
     digest: PromptDigest,
 }
 
 impl PromptRef {
     #[must_use]
-    pub fn id(&self) -> &str {
+    pub const fn id(&self) -> &PromptId {
         &self.id
     }
     #[must_use]
-    pub fn version(&self) -> &str {
+    pub const fn version(&self) -> &PromptVersion {
         &self.version
     }
     #[must_use]
@@ -159,9 +229,9 @@ pub struct LoadedPrompt {
 
 impl LoadedPrompt {
     pub fn load(
-        task_folder: &str,
-        version_file: &str,
-        source: &str,
+        task_folder: &PromptTask,
+        version_file: &PromptVersion,
+        source: &PromptSource,
         digest: PromptDigest,
     ) -> Result<Self, PromptLocationError> {
         let file = PromptFile::parse(source).map_err(PromptLocationError::Format)?;
