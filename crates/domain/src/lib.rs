@@ -38,12 +38,17 @@ pub use instrument_mapping_change::{
 pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentMasterError};
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
 
+mod ai_read_policy;
 mod cluster;
 mod collected_item;
 mod data_source;
 mod disclosure;
 mod news_item;
 
+pub use ai_read_policy::{
+    AiBodyReadPolicy, AiBodyReadSettingError, AiBodyReadToggle, AiNewsInput,
+    SourceAiBodyReadSettings, prepare_news_for_ai,
+};
 pub use cluster::{Cluster, ClusterError};
 pub use collected_item::{CollectedItem, InformationSource, UntrustedText, UntrustedTextError};
 pub use data_source::{DataSource, DataSourceCategory};

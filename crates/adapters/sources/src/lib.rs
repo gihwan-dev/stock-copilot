@@ -1,3 +1,4 @@
+mod article_reader;
 mod endpoint;
 mod headers;
 mod http;
@@ -6,6 +7,7 @@ mod rate_limiter;
 mod registry;
 mod rss;
 
+pub use article_reader::{ArticleReadError, ArticleReader};
 pub use endpoint::SourceEndpoint;
 pub use headers::{
     BROWSER_USER_AGENT, ConditionalValidators, ContactUserAgent, STANDARD_USER_AGENT,

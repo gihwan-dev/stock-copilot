@@ -13,3 +13,5 @@
 | N-19 | 연도·분기 마스킹 후 남은 ASCII 숫자가 총 2개 이상이면 문자 삽입 분할 포함 전부 거부 | 연속 2자리·구분자 분할만 거부하고 영문자 내부 단일 숫자 허용 |
 | N-19 | 감사 로그(`AuditKind::WebSearchChecked`)에 검색어 원문을 남기지 않고 SHA-256 다이제스트·모드·닫힌 판정/사유만 기록(감사 쓰기 실패 시 fail-closed) | 통과된 코드 검색어에 한해 원문 평문 저장 |
 | N-19 | 등록 실명(2자 이상)은 종목명과 겹쳐도 거부, 1자 성씨는 등록 거부, `"사조"` 등 수사 결합 상호도 보수적으로 거부 | 종목 마스터 예외 표를 두어 실명·수사 충돌 일부 통과 |
+| N-02 | 깨진 RSS 피드(비UTF-8·HTML 오류 페이지·미종결 XML·전체 항목 URL 무효)는 `InvalidResponse(Schema)`로 거부하고, 정상 피드 내 개별 손상 항목만 건너뜀 | 개별 손상 항목 하나에도 전체 피드 폐기 |
+| N-17 | `SourceAiBodyReadSettings`에서 `Yonhap`·`GoogleNews`는 켜기 자체를 타입·오류로 봉인하고, `ArticleReader`는 본문 읽기가 켜진 언론사 RSS의 `https` 기사 도메인(`www.edaily.co.kr`, `finance.yahoo.com` 포함)만 일회성 읽기 허용 | 웹 출처나 `http` 기사 주소까지 일회성 읽기 허용 |

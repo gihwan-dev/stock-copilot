@@ -370,7 +370,7 @@ const SPECS: [SourceSpec; 16] = [
     SourceSpec {
         source: HttpDataSource::Edaily,
         bucket: RateLimitBucket::Edaily,
-        allowed_hosts: &["rss.edaily.co.kr"],
+        allowed_hosts: &["rss.edaily.co.kr", "www.edaily.co.kr"],
         conditional_get: ConditionalGet::Supported,
         user_agent: UserAgentRequirement::Standard,
         min_interval: MIN_INTERVAL,
@@ -394,7 +394,7 @@ const SPECS: [SourceSpec; 16] = [
     SourceSpec {
         source: HttpDataSource::YahooFinance,
         bucket: RateLimitBucket::YahooFinance,
-        allowed_hosts: &["feeds.finance.yahoo.com"],
+        allowed_hosts: &["feeds.finance.yahoo.com", "finance.yahoo.com"],
         conditional_get: ConditionalGet::Unsupported,
         user_agent: UserAgentRequirement::Browser,
         min_interval: MIN_INTERVAL,
