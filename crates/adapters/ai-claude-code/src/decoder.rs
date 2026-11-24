@@ -52,12 +52,22 @@ struct PendingWebSearch {
     query: UntrustedText,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DecodedLineKind {
+    Result,
+    Other,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClaudeEventDecoder {
     expectation: IsolationExpectation,
     lifecycle: Lifecycle,
     configured_model: Option<ModelName>,
     last_actual_model: Option<ModelName>,
+    last_cli_version: Option<String>,
+    last_structured_output: Option<Value>,
+    last_result_num_turns: Option<u64>,
+    last_line_kind: DecodedLineKind,
     turn_model_seen: TurnModelSeen,
     turn_delta_state: TurnDeltaState,
     pending_tools: BTreeMap<String, PendingTool>,
@@ -72,11 +82,39 @@ impl ClaudeEventDecoder {
             lifecycle: Lifecycle::AwaitingInit,
             configured_model: None,
             last_actual_model: None,
+            last_cli_version: None,
+            last_structured_output: None,
+            last_result_num_turns: None,
+            last_line_kind: DecodedLineKind::Other,
             turn_model_seen: TurnModelSeen::No,
             turn_delta_state: TurnDeltaState::NoneYet,
             pending_tools: BTreeMap::new(),
             pending_web_searches: BTreeMap::new(),
         }
+    }
+
+    #[must_use]
+    pub fn last_cli_version(&self) -> Option<&str> {
+        self.last_cli_version.as_deref()
+    }
+
+    #[must_use]
+    pub fn last_actual_model(&self) -> Option<&ModelName> {
+        self.last_actual_model.as_ref()
+    }
+
+    #[must_use]
+    pub fn last_structured_output(&self) -> Option<&Value> {
+        self.last_structured_output.as_ref()
+    }
+
+    #[must_use]
+    pub const fn last_result_num_turns(&self) -> Option<u64> {
+        self.last_result_num_turns
+    }
+
+    pub(crate) const fn last_line_kind(&self) -> DecodedLineKind {
+        self.last_line_kind
     }
 
     pub fn decode_line(&mut self, line: &str) -> Result<Vec<AiEvent>, StreamDecodeError> {
@@ -136,6 +174,11 @@ impl ClaudeEventDecoder {
         object: &Map<String, Value>,
         raw_line: &str,
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
+        self.last_line_kind = if kind == "result" {
+            DecodedLineKind::Result
+        } else {
+            DecodedLineKind::Other
+        };
         if kind == "system" {
             return self.handle_system(object, raw_line);
         }
@@ -176,6 +219,7 @@ impl ClaudeEventDecoder {
         object: &Map<String, Value>,
     ) -> Result<Vec<AiEvent>, StreamDecodeError> {
         let snapshot = parse_init_snapshot(object)?;
+        self.last_cli_version = Some(snapshot.cli_version.clone());
         match self.lifecycle {
             Lifecycle::AwaitingInit => {
                 let check = evaluate_init_isolation(&snapshot, &self.expectation);
@@ -533,6 +577,8 @@ impl ClaudeEventDecoder {
         if outcome == ResultOutcome::Error && rate_limited == RateLimitReported::No {
             events.push(AiEvent::Unknown(untrusted(raw_line)?));
         }
+        self.last_result_num_turns = object.get("num_turns").and_then(Value::as_u64);
+        self.last_structured_output = object.get("structured_output").cloned();
         self.turn_delta_state = TurnDeltaState::NoneYet;
         self.turn_model_seen = TurnModelSeen::No;
         Ok(events)

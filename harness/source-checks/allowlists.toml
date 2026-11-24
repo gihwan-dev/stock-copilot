@@ -114,6 +114,11 @@ names = ["clock-env:now"]
 reason = "U-01 SystemClock의 운영체제 벽시계 읽기 한 곳"
 
 [[clock-environment]]
+path = "crates/toss-smoke/src/main.rs"
+names = ["test-awareness:env::args_os", "clock-env:now"]
+reason = "T-12 연결 확인 CLI 진입점. 명령행 인자와 HTTP 제한기용 벽시계만 읽고 환경 변수 읽기는 전면 금지한다"
+
+[[clock-environment]]
 path = "crates/testkit/src/bin/fake_ai_cli.rs"
 names = [
     "test-awareness:env::args_os",
@@ -124,3 +129,8 @@ names = [
     "clock-env:var:USER",
 ]
 reason = "A-11 가짜 AI CLI 진입점. 프로세스 인자와 문서(architecture 2.3, tasks AI-03, R-03)에 명시된 환경 변수 키만 개별 읽기하며 전체 환경 열람을 허용하지 않는다"
+
+[[clock-environment]]
+path = "crates/mcp-server/tests/server_security.rs"
+names = ["clock-env:temp_dir"]
+reason = "M-01: Unix 도메인 소켓 테스트가 macOS sun_path 104바이트 한도 안의 짧은 임시 경로를 쓰기 위해 temp_dir을 읽는다. 제품 코드에는 허용하지 않는다"

@@ -907,6 +907,19 @@ findings = [
 ]
 
 [[case]]
+name = "toss-production-in-toss-smoke-other-file-fail"
+findings = [
+    { rule = "toss-production", subject = "crates/toss-smoke/src/other.rs" },
+    { rule = "toss-production", subject = "crates/toss-smoke/tests/smoke.rs" },
+]
+
+[[case]]
+name = "toss-host-in-toss-smoke-main-fail"
+findings = [
+    { rule = "toss-host", subject = "crates/toss-smoke/src/main.rs" },
+]
+
+[[case]]
 name = "identity-confirmation-h66-followup-bypasses-fail"
 findings = [
     { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/collect_functions_reexport.rs" },

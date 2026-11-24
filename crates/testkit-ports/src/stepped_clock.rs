@@ -1,6 +1,6 @@
 use crate::script::State;
 use application::Clock;
-use domain::Timestamp;
+use domain::{TimeError, TimeSpan, Timestamp};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClockStepError {
     Backwards,
@@ -29,6 +29,12 @@ impl SteppedClock {
         }
         *current = at;
         Ok(())
+    }
+    pub fn advance_by(&self, span: TimeSpan) -> Result<Timestamp, TimeError> {
+        let mut current = self.at.write();
+        let next = current.checked_add(span)?;
+        *current = next;
+        Ok(next)
     }
 }
 impl Clock for SteppedClock {

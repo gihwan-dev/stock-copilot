@@ -298,6 +298,48 @@
       "namepath": "check-full",
       "shebang": false
     },
+    "check-lite": {
+      "attributes": [],
+      "body": [
+        ["pnpm install --frozen-lockfile --ignore-scripts"],
+        ["pnpm -C apps/desktop exec tsc -p ."],
+        ["pnpm -C apps/desktop exec eslint --max-warnings 0 src"],
+        ["pnpm -C apps/desktop exec vite build"],
+        ["node harness/vitest-check/check.mjs"],
+        ["node --test 'apps/desktop/tests/*.test.mjs'"],
+        ["cargo fmt --all --check"],
+        ["\"", [["call", "just_executable"]], "\" clippy Cargo.toml"],
+        ["\"", [["call", "just_executable"]], "\" arch-check"],
+        ["\"", [["call", "just_executable"]], "\" source-check"],
+        ["\"", [["call", "just_executable"]], "\" sql-check"],
+        ["\"", [["call", "just_executable"]], "\" migration-check"],
+        ["\"", [["call", "just_executable"]], "\" capability-check"],
+        ["node harness/generated-files/check.mjs"],
+        [
+          "env -u STOCK_COPILOT_PROPTEST_CASES cargo nextest run --workspace --locked --exclude xtask"
+        ]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-node",
+          "star": null
+        },
+        {
+          "arguments": [],
+          "recipe": "check-pnpm",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "check-lite",
+      "parameters": [],
+      "priors": 2,
+      "private": false,
+      "quiet": false,
+      "namepath": "check-lite",
+      "shebang": false
+    },
     "check-node": {
       "attributes": [],
       "body": [

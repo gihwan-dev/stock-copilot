@@ -1,3 +1,7 @@
+use src_tauri::platform::notifier::{
+    FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
+};
+use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
     database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
@@ -44,7 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         settings: Arc::new(Unavailable),
         audit: Arc::new(Unavailable),
         secrets: Arc::new(Unavailable),
-        notifier: Arc::new(Unavailable),
+        notifier: Arc::new(FilteredNotifier::new(
+            UnavailableNotificationDelivery,
+            NotificationPreferences::default(),
+        )),
         news_feeds: Vec::new(),
         clock: Arc::clone(&shared_clock),
         presence: Arc::new(platform_macos::UnavailablePresence),
@@ -52,20 +59,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(shared_clock)),
     };
-    run_app(
-        build_app(
-            tauri::Builder::default().manage(
-                src_tauri::ipc::open_external::ExternalLinkRuntime::new(
-                    Arc::new(Unavailable),
-                    Arc::new(Unavailable),
-                ),
-            ),
-            ports,
-            context,
-        )?,
-        |handle, code| handle.exit(code.as_i32()),
-    );
-    Ok(())
+    let app = build_app(
+        tauri::Builder::default().manage(src_tauri::ipc::open_external::ExternalLinkRuntime::new(
+            Arc::new(Unavailable),
+            Arc::new(Unavailable),
+        )),
+        ports,
+        context,
+    )?;
+    let socket_path = SocketPath::try_new(
+        tauri::Manager::path(&app)
+            .app_data_dir()?
+            .join("instance.sock"),
+    )
+    .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let single_instance = attach_to_app(app.handle(), socket_path)
+        .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    match single_instance {
+        InstanceAcquisition::Primary(_guard) => {
+            run_app(app, |handle, code| handle.exit(code.as_i32()));
+            Ok(())
+        }
+        InstanceAcquisition::SecondaryNotified => Ok(()),
+    }
 }
 
 fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseFactory {
@@ -270,5 +286,33 @@ mod tests {
                 .is_none(),
             "원격 출처 거부"
         );
+    }
+
+    #[test]
+    fn composition_root_constructs_sources_client_without_broker_credentials_or_hosts() {
+        let clock = std::sync::Arc::new(testkit_ports::SteppedClock::new(
+            broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
+                .expect("clock")
+                .into_domain(),
+        ));
+        let client = sources::SourceHttpClient::new(
+            sources::SourceEndpoint::live(),
+            clock,
+            std::sync::Arc::new(sources::TokioSourceWait),
+            None,
+        )
+        .expect("live sources client");
+        assert_eq!(format!("{client:?}"), "SourceHttpClient(<redacted>)");
+        for spec in sources::SourceRegistry::all() {
+            for host in spec.allowed_hosts() {
+                assert!(!host.to_ascii_lowercase().contains("toss"), "{host}");
+            }
+            match spec.credential() {
+                sources::CredentialRequirement::None
+                | sources::CredentialRequirement::Optional(
+                    application::CredentialSource::Dart | application::CredentialSource::Fred,
+                ) => {}
+            }
+        }
     }
 }

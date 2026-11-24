@@ -5,6 +5,7 @@ export const DOM_ACCESS_FILES = [
   "src/shared/platform/index.ts",
   "src/shared/platform/input.ts",
   "src/shared/platform/canvasTheme.ts",
+  "src/shared/ipc/timer.ts",
   "src/shared/ds/testing/overflow.ts",
   "src/shared/ds/testing/overflow-geometry.ts",
 ];

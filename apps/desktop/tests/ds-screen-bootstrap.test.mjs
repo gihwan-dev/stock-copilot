@@ -73,7 +73,6 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     );
     for (const path of [
       "app/main.tsx",
-      "app/App.tsx",
       "shared/platform/index.ts",
       "shared/platform/input.ts",
       "shared/platform/canvasTheme.ts",
@@ -82,6 +81,10 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         join(folder, "src", path),
         readFileSync(join(desktopRoot, "src", path), "utf8"),
       );
+    writeFileSync(
+      join(folder, "src/app/App.tsx"),
+      "export const App = (): null => null;\n",
+    );
     compile();
     const input = join(folder, "src/shared/platform/input.ts");
     const canvasTheme = join(folder, "src/shared/platform/canvasTheme.ts");
@@ -114,6 +117,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       "src/shared/platform/index.ts",
       "src/shared/platform/input.ts",
       "src/shared/platform/canvasTheme.ts",
+      "src/shared/ipc/timer.ts",
       "src/shared/ds/testing/overflow.ts",
       "src/shared/ds/testing/overflow-geometry.ts",
     ]);
@@ -131,6 +135,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "chartNavigation",
         "chatEventValue",
         "chatCommit",
+        "shellDismiss",
       ],
     );
     const returns = inputExports.map((entry) =>
@@ -147,6 +152,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       ['"ignore" | "next" | "previous" | "first" | "last"'],
       ["Result<FreeText, BrandError>"],
       ['"commit" | "ignore"'],
+      ['"ignore" | "dismiss"'],
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),

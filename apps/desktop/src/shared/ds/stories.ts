@@ -6,4 +6,5 @@ export { chartComponentStories } from "./Charts.stories";
 export { numberComponentStories } from "./Numbers.stories";
 
 export { contentComponentStories } from "./Content.stories";
+export { layoutComponentStories } from "./Layout.stories";
 export { catalogAdditionalStories } from "./Catalog.stories";
