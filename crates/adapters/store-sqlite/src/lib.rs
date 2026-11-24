@@ -72,6 +72,16 @@ impl Database {
         self.write(|_| Ok(application::WriteCompleted)).await
     }
 
+    pub async fn reclaim_space(&self) -> Result<application::WriteCompleted, SystemPortError> {
+        self.write(|transaction| {
+            let mut statement = transaction.prepare(sql::INCREMENTAL_VACUUM)?;
+            let mut rows = statement.query([])?;
+            while rows.next()?.is_some() {}
+            Ok(application::WriteCompleted)
+        })
+        .await
+    }
+
     pub(crate) async fn read<T, F>(&self, operation: F) -> Result<T, SystemPortError>
     where
         T: Send + 'static,
@@ -194,3 +204,6 @@ mod settings;
 pub use settings::{SettingsStore, TossSpecHash, TossSpecHashError};
 #[cfg(test)]
 mod settings_tests;
+
+#[cfg(test)]
+mod maintenance_tests;

@@ -14,3 +14,5 @@ pub(crate) const CIPHER_HMAC: &str = "PRAGMA cipher_use_hmac";
 pub(crate) const PAGE_SIZE: &str = "PRAGMA cipher_page_size";
 pub(crate) const SYNCHRONOUS: &str = "PRAGMA synchronous";
 pub(crate) const SET_SYNCHRONOUS: &str = "PRAGMA synchronous = FULL";
+pub(crate) const SET_AUTO_VACUUM: &str = "PRAGMA auto_vacuum = INCREMENTAL";
+pub(crate) const INCREMENTAL_VACUUM: &str = "PRAGMA incremental_vacuum";
