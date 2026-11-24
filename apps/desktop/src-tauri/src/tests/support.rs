@@ -5,14 +5,18 @@ use crate::{
 };
 use std::sync::Arc;
 #[derive(Debug)]
-pub(super) struct TestPorts;
+pub(crate) struct TestPorts;
 impl PortTypes for TestPorts {
     type BrokerRead = testkit_ports::scripted::ScriptedBrokerRead;
     type MarketInfo = Unavailable;
     type MacroSeries = Unavailable;
     type NewsFeed = UnavailableFeed;
     type Fundamentals = Unavailable;
-    type AiProvider = Unavailable;
+    type AiProvider = testkit_ports::chat_fakes::ScriptedAiProvider;
+    type ChatRepository = testkit_ports::chat_fakes::MemoryChatRepository;
+    type ChatRunLedger = testkit_ports::chat_fakes::MemoryChatRunLedger;
+    type ChatQueuePort = testkit_ports::chat_fakes::ScriptedChatQueue;
+    type WarmChatRuntime = testkit_ports::chat_fakes::ScriptedWarmChatRuntime;
     type PortfolioRepository = testkit_ports::memory::MemoryPortfolioRepository;
     type TransactionRepository = Unavailable;
     type MarketDataRepository = Unavailable;
@@ -29,14 +33,18 @@ impl PortTypes for TestPorts {
     type Notifier = Unavailable;
     type UserPresence = testkit_ports::ScriptedPresence;
 }
-pub(super) fn ports() -> Ports<TestPorts> {
+pub(crate) fn ports() -> Ports<TestPorts> {
     Ports {
         broker_read: Arc::new(testkit_ports::scripted::ScriptedBrokerRead::default()),
         market_info: Arc::new(Unavailable),
         macro_series: Arc::new(Unavailable),
         news_feeds: Vec::new(),
         fundamentals: Arc::new(Unavailable),
-        ai_provider: Arc::new(Unavailable),
+        ai_provider: Arc::new(testkit_ports::chat_fakes::ScriptedAiProvider::default()),
+        chat_repository: Arc::new(testkit_ports::chat_fakes::MemoryChatRepository::default()),
+        chat_ledger: Arc::new(testkit_ports::chat_fakes::MemoryChatRunLedger::default()),
+        chat_queue: Arc::new(testkit_ports::chat_fakes::ScriptedChatQueue::default()),
+        warm_chat: Arc::new(testkit_ports::chat_fakes::ScriptedWarmChatRuntime::default()),
         portfolios: Arc::new(testkit_ports::memory::MemoryPortfolioRepository::default()),
         transactions: Arc::new(Unavailable),
         market_data: Arc::new(Unavailable),

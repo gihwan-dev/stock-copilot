@@ -1,15 +1,18 @@
 use application::{
     AccessDenial, AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, AuditEntry, AuditIntegrity,
-    AuditLog, BrokerRead, ChatHistory, CollectedObservation, ConditionalDraftOutcome,
-    DataAvailability, EstimateRepository, FeedCursor, FeedSource, FinancialStatement, Fundamentals,
-    FxRateQuery, HoldingsObservation, HttpStatus, InformationError, IsolationCheck,
-    MacroObservation, MacroSeries, MacroSeriesId, MarketDataRepository, MarketInfo, NewsFeed,
-    NewsMetadata, NewsRepository, Notification, Notifier, PortError, PortErrorKind,
-    PortfolioRepository, ProposalRepository, QuoteObservation, RankingQuery, ReadEndpoint,
-    RecordOutcome, ResetTime, RetryDelay, RunKind, RunSpec, SecretKey, SecretStore, SecretValue,
-    SectorRankingQuery, SettingsRepository, SignalCommitOutcome, SignalMutation, SignalRepository,
-    SignalSnapshot, SignalSourceFacts, SystemFailure, SystemPort, SystemPortError,
-    ThesisRepository, TransactionRead, TransactionRepository, ValuationRepository, WriteCompleted,
+    AuditLog, BrokerRead, ChatHistory, ChatQueueAcquisition, ChatQueuePort, ChatRepository,
+    ChatRunLedger, ChatRunLedgerEntry, ChatSessionId, ChatSessionRecord, ChatSessionSummary,
+    CollectedObservation, ConditionalDraftOutcome, DataAvailability, EstimateRepository,
+    FeedCursor, FeedSource, FinancialStatement, Fundamentals, FxRateQuery, HoldingsObservation,
+    HttpStatus, InformationError, IsolationCheck, MacroObservation, MacroSeries, MacroSeriesId,
+    MarketDataRepository, MarketInfo, NewsFeed, NewsMetadata, NewsRepository, Notification,
+    Notifier, PortError, PortErrorKind, PortfolioRepository, ProposalRepository, QuoteObservation,
+    RankingQuery, ReadEndpoint, RecordOutcome, ResetTime, RetryDelay, RunKind, RunSpec, SecretKey,
+    SecretStore, SecretValue, SectorRankingQuery, SettingsRepository, SignalCommitOutcome,
+    SignalMutation, SignalRepository, SignalSnapshot, SignalSourceFacts, StoredChatEntry,
+    StoredUserMessage, SystemFailure, SystemPort, SystemPortError, ThesisRepository,
+    TransactionRead, TransactionRepository, UserMessageId, ValuationRepository, WarmChatId,
+    WarmChatProbe, WarmChatRequest, WarmChatRuntime, WarmChatSession, WriteCompleted,
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
@@ -880,6 +883,124 @@ pub struct UnavailableStream;
 impl AiEventStream for UnavailableStream {
     fn next(&mut self) -> impl Future<Output = Result<Option<AiEvent>, InformationError>> + Send {
         std::future::ready(Err(InformationError::Unavailable(ResetTime::NotProvided)))
+    }
+}
+impl ChatRepository for Unavailable {
+    fn ensure_session(
+        &self,
+        _session: &ChatSessionId,
+        _now: Timestamp,
+    ) -> impl Future<Output = Result<ChatSessionRecord, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn load_session(
+        &self,
+        _session: &ChatSessionId,
+    ) -> impl Future<Output = Result<Option<ChatSessionRecord>, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn list_sessions(
+        &self,
+    ) -> impl Future<Output = Result<Vec<ChatSessionSummary>, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn append_entry(
+        &self,
+        _session: &ChatSessionId,
+        _entry: &StoredChatEntry,
+    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn load_user_message(
+        &self,
+        _session: &ChatSessionId,
+        _message_id: &UserMessageId,
+    ) -> impl Future<Output = Result<Option<StoredUserMessage>, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+}
+impl ChatRunLedger for Unavailable {
+    fn record_chat_run(
+        &self,
+        _entry: &ChatRunLedgerEntry,
+    ) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+}
+impl ChatQueuePort for Unavailable {
+    fn acquire_chat(
+        &self,
+        _run: &AiRunId,
+    ) -> impl Future<Output = Result<ChatQueueAcquisition, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn release_chat(
+        &self,
+        _run: &AiRunId,
+    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+}
+impl WarmChatRuntime for Unavailable {
+    type Stream = UnavailableStream;
+    fn prewarm(
+        &self,
+        _request: WarmChatRequest,
+    ) -> impl Future<Output = Result<WarmChatProbe, InformationError>> + Send {
+        std::future::ready(Err(InformationError::Unavailable(ResetTime::NotProvided)))
+    }
+    fn store_ready(
+        &self,
+        _session: WarmChatSession,
+    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn take_ready(
+        &self,
+    ) -> impl Future<Output = Result<Option<WarmChatSession>, SystemPortError>> + Send {
+        std::future::ready(Ok(None))
+    }
+    fn send_on_warm(
+        &self,
+        _session: WarmChatSession,
+        _spec: RunSpec,
+        _history: ChatHistory,
+        _message: UntrustedText,
+    ) -> impl Future<Output = Result<Self::Stream, InformationError>> + Send {
+        std::future::ready(Err(InformationError::Unavailable(ResetTime::NotProvided)))
+    }
+    fn discard(
+        &self,
+        _id: &WarmChatId,
+    ) -> impl Future<Output = Result<(), InformationError>> + Send {
+        std::future::ready(Ok(()))
     }
 }
 impl application::CollectedUrlCatalog for Unavailable {
