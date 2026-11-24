@@ -1,7 +1,6 @@
 use crate::platform::background::{BackgroundRuntime, IdleCollectorWorker};
 use crate::platform::scheduled_ports::{AppSpecWatch, AppStoredJobs};
 use crate::ports::{PortTypes, Ports};
-use crate::sqlite_ports::{SharedDatabase, SqliteRepositories};
 use application::SyncPortfolio;
 use domain::Timestamp;
 use scheduler::{
@@ -14,6 +13,7 @@ use scheduler::{
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
+use store_sqlite::SqliteRepositories;
 use tauri::{App, AppHandle, Manager, Runtime};
 
 pub struct AppPortfolioSync<R: Runtime, P: PortTypes> {
@@ -97,12 +97,13 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     {
         return SchedulingStart::InvalidSchedule;
     }
-    if let Some(shared) = app.try_state::<SharedDatabase>()
+    if let Some(repositories) = app.try_state::<Arc<SqliteRepositories>>()
         && register_stored_jobs::<R, P>(
             &mut registry,
             app.handle(),
-            &SqliteRepositories::new(shared.inner().clone()),
-            &ports,
+            repositories.as_ref(),
+            app.try_state::<SpecWatchInputs>()
+                .map(|inputs| inputs.inner().clone()),
         )
         .is_err()
     {
@@ -125,11 +126,17 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     SchedulingStart::Started
 }
 
+#[derive(Debug, Clone)]
+pub struct SpecWatchInputs {
+    pub source: Arc<broker_toss::TossSpecClient>,
+    pub baseline: application::TossSpecBaseline,
+}
+
 pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     registry: &mut JobRegistry,
     app: &AppHandle<R>,
     repositories: &SqliteRepositories,
-    ports: &Ports<P>,
+    spec_watch: Option<SpecWatchInputs>,
 ) -> Result<(), RegistryError> {
     let stored = || {
         Arc::new(AppStoredJobs::<R, P>::new(
@@ -143,15 +150,11 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
         stored(),
         Arc::new(NoMarketCalendar),
     ))?;
-    let clock: Arc<dyn application::Clock> = Arc::<P::Clock>::clone(&ports.clock);
-    if let Ok(http) = broker_toss::TossHttpClient::new(
-        &broker_toss::TossEndpoint::production(),
-        clock,
-        Arc::new(broker_toss::TokioRequestWait),
-    ) {
+    if let Some(inputs) = spec_watch {
         registry.register(TossSpecWatchJob::new(Arc::new(AppSpecWatch::new(
             AppStoredJobs::<R, P>::new(app.clone(), repositories.clone()),
-            Arc::new(broker_toss::TossSpecClient::new(http)),
+            inputs.source,
+            inputs.baseline,
         ))))?;
     }
     Ok(())
