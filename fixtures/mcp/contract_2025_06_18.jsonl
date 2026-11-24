@@ -1,0 +1,15 @@
+{"send":{"id":1,"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"contract-client","version":"0.0.0"},"protocolVersion":"2025-06-18"}}}
+{"recv":{"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{}},"protocolVersion":"2025-06-18","serverInfo":{"name":"stock-copilot-mcp","version":"0.1.0"}}}}
+{"send":{"jsonrpc":"2.0","method":"notifications/initialized"}}
+{"send":{"id":2,"jsonrpc":"2.0","method":"tools/list","params":{}}}
+{"recv":{"id":2,"jsonrpc":"2.0","result":{"tools":[{"annotations":{"destructiveHint":false,"idempotentHint":true,"openWorldHint":false,"readOnlyHint":true},"description":"Contract fixture returning a fixed quote.","inputSchema":{"additionalProperties":false,"properties":{"symbol":{"maxLength":12,"minLength":1,"type":"string"}},"required":["symbol"],"type":"object"},"name":"get_fixture_quote"}]}}}
+{"send":{"id":3,"jsonrpc":"2.0","method":"tools/call","params":{"arguments":{"symbol":"005930"},"name":"get_fixture_quote"}}}
+{"recv":{"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"{\"fetched_at\":\"2026-11-25T09:00:00+09:00\",\"price\":\"71200\",\"symbol\":\"005930\"}","type":"text"}],"isError":false,"structuredContent":{"fetched_at":"2026-11-25T09:00:00+09:00","price":"71200","symbol":"005930"}}}}
+{"send":{"id":4,"jsonrpc":"2.0","method":"tools/call","params":{"arguments":{"side":"buy","symbol":"005930"},"name":"get_fixture_quote"}}}
+{"recv":{"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"{\"code\":\"invalid_input\",\"message\":\"unknown argument field is not allowed\",\"retryable\":false}","type":"text"}],"isError":true,"structuredContent":{"code":"invalid_input","message":"unknown argument field is not allowed","retryable":false}}}}
+{"send":{"id":5,"jsonrpc":"2.0","method":"tools/call","params":{"arguments":{"symbol":"MISSING"},"name":"get_fixture_quote"}}}
+{"recv":{"id":5,"jsonrpc":"2.0","result":{"content":[{"text":"{\"code\":\"data_unavailable\",\"field\":\"symbol\",\"message\":\"no data for the requested symbol\",\"retryable\":false}","type":"text"}],"isError":true,"structuredContent":{"code":"data_unavailable","field":"symbol","message":"no data for the requested symbol","retryable":false}}}}
+{"send":{"id":6,"jsonrpc":"2.0","method":"tools/call","params":{"arguments":{},"name":"place_order"}}}
+{"recv":{"id":6,"jsonrpc":"2.0","result":{"content":[{"text":"{\"code\":\"unknown_tool\",\"field\":\"name\",\"message\":\"requested tool is not registered\",\"retryable\":false}","type":"text"}],"isError":true,"structuredContent":{"code":"unknown_tool","field":"name","message":"requested tool is not registered","retryable":false}}}}
+{"send":{"id":7,"jsonrpc":"2.0","method":"ping"}}
+{"recv":{"id":7,"jsonrpc":"2.0","result":{}}}

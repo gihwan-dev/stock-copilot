@@ -382,6 +382,21 @@ pub use market_overview::{
     OverviewFreshness, OverviewObservation, OverviewRequest,
 };
 
+mod market_tool_reads;
+pub use market_tool_reads::{
+    CandleToolLine, CandleWindow, CandleWindowError, CandlesToolView, InvestorFlowToolLine,
+    InvestorFlowToolView, MarketOverviewToolView, MarketToolReads, OverviewItem, OverviewToolLine,
+    OverviewUnit, QuoteToolView, RankingToolKind, RankingToolLine, RankingsToolView,
+    SectorToolLine, SectorsToolView, SessionStatus, SessionToolLine, ValueProvenance,
+};
+mod portfolio_tool_reads;
+pub use portfolio_tool_reads::{
+    AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
+    BenchmarkReturnLine, BuyingPowerLine, ConcentrationLine, HoldingToolLine, PerformanceBenchmark,
+    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, RiskMetrics,
+    SampleSufficiency, TransactionAdmission, TransactionToolFilter, TransactionToolKind,
+    TransactionToolLine, TransactionsToolView,
+};
 mod portfolio_views;
 pub use portfolio_views::{
     GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,
@@ -504,6 +519,11 @@ pub use news_data_settings::{
     SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
+mod deep_research;
+pub use deep_research::{
+    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchEvidenceSource,
+    ResearchWebCollector, ResearchWebOutcome, ResearchWebStore,
+};
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
