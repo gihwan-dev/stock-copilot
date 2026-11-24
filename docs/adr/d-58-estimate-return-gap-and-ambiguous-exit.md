@@ -14,6 +14,8 @@ ADR 0151(D-54)은 추정별 수익률 계산 경로 `domain::estimate_return`을
 1. 목표·손절 경계를 넘겨 열린 봉(정규장 시가와 장중 분봉 시가 모두): `EstimateReturnError::GapPricePending`으로 보류했다.
 2. 같은 봉에서 목표와 손절에 모두 닿은 확정 모호 실패(`OutcomeState::Failure(OutcomeFailure::Ambiguous)`): `EstimateReturnError::AmbiguousExit`로 보류했다.
 
+이 ADR은 기존 보호 파일인 ADR 0151의 12행·14행(갭 `GapPricePending` 보류, 같은 봉 모호 실패 `AmbiguousExit` 보류)과 31~32행(정규장·장중 분봉 시가 갭 및 같은 봉 모호 실패의 정의 대기)을 대체한다. 나머지 보류 사유와 보정 이력 상한 정책은 ADR 0151의 결정을 유지한다.
+
 D-54 메인 평가는 두 경우에 대해 다음 정책을 확정하고 D-58로 등록했다.
 
 - **갭**: 목표·손절 경계를 넘겨 열린 봉은 그 봉의 시가를 청산 가격으로 쓴다(정규장 시가와 장중 분봉 시가 모두). 실제 체결 가능 가격에 가깝고 손절 갭의 손실을 숨기지 않기 위함이다.
