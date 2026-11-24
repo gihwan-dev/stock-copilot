@@ -22,10 +22,10 @@ use domain::{
 };
 use std::collections::BTreeSet;
 
-fn put_market(out: &mut Encoder, market: &Market) {
+pub(crate) fn put_market(out: &mut Encoder, market: &Market) {
     out.push(market.as_code().as_str());
 }
-fn take_market(input: &mut Decoder<'_>) -> rusqlite::Result<Market> {
+pub(crate) fn take_market(input: &mut Decoder<'_>) -> rusqlite::Result<Market> {
     let code = MarketCode::try_new(input.next()?).map_err(invalid)?;
     Ok(Market::new(code))
 }
@@ -266,7 +266,7 @@ fn take_money_result(input: &mut Decoder<'_>) -> rusqlite::Result<Result<Money, 
         _ => Err(invalid(())),
     }
 }
-fn put_fx_rate(out: &mut Encoder, rate: FxRate) {
+pub(crate) fn put_fx_rate(out: &mut Encoder, rate: FxRate) {
     out.push(
         &rate
             .quote_per_base()
@@ -289,7 +289,7 @@ fn put_fx_rate(out: &mut Encoder, rate: FxRate) {
         FxSource::TossOpenApi => "toss_open_api",
     });
 }
-fn take_fx_rate(input: &mut Decoder<'_>) -> rusqlite::Result<FxRate> {
+pub(crate) fn take_fx_rate(input: &mut Decoder<'_>) -> rusqlite::Result<FxRate> {
     let numeric = NumericInput::try_new(input.next()?).map_err(invalid)?;
     let pair = match input.next()? {
         "USD_KRW" => FxPair::UsdKrw,
@@ -310,7 +310,7 @@ fn take_fx_rate(input: &mut Decoder<'_>) -> rusqlite::Result<FxRate> {
     };
     FxRate::parse(&numeric, pair, kind, validity, source).map_err(invalid)
 }
-fn put_candle(out: &mut Encoder, candle: &Candle) {
+pub(crate) fn put_candle(out: &mut Encoder, candle: &Candle) {
     out.push(candle.instrument().as_str());
     put_timestamp(out, candle.time().timestamp());
     out.push(match candle.time().period() {
@@ -335,7 +335,7 @@ fn put_candle(out: &mut Encoder, candle: &Candle) {
         CandleStatus::InProgress => "in_progress",
     });
 }
-fn take_candle(input: &mut Decoder<'_>) -> rusqlite::Result<Candle> {
+pub(crate) fn take_candle(input: &mut Decoder<'_>) -> rusqlite::Result<Candle> {
     let instrument = InstrumentId::try_new(input.next()?).map_err(invalid)?;
     let timestamp = take_timestamp(input)?;
     let period = match input.next()? {
@@ -898,7 +898,7 @@ fn put_cash_rejection(out: &mut Encoder, rejection: CashRequestRejection) {
         CashRequestRejection::BatchLimitExceeded => "batch_limit_exceeded",
     });
 }
-fn put_cash_failure(out: &mut Encoder, failure: CashObservationFailure) {
+pub(crate) fn put_cash_failure(out: &mut Encoder, failure: CashObservationFailure) {
     match failure {
         CashObservationFailure::AccessDenied(cause) => {
             out.push("access_denied");
@@ -996,7 +996,9 @@ fn take_cash_failure_unavailable(
     };
     Ok(CashObservationFailure::Unavailable { cause, retry })
 }
-fn take_cash_failure(input: &mut Decoder<'_>) -> rusqlite::Result<CashObservationFailure> {
+pub(crate) fn take_cash_failure(
+    input: &mut Decoder<'_>,
+) -> rusqlite::Result<CashObservationFailure> {
     match input.next()? {
         "access_denied" => Ok(CashObservationFailure::AccessDenied(
             match input.next()? {

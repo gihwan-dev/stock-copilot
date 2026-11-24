@@ -47,3 +47,8 @@ sha256 = "b6e60a6119333d85641ea8073b26f04673105104d97493a36a40be319f8a25fb"
 number = 10
 file = "0010_estimates_and_valuations.sql"
 sha256 = "e872e682a11ddfa90d0582de18add09f406e502cb5cbb56eae9e8b65ac5a3877"
+
+[[migration]]
+number = 11
+file = "0011_proposals_and_signals.sql"
+sha256 = "fdb81878e025fe5c41e89cc4e1c9841133b7331675e98de9f861b64865d67562"

@@ -174,3 +174,8 @@ mod estimates;
 pub use estimates::{EstimateStore, ValuationStore};
 #[cfg(test)]
 mod estimates_tests;
+
+mod signals;
+pub use signals::SignalStore;
+#[cfg(test)]
+mod signals_tests;

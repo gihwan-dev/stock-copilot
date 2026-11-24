@@ -1,5 +1,5 @@
-mod codec;
-mod valuation_codec;
+pub(crate) mod codec;
+pub(crate) mod valuation_codec;
 
 use crate::{Database, migration::digest, sql::estimates as sql};
 use application::resolve_estimates::{
@@ -116,7 +116,7 @@ fn load_assignments(connection: &Connection) -> rusqlite::Result<EstimateAssignm
     EstimateAssignments::restore_from_saved_state(entries).map_err(invalid)
 }
 
-fn decode_joined_record(
+pub(crate) fn decode_joined_record(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<EstimateSubmissionRecord<AiRunId, ReasoningEffort>> {
     let task_id = CalibrationEstimateId::try_new(&row.get::<_, String>(0)?).map_err(invalid)?;
@@ -137,7 +137,7 @@ fn decode_joined_record(
     EstimateSubmissionRecord::create(issued, submission, narrative, metadata).map_err(invalid)
 }
 
-fn load_latest_calibration(
+pub(crate) fn load_latest_calibration(
     connection: &Connection,
     key: &CalibrationKey,
 ) -> rusqlite::Result<Option<(i64, Calibration)>> {

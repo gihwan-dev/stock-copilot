@@ -20,76 +20,76 @@ use domain::{
     Timestamp, ToolReference, UnixSeconds, UntrustedText, Volatility, VolatilitySamples,
 };
 
-pub(super) fn invalid<E>(_error: E) -> rusqlite::Error {
+pub(crate) fn invalid<E>(_error: E) -> rusqlite::Error {
     rusqlite::Error::InvalidQuery
 }
 
-pub(super) struct Encoder(String);
+pub(crate) struct Encoder(String);
 
 impl Encoder {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(String::new())
     }
-    pub(super) fn push(&mut self, value: &str) {
+    pub(crate) fn push(&mut self, value: &str) {
         self.0.push_str(&value.len().to_string());
         self.0.push(':');
         self.0.push_str(value);
     }
-    pub(super) fn push_usize(&mut self, value: usize) {
+    pub(crate) fn push_usize(&mut self, value: usize) {
         self.push(&value.to_string());
     }
-    pub(super) fn push_i64(&mut self, value: i64) {
+    pub(crate) fn push_i64(&mut self, value: i64) {
         self.push(&value.to_string());
     }
-    pub(super) fn push_u64(&mut self, value: u64) {
+    pub(crate) fn push_u64(&mut self, value: u64) {
         self.push(&value.to_string());
     }
-    pub(super) fn push_u32(&mut self, value: u32) {
+    pub(crate) fn push_u32(&mut self, value: u32) {
         self.push(&value.to_string());
     }
-    pub(super) fn push_i32(&mut self, value: i32) {
+    pub(crate) fn push_i32(&mut self, value: i32) {
         self.push(&value.to_string());
     }
-    pub(super) fn push_u8(&mut self, value: u8) {
+    pub(crate) fn push_u8(&mut self, value: u8) {
         self.push(&value.to_string());
     }
-    pub(super) fn finish(self) -> String {
+    pub(crate) fn finish(self) -> String {
         self.0
     }
 }
 
-pub(super) struct Decoder<'input>(&'input str);
+pub(crate) struct Decoder<'input>(&'input str);
 
 impl<'input> Decoder<'input> {
-    pub(super) const fn new(raw: &'input str) -> Self {
+    pub(crate) const fn new(raw: &'input str) -> Self {
         Self(raw)
     }
-    pub(super) fn next(&mut self) -> rusqlite::Result<&'input str> {
+    pub(crate) fn next(&mut self) -> rusqlite::Result<&'input str> {
         let (length, rest) = self.0.split_once(':').ok_or_else(|| invalid(()))?;
         let size = length.parse::<usize>().map_err(invalid)?;
         let value = rest.get(..size).ok_or_else(|| invalid(()))?;
         self.0 = rest.get(size..).ok_or_else(|| invalid(()))?;
         Ok(value)
     }
-    pub(super) fn next_usize(&mut self) -> rusqlite::Result<usize> {
+    pub(crate) fn next_usize(&mut self) -> rusqlite::Result<usize> {
         self.next()?.parse::<usize>().map_err(invalid)
     }
-    pub(super) fn next_i64(&mut self) -> rusqlite::Result<i64> {
+    pub(crate) fn next_i64(&mut self) -> rusqlite::Result<i64> {
         self.next()?.parse::<i64>().map_err(invalid)
     }
-    pub(super) fn next_u64(&mut self) -> rusqlite::Result<u64> {
+    pub(crate) fn next_u64(&mut self) -> rusqlite::Result<u64> {
         self.next()?.parse::<u64>().map_err(invalid)
     }
-    pub(super) fn next_u32(&mut self) -> rusqlite::Result<u32> {
+    pub(crate) fn next_u32(&mut self) -> rusqlite::Result<u32> {
         self.next()?.parse::<u32>().map_err(invalid)
     }
-    pub(super) fn next_i32(&mut self) -> rusqlite::Result<i32> {
+    pub(crate) fn next_i32(&mut self) -> rusqlite::Result<i32> {
         self.next()?.parse::<i32>().map_err(invalid)
     }
-    pub(super) fn next_u8(&mut self) -> rusqlite::Result<u8> {
+    pub(crate) fn next_u8(&mut self) -> rusqlite::Result<u8> {
         self.next()?.parse::<u8>().map_err(invalid)
     }
-    pub(super) fn finish(self) -> rusqlite::Result<()> {
+    pub(crate) fn finish(self) -> rusqlite::Result<()> {
         if self.0.is_empty() {
             Ok(())
         } else {
@@ -98,96 +98,96 @@ impl<'input> Decoder<'input> {
     }
 }
 
-pub(super) fn put_currency(out: &mut Encoder, currency: Currency) {
+pub(crate) fn put_currency(out: &mut Encoder, currency: Currency) {
     out.push(match currency {
         Currency::Krw => "KRW",
         Currency::Usd => "USD",
     });
 }
-pub(super) fn take_currency(input: &mut Decoder<'_>) -> rusqlite::Result<Currency> {
+pub(crate) fn take_currency(input: &mut Decoder<'_>) -> rusqlite::Result<Currency> {
     match input.next()? {
         "KRW" => Ok(Currency::Krw),
         "USD" => Ok(Currency::Usd),
         _ => Err(invalid(())),
     }
 }
-pub(super) fn put_known_market(out: &mut Encoder, market: KnownMarket) {
+pub(crate) fn put_known_market(out: &mut Encoder, market: KnownMarket) {
     out.push(match market {
         KnownMarket::Kr => "KR",
         KnownMarket::Us => "US",
     });
 }
-pub(super) fn take_known_market(input: &mut Decoder<'_>) -> rusqlite::Result<KnownMarket> {
+pub(crate) fn take_known_market(input: &mut Decoder<'_>) -> rusqlite::Result<KnownMarket> {
     match input.next()? {
         "KR" => Ok(KnownMarket::Kr),
         "US" => Ok(KnownMarket::Us),
         _ => Err(invalid(())),
     }
 }
-pub(super) fn put_timestamp(out: &mut Encoder, value: Timestamp) {
+pub(crate) fn put_timestamp(out: &mut Encoder, value: Timestamp) {
     out.push_i64(*value.utc_seconds().as_i64());
     out.push_u32(*value.nanosecond().as_u32());
     out.push_i32(*value.offset_seconds().as_i32());
 }
-pub(super) fn take_timestamp(input: &mut Decoder<'_>) -> rusqlite::Result<Timestamp> {
+pub(crate) fn take_timestamp(input: &mut Decoder<'_>) -> rusqlite::Result<Timestamp> {
     let seconds = UnixSeconds::new(input.next_i64()?);
     let nanos = Nanosecond::new(input.next_u32()?);
     let offset = OffsetSeconds::new(input.next_i32()?);
     Timestamp::from_parts(seconds, nanos, offset).map_err(invalid)
 }
-pub(super) fn put_date(out: &mut Encoder, value: CalendarDate) {
+pub(crate) fn put_date(out: &mut Encoder, value: CalendarDate) {
     out.push_i32(*value.year().as_i32());
     out.push_u8(*value.month().as_u8());
     out.push_u8(*value.day().as_u8());
 }
-pub(super) fn take_date(input: &mut Decoder<'_>) -> rusqlite::Result<CalendarDate> {
+pub(crate) fn take_date(input: &mut Decoder<'_>) -> rusqlite::Result<CalendarDate> {
     let year = CalendarYear::new(input.next_i32()?);
     let month = MonthNumber::new(input.next_u8()?);
     let day = DayNumber::new(input.next_u8()?);
     CalendarDate::from_parts(year, month, day).map_err(invalid)
 }
-pub(super) fn put_interval(out: &mut Encoder, value: TimeInterval) {
+pub(crate) fn put_interval(out: &mut Encoder, value: TimeInterval) {
     put_timestamp(out, value.start());
     put_timestamp(out, value.end());
 }
-pub(super) fn take_interval(input: &mut Decoder<'_>) -> rusqlite::Result<TimeInterval> {
+pub(crate) fn take_interval(input: &mut Decoder<'_>) -> rusqlite::Result<TimeInterval> {
     let start = take_timestamp(input)?;
     let end = take_timestamp(input)?;
     TimeInterval::try_new(start, end).map_err(invalid)
 }
-pub(super) fn put_money(out: &mut Encoder, value: Money) {
+pub(crate) fn put_money(out: &mut Encoder, value: Money) {
     put_currency(out, value.currency());
     out.push(&value.amount().as_decimal().to_string());
 }
-pub(super) fn take_money(input: &mut Decoder<'_>) -> rusqlite::Result<Money> {
+pub(crate) fn take_money(input: &mut Decoder<'_>) -> rusqlite::Result<Money> {
     let currency = take_currency(input)?;
     let numeric = NumericInput::try_new(input.next()?).map_err(invalid)?;
     Money::parse(&numeric, currency).map_err(invalid)
 }
-pub(super) fn put_price(out: &mut Encoder, value: Price) {
+pub(crate) fn put_price(out: &mut Encoder, value: Price) {
     put_currency(out, value.as_money().currency());
     out.push(&value.as_money().amount().as_decimal().to_string());
 }
-pub(super) fn take_price(input: &mut Decoder<'_>) -> rusqlite::Result<Price> {
+pub(crate) fn take_price(input: &mut Decoder<'_>) -> rusqlite::Result<Price> {
     let currency = take_currency(input)?;
     let numeric = NumericInput::try_new(input.next()?).map_err(invalid)?;
     Price::parse(&numeric, currency).map_err(invalid)
 }
-pub(super) fn put_quantity(out: &mut Encoder, value: Quantity) {
+pub(crate) fn put_quantity(out: &mut Encoder, value: Quantity) {
     out.push(&value.as_decimal().to_string());
 }
-pub(super) fn take_quantity(input: &mut Decoder<'_>) -> rusqlite::Result<Quantity> {
+pub(crate) fn take_quantity(input: &mut Decoder<'_>) -> rusqlite::Result<Quantity> {
     let numeric = NumericInput::try_new(input.next()?).map_err(invalid)?;
     Quantity::parse(&numeric).map_err(invalid)
 }
-pub(super) fn put_ratio(out: &mut Encoder, value: Ratio) {
+pub(crate) fn put_ratio(out: &mut Encoder, value: Ratio) {
     out.push(&value.as_decimal().to_string());
 }
-pub(super) fn take_ratio(input: &mut Decoder<'_>) -> rusqlite::Result<Ratio> {
+pub(crate) fn take_ratio(input: &mut Decoder<'_>) -> rusqlite::Result<Ratio> {
     let numeric = NumericInput::try_new(input.next()?).map_err(invalid)?;
     Ratio::parse(&numeric).map_err(invalid)
 }
-fn put_horizon(out: &mut Encoder, value: Horizon) {
+pub(crate) fn put_horizon(out: &mut Encoder, value: Horizon) {
     out.push(match value.selection() {
         HorizonSelection::Hours => "hours",
         HorizonSelection::FewDays => "few_days",
@@ -195,7 +195,7 @@ fn put_horizon(out: &mut Encoder, value: Horizon) {
         HorizonSelection::HalfYearOrMore => "half_year_or_more",
     });
 }
-fn take_horizon(input: &mut Decoder<'_>) -> rusqlite::Result<Horizon> {
+pub(crate) fn take_horizon(input: &mut Decoder<'_>) -> rusqlite::Result<Horizon> {
     let selection = match input.next()? {
         "hours" => HorizonSelection::Hours,
         "few_days" => HorizonSelection::FewDays,
@@ -205,14 +205,14 @@ fn take_horizon(input: &mut Decoder<'_>) -> rusqlite::Result<Horizon> {
     };
     Ok(Horizon::new(selection))
 }
-fn put_appetite(out: &mut Encoder, value: RiskAppetite) {
+pub(crate) fn put_appetite(out: &mut Encoder, value: RiskAppetite) {
     out.push(match value {
         RiskAppetite::Conservative => "conservative",
         RiskAppetite::Neutral => "neutral",
         RiskAppetite::Aggressive => "aggressive",
     });
 }
-fn take_appetite(input: &mut Decoder<'_>) -> rusqlite::Result<RiskAppetite> {
+pub(crate) fn take_appetite(input: &mut Decoder<'_>) -> rusqlite::Result<RiskAppetite> {
     match input.next()? {
         "conservative" => Ok(RiskAppetite::Conservative),
         "neutral" => Ok(RiskAppetite::Neutral),
@@ -322,13 +322,13 @@ pub(super) fn decode_cost_eligible_task(payload: &str) -> rusqlite::Result<CostE
     })
     .map_err(invalid)
 }
-pub(super) fn put_calibration_key(out: &mut Encoder, key: &CalibrationKey) {
+pub(crate) fn put_calibration_key(out: &mut Encoder, key: &CalibrationKey) {
     out.push(key.model().provider().as_str());
     out.push(key.model().name().as_str());
     out.push(key.model().version().as_str());
     put_horizon(out, key.horizon());
 }
-pub(super) fn take_calibration_key(input: &mut Decoder<'_>) -> rusqlite::Result<CalibrationKey> {
+pub(crate) fn take_calibration_key(input: &mut Decoder<'_>) -> rusqlite::Result<CalibrationKey> {
     let provider = ModelIdentityPart::try_new(input.next()?).map_err(invalid)?;
     let name = ModelIdentityPart::try_new(input.next()?).map_err(invalid)?;
     let version = ModelIdentityPart::try_new(input.next()?).map_err(invalid)?;
@@ -338,7 +338,7 @@ pub(super) fn take_calibration_key(input: &mut Decoder<'_>) -> rusqlite::Result<
         horizon,
     ))
 }
-pub(super) fn encode_calibration_key(key: &CalibrationKey) -> String {
+pub(crate) fn encode_calibration_key(key: &CalibrationKey) -> String {
     let mut out = Encoder::new();
     out.push("cal-key-v1");
     put_calibration_key(&mut out, key);
@@ -353,7 +353,7 @@ pub(super) fn decode_calibration_key(payload: &str) -> rusqlite::Result<Calibrat
     input.finish()?;
     Ok(key)
 }
-fn put_ai_probability(out: &mut Encoder, value: AiProbability) {
+pub(crate) fn put_ai_probability(out: &mut Encoder, value: AiProbability) {
     out.push(
         &value
             .into_probability()
@@ -363,11 +363,11 @@ fn put_ai_probability(out: &mut Encoder, value: AiProbability) {
             .to_string(),
     );
 }
-fn take_ai_probability(input: &mut Decoder<'_>) -> rusqlite::Result<AiProbability> {
+pub(crate) fn take_ai_probability(input: &mut Decoder<'_>) -> rusqlite::Result<AiProbability> {
     let parsed = AiProbabilityInput::try_new(input.next()?).map_err(invalid)?;
     AiProbability::parse(&parsed).map_err(invalid)
 }
-fn put_news_source(out: &mut Encoder, source: &NewsSource) {
+pub(crate) fn put_news_source(out: &mut Encoder, source: &NewsSource) {
     out.push(match source {
         NewsSource::Hankyung => "hankyung",
         NewsSource::Maekyung => "maekyung",
@@ -379,7 +379,7 @@ fn put_news_source(out: &mut Encoder, source: &NewsSource) {
         NewsSource::YahooFinance => "yahoo_finance",
     });
 }
-fn take_news_source(input: &mut Decoder<'_>) -> rusqlite::Result<NewsSource> {
+pub(crate) fn take_news_source(input: &mut Decoder<'_>) -> rusqlite::Result<NewsSource> {
     match input.next()? {
         "hankyung" => Ok(NewsSource::Hankyung),
         "maekyung" => Ok(NewsSource::Maekyung),
@@ -392,7 +392,7 @@ fn take_news_source(input: &mut Decoder<'_>) -> rusqlite::Result<NewsSource> {
         _ => Err(invalid(())),
     }
 }
-fn put_evidence(out: &mut Encoder, evidence: &Evidence) {
+pub(crate) fn put_evidence(out: &mut Encoder, evidence: &Evidence) {
     out.push_usize(evidence.as_items().len());
     for item in evidence.as_items() {
         match item {
@@ -430,7 +430,7 @@ fn put_evidence(out: &mut Encoder, evidence: &Evidence) {
         }
     }
 }
-fn take_evidence(input: &mut Decoder<'_>) -> rusqlite::Result<Evidence> {
+pub(crate) fn take_evidence(input: &mut Decoder<'_>) -> rusqlite::Result<Evidence> {
     let count = input.next_usize()?;
     if !(1..=8).contains(&count) {
         return Err(invalid(()));
@@ -730,7 +730,7 @@ pub(super) fn decode_outcome(payload: &str) -> rusqlite::Result<EstimateOutcome>
     input.finish()?;
     EstimateOutcome::restore_from_saved_state(saved).map_err(invalid)
 }
-pub(super) fn encode_calibration(calibration: &Calibration) -> String {
+pub(crate) fn encode_calibration(calibration: &Calibration) -> String {
     let mut out = Encoder::new();
     out.push("calibration-v1");
     put_calibration_key(&mut out, calibration.key());
@@ -752,7 +752,7 @@ pub(super) fn encode_calibration(calibration: &Calibration) -> String {
     }
     out.finish()
 }
-pub(super) fn decode_calibration(payload: &str) -> rusqlite::Result<Calibration> {
+pub(crate) fn decode_calibration(payload: &str) -> rusqlite::Result<Calibration> {
     let mut input = Decoder::new(payload);
     if input.next()? != "calibration-v1" {
         return Err(invalid(()));

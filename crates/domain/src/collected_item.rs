@@ -57,6 +57,16 @@ impl CollectedItem {
         Self::from_source(InformationSource::Web, url, title, body)
     }
 
+    #[must_use]
+    pub const fn from_saved_source(
+        source: InformationSource,
+        url: NormalizedUrl,
+        title: UntrustedText,
+        body: Option<UntrustedText>,
+    ) -> Self {
+        Self::from_source(source, url, title, body)
+    }
+
     pub(crate) const fn from_source(
         source: InformationSource,
         url: NormalizedUrl,

@@ -51,3 +51,7 @@ pub(crate) mod instrument_mapping_tests;
 pub(crate) mod estimates;
 #[cfg(test)]
 pub(crate) mod estimates_tests;
+
+pub(crate) mod signals;
+#[cfg(test)]
+pub(crate) mod signals_tests;
