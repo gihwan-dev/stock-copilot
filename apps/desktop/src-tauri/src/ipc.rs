@@ -5,6 +5,7 @@ pub mod chat_hub;
 pub mod error;
 pub mod event;
 pub mod open_external;
+pub mod order_approval;
 pub mod registry;
 
 #[cfg(test)]
