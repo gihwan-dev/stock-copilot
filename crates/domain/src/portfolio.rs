@@ -33,6 +33,10 @@ impl BuyingPower {
             observed_at,
         }
     }
+    #[must_use]
+    pub fn from_observation(observation: crate::CashObservation) -> Self {
+        buying_power_from_observation(observation)
+    }
     pub const fn money(self) -> Result<Money, PortfolioError> {
         match self.amount {
             BuyingPowerAmount::Available(value) => Ok(value),

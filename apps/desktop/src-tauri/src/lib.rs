@@ -1,3 +1,4 @@
+pub mod audit_queue;
 pub mod bindings;
 pub mod database;
 pub mod exit;

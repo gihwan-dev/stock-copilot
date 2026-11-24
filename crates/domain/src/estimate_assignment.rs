@@ -47,6 +47,13 @@ impl<Run> IssuedEstimateTask<Run> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedIssuedEstimateTask<Run> {
+    pub id: CalibrationEstimateId,
+    pub run: Run,
+    pub task: CostEligibleTask,
+    pub consumption: EstimateConsumption,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimateAssignments<Run>(Vec<IssuedEstimateTask<Run>>);
 impl<Run: Clone + Eq> Default for EstimateAssignments<Run> {
     fn default() -> Self {
@@ -54,6 +61,30 @@ impl<Run: Clone + Eq> Default for EstimateAssignments<Run> {
     }
 }
 impl<Run: Clone + Eq> EstimateAssignments<Run> {
+    #[must_use]
+    pub fn entries(&self) -> &[IssuedEstimateTask<Run>] {
+        &self.0
+    }
+    pub fn restore_from_saved_state(
+        entries: Vec<SavedIssuedEstimateTask<Run>>,
+    ) -> Result<Self, EstimateAssignmentError> {
+        let mut restored = Vec::with_capacity(entries.len());
+        for entry in entries {
+            if restored
+                .iter()
+                .any(|existing: &IssuedEstimateTask<Run>| existing.id.0 == entry.id)
+            {
+                return Err(EstimateAssignmentError::AlreadyIssued);
+            }
+            restored.push(IssuedEstimateTask {
+                id: IssuedEstimateTaskId(entry.id),
+                run: entry.run,
+                task: entry.task,
+                consumption: entry.consumption,
+            });
+        }
+        Ok(Self(restored))
+    }
     pub fn issue(
         &self,
         id: CalibrationEstimateId,

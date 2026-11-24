@@ -5,12 +5,12 @@ use std::time::Duration;
 
 use application::{Clock, HttpStatus, ReadEndpoint, RetryDelay, SecretValue};
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+use reqwest::header::{AUTHORIZATION, CONNECTION, HeaderMap, HeaderValue, UPGRADE};
 use reqwest::{Client, Url};
 
 use crate::endpoint::EndpointMode;
 use crate::{
-    ReadRequest, TossEndpoint, TossErrorBody, TossMappedError, map_toss_read_error,
+    ReadRequest, TossEndpoint, TossErrorBody, TossMappedError, TossWsEndpoint, map_toss_read_error,
     map_toss_token_error,
 };
 
@@ -68,12 +68,28 @@ impl fmt::Debug for RawResponse {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublicDocsRoute {
+    Versions,
+    LatestOpenApi,
+}
+
+impl PublicDocsRoute {
+    const fn path(self) -> &'static str {
+        match self {
+            Self::Versions => "/openapi-docs/versions.json",
+            Self::LatestOpenApi => "/openapi-docs/latest/openapi.json",
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct ResponseHeaders {
     retry_after: Option<String>,
     limit: Option<String>,
     remaining: Option<String>,
     reset: Option<String>,
+    last_modified: Option<String>,
 }
 
 impl fmt::Debug for ResponseHeaders {
@@ -112,6 +128,10 @@ impl ResponseHeaders {
     #[must_use]
     pub fn reset(&self) -> Option<&str> {
         self.reset.as_deref()
+    }
+    #[must_use]
+    pub fn last_modified(&self) -> Option<&str> {
+        self.last_modified.as_deref()
     }
 }
 
@@ -185,6 +205,118 @@ fn configured_client(mode: EndpointMode) -> reqwest::ClientBuilder {
         EndpointMode::Loopback => builder
             .https_only(false)
             .dns_resolver(Arc::new(LoopbackResolver)),
+    }
+}
+
+fn configured_ws_client(mode: EndpointMode) -> reqwest::ClientBuilder {
+    let builder = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(5))
+        .http1_only();
+    match mode {
+        EndpointMode::Production => builder.https_only(true),
+        EndpointMode::Loopback => builder
+            .https_only(false)
+            .dns_resolver(Arc::new(LoopbackResolver)),
+    }
+}
+
+pub struct TossWsConnector {
+    client: Client,
+    origin: Url,
+}
+
+impl fmt::Debug for TossWsConnector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("TossWsConnector(<redacted>)")
+    }
+}
+
+pub(crate) enum WsUpgradeOutcome {
+    Connected(reqwest::Upgraded),
+    Unauthorized,
+    Forbidden,
+    ServiceUnavailable,
+    UnexpectedStatus(u16),
+}
+
+impl WsUpgradeOutcome {
+    fn valid_upgrade_headers(headers: &HeaderMap, expected_accept: &str) -> bool {
+        let upgrade_ok = headers
+            .get(UPGRADE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.eq_ignore_ascii_case("websocket"));
+        let connection_ok = headers
+            .get(CONNECTION)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| {
+                value
+                    .split(',')
+                    .any(|part| part.trim().eq_ignore_ascii_case("upgrade"))
+            });
+        let accept_ok = headers
+            .get("sec-websocket-accept")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value == expected_accept);
+        upgrade_ok && connection_ok && accept_ok
+    }
+}
+
+impl TossWsConnector {
+    pub fn new(endpoint: &TossWsEndpoint) -> Result<Self, TossHttpError> {
+        let origin =
+            Url::parse(endpoint.origin()).map_err(|_error| TossHttpError::InvalidEndpoint)?;
+        match endpoint.mode() {
+            EndpointMode::Production => {}
+            EndpointMode::Loopback => validate_loopback(&origin)?,
+        }
+        let client = configured_ws_client(endpoint.mode())
+            .build()
+            .map_err(|_error| TossHttpError::Configuration)?;
+        Ok(Self { client, origin })
+    }
+
+    pub(crate) async fn open_upgrade(
+        &self,
+        token: &SecretValue,
+        ws_key: &str,
+        expected_accept: &str,
+    ) -> Result<WsUpgradeOutcome, TossHttpError> {
+        let mut url = self.origin.clone();
+        url.set_path("/ws/v1");
+        let authorization_bytes =
+            SecretValue::new([b"Bearer ", token.as_exposed_secret()].concat());
+        let authorization = sensitive_header(&authorization_bytes)?;
+        let send_future = self
+            .client
+            .get(url)
+            .header(AUTHORIZATION, authorization)
+            .header(UPGRADE, "websocket")
+            .header(CONNECTION, "Upgrade")
+            .header("Sec-WebSocket-Version", "13")
+            .header("Sec-WebSocket-Key", ws_key)
+            .send();
+        let response = tokio::time::timeout(Duration::from_secs(10), send_future)
+            .await
+            .map_err(|_elapsed| TossHttpError::Transport)?
+            .map_err(|_error| TossHttpError::Transport)?;
+        match response.status().as_u16() {
+            101 => {
+                if !WsUpgradeOutcome::valid_upgrade_headers(response.headers(), expected_accept) {
+                    return Err(TossHttpError::Transport);
+                }
+                let upgraded = response
+                    .upgrade()
+                    .await
+                    .map_err(|_error| TossHttpError::Transport)?;
+                Ok(WsUpgradeOutcome::Connected(upgraded))
+            }
+            401 => Ok(WsUpgradeOutcome::Unauthorized),
+            403 => Ok(WsUpgradeOutcome::Forbidden),
+            503 => Ok(WsUpgradeOutcome::ServiceUnavailable),
+            other => Ok(WsUpgradeOutcome::UnexpectedStatus(other)),
+        }
     }
 }
 
@@ -286,6 +418,21 @@ impl TossHttpClient {
             attempt = attempt.saturating_add(1);
         }
     }
+    pub async fn get_public_doc(
+        &self,
+        route: PublicDocsRoute,
+    ) -> Result<RawResponse, TossHttpError> {
+        let mut url = self.origin.clone();
+        url.set_path(route.path());
+        receive(
+            self.client
+                .get(url)
+                .send()
+                .await
+                .map_err(|_error| TossHttpError::Transport)?,
+        )
+        .await
+    }
 }
 
 pub(crate) async fn receive(mut response: reqwest::Response) -> Result<RawResponse, TossHttpError> {
@@ -295,6 +442,7 @@ pub(crate) async fn receive(mut response: reqwest::Response) -> Result<RawRespon
         limit: header(response.headers(), "X-RateLimit-Limit"),
         remaining: header(response.headers(), "X-RateLimit-Remaining"),
         reset: header(response.headers(), "X-RateLimit-Reset"),
+        last_modified: header(response.headers(), "Last-Modified"),
     };
     let mut chunks = Vec::new();
     let mut length = 0_usize;
@@ -519,6 +667,44 @@ mod tests {
         assert_eq!(
             super::validate_loopback(&reqwest::Url::parse("http://127.0.0.1:80").expect("URL")),
             Ok(())
+        );
+    }
+
+    #[test]
+    fn ws_product_configuration_rejects_plaintext_and_omits_total_timeout() {
+        let probe = testkit::ConnectionProbe::bind().expect("listener");
+        let endpoint =
+            crate::TossWsEndpoint::local(probe.port().expect("port")).expect("local ws endpoint");
+        let config = format!(
+            "{:?}",
+            super::configured_ws_client(EndpointMode::Production)
+        );
+        assert!(config.contains("connect_timeout: 5s"), "{config}");
+        assert!(config.contains("http1_only: true"), "{config}");
+        let client = super::configured_ws_client(EndpointMode::Production)
+            .build()
+            .expect("ws client");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let outcome = runtime
+            .block_on(async {
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(1),
+                    client.get(endpoint.origin()).send(),
+                )
+                .await
+            })
+            .expect("scheme refusal before I/O wait")
+            .map_err(|error| {
+                assert!(error.is_builder());
+                TossHttpError::Transport
+            });
+        assert_eq!(outcome.expect_err("plaintext"), TossHttpError::Transport);
+        assert_eq!(
+            probe.observe().expect("listener status"),
+            testkit::ConnectionObservation::NoConnection
         );
     }
 }
