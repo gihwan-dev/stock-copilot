@@ -6,6 +6,11 @@ mod stepped_clock;
 pub use stepped_clock::{ClockStepError, SteppedClock};
 mod scripted_presence;
 pub use scripted_presence::{PresenceCall, RecordedOrderSummary, ScriptedPresence};
+mod scripted_identity_confirmation;
+pub use scripted_identity_confirmation::{
+    IdentityConfirmationCall, IdentityConfirmationIssuanceKind, ScriptedIdentityConfirmation,
+    ScriptedIdentityConfirmationIssuer,
+};
 pub mod contracts;
 mod draft_record;
 pub mod scripted;

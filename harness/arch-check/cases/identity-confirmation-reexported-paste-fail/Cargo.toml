@@ -1,0 +1,7 @@
+[workspace]
+resolver = "3"
+members = [
+    "apps/desktop/src-tauri",
+    "apps/desktop/e2e-app",
+    "crates/adapters/store-sqlite",
+]

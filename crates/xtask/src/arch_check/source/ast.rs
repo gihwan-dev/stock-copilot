@@ -1,4 +1,4 @@
-mod uses;
+pub(super) mod uses;
 
 use std::collections::BTreeSet;
 

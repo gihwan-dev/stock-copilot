@@ -37,5 +37,6 @@ pnpm-lock.yaml
 !docs/open-issues.md
 !docs/agents/**
 !crates/testkit-ports/src/scripted_presence.rs
+!crates/testkit-ports/src/scripted_identity_confirmation.rs
 !crates/testkit-ports/src/script.rs
 !crates/testkit-ports/src/lib.rs
