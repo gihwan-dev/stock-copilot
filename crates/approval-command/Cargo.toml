@@ -6,3 +6,12 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+application = { path = "../application" }
+domain = { path = "../domain" }
+order-execution = { path = "../order-execution" }
+
+[dev-dependencies]
+testkit = { path = "../testkit" }
+testkit-ports = { path = "../testkit-ports" }
