@@ -85,3 +85,5 @@ reason = "U-02 실제 명령 역직렬화 회귀의 InvokeRequest에 Tauri 모�
 names = ["Channel"]
 allowed-files = ["src/ipc/chat.rs"]
 reason = "C-02 채팅 스트림이 요청별 Channel<ChatChunkEvent>로만 조각을 전달한다 (architecture.md 3.5)"
+allowed-files = ["src/tests/ipc_contract.rs", "src/tests/responsiveness.rs"]
+reason = "U-02 실제 명령 역직렬화 회귀와 U-31 비차단 IPC 응답성 회귀의 InvokeRequest에 Tauri 모의 런타임의 고정 키를 넣는다. 제품 IPC 통로를 추가하지 않는다"

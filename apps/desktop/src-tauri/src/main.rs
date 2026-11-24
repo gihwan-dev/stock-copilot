@@ -1,3 +1,4 @@
+use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::platform::notifier::{
     FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
 };
@@ -58,12 +59,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         news_feeds: Vec::new(),
         clock: Arc::clone(&shared_clock),
-        presence: Arc::new(platform_macos::UnavailablePresence),
+        presence: Arc::new(platform_macos::MacOsRiskDialogPresence::unavailable()),
         events: application::EventBusBuilder::default().build(),
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(shared_clock)),
     };
     let app = build_app(
+        tauri::Builder::default().manage(ExternalLinkRuntime::new(
         tauri::Builder::default().manage(src_tauri::ipc::open_external::ExternalLinkRuntime::new(
             Arc::new(Unavailable),
             Arc::new(Unavailable),
