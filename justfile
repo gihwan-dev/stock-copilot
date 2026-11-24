@@ -201,14 +201,29 @@ coverage-check:
 test-diff commit:
     cargo run --locked --quiet --package xtask -- test-diff "$1"
 
+test-diff-bundle-draft task base target mode="":
+    if [ -n "$4" ]; then cargo run --locked --quiet --package xtask -- test-diff-bundle draft "$1" "$2" "$3" --mode "$4"; else cargo run --locked --quiet --package xtask -- test-diff-bundle draft "$1" "$2" "$3"; fi
+
+test-diff-bundle-check bundle base target:
+    cargo run --locked --quiet --package xtask -- test-diff-bundle check "$1" "$2" "$3"
+
+test-diff-bundle-message bundle:
+    cargo run --locked --quiet --package xtask -- test-diff-bundle message "$1"
+
 mutants-diff commit:
     cargo run --locked --quiet --package xtask -- mutants --in-diff "$1"
 
 mutants-diff-plan commit:
     cargo run --locked --quiet --package xtask -- mutants --in-diff-plan "$1"
 
+mutants-diff-plan-platform commit platform:
+    if [ "$2" = "macos" ]; then cargo run --locked --quiet --package xtask -- mutants --in-diff-plan "$1" --platform "$2"; else cargo run --locked --quiet --package xtask -- mutants --in-diff-plan "$1" --platform "$2" --linux-exclusions; fi
+
 mutants-diff-shard commit shard:
     cargo run --locked --quiet --package xtask -- mutants --in-diff "$1" --shard "$2"
+
+mutants-diff-platform-shard commit platform shard:
+    if [ "$2" = "linux" ]; then cargo run --locked --quiet --package xtask -- mutants --in-diff "$1" --platform "$2" --shard "$3" --linux-exclusions; else cargo run --locked --quiet --package xtask -- mutants --in-diff "$1" --platform "$2" --shard "$3"; fi
 
 mutants-daily commit shard:
     cargo run --locked --quiet --package xtask -- mutants --daily "$1" --shard "$2"

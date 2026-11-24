@@ -1,4 +1,5 @@
 mod approval;
+mod bundle;
 mod crates;
 mod modules;
 
@@ -7,6 +8,9 @@ mod approval_tests;
 
 #[cfg(test)]
 mod h56_tests;
+
+#[cfg(test)]
+mod h62_tests;
 
 #[cfg(test)]
 mod tests;
@@ -19,9 +23,9 @@ use std::path::Path;
 use std::process::{ExitCode, Stdio};
 use std::thread;
 
-use crate::check_support::{Finding, report, workspace_root};
+use crate::check_support::{Finding, read_text, report, workspace_root};
 use crate::git_base::{git, output};
-use crate::nextest_list::list_tests;
+use crate::nextest_list::{list_tests, list_tests_excluding};
 use crates::crate_roots;
 pub(crate) use modules::STANDARD_MACROS;
 use modules::{ModuleRecord, Scan, Walker, has_tests};
@@ -204,9 +208,32 @@ fn support_findings(base: &Scan, current: &Scan) -> BTreeSet<Finding<Rule>> {
     findings
 }
 
-pub(crate) fn compare_files(base: &Files, current: &Files) -> (BTreeSet<Finding<Rule>>, Scan) {
-    let before = scan(base);
-    let now = scan(current);
+pub(crate) struct RootScans {
+    roots: Vec<(crates::Root, Scan)>,
+    base_texts: Sources,
+    base_unreached_tests: BTreeSet<String>,
+    base_scan: Scan,
+}
+
+fn extend_scan(target: &mut Scan, part: &Scan) {
+    target.tests.extend(
+        part.tests
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone())),
+    );
+    target.modules.extend(
+        part.modules
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone())),
+    );
+    target.reached.extend(part.reached.iter().cloned());
+}
+
+fn compare_scans(
+    before: &Scan,
+    now: &Scan,
+    unreachable: BTreeSet<Finding<Rule>>,
+) -> BTreeSet<Finding<Rule>> {
     let mut findings: BTreeSet<Finding<Rule>> = before
         .tests
         .iter()
@@ -218,8 +245,92 @@ pub(crate) fn compare_files(base: &Files, current: &Files) -> (BTreeSet<Finding<
             Some(_) => None,
         })
         .collect();
-    findings.extend(unreachable_findings(current, &now));
-    findings.extend(support_findings(&before, &now));
+    findings.extend(unreachable);
+    findings.extend(support_findings(before, now));
+    findings
+}
+
+impl RootScans {
+    pub(crate) fn new(before: &Files) -> Self {
+        let base_texts = sources(before);
+        let mut base_scan = Scan::default();
+        let mut roots = Vec::new();
+        for root in crate_roots(before) {
+            let mut part = Scan::default();
+            Walker {
+                sources: &base_texts,
+                binary: root.binary.clone(),
+                scan: &mut part,
+            }
+            .walk_root(&root.file);
+            extend_scan(&mut base_scan, &part);
+            roots.push((root, part));
+        }
+        let base_unreached_tests = base_texts
+            .iter()
+            .filter(|(path, source)| !base_scan.reached.contains(*path) && has_tests(source))
+            .map(|(path, _)| path.clone())
+            .collect();
+        Self {
+            roots,
+            base_texts,
+            base_unreached_tests,
+            base_scan,
+        }
+    }
+
+    pub(crate) fn compare_substituting(&self, substituted: &Files) -> BTreeSet<Finding<Rule>> {
+        if substituted.is_empty() {
+            return BTreeSet::new();
+        }
+        let mut texts = self.base_texts.clone();
+        for (path, bytes) in substituted {
+            if in_scope(path) {
+                texts.insert(path.clone(), String::from_utf8_lossy(bytes).into_owned());
+            }
+        }
+        let mut now = Scan::default();
+        for (root, base_part) in &self.roots {
+            let touched = substituted.contains_key(&root.file)
+                || base_part
+                    .reached
+                    .iter()
+                    .any(|path| substituted.contains_key(path));
+            if touched {
+                let mut part = Scan::default();
+                Walker {
+                    sources: &texts,
+                    binary: root.binary.clone(),
+                    scan: &mut part,
+                }
+                .walk_root(&root.file);
+                extend_scan(&mut now, &part);
+            } else {
+                extend_scan(&mut now, base_part);
+            }
+        }
+        let unreachable = texts
+            .iter()
+            .filter(|(path, source)| {
+                if now.reached.contains(*path) {
+                    return false;
+                }
+                if substituted.contains_key(*path) || self.base_scan.reached.contains(*path) {
+                    has_tests(source)
+                } else {
+                    self.base_unreached_tests.contains(*path)
+                }
+            })
+            .map(|(path, _)| Finding::whole_file(path, Rule::Unreachable(path.clone())))
+            .collect();
+        compare_scans(&self.base_scan, &now, unreachable)
+    }
+}
+
+pub(crate) fn compare_files(base: &Files, current: &Files) -> (BTreeSet<Finding<Rule>>, Scan) {
+    let before = scan(base);
+    let now = scan(current);
+    let findings = compare_scans(&before, &now, unreachable_findings(current, &now));
     (findings, before)
 }
 
@@ -377,6 +488,32 @@ pub(crate) fn check(root: &Path, base: &str) -> Result<BTreeSet<Finding<Rule>>, 
     check_for(root, base, crate::git_base::BaseUse::Ancestor)
 }
 
+pub(crate) const LINUX_EXCLUSIONS_FILE: &str = "harness/ci/linux/exclusions.json";
+
+pub(crate) fn linux_excluded_crates(root: &Path) -> Result<BTreeSet<String>, String> {
+    let text = read_text(&root.join(LINUX_EXCLUSIONS_FILE))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| format!("{LINUX_EXCLUSIONS_FILE}: {error}"))?;
+    let crates = parsed
+        .get("crates")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| format!("{LINUX_EXCLUSIONS_FILE}: crates 배열이 없다"))?;
+    let mut excluded = BTreeSet::new();
+    for entry in crates {
+        let name = entry
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("{LINUX_EXCLUSIONS_FILE}: crate 이름이 비어 있다"))?;
+        excluded.insert(String::from(name));
+    }
+    Ok(excluded)
+}
+
+fn belongs_to_package(test_id: &str, package: &str) -> bool {
+    test_id.starts_with(&format!("{package} ")) || test_id.starts_with(&format!("{package}::"))
+}
+
 pub(crate) fn check_for(
     root: &Path,
     base: &str,
@@ -388,7 +525,29 @@ pub(crate) fn check_for(
     let mut findings = compare_sources(&texts(&before), &texts(&current));
     let expected: BTreeSet<String> = scan(&before).tests.keys().cloned().collect();
     findings.extend(compare_lists(&expected, &list_tests(root, &[], None)?));
-    approval::apply(root, &before, &current, findings, base_use)
+    approval::apply_for_base(root, &commit, (&before, &current), findings, base_use)
+}
+
+pub(crate) fn check_for_linux(
+    root: &Path,
+    base: &str,
+    base_use: crate::git_base::BaseUse,
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
+    let excluded: Vec<String> = linux_excluded_crates(root)?.into_iter().collect();
+    let before = base_files(root, &commit)?;
+    let current = current_files(root)?;
+    let mut findings = compare_sources(&texts(&before), &texts(&current));
+    let expected: BTreeSet<String> = scan(&before)
+        .tests
+        .into_keys()
+        .filter(|id| !excluded.iter().any(|pkg| belongs_to_package(id, pkg)))
+        .collect();
+    findings.extend(compare_lists(
+        &expected,
+        &list_tests_excluding(root, &excluded, None)?,
+    ));
+    approval::apply_for_base(root, &commit, (&before, &current), findings, base_use)
 }
 
 pub(crate) fn check_fast(
@@ -414,7 +573,11 @@ pub(crate) fn check_fast(
             .collect();
         findings.extend(compare_lists(&expected, &list_tests(root, packages, None)?));
     }
-    approval::apply(root, &before, &current, findings, base_use)
+    approval::apply_for_base(root, &commit, (&before, &current), findings, base_use)
+}
+
+pub(crate) fn bundle_command(arguments: &[String]) -> ExitCode {
+    bundle::command::command(arguments)
 }
 
 pub(crate) fn selected_command(

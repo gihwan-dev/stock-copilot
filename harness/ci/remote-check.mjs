@@ -12,7 +12,10 @@ import {
 export const REPOSITORY = "gihwan-dev/stock-copilot";
 export const COMMIT = /^[0-9a-f]{40}$/u;
 export const WORKFLOWS = [
-  { file: "ci.yml", jobs: ["linux"] },
+  {
+    file: "ci.yml",
+    jobs: ["linux", "diff-mutants-plan", "diff-mutants-verdict"],
+  },
   { file: "signatures.yml", jobs: ["signatures"] },
 ];
 
@@ -113,15 +116,75 @@ const REQUIRED_STEPS = {
     "linux check",
     "linux tests without network",
   ],
-  macos: ["just check", "diff mutants", "diff mutants verdict"],
-  "macos-branch": [
-    "branch checkout",
-    "just check",
-    "diff mutants",
-    "diff mutants verdict",
-  ],
+  macos: ["just check"],
+  "macos-branch": ["branch checkout", "just check"],
+  "diff-mutants-plan": ["range", "diff mutants plan"],
+  "diff-mutants-verdict": ["diff mutants aggregate"],
   signatures: ["signatures from the base checkout"],
 };
+
+const SHARD_STEPS = ["diff mutants shard", "diff mutants summary"];
+const SHARD_JOB_NAME = /^diff-mutants-(?:linux|macos) \([0-7]\/[1-8]\)$/u;
+const SKIPPED_PLATFORM_JOBS = new Set([
+  "diff-mutants-linux",
+  "diff-mutants-macos",
+]);
+const isSkippedPlatformJob = (job) =>
+  typeof job?.name === "string" && SKIPPED_PLATFORM_JOBS.has(job.name);
+const isShardJob = (job) =>
+  typeof job?.name === "string" &&
+  !SKIPPED_PLATFORM_JOBS.has(job.name) &&
+  (job.name.startsWith("diff-mutants-linux") ||
+    job.name.startsWith("diff-mutants-macos"));
+
+const validSkippedPlatformJob = (sha, run, job, allowCancelled = false) =>
+  isSkippedPlatformJob(job) &&
+  job.status === "completed" &&
+  (job.conclusion === "skipped" ||
+    (allowCancelled &&
+      run.conclusion === "cancelled" &&
+      job.conclusion === "cancelled")) &&
+  job.head_sha === sha &&
+  job.run_attempt === run.run_attempt &&
+  Array.isArray(job.steps) &&
+  job.steps.length === 0;
+
+const validSkippedPlatformEntries = (
+  sha,
+  run,
+  jobs,
+  shardJobs,
+  allowCancelled = false,
+) => {
+  const skipped = jobs.filter(isSkippedPlatformJob);
+  const names = new Set(skipped.map((job) => job.name));
+  if (names.size !== skipped.length) return false;
+  if (
+    !skipped.every((job) =>
+      validSkippedPlatformJob(sha, run, job, allowCancelled),
+    )
+  )
+    return false;
+  return skipped.every(
+    (job) => !shardJobs.some((shard) => shard.name.startsWith(`${job.name} (`)),
+  );
+};
+
+const validShardJob = (sha, run, job) =>
+  SHARD_JOB_NAME.test(job.name) &&
+  job.status === "completed" &&
+  job.conclusion === "success" &&
+  job.head_sha === sha &&
+  job.run_attempt === run.run_attempt &&
+  Array.isArray(job.steps) &&
+  SHARD_STEPS.every((step) => {
+    const found = job.steps.filter((entry) => entry.name === step);
+    return (
+      found.length === 1 &&
+      found[0].status === "completed" &&
+      found[0].conclusion === "success"
+    );
+  });
 
 const invalidRun = (sha, run, workflow) =>
   !COMMIT.test(sha) ||
@@ -187,11 +250,30 @@ const missingRequiredSteps = (sha, run, jobs, workflow) => {
     )
   )
     return [];
-  return entries.flatMap(({ name, jobs: [entry] }) =>
-    REQUIRED_STEPS[name]
-      .filter((step) => !entry.steps.some((item) => item.name === step))
-      .map((step) => `${name}: ${step}`),
-  );
+  const shardMissing =
+    workflow.file === "ci.yml"
+      ? jobs
+          .filter(isShardJob)
+          .flatMap((entry) =>
+            entry.status === "completed" &&
+            entry.conclusion === "success" &&
+            entry.head_sha === sha &&
+            entry.run_attempt === run.run_attempt &&
+            Array.isArray(entry.steps)
+              ? SHARD_STEPS.filter(
+                  (step) => !entry.steps.some((item) => item.name === step),
+                ).map((step) => `${entry.name}: ${step}`)
+              : [],
+          )
+      : [];
+  return [
+    ...entries.flatMap(({ name, jobs: [entry] }) =>
+      REQUIRED_STEPS[name]
+        .filter((step) => !entry.steps.some((item) => item.name === step))
+        .map((step) => `${name}: ${step}`),
+    ),
+    ...shardMissing,
+  ];
 };
 
 export const checkRun = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
@@ -202,8 +284,17 @@ export const checkRun = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
     !Array.isArray(jobs)
   )
     return false;
-  return requiredJobs(run, workflow).every((name) =>
+  const requiredOk = requiredJobs(run, workflow).every((name) =>
     completeJob(sha, run, jobs, name),
+  );
+  if (!requiredOk) return false;
+  if (workflow.file !== "ci.yml") return true;
+  const shardJobs = jobs.filter(isShardJob);
+  const shardNames = new Set(shardJobs.map((job) => job.name));
+  return (
+    shardNames.size === shardJobs.length &&
+    shardJobs.every((job) => validShardJob(sha, run, job)) &&
+    validSkippedPlatformEntries(sha, run, jobs, shardJobs)
   );
 };
 
@@ -250,10 +341,29 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
       ? "RETRY_CANCELLED"
       : "INVALID_EVIDENCE";
   }
+  const shardJobs = workflow.file === "ci.yml" ? jobs.filter(isShardJob) : [];
+  const shardNames = new Set(shardJobs.map((job) => job.name));
+  if (
+    shardNames.size !== shardJobs.length ||
+    shardJobs.some(
+      (job) =>
+        !SHARD_JOB_NAME.test(job.name) ||
+        job.head_sha !== sha ||
+        job.run_attempt !== run.run_attempt,
+    ) ||
+    (workflow.file === "ci.yml" &&
+      !validSkippedPlatformEntries(sha, run, jobs, shardJobs, true))
+  ) {
+    return "INVALID_EVIDENCE";
+  }
   const failed = entries
     .map((items) => items[0])
     .filter((job) => job.conclusion !== "success");
-  if (failed.some((job) => job.status !== "completed"))
+  const failedShards = shardJobs.filter((job) => job.conclusion !== "success");
+  if (
+    failed.some((job) => job.status !== "completed") ||
+    failedShards.some((job) => job.status !== "completed")
+  )
     return "INVALID_EVIDENCE";
   const unassigned = (job) =>
     (job.runner_id === 0 || job.runner_id === null) &&
@@ -270,40 +380,58 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
   const failedStep = (job) =>
     Array.isArray(job.steps) &&
     job.steps.some((step) => step.conclusion === "failure");
-  const mutationLimit = (job, stepName) => {
-    if (
-      !["macos", "macos-branch"].includes(job.name) ||
-      job.conclusion !== "failure" ||
-      !Array.isArray(job.steps)
-    )
-      return false;
-    const failures = job.steps.filter((step) => step.conclusion === "failure");
-    const passed = (name) =>
-      job.steps.filter(
-        (step) =>
-          step.name === name &&
-          step.status === "completed" &&
-          step.conclusion === "success",
-      ).length === 1;
-    return (
-      failures.length === 1 &&
-      failures[0].name === stepName &&
-      failures[0].status === "completed" &&
-      passed("just check") &&
-      passed("diff mutants") &&
-      (job.name !== "macos-branch" || passed("branch checkout"))
+  const shardTimedOut = (job) => {
+    if (job.conclusion === "timed_out") return true;
+    if (!Array.isArray(job.steps)) return false;
+    const shardStepTimedOut = job.steps.some(
+      (step) =>
+        step.name === "diff mutants shard" && step.conclusion === "timed_out",
     );
+    const otherFailed = job.steps.some(
+      (step) =>
+        step.conclusion === "failure" && step.name !== "diff mutants summary",
+    );
+    return shardStepTimedOut && !otherFailed;
   };
+  const nonVerdictFailed = failed.filter(
+    (job) => job.name !== "diff-mutants-verdict",
+  );
   if (
-    failed.length > 0 &&
-    failed.every((job) => mutationLimit(job, "diff mutants timeout"))
-  )
-    return "RETRY_MUTATION_TIMED_OUT";
-  if (
-    failed.length > 0 &&
-    failed.every((job) => mutationLimit(job, "diff mutants budget"))
-  )
-    return "RETRY_MUTATION_BUDGET";
+    nonVerdictFailed.length === 0 &&
+    failed.length === 1 &&
+    failed[0].name === "diff-mutants-verdict" &&
+    failedShards.length > 0
+  ) {
+    if (
+      failedShards.some(
+        (job) =>
+          job.conclusion === "failure" &&
+          !unassigned(job) &&
+          !uncertainAssignment(job) &&
+          !shardTimedOut(job),
+      )
+    )
+      return "CHECK_FAILED";
+    if (
+      failedShards.some(
+        (job) => job.conclusion === "failure" && uncertainAssignment(job),
+      )
+    )
+      return "INVALID_EVIDENCE";
+    if (
+      failedShards.some(
+        (job) =>
+          unassigned(job) &&
+          ["failure", "cancelled", "timed_out"].includes(job.conclusion),
+      )
+    )
+      return "RETRY_RUNNER_UNASSIGNED";
+    if (failedShards.some((job) => shardTimedOut(job)))
+      return "RETRY_MUTATION_TIMED_OUT";
+    if (failedShards.some((job) => job.conclusion === "cancelled"))
+      return "RETRY_CANCELLED";
+    return "CHECK_FAILED";
+  }
   if (
     failed.some(
       (job) =>
@@ -311,6 +439,13 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
         !unassigned(job) &&
         !uncertainAssignment(job) &&
         (!timedOutStep(job) || failedStep(job)),
+    ) ||
+    failedShards.some(
+      (job) =>
+        job.conclusion === "failure" &&
+        !unassigned(job) &&
+        !uncertainAssignment(job) &&
+        !shardTimedOut(job),
     )
   )
     return "CHECK_FAILED";
@@ -450,9 +585,7 @@ const FAILURE_MESSAGES = {
   RETRY_TIMED_OUT:
     "작업이 시간 초과되어 재시도 대상이다; 원인은 확인되지 않았다",
   RETRY_MUTATION_TIMED_OUT:
-    "변경분 변이 조각이 20분 제한에 도달해 재시도 또는 추가 분할 대상이다",
-  RETRY_MUTATION_BUDGET:
-    "변경분 변이의 다음 조각을 실행하기에 작업 시간이 부족해 재시도 또는 변경 분할 대상이다",
+    "변경분 변이 조각이 시간 제한에 도달해 재시도 또는 추가 분할 대상이다",
   PENDING: "작업이 아직 진행 중이다",
   CHECK_FAILED: "검사 또는 준비 단계가 실패했다; 실행 로그를 확인한다",
   MISSING_REQUIRED_STEPS: "성공 실행에 현재 필수 단계가 없다",

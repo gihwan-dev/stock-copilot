@@ -36,19 +36,21 @@ const linux = job("linux", [
   "linux tests without network",
 ]);
 const macos = job("macos-branch", ["just check"]);
+const plan = job("diff-mutants-plan", ["range", "diff mutants plan"]);
+const verdict = job("diff-mutants-verdict", ["diff mutants aggregate"]);
 
 test("성공 작업의 필수 단계 누락을 단계 이름과 함께 거부한다", async () => {
-  const jobs = [linux, macos];
+  const jobs = [linux, macos, plan, verdict];
   assert.equal(failureCode(sha, run, jobs), "MISSING_REQUIRED_STEPS");
   const read = async (path) =>
     path.includes("workflows/ci.yml/")
       ? { total_count: 1, workflow_runs: [run] }
-      : { total_count: 2, jobs };
+      : { total_count: jobs.length, jobs };
   await assert.rejects(
     remoteCheckFrom(sha, read),
     (error) =>
       error.code === "MISSING_REQUIRED_STEPS" &&
-      /macos-branch.*diff mutants/u.test(error.message),
+      /macos-branch.*branch checkout/u.test(error.message),
   );
   assert.equal(
     failureCode(sha, { ...run, head_sha: "b".repeat(40) }, jobs),
@@ -58,6 +60,8 @@ test("성공 작업의 필수 단계 누락을 단계 이름과 함께 거부한
     failureCode(sha, { ...run, conclusion: "failure" }, [
       linux,
       { ...macos, conclusion: "failure" },
+      plan,
+      verdict,
     ]),
     "CHECK_FAILED",
   );

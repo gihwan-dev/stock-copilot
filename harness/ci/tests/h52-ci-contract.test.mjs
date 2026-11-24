@@ -7,9 +7,14 @@ import { repoRoot } from "./signature-repo.mjs";
 const ci = JSON.parse(
   readFileSync(join(repoRoot, ".github/workflows/ci.yml"), "utf8"),
 );
+const signatures = JSON.parse(
+  readFileSync(join(repoRoot, ".github/workflows/signatures.yml"), "utf8"),
+);
 const macos = ci.jobs["macos-branch"];
 
-test("작업 브랜치 push도 macOS 전체 검사와 변경분 변이를 실행한다", () => {
+test("master와 merge/** 푸시는 macOS 전체 검사와 변경분 변이를 실행하고 서명 검사는 모든 푸시에서 실행한다", () => {
+  assert.deepEqual(ci.on.push.branches, ["master", "merge/**"]);
+  assert.deepEqual(signatures.on.push.branches, ["**"]);
   assert.equal(
     macos.if,
     "github.event_name == 'push' && github.ref != 'refs/heads/master'",
@@ -19,15 +24,54 @@ test("작업 브랜치 push도 macOS 전체 검사와 변경분 변이를 실행
   assert.equal(ci.jobs.macos["timeout-minutes"], 120);
   assert.ok(macos.steps.some((step) => step.run === 'just base="$BASE" check'));
   assert.ok(
-    macos.steps.some((step) => step.run === "node harness/ci/diff-mutants.mjs"),
-  );
-  assert.ok(
     macos.steps.findIndex((step) => step.name === "branch checkout") <
       macos.steps.findIndex((step) => step.name === "just check"),
   );
+  assert.equal(ci.jobs["diff-mutants-plan"].if, "github.event_name == 'push'");
   assert.ok(
-    macos.steps.some(
-      (step) => step.run === "node harness/ci/diff-mutants-verdict.mjs",
+    ci.jobs["diff-mutants-plan"].steps.some(
+      (step) => step.run === "node harness/ci/diff-mutants-plan.mjs",
+    ),
+  );
+  assert.equal(
+    ci.jobs["diff-mutants-linux"].if,
+    "github.event_name == 'push' && needs.diff-mutants-plan.outputs.run_linux == 'yes'",
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-linux"].steps.some(
+      (step) =>
+        step.run ===
+        'node harness/ci/linux/offline.mjs just mutants-diff-platform-shard "$MUTATION_BASE" linux "$MUTATION_SHARD"',
+    ),
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-linux"].steps.some(
+      (step) => step.run === "node harness/ci/diff-mutants-shard.mjs summary",
+    ),
+  );
+  assert.equal(
+    ci.jobs["diff-mutants-macos"].if,
+    "github.event_name == 'push' && needs.diff-mutants-plan.outputs.run_macos == 'yes'",
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-macos"].steps.some(
+      (step) =>
+        step.run ===
+        'just mutants-diff-platform-shard "$MUTATION_BASE" macos "$MUTATION_SHARD"',
+    ),
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-macos"].steps.some(
+      (step) => step.run === "node harness/ci/diff-mutants-shard.mjs summary",
+    ),
+  );
+  assert.equal(
+    ci.jobs["diff-mutants-verdict"].if,
+    "always() && github.event_name == 'push'",
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-verdict"].steps.some(
+      (step) => step.run === "node harness/ci/diff-mutants-aggregate.mjs",
     ),
   );
 });
