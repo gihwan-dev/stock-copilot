@@ -9,6 +9,10 @@ export const commands = {
     typedError<AppVersion, IpcError>(
       __TAURI_INVOKE("app_version", { request }),
     ),
+  openExternal: (request: OpenExternalRequest) =>
+    typedError<OpenExternalResponse, IpcError>(
+      __TAURI_INVOKE("open_external", { request }),
+    ),
 };
 
 /** Events */
@@ -32,6 +36,16 @@ export type IpcError = {
 };
 
 export type IpcErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
+
+export type OpenExternalRequest = {
+  url: string;
+};
+
+export type OpenExternalResponse = {
+  status: OpenExternalStatus;
+};
+
+export type OpenExternalStatus = "opened";
 
 export type UiDisclosureKey = {
   source: UiDisclosureSource;

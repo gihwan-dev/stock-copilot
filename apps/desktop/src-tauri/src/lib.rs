@@ -53,6 +53,12 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             app.manage(database.status());
             app.manage(Lifecycle::new(refresh, database));
             app.manage(ports);
+            if app
+                .try_state::<ipc::open_external::ExternalLinkRuntime>()
+                .is_none()
+            {
+                app.manage(ipc::open_external::ExternalLinkRuntime::unavailable());
+            }
             Ok(())
         })
         .build(context)

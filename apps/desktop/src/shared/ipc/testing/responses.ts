@@ -6,4 +6,5 @@ export const responses = {
     { kind: "bug" },
     { kind: "no-data" },
   ],
+  openExternal: { status: "opened" },
 } as const;
