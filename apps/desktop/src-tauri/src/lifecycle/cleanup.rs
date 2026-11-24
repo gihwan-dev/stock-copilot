@@ -1,8 +1,23 @@
 use super::{DatabaseClosure, RefreshOutcome, ShutdownOutcome, Work};
 use crate::database::DatabaseState;
+use crate::platform::process_cleanup::ShutdownHook;
 use application::SystemPortError;
+use std::sync::Arc;
 
+#[cfg(test)]
 pub(super) async fn finish<Close, Closing>(work: Work, close: Close) -> ShutdownOutcome
+where
+    Close: FnOnce(DatabaseState) -> Closing,
+    Closing: Future<Output = Result<DatabaseClosure, SystemPortError>>,
+{
+    finish_with_hook(work, None, close).await
+}
+
+pub(super) async fn finish_with_hook<Close, Closing>(
+    work: Work,
+    hook: Option<Arc<dyn ShutdownHook>>,
+    close: Close,
+) -> ShutdownOutcome
 where
     Close: FnOnce(DatabaseState) -> Closing,
     Closing: Future<Output = Result<DatabaseClosure, SystemPortError>>,
@@ -13,8 +28,16 @@ where
         Err(tauri::Error::JoinError(error)) if error.is_cancelled() => RefreshOutcome::Cancelled,
         Err(error) => RefreshOutcome::Failed(error),
     };
+    let processes = match hook {
+        Some(active_hook) => Some(active_hook.on_shutdown().await),
+        None => None,
+    };
     let database = close(work.database).await;
-    ShutdownOutcome { refresh, database }
+    ShutdownOutcome {
+        refresh,
+        processes,
+        database,
+    }
 }
 
 pub(super) async fn close_database(

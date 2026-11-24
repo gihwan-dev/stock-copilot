@@ -53,18 +53,41 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             let refresh = tauri::async_runtime::block_on(startup::start(&ports, |data| {
                 publish_main(app.handle(), data)
             }))?;
+            let shutdown_hook = prepare_process_shutdown_hook(app);
             app.manage(database.status());
-            app.manage(Lifecycle::new(refresh, database));
+            app.manage(Lifecycle::with_shutdown_hook(
+                refresh,
+                database,
+                shutdown_hook,
+            ));
             app.manage(ports);
-            if app
-                .try_state::<ipc::open_external::ExternalLinkRuntime>()
-                .is_none()
-            {
-                app.manage(ipc::open_external::ExternalLinkRuntime::unavailable());
-            }
+            ensure_default_runtimes(app);
             Ok(())
         })
         .build(context)
+}
+
+fn prepare_process_shutdown_hook<R: Runtime>(
+    app: &App<R>,
+) -> Arc<dyn platform::process_cleanup::ShutdownHook> {
+    if app
+        .try_state::<platform::process_cleanup::ProcessRuntime>()
+        .is_none()
+    {
+        app.manage(platform::process_cleanup::ProcessRuntime::default_in_memory());
+    }
+    let runtime = app.state::<platform::process_cleanup::ProcessRuntime>();
+    let _startup_cleanup = tauri::async_runtime::block_on(runtime.cleanup_orphans_on_startup());
+    runtime.shutdown_hook()
+}
+
+fn ensure_default_runtimes<R: Runtime>(app: &App<R>) {
+    if app
+        .try_state::<ipc::open_external::ExternalLinkRuntime>()
+        .is_none()
+    {
+        app.manage(ipc::open_external::ExternalLinkRuntime::unavailable());
+    }
 }
 
 fn publish_main<R: Runtime>(

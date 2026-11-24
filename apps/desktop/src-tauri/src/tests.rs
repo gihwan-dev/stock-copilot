@@ -7,6 +7,7 @@ mod exit;
 mod ipc_contract;
 mod lifecycle;
 mod notifier;
+mod process_cleanup;
 mod residency;
 mod startup;
 mod support;

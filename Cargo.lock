@@ -3759,6 +3759,7 @@ dependencies = [
  "tauri-build",
  "tauri-specta",
  "testkit-ports",
+ "tokio",
 ]
 
 [[package]]
