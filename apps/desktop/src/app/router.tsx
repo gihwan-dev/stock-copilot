@@ -16,6 +16,7 @@ import {
   type SystemSettingsPresence,
 } from "./context";
 import {
+  BriefingsRouteView,
   HomeView,
   SettingsRouteView,
   ShellLayout,
@@ -45,6 +46,12 @@ const transactionsRoute = createRoute({
   component: TransactionsView,
 });
 
+const briefingsRoute = createRoute({
+  getParentRoute: () => shellLayoutRoute,
+  path: "/briefings",
+  component: BriefingsRouteView,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
@@ -58,7 +65,7 @@ const statusRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  shellLayoutRoute.addChildren([homeRoute, transactionsRoute]),
+  shellLayoutRoute.addChildren([homeRoute, transactionsRoute, briefingsRoute]),
   settingsRoute,
   statusRoute,
 ]);

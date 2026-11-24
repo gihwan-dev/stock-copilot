@@ -1,8 +1,9 @@
 use src_tauri::audit_queue::AuditEventQueue;
+use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::platform::notifier::{
-    AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationEventSubscriber,
-    NotificationPreferences, UnavailableNotificationDelivery,
+    AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
+    NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
 };
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::product_events::{
@@ -51,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let ports = product_ports(&repositories, notifier, &shared_clock, events);
     let app = build_app(
-        product_builder(scheduler_events, repositories.shared().clone(), ui_events),
+        product_builder(scheduler_events, &repositories, ui_events),
         ports,
         context,
     )?;
@@ -112,7 +113,7 @@ fn product_ports(
 
 fn product_builder(
     scheduler_events: Arc<scheduler::SchedulerEventBridge>,
-    shared_database: SharedDatabase,
+    repositories: &Arc<SqliteRepositories>,
     ui_events: Arc<UiEventSlot<tauri::Wry>>,
 ) -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
@@ -121,21 +122,22 @@ fn product_builder(
             Arc::new(Unavailable),
         ))
         .manage(scheduler_events)
-        .manage(shared_database)
+        .manage(repositories.shared().clone())
+        .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
         .manage(ui_events)
 }
 
 type ProductNotifier = FilteredNotifier<UnavailableNotificationDelivery>;
 
-struct ProductSubscribers {
-    notifier: Arc<ProductNotifier>,
+struct ProductSubscribers<D> {
+    notifier: Arc<FilteredNotifier<D>>,
     audit: Arc<SqliteRepositories>,
     clock: Arc<platform_macos::SystemClock>,
     ui_events: Arc<UiEventSlot<tauri::Wry>>,
 }
 
-fn product_event_bus(
-    subscribers: ProductSubscribers,
+fn product_event_bus<D: NotificationDelivery + 'static>(
+    subscribers: ProductSubscribers<D>,
 ) -> (application::EventBus, Arc<scheduler::SchedulerEventBridge>) {
     let bridge = Arc::new(scheduler::SchedulerEventBridge::new());
     let mut builder = application::EventBusBuilder::default();
@@ -146,7 +148,7 @@ fn product_event_bus(
     builder.subscribe(ui_event_kinds(), BridgedUiEvents(subscribers.ui_events));
     builder.subscribe(
         NotificationEventSubscriber::<
-            AsyncRuntimeNotificationDispatch<ProductNotifier>,
+            AsyncRuntimeNotificationDispatch<FilteredNotifier<D>>,
             RecordedTriggerUrgency,
         >::subscribed_kinds(),
         NotificationEventSubscriber::new(
@@ -395,5 +397,74 @@ mod tests {
                 ) => {}
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod product_bus_tests {
+    use super::{ProductSubscribers, product_event_bus};
+    use application::{Notification, SystemPortError, WriteCompleted};
+    use domain::{DomainEvent, InstrumentId};
+    use src_tauri::platform::notifier::{
+        FilteredNotifier, NotificationDelivery, NotificationMessage, NotificationPreferences,
+        NotificationToggle,
+    };
+    use src_tauri::product_events::UiEventSlot;
+    use src_tauri::sqlite_ports::{SharedDatabase, SqliteRepositories};
+    use std::sync::{Arc, mpsc};
+    use std::time::Duration;
+
+    type Sent = (Notification, NotificationMessage);
+
+    struct ChannelDelivery(mpsc::Sender<Sent>);
+
+    impl NotificationDelivery for ChannelDelivery {
+        fn deliver(
+            &self,
+            notification: Notification,
+            message: NotificationMessage,
+        ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+            let _sent = self.0.send((notification, message));
+            std::future::ready(Ok(WriteCompleted))
+        }
+    }
+
+    fn instrument() -> InstrumentId {
+        InstrumentId::try_new("005930").expect("종목")
+    }
+
+    #[test]
+    fn product_event_bus_turns_each_new_signal_into_one_macos_notification() {
+        let (sender, receiver) = mpsc::channel();
+        let notifier = Arc::new(FilteredNotifier::new(
+            ChannelDelivery(sender),
+            NotificationPreferences::default(),
+        ));
+        let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let (events, _bridge) = product_event_bus(ProductSubscribers {
+            notifier: Arc::clone(&notifier),
+            audit: Arc::new(SqliteRepositories::new(SharedDatabase::new())),
+            clock,
+            ui_events: Arc::new(UiEventSlot::<tauri::Wry>::default()),
+        });
+        let _cleared = events.publish(DomainEvent::SignalCleared(instrument()));
+        let _raised = events.publish(DomainEvent::SignalRaised(instrument()));
+        let (notification, message) = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("새 신호 알림");
+        assert_eq!(notification, Notification::NewSignal);
+        assert_eq!(message.title, "새 매매 신호");
+        assert!(
+            receiver.recv_timeout(Duration::from_millis(300)).is_err(),
+            "신호 해제는 알리지 않는다"
+        );
+        notifier
+            .set_toggle(Notification::NewSignal, NotificationToggle::Disabled)
+            .expect("끄기");
+        let _muted = events.publish(DomainEvent::SignalRaised(instrument()));
+        assert!(
+            receiver.recv_timeout(Duration::from_millis(300)).is_err(),
+            "꺼 둔 알림은 보내지 않는다"
+        );
     }
 }
