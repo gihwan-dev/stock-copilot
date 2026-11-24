@@ -24,5 +24,6 @@ impl PortTypes for ProductPorts {
     type SecretStore = Unavailable;
     type Clock = platform_macos::SystemClock;
     type Notifier = FilteredNotifier<UnavailableNotificationDelivery>;
-    type UserPresence = platform_macos::UnavailablePresence;
+    type UserPresence =
+        platform_macos::MacOsRiskDialogPresence<platform_macos::UnavailableRiskDialogBackend>;
 }
