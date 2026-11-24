@@ -41,3 +41,4 @@ pub(crate) const VALUATION_HISTORY: &str = "SELECT snapshot_payload FROM daily_v
 
 pub(crate) const VALUATION_DAY_BY_DATE: &str = "SELECT result_hash, result_payload FROM daily_valuation_days WHERE account = ?1 AND day_year = ?2 AND day_month = ?3 AND day_number = ?4";
 pub(crate) const INSERT_VALUATION_DAY: &str = "INSERT INTO daily_valuation_days(account, day_year, day_month, day_number, result_hash, result_payload) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
+pub(crate) const RESOLVED_SUBMISSION_RECORDS: &str = "SELECT rec.task_id, rec.run_id, rec.record_payload, task.status, task.task_payload, res.outcome_payload FROM estimate_submission_records rec INNER JOIN estimate_tasks task ON task.task_id = rec.task_id INNER JOIN estimate_task_resolutions res ON res.task_id = rec.task_id ORDER BY res.id";
