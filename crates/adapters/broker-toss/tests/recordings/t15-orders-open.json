@@ -1,0 +1,61 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/orders",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1orders/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "orders": [
+        {
+          "orderId": "synthetic-open-kr-001",
+          "symbol": "005930",
+          "side": "BUY",
+          "orderType": "LIMIT",
+          "timeInForce": "DAY",
+          "status": "PENDING",
+          "price": "70000",
+          "quantity": "10",
+          "orderAmount": null,
+          "currency": "KRW",
+          "orderedAt": "2026-03-29T09:30:00+09:00",
+          "canceledAt": null,
+          "execution": {
+            "filledQuantity": "0",
+            "averageFilledPrice": null,
+            "filledAmount": null,
+            "commission": null,
+            "tax": null,
+            "filledAt": null,
+            "settlementDate": null
+          }
+        },
+        {
+          "orderId": "synthetic-open-us-002",
+          "symbol": "AAPL",
+          "side": "SELL",
+          "orderType": "LIMIT",
+          "timeInForce": "DAY",
+          "status": "PARTIAL_FILLED",
+          "price": "185.5",
+          "quantity": "5",
+          "orderAmount": null,
+          "currency": "USD",
+          "orderedAt": "2026-03-29T10:00:00+09:00",
+          "canceledAt": null,
+          "execution": {
+            "filledQuantity": "2",
+            "averageFilledPrice": "185.25",
+            "filledAmount": "370.5",
+            "commission": "0.66",
+            "tax": "0",
+            "filledAt": "2026-03-29T10:00:05+09:00",
+            "settlementDate": null
+          }
+        }
+      ],
+      "nextCursor": null,
+      "hasNext": false
+    }
+  }
+}

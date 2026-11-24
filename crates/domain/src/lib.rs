@@ -682,3 +682,10 @@ pub use draft_order_intent::{
     DraftOrderIntent, HistoricalDecimalText, HistoricalOrderAmount, HistoricalOrderTerms,
     HistoricalSellQuantity, HistoricalWholeQuantity,
 };
+mod order_query_proof;
+pub use order_query_proof::{
+    ClosedOrderCompletenessProof, ClosedOrderPageCollector, ClosedOrderQueryScope,
+    OpenOrderCollector, OpenOrderQueryScope, OrderDateFilter, OrderPageBoundary,
+    OrderPageExhaustion, OrderQueryFilterState, OrderRowIntake, OrderSymbolFilter,
+    OrderedAtDateBounds, ProvenClosedOrderSet,
+};

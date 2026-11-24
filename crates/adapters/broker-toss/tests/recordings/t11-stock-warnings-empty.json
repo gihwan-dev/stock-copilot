@@ -1,0 +1,10 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/stocks/{symbol}/warnings",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1stocks~1{symbol}~1warnings/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": []
+  }
+}

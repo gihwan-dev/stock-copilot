@@ -1,0 +1,17 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/orders",
+  "method": "get",
+  "status": "400",
+  "schema": "#/paths/~1api~1v1~1orders/get/responses/400/content/application~1json/schema",
+  "body": {
+    "error": {
+      "requestId": "synthetic-orders-400",
+      "code": "invalid-request",
+      "message": "유효하지 않은 커서입니다.",
+      "data": {
+        "field": "cursor"
+      }
+    }
+  }
+}

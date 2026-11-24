@@ -679,6 +679,7 @@ mod tests {
             Cap::ShortSelling,
             Cap::CreditTrades,
             Cap::SecuritiesLending,
+            Cap::SellableQuantity,
         ] {
             assert_eq!(
                 capabilities.support_for(capability),
@@ -686,12 +687,7 @@ mod tests {
                 "{capability:?}"
             );
         }
-        for capability in [
-            Cap::Instruments,
-            Cap::Orderbook,
-            Cap::PriceLimits,
-            Cap::SellableQuantity,
-        ] {
+        for capability in [Cap::Instruments, Cap::Orderbook, Cap::PriceLimits] {
             assert_eq!(
                 capabilities.support_for(capability),
                 CapabilitySupport::Unsupported,

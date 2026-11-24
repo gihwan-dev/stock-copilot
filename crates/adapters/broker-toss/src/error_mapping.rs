@@ -269,7 +269,16 @@ fn edge_blocked() -> (StatusRule, PortErrorKind) {
     )
 }
 
+fn order_not_found_mapping(endpoint: ReadEndpoint) -> (StatusRule, PortErrorKind) {
+    if endpoint == ReadEndpoint::Order {
+        missing(MissingData::Order)
+    } else {
+        mismatch(ResponseMismatch::Validation)
+    }
+}
+
 fn api_mapping(
+    endpoint: ReadEndpoint,
     code: ApiErrorCode,
     status: HttpStatus,
     retry: RetryDelay,
@@ -291,6 +300,7 @@ fn api_mapping(
         StockNotFound => missing(MissingData::Stock),
         ExchangeRateNotFound => missing(MissingData::ExchangeRate),
         SectorNotFound => missing(MissingData::Sector),
+        OrderNotFound => order_not_found_mapping(endpoint),
         EdgeBlocked => edge_blocked(),
         UnsupportedContentType => rejected(
             UnsupportedMediaType,
@@ -322,7 +332,6 @@ fn api_mapping(
         | OppositePendingOrderExists
         | OrderHoursClosed
         | OrderLimitExceeded
-        | OrderNotFound
         | OrderTypeNotAllowed
         | PrerequisiteRequired
         | PriceOutOfRange
@@ -413,16 +422,17 @@ pub fn map_toss_token_error(
 }
 
 fn api_for_envelope(
+    endpoint: ReadEndpoint,
     envelope: ExpectedEnvelope,
     code: ApiErrorCode,
     status: HttpStatus,
     retry: RetryDelay,
 ) -> (StatusRule, PortErrorKind) {
     match envelope {
-        ExpectedEnvelope::Read => api_mapping(code, status, retry),
+        ExpectedEnvelope::Read => api_mapping(endpoint, code, status, retry),
         ExpectedEnvelope::Token => {
             if status == HttpStatus::RateLimited {
-                api_mapping(code, status, retry)
+                api_mapping(endpoint, code, status, retry)
             } else {
                 mismatch(ResponseMismatch::Schema)
             }
@@ -474,7 +484,7 @@ fn map_body(
                 CodeRecognition::Known
             };
             cursor = observed_cursor;
-            let (rule, kind) = api_for_envelope(envelope, code, status, retry);
+            let (rule, kind) = api_for_envelope(endpoint, envelope, code, status, retry);
             (rule, kind, diagnostics)
         }
         TossErrorBody::OAuth { code, diagnostics } => {
