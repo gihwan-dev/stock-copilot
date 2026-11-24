@@ -289,7 +289,7 @@ enum OpOutcome {
     Rejected,
 }
 
-fn outcome_of<T, E>(result: Result<T, E>) -> OpOutcome {
+fn outcome_of<T, E>(result: &Result<T, E>) -> OpOutcome {
     match result {
         Ok(_) => OpOutcome::Accepted,
         Err(_) => OpOutcome::Rejected,
@@ -322,7 +322,7 @@ fn apply_link_op(mappings: &mut InstrumentMappings, input: LinkOp<'_>) -> OpOutc
             ts(input.timestamp),
         ),
     );
-    outcome_of(mappings.link_confirmed_change(change))
+    outcome_of(&mappings.link_confirmed_change(change))
 }
 
 fn correction_confirmation(
@@ -459,7 +459,7 @@ fn apply_correct_link(
         target_next,
         correction_confirmation(serial, "속성 테스트 연결 정정", timestamp),
     );
-    outcome_of(mappings.correct_link(correction))
+    outcome_of(&mappings.correct_link(correction))
 }
 
 fn apply_ensure_op(
@@ -472,7 +472,7 @@ fn apply_ensure_op(
         let _skip = local.issue().expect("건너뛰기");
     }
     let cand = local.issue().expect("후보");
-    outcome_of(mappings.ensure(source, cand))
+    outcome_of(&mappings.ensure(source, cand))
 }
 
 fn apply_correct_retirement_op(
@@ -488,7 +488,7 @@ fn apply_correct_retirement_op(
         target,
         correction_confirmation(serial, "속성 테스트 폐지 정정", timestamp),
     );
-    outcome_of(mappings.correct_retirement(correction))
+    outcome_of(&mappings.correct_retirement(correction))
 }
 
 fn pick_link_next(
@@ -517,7 +517,7 @@ fn apply_retire_op(
     fallback: &InstrumentSource,
 ) -> OpOutcome {
     let target = current_active_source(mappings, id).unwrap_or_else(|| fallback.clone());
-    outcome_of(mappings.retire(&target))
+    outcome_of(&mappings.retire(&target))
 }
 
 fn apply_op(
