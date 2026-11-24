@@ -397,6 +397,7 @@ impl ClaudeCodeProvider {
         Ok(ClaudeEventStream {
             rx,
             finished: StreamState::Open,
+            structured_output: None,
             _cancel_guard: cancel_guard,
         })
     }
@@ -477,6 +478,7 @@ enum StreamItem {
 #[derive(Debug)]
 enum ChannelMessage {
     Event(AiEvent),
+    Structured(serde_json::Value),
     Control(StreamItem),
 }
 
@@ -489,6 +491,7 @@ enum StreamState {
 pub struct ClaudeEventStream {
     rx: mpsc::Receiver<ChannelMessage>,
     finished: StreamState,
+    structured_output: Option<serde_json::Value>,
     _cancel_guard: ChildCancelGuard,
 }
 
@@ -496,24 +499,37 @@ impl fmt::Debug for ClaudeEventStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClaudeEventStream")
             .field("finished", &self.finished)
+            .field("has_structured_output", &self.structured_output.is_some())
             .finish_non_exhaustive()
+    }
+}
+
+impl ClaudeEventStream {
+    #[must_use]
+    pub const fn structured_output(&self) -> Option<&serde_json::Value> {
+        self.structured_output.as_ref()
     }
 }
 
 impl AiEventStream for ClaudeEventStream {
     async fn next(&mut self) -> Result<Option<AiEvent>, InformationError> {
-        if self.finished == StreamState::Closed {
-            return Ok(None);
-        }
-        match self.rx.recv().await {
-            Some(ChannelMessage::Event(event)) => Ok(Some(event)),
-            Some(ChannelMessage::Control(StreamItem::End)) | None => {
-                self.finished = StreamState::Closed;
-                Ok(None)
+        loop {
+            if self.finished == StreamState::Closed {
+                return Ok(None);
             }
-            Some(ChannelMessage::Control(StreamItem::Error(error))) => {
-                self.finished = StreamState::Closed;
-                Err(error)
+            match self.rx.recv().await {
+                Some(ChannelMessage::Event(event)) => return Ok(Some(event)),
+                Some(ChannelMessage::Structured(value)) => {
+                    self.structured_output = Some(value);
+                }
+                Some(ChannelMessage::Control(StreamItem::End)) | None => {
+                    self.finished = StreamState::Closed;
+                    return Ok(None);
+                }
+                Some(ChannelMessage::Control(StreamItem::Error(error))) => {
+                    self.finished = StreamState::Closed;
+                    return Err(error);
+                }
             }
         }
     }
@@ -841,6 +857,17 @@ fn decode_stdout_loop(
             sinks,
         ) {
             return stop;
+        }
+        if let (DecodedLineKind::Result, PreflightZeroSeen::No, Some(value)) = (
+            decoder.last_line_kind(),
+            preflight_result,
+            decoder.last_structured_output(),
+        ) && sinks
+            .tx
+            .blocking_send(ChannelMessage::Structured(value.clone()))
+            .is_err()
+        {
+            return StopReason::ReceiverClosed;
         }
     }
 }

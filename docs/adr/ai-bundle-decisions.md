@@ -17,3 +17,7 @@
 | AI-18 | 자가 점검은 허용 폴더·거부 폴더의 표지 파일을 같은 프로필(+거부 폴더)로 `/bin/cat`하게 해, 허용 표지만 나오고 종료 코드가 실패면 적용, 거부 표지가 나오면 미적용, 그 밖은 사용 불가로 본다. 적용이 아니면 조립 루트가 겹 없이(`without_sandbox`) 띄운다. 실제 `sandbox-exec` 안에서의 구독 인증 확인은 AI-12(사용자 실측)로 남긴다 | 점검 실패 시 AI 끄기 |
 | AI-08 | 종료 기록에 시작·종료 시각(`AiJobTiming`, 소요 시간은 `Timestamp::elapsed_until`)과 토큰 합(`TokenUsage`, 입력·출력·캐시 읽기·캐시 생성)을 둔다. 토큰은 실행 중 `TokenUsage` 사건을 `AiJobUsageMeter`가 포화 덧셈으로 모두 더한다 | 마지막 사건만 쓰기 |
 | AI-08 | 조회는 `ListAiJobUsage(from, through)`가 종료 시각 창의 기록을 최근 것부터 돌려준다. 저장은 S-09 전까지 `AiJobRecordStore` 포트와 `testkit-ports` 가짜로만 둔다. 목적별 합계는 AI-10 화면 작업 때 더한다 | 지금 목적별 합계 |
+| AI-14 | 수집 실행기는 기존 `WebCollectionRunner` 포트(N-20)를 어댑터의 `ClaudeWebCollectionRunner`가 구현한다. JSON 파싱이 필요해 `application`이 아닌 어댑터에 둔다 | `application`에 serde 추가 |
+| AI-14 | 구조화 출력은 `AiEvent`에 변형을 더하지 않고, 결과 줄의 `structured_output`을 `ClaudeEventStream::structured_output()`으로만 넘긴다(사전 점검 0턴 결과 제외, 격리 통과 뒤에만) | `AiEvent::StructuredOutput` 추가 |
+| AI-14 | 스키마는 `WEB_COLLECTION_JSON_SCHEMA`(`items[]{url,title,summary?}`, 최대 20). 주소가 `NormalizedUrl`이 아니거나 제목이 비었거나 요약이 문자열이 아니면 그 항목만 버리고, `items` 배열이 없으면 실패(`Unavailable`). 실행 중 `ToolCall`·`McpUnavailable`이 나오면 `Rejected` | 하나라도 틀리면 전체 실패 |
+| AI-14 | 수집 실행 ID는 `collect-<시계 초>-<순번>`, 모델은 `Fast`, 추론 강도 `Low` | 설정값 |
