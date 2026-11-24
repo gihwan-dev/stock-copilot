@@ -125,6 +125,9 @@ export const designUtilities = (tokens) => [
   ["scroll-viewport-y", "position", "relative"],
   ["scroll-viewport-y", "overflow-x", "hidden !important"],
   ["scroll-viewport-y", "overflow-y", "auto !important"],
+  ["scroll-viewport-both", "position", "relative"],
+  ["scroll-viewport-both", "overflow-x", "auto !important"],
+  ["scroll-viewport-both", "overflow-y", "auto !important"],
   [
     "scroll-outline-inset",
     "outline-offset",
@@ -132,6 +135,8 @@ export const designUtilities = (tokens) => [
   ],
   ["scroll-track-x", "height", "var(--spacing-space-2)"],
   ["scroll-track-y", "width", "var(--spacing-space-2)"],
+  ["scroll-content-y", "min-width", "0 !important"],
+  ["scroll-content-y", "overflow-x", "clip"],
   ["scroll-flex", "min-height", "0"],
   ["scroll-flex", "min-width", "0"],
   ["wrap-slot", "min-width", "min(100%, var(--spacing-popover-min-width))"],

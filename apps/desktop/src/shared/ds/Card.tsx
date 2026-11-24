@@ -29,8 +29,10 @@ export const Card = (props: Props): ReactElement => (
         )}
       </header>
     ) : null}
-    <CardBody direction="horizontal" layout="card">
-      {props.children}
+    <CardBody direction="horizontal">
+      <div className="p-space-4 flex flex-col gap-space-4">
+        {props.children}
+      </div>
     </CardBody>
   </section>
 );

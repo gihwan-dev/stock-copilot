@@ -61,8 +61,10 @@ export const Dialog = (props: Props): ReactElement => {
                 </BaseDialog.Close>
               )}
             </header>
-            <ScrollArea direction="vertical" layout="dialog">
-              <div className="flex flex-col gap-space-4">{props.children}</div>
+            <ScrollArea direction="both">
+              <div className="p-space-5 flex flex-col gap-space-4">
+                {props.children}
+              </div>
             </ScrollArea>
             <DialogFooter actions={props.actions} />
           </BaseDialog.Popup>

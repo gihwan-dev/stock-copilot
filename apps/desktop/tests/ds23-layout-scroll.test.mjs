@@ -16,7 +16,7 @@ let fixture;
 before(async () => {
   fixture = await componentsDom(String.raw`
 import { createElement as h } from "react";
-import { render, cleanup, act } from "@testing-library/react";
+import { render, cleanup, act, fireEvent } from "@testing-library/react";
 import {
   Badge,
   Button,
@@ -75,8 +75,9 @@ const show = async (node) => {
   return view;
 };
 window.cleanup = cleanup;
-window.showScroll = (direction, layout) =>
-  show(h(ScrollArea, { direction, layout }, h(Text, null, description)));
+window.fire = fireEvent;
+window.showScroll = (direction) =>
+  show(h(ScrollArea, { direction }, h(Text, null, description)));
 window.showNumbers = () =>
   show(
     h(
@@ -143,8 +144,9 @@ test("DS23 ScrollArea declares directional viewport, overlay scrollbar suppressi
   for (const [direction, viewportClass] of [
     ["horizontal", "scroll-viewport-x"],
     ["vertical", "scroll-viewport-y"],
+    ["both", "scroll-viewport-both"],
   ]) {
-    await w.showScroll(direction, direction === "vertical" ? "stage" : "plain");
+    await w.showScroll(direction);
     const viewport = w.document.querySelector("[data-scroll-viewport]");
     assert.ok(viewport, direction);
     assert.ok(viewport.classList.contains(viewportClass), direction);
@@ -155,7 +157,14 @@ test("DS23 ScrollArea declares directional viewport, overlay scrollbar suppressi
     assert.ok(
       viewport.classList.contains("focus-visible:scroll-outline-inset"),
     );
+    if (direction === "horizontal")
+      assert.ok(viewport.classList.contains("pb-space-2"));
     assert.equal(viewport.parentElement.style.position, "relative");
+    const content = viewport.firstElementChild;
+    assert.ok(content, direction);
+    assert.equal(content.getAttribute("role"), "presentation", direction);
+    if (direction === "vertical")
+      assert.ok(content.classList.contains("scroll-content-y"));
   }
   const tokensCss = readFileSync(
     join(desktopRoot, "src/shared/ds/tokens.css"),
@@ -169,6 +178,8 @@ test("DS23 ScrollArea declares directional viewport, overlay scrollbar suppressi
   const compiled = (await compile(source)).build([
     "scroll-viewport-x",
     "scroll-viewport-y",
+    "scroll-viewport-both",
+    "scroll-content-y",
     "scroll-outline-inset",
   ]);
   const declarations = {};
@@ -197,6 +208,17 @@ test("DS23 ScrollArea declares directional viewport, overlay scrollbar suppressi
     declarations[".scroll-viewport-y:overflow-y"],
     "auto !important",
   );
+  assert.equal(declarations[".scroll-viewport-both:position"], "relative");
+  assert.equal(
+    declarations[".scroll-viewport-both:overflow-x"],
+    "auto !important",
+  );
+  assert.equal(
+    declarations[".scroll-viewport-both:overflow-y"],
+    "auto !important",
+  );
+  assert.equal(declarations[".scroll-content-y:min-width"], "0 !important");
+  assert.equal(declarations[".scroll-content-y:overflow-x"], "clip");
   assert.equal(
     declarations[".scroll-outline-inset:outline-offset"],
     "calc(var(--border-width-focus) * -1)",
@@ -223,22 +245,38 @@ test("DS23 numbers stay inline single-line while Card, Table, and Donut/Treemap 
     const viewports = [
       ...w.document.querySelectorAll("[data-scroll-viewport]"),
     ];
-    assert.ok(viewports.length >= 2, kind);
-    for (const vp of viewports)
-      assert.ok(vp.classList.contains("scroll-viewport-x"), kind);
-    assert.ok(
-      viewports.some((vp) => vp.querySelector("table") !== null),
-      kind,
-    );
+    assert.equal(viewports.length, 1, kind);
+    assert.ok(viewports[0].classList.contains("scroll-viewport-x"), kind);
+    assert.ok(viewports[0].querySelector("table") !== null, kind);
   }
 
   await w.showChart("line");
   const lineViewports = [
     ...w.document.querySelectorAll("[data-scroll-viewport]"),
   ];
-  assert.equal(lineViewports.length, 3);
+  assert.equal(lineViewports.length, 2);
   for (const vp of lineViewports)
     assert.ok(vp.classList.contains("scroll-viewport-x"));
+  assert.ok(
+    lineViewports[1].querySelector(".\\@content-medium\\:justify-end") !== null,
+  );
+  const explore = w.document.querySelector("button");
+  w.fire.focus(explore);
+  const focusedViewports = [
+    ...w.document.querySelectorAll("[data-scroll-viewport]"),
+  ];
+  assert.equal(focusedViewports.length, 3);
+  for (const vp of focusedViewports)
+    assert.ok(vp.classList.contains("scroll-viewport-x"));
+  const statusRegion = w.document.querySelector('[role="status"]');
+  const initialStatusText = statusRegion.textContent;
+  assert.ok(initialStatusText.length > 0);
+  w.fire.blur(explore);
+  assert.equal(statusRegion.textContent, "");
+  w.fire.focus(statusRegion);
+  assert.equal(statusRegion.textContent, initialStatusText);
+  w.fire.blur(statusRegion);
+  assert.equal(statusRegion.textContent, "");
   const srTable = w.document.querySelector("table.sr-only");
   assert.ok(srTable);
   assert.equal(srTable.closest("[data-scroll-viewport]"), null);
@@ -267,7 +305,7 @@ test("DS23 buttons, secret TextField, Dialog, and five resolved components apply
   assert.ok(popup.querySelector("footer").classList.contains("flex-wrap"));
   const dialogViewport = popup.querySelector("[data-scroll-viewport]");
   assert.ok(dialogViewport);
-  assert.ok(dialogViewport.classList.contains("scroll-viewport-y"));
+  assert.ok(dialogViewport.classList.contains("scroll-viewport-both"));
 
   await w.showCheckbox();
   const checkbox = w.document.querySelector('button[role="checkbox"]');
@@ -302,6 +340,7 @@ test("DS23 buttons, secret TextField, Dialog, and five resolved components apply
   assert.ok(bar.classList.contains("px-space-4"));
   assert.ok(bar.classList.contains("flex-wrap"));
   assert.ok(region.parentElement.classList.contains("wrap-slot"));
+  assert.ok(region.parentElement.querySelector("svg") !== null);
 
   await w.showDisclosure();
   const trigger = w.document.querySelector("button");
@@ -320,8 +359,11 @@ test("DS23 new scroll and layout utilities remain restricted to their owning fil
   for (const [file, cls] of [
     ["src/shared/ds/Badge.tsx", "scroll-viewport-x"],
     ["src/shared/ds/Badge.tsx", "scroll-viewport-y"],
+    ["src/shared/ds/Badge.tsx", "scroll-viewport-both"],
     ["src/shared/ds/Badge.tsx", "scroll-track-x"],
     ["src/shared/ds/Badge.tsx", "scroll-track-y"],
+    ["src/shared/ds/Badge.tsx", "scroll-content-y"],
+    ["src/shared/ds/Text.tsx", "scroll-content-y"],
     ["src/shared/ds/Badge.tsx", "wrap-slot"],
     ["src/shared/ds/Card.tsx", "scroll-viewport-x"],
     ["src/shared/ds/Text.tsx", "scroll-viewport-x"],

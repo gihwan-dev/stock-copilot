@@ -1,5 +1,10 @@
 import type { ReactElement } from "react";
-import type { ChartProps, ChartPoint, ChartAxisLabels } from "./chart-types";
+import type {
+  ChartProps,
+  ChartPoint,
+  ChartAxisLabels,
+  ChartMark,
+} from "./chart-types";
 import { ChartNumber } from "./Numbers";
 import { ScrollArea } from "./ScrollArea";
 import { text } from "../lib";
@@ -76,12 +81,37 @@ export const ChartAxes = (props: {
         </span>
       </ScrollArea>
       <ScrollArea direction="horizontal">
-        <span className="block w-max text-caption text-ink-muted">
-          {text("ds.chartMaximum", "ko")}
-          {text("ds.chartSeparator", "ko")}
-          <ChartNumber value={props.axes.maximum} />
-        </span>
+        <div className="w-full @content-medium:flex @content-medium:justify-end">
+          <span className="block w-max text-caption text-ink-muted">
+            {text("ds.chartMaximum", "ko")}
+            {text("ds.chartSeparator", "ko")}
+            <ChartNumber value={props.axes.maximum} />
+          </span>
+        </div>
       </ScrollArea>
     </div>
   </div>
+);
+
+export const ChartStatusBody = (props: {
+  readonly selected: ChartMark | undefined;
+  readonly keepMounted: "keep" | "hide";
+}): ReactElement => (
+  <>
+    {props.selected === undefined ? null : (
+      <span className="status-sentence">
+        {props.selected.label}
+        {text("ds.chartSeparator", "ko")}
+      </span>
+    )}
+    {props.selected === undefined && props.keepMounted === "hide" ? null : (
+      <ScrollArea direction="horizontal">
+        {props.selected === undefined ? (
+          <span />
+        ) : (
+          <ChartNumber value={props.selected.value} />
+        )}
+      </ScrollArea>
+    )}
+  </>
 );

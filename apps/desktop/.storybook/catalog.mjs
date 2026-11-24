@@ -32,20 +32,27 @@ const Example = ({ render, theme }) => render(theme);
 const Stage = ({ component, render, theme }) =>
   createElement(
     ScrollArea,
-    { direction: "vertical", layout: "stage" },
+    { direction: "vertical" },
     numericComponents.has(component)
       ? createElement(
-          ScrollArea,
-          { direction: "horizontal", layout: "numeric" },
+          "div",
+          { className: "py-space-3" },
           createElement(
-            "div",
-            { "data-catalog-content": "", className: "w-max" },
-            createElement(Example, { render, theme }),
+            ScrollArea,
+            { direction: "horizontal" },
+            createElement(
+              "div",
+              { "data-catalog-content": "", className: "w-max" },
+              createElement(Example, { render, theme }),
+            ),
           ),
         )
       : createElement(
           "div",
-          { "data-catalog-content": "", className: "w-full scroll-flex" },
+          {
+            "data-catalog-content": "",
+            className: "w-full scroll-flex py-space-3",
+          },
           createElement(Example, { render, theme }),
         ),
   );

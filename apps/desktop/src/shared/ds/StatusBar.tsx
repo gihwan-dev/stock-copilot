@@ -40,7 +40,9 @@ const statusAction = (action: Props["action"]): ReactElement | null =>
 const statusIndicator = (tone: Tone): ReactElement => (
   <span
     className={
-      tone === "info" ? "flex-none text-ink-muted" : "flex-none text-alert"
+      tone === "info"
+        ? "flex-none text-ink-muted mr-space-2"
+        : "flex-none text-alert mr-space-2"
     }
   >
     <Icon name={statusIcon(tone)} />
@@ -51,18 +53,28 @@ const emptyStyles = {
   error: "flex items-center",
   info: "flex items-center",
 } as const;
+const statusClasses = {
+  warning: "flex-1 status-sentence",
+  info: "flex-1 status-sentence",
+  error: "status-sentence",
+} as const;
+const alertClasses = {
+  warning: "status-sentence",
+  info: "status-sentence",
+  error: "flex-1 status-sentence",
+} as const;
 export const StatusBar = (props: Props): ReactElement => {
   const tone = props.tone ?? "warning";
   const present = props.children !== undefined && props.children.length > 0;
   return (
     <div className="flex-none">
       <div className={present ? styles[tone] : emptyStyles[tone]}>
-        {present ? statusIndicator(tone) : null}
-        <div className="flex-1 status-sentence wrap-slot">
-          <div role="status" aria-atomic="true">
+        <div className="flex-1 flex items-center wrap-slot">
+          {present ? statusIndicator(tone) : null}
+          <div role="status" aria-atomic="true" className={statusClasses[tone]}>
             {tone === "error" ? undefined : props.children}
           </div>
-          <div role="alert" aria-atomic="true">
+          <div role="alert" aria-atomic="true" className={alertClasses[tone]}>
             {tone === "error" ? props.children : undefined}
           </div>
         </div>

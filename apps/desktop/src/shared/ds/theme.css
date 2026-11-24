@@ -153,6 +153,18 @@
   overflow-y: auto !important;
 }
 
+@utility scroll-viewport-both {
+  position: relative;
+}
+
+@utility scroll-viewport-both {
+  overflow-x: auto !important;
+}
+
+@utility scroll-viewport-both {
+  overflow-y: auto !important;
+}
+
 @utility scroll-outline-inset {
   outline-offset: calc(var(--border-width-focus) * -1);
 }
@@ -163,6 +175,14 @@
 
 @utility scroll-track-y {
   width: var(--spacing-space-2);
+}
+
+@utility scroll-content-y {
+  min-width: 0 !important;
+}
+
+@utility scroll-content-y {
+  overflow-x: clip;
 }
 
 @utility scroll-flex {

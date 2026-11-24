@@ -3046,6 +3046,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -3062,6 +3067,11 @@
     },
     {
       "name": "@content-medium:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -6911,6 +6921,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -6927,6 +6942,11 @@
     },
     {
       "name": "@content-wide:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -10786,6 +10806,11 @@
       "generated": "yes"
     },
     {
+      "name": "active:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -10802,6 +10827,11 @@
     },
     {
       "name": "active:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15246,6 +15276,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -15262,6 +15297,11 @@
     },
     {
       "name": "disabled:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -19336,6 +19376,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -19352,6 +19397,11 @@
     },
     {
       "name": "focus-visible:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -23201,6 +23251,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -23217,6 +23272,11 @@
     },
     {
       "name": "focus:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -27411,6 +27471,11 @@
       "generated": "yes"
     },
     {
+      "name": "hover:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -27427,6 +27492,11 @@
     },
     {
       "name": "hover:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -31776,6 +31846,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -31792,6 +31867,11 @@
     },
     {
       "name": "motion-reduce:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -34071,6 +34151,11 @@
       "generated": "yes"
     },
     {
+      "name": "scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -34087,6 +34172,11 @@
     },
     {
       "name": "scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -37931,6 +38021,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -37947,6 +38042,11 @@
     },
     {
       "name": "window-lg:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -41796,6 +41896,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:scroll-flex",
       "kind": "allowed",
       "generated": "yes"
@@ -41812,6 +41917,11 @@
     },
     {
       "name": "window-md:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:scroll-viewport-both",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -45106,6 +45216,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:scroll-content-y",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:scroll-flex",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -45119,6 +45233,10 @@
     },
     {
       "selector": ".\\@content-medium\\:scroll-track-y",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:scroll-viewport-both",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
@@ -48102,6 +48220,10 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:scroll-content-y",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:scroll-flex",
       "context": ["@container (width >= 75rem)"]
     },
@@ -48115,6 +48237,10 @@
     },
     {
       "selector": ".\\@content-wide\\:scroll-track-y",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:scroll-viewport-both",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -51106,6 +51232,10 @@
       "context": []
     },
     {
+      "selector": ".active\\:scroll-content-y:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:scroll-flex:active",
       "context": []
     },
@@ -51119,6 +51249,10 @@
     },
     {
       "selector": ".active\\:scroll-track-y:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:scroll-viewport-both:active",
       "context": []
     },
     {
@@ -54574,6 +54708,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:scroll-content-y:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:scroll-flex:disabled",
       "context": []
     },
@@ -54587,6 +54725,10 @@
     },
     {
       "selector": ".disabled\\:scroll-track-y:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:scroll-viewport-both:disabled",
       "context": []
     },
     {
@@ -57750,6 +57892,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:scroll-content-y:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:scroll-flex:focus-visible",
       "context": []
     },
@@ -57763,6 +57909,10 @@
     },
     {
       "selector": ".focus-visible\\:scroll-track-y:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:scroll-viewport-both:focus-visible",
       "context": []
     },
     {
@@ -60746,6 +60896,10 @@
       "context": []
     },
     {
+      "selector": ".focus\\:scroll-content-y:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:scroll-flex:focus",
       "context": []
     },
@@ -60759,6 +60913,10 @@
     },
     {
       "selector": ".focus\\:scroll-track-y:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:scroll-viewport-both:focus",
       "context": []
     },
     {
@@ -64018,6 +64176,10 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:scroll-content-y:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:scroll-flex:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -64031,6 +64193,10 @@
     },
     {
       "selector": ".hover\\:scroll-track-y:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:scroll-viewport-both:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -67414,6 +67580,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:scroll-content-y",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:scroll-flex",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -67427,6 +67597,10 @@
     },
     {
       "selector": ".motion-reduce\\:scroll-track-y",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:scroll-viewport-both",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -69150,6 +69324,10 @@
       "context": []
     },
     {
+      "selector": ".scroll-content-y",
+      "context": []
+    },
+    {
       "selector": ".scroll-flex",
       "context": []
     },
@@ -69163,6 +69341,10 @@
     },
     {
       "selector": ".scroll-track-y",
+      "context": []
+    },
+    {
+      "selector": ".scroll-viewport-both",
       "context": []
     },
     {
@@ -72138,6 +72320,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:scroll-content-y",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:scroll-flex",
       "context": ["@media (width >= 80rem)"]
     },
@@ -72151,6 +72337,10 @@
     },
     {
       "selector": ".window-lg\\:scroll-track-y",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:scroll-viewport-both",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -75134,6 +75324,10 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:scroll-content-y",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:scroll-flex",
       "context": ["@media (width >= 67.5rem)"]
     },
@@ -75147,6 +75341,10 @@
     },
     {
       "selector": ".window-md\\:scroll-track-y",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:scroll-viewport-both",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
