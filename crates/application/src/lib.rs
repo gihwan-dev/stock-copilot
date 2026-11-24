@@ -434,3 +434,9 @@ pub use open_external::{
     CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
     OpenExternalError, OpenExternalOutcome, OpenExternalUrl,
 };
+mod watchlist;
+pub use watchlist::{
+    ManageWatchlist, TrackedUniverse, TrackingOrigin, TrackingTarget, Watchlist, WatchlistCount,
+    WatchlistEntry, WatchlistError, WatchlistMembership, WatchlistOutcome, WatchlistRepository,
+    WatchlistStoreOutcome,
+};
