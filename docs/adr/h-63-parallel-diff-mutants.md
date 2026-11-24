@@ -36,18 +36,19 @@ D-54 병합에서 `domain` 선택 변이 130건을 단일 `macos-15` 러너(`mac
 
 ## 추가 결정: 작업 브랜치 푸시에서 전체 CI 제외 (`master`·`merge/**` 한정)
 
-- **배경**: 작업 브랜치(`d-58`, `h-64`, `s-24` 등)를 푸시할 때마다 `ci.yml`의 전체 검사(Linux·macOS·변경분 변이)가 실행되어 GitHub Actions 실행기(특히 macOS 슬롯)를 차지하고, 실제 병합 판정에 쓰이는 병합 커밋(`merge/*`)의 검사가 30분 넘게 대기열에 밀리는 병목이 발생했다. 작업 브랜치 푸시의 `ci.yml` 결과는 병합 판정에 쓰이지 않으며, 판정은 `merge/*` 병합 커밋과 `master`에서만 수행한다.
+- **대체하는 기존 결정**: ADR 0128(H-52)의 "모든 브랜치 push에서 원격 Linux·macOS 전체 검사 실행" 규칙을 `master`·`merge/**` 푸시 한정으로 대체한다(2026-11-24 메인 결정, 최종 사용자 확인 대기).
+- **배경**: 기존(ADR 0128)에는 작업 브랜치(`d-58`, `h-64`, `s-24` 등)를 푸시할 때마다 `ci.yml`의 전체 검사(Linux·macOS·변경분 변이)가 실행되어 GitHub Actions 실행기(특히 macOS 슬롯)를 차지하고, 실제 병합 판정에 쓰이는 병합 커밋(`merge/*`)의 검사가 30분 넘게 대기열에 밀리는 병목이 발생했다. 따라서 원격 전체 CI 판정 지점을 일반 작업 브랜치 끝에서 `merge/**` 병합 커밋과 `master`로 옮긴다.
 - **결정**:
-  1. `.github/workflows/ci.yml`의 `on.push.branches`를 `["**"]`에서 `["master", "merge/**"]`로 제한한다. 일반 작업 브랜치 푸시에서는 로컬 범위 검사(`just check-fast`)와 원격 서명 검사(`signatures.yml`, `on.push.branches: ["**"]` 유지)만 돌고, 전체 CI(`linux`, `macos` / `macos-branch`, `diff-mutants-plan`, `diff-mutants-linux`, `diff-mutants-macos`, `diff-mutants-verdict`)는 `master`와 `merge/**` 푸시에서만 실행한다.
-  2. `harness/ci/workflow-policy/policy.json`에 `ciPushBranches: ["master", "merge/**"]`와 `signaturesPushBranches: ["**"]`를 추가하고, `harness/ci/workflow-policy/check.mjs`의 `pushBranchFindings`로 `ci.yml`의 분기 확대(`**`, 추가 브랜치, `branches` 누락)·축소(`master` 또는 `merge/**` 누락, `merge/*` 오기)와 `signatures.yml`의 축소 모두 `event:push.branches`로 닫힌 실패하게 고정한다.
+  1. `.github/workflows/ci.yml`의 `on.push.branches`를 `["**"]`에서 `["master", "merge/**"]`로 제한한다. 일반 작업 브랜치에서는 로컬 커밋 범위 검사(`just check-fast`)·로컬 푸시 훅(`just check-full`)과 원격 서명 검사(`signatures.yml`, `on.push.branches: ["**"]` 유지, `lock-point.txt` 설정 후 활성)만 돌고, 전체 원격 CI(`linux`, `macos` / `macos-branch`, `diff-mutants-plan`, `diff-mutants-linux`, `diff-mutants-macos`, `diff-mutants-verdict`)는 `master`와 `merge/**` 푸시에서만 실행한다.
+  2. `harness/ci/workflow-policy/policy.json`에 `ciPushBranches: ["master", "merge/**"]`와 `signaturesPushBranches: ["**"]`를 추가하고, `harness/ci/workflow-policy/check.mjs`의 `pushBranchFindings`와 `repositoryPushBranchIssues`로 `ci.yml`의 분기 확대(`**`, 추가 브랜치, `branches` 누락)·축소(`master` 또는 `merge/**` 누락, `merge/*` 오기), `signatures.yml`의 축소, 그리고 작업 이름 변경·삭제와 정책 동시 변조까지 모두 `event:push.branches`로 닫힌 실패하게 고정한다.
   3. H-59 규칙(`ci.yml` 최상위 `concurrency`: `master`는 실행·재시도별 독립 그룹 및 취소 금지, 그 외 브랜치는 브랜치별 이전 실행 취소)은 `merge/**` 브랜치에서 그대로 유지한다(`h59-capacity.test.mjs`).
   4. `remote-check.mjs`와 `merge-gate.mjs`는 `merge/*` 푸시의 `linux`, `macos-branch`, `diff-mutants-plan`, 실행된 조각, 건너뛴 플랫폼 항목, `diff-mutants-verdict`와 `signatures.yml`을 모두 요구하므로, `ci.yml` 실행이 없는 일반 작업 브랜치 SHA로는 병합 게이트가 닫힌 실패로 거부된다.
-  5. `docs/harness.md`와 `docs/workflow.md`에 "작업 브랜치는 로컬 범위 검사 + 서명 검사만, 전체 검사는 `merge/**`·`master` 병합 커밋에서" 원칙과 H-63 병렬 변이 파이프라인을 반영한다.
+  5. `docs/harness.md`와 `docs/workflow.md`에 로컬 커밋/푸시 훅·원격 서명 검사·`merge/**`·`master` 전체 CI 분리 원칙과 `merge/<작업 ID>` 검증 후 `master` fast-forward / `merge-gate` 절차를 반영한다.
 - **버린 대안**: 모든 브랜치 푸시에서 `ci.yml`을 계속 돌리며 macOS 동시 실행 한도만 늘리기(계정 한도 제약으로 근본 해결 불가), 또는 `signatures.yml`까지 `merge/**`로 줄이기(작업 브랜치 푸시의 보호 경로 사후 탐지 약화).
 
 ## 기존 테스트 파일 기계적 갱신 내역 (AGENTS.md 5)
 
-새 CI 작업 구조(`diff-mutants-plan`·`diff-mutants-linux`·`diff-mutants-macos`·`diff-mutants-verdict`), 공통 `macos-mutants-slot-{0,1}` 그룹, 그리고 `ci.yml` 푸시 트리거(`master`·`merge/**`)를 반영하기 위해 아래 7개 기존 테스트 파일을 기계적으로 갱신했다(기존 단언 약화·삭제 없음; 최종 `master` 반영은 사용자 서명 커밋 또는 잠금 시점 이전 메인 병합 절차로 진행한다).
+새 CI 작업 구조(`diff-mutants-plan`·`diff-mutants-linux`·`diff-mutants-macos`·`diff-mutants-verdict`), 공통 `macos-mutants-slot-{0,1}` 그룹, 그리고 `ci.yml` 푸시 트리거(`master`·`merge/**`)를 반영하기 위해 아래 7개 기존 테스트 파일을 기계적으로 갱신했다(기존 단언 약화·삭제 없음; 최종 `master` 반영은 사용자 서명 커밋으로 진행한다, AGENTS.md 5).
 
 | 파일 | 변경 요약 |
 |---|---|

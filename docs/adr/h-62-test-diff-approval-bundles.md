@@ -58,10 +58,10 @@ H-55·H-56(ADR 0153)은 `harness/test-diff/approvals.toml`의 승인 행으로 �
    - `just test-diff-bundle-draft <작업 ID> <기준 40자리 SHA> <브랜치 40자리 SHA> merge-head`
 2. 사전 대조 확인(병합 전 작업 브랜치 끝 커밋 기준):
    - `just test-diff-bundle-check harness/test-diff/bundles/<작업 ID>.toml <기준 40자리 SHA> <브랜치 40자리 SHA>`
-3. 묶음 단독 커밋 `I` 생성 후 `origin/master`에 단독 푸시 및 원격 추적 참조 갱신(현재 `harness/ci/signatures/lock-point.txt`가 비어 있어 서명 검사 비활성 상태이므로 일반 `git commit`으로 통과하며, 추후 잠금 시점을 켜면 보호 경로 규칙에 따라 사용자 `git commit -S`가 필요하다):
-   - `git add harness/test-diff/bundles/<작업 ID>.toml && git commit -m "H-62: <작업 ID> 테스트 변경 승인 묶음"`
+3. 묶음 단독 서명 커밋 `I` 생성 후 `origin/master`에 단독 푸시 및 원격 추적 참조 갱신(AGENTS.md 5·workflow.md 4장에 따라 보호 경로 변경은 사용자 서명 커밋이 규범이며, `signatures.yml`은 `harness/ci/signatures/lock-point.txt`가 설정된 이후부터 서명을 검증한다):
+   - `git add harness/test-diff/bundles/<작업 ID>.toml && git commit -S -m "H-62: <작업 ID> 테스트 변경 승인 묶음"`
    - `git push origin master && git fetch origin master`
-4. 병합 커밋 메시지 트레일러 생성, `merge/<작업 ID>` 브랜치에서 `--no-ff` 병합 커밋 `M` 생성 후 `merge/<작업 ID>` 푸시(`ci.yml` 전체 검사 실행):
+4. 병합 커밋 메시지 트레일러 생성, `merge/<작업 ID>` 브랜치에서 `--no-ff` 병합 커밋 `M` 생성 후 `merge/<작업 ID>` 푸시(`ci.yml` 전체 검사 실행), 검증 통과 뒤 `master` fast-forward:
    - `just test-diff-bundle-message harness/test-diff/bundles/<작업 ID>.toml`
    - `git checkout -b merge/<작업 ID> master`
    - 커밋 본문 끝에 아래 트레일러 두 줄을 붙여 병합한다(`merge-head` 모드에서 커밋된 병합 커밋에 필수):
@@ -69,7 +69,8 @@ H-55·H-56(ADR 0153)은 `harness/test-diff/approvals.toml`의 승인 행으로 �
      Test-Diff-Bundle: harness/test-diff/bundles/<작업 ID>.toml
      Test-Diff-Findings: <건수>
      ```
-   - `git push origin merge/<작업 ID>` 후 `just remote-check <M의 SHA>`(Linux·`macos-branch`·병렬 변이·`signatures.yml`) 통과 확인 뒤 `master`에 반영한다.
+   - `git push origin merge/<작업 ID>` 후 `just remote-check <M의 SHA>`(Linux·`macos-branch`·병렬 변이·`signatures.yml`) 통과를 확인한다.
+   - 통과 뒤 `git checkout master && git merge --ff-only merge/<작업 ID> && git push origin master`로 `M`을 그대로 `master`에 반영한다(`M` 위에 이중 병합 커밋을 만들지 않는다).
    - 병합 커밋 `M`에서 `just test-diff-bundle-check harness/test-diff/bundles/<작업 ID>.toml <I의 SHA> <M의 SHA>`와 `just base=<I의 SHA> test-diff`, `mutants-diff` 선행 검사, CI `ci.yml`이 그대로 통과한다.
 
 ## 보류 결정과 선택지

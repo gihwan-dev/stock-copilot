@@ -58,7 +58,7 @@
 
 ### 1.2 언제 무엇을 돌리는가
 
-전체 `just check`는 로컬 macOS와 macOS CI가 맡는다. 작업 공간에 macOS 전용 crate가 있고 `cfg`와 매니페스트 `[target]` 표를 금지하므로(3.2) Linux에서는 작업 공간 전체를 빌드하지 않는다. Linux CI는 서명 검사와 플랫폼 중립 crate 묶음만 돈다. 플랫폼 중립 묶음은 작업 공간에서 보호된 제외 목록(macOS 전용 crate와 그것에 의존하는 crate)을 뺀 것이다. 일반 작업 브랜치 푸시에서는 로컬 범위 검사(`just check-fast`)와 원격 서명 검사(`signatures.yml`)만 실행하고, 전체 CI(`ci.yml`: Linux 검사·시각 회귀, macOS 전체 `just check`, 플랫폼 분리 병렬 변경분 변이)는 `master`와 `merge/**` 병합 커밋 푸시에서만 실행한다.
+전체 `just check`는 로컬 macOS와 macOS CI가 맡는다. 작업 공간에 macOS 전용 crate가 있고 `cfg`와 매니페스트 `[target]` 표를 금지하므로(3.2) Linux에서는 작업 공간 전체를 빌드하지 않는다. Linux CI는 서명 검사와 플랫폼 중립 crate 묶음만 돈다. 플랫폼 중립 묶음은 작업 공간에서 보호된 제외 목록(macOS 전용 crate와 그것에 의존하는 crate)을 뺀 것이다. 일반 작업 브랜치의 로컬 커밋 훅은 범위 검사(`just check-fast`), 로컬 푸시 훅은 `just check-full`을 실행하며, 원격 푸시에서는 서명 검사(`signatures.yml`, `harness/ci/signatures/lock-point.txt` 설정 후 활성)만 돈다. 원격 전체 CI(`ci.yml`: Linux 검사·시각 회귀, macOS 전체 `just check`, 플랫폼 분리 병렬 변경분 변이)는 `master`와 `merge/**` 병합 커밋 푸시에서만 실행한다.
 
 | 언제 | 어디서 | 내용 |
 |---|---|---|

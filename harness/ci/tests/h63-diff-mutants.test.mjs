@@ -1060,6 +1060,75 @@ test("H-63 정책은 ci.yml 푸시 트리거를 master·merge/**로 고정하고
     ),
   );
 
+  for (const singleJob of ["linux", "macos", "macos-branch"]) {
+    const partialCi = structuredClone(ci);
+    partialCi.on.push.branches = ["**"];
+    partialCi.jobs = { [singleJob]: ci.jobs[singleJob] };
+    assert.ok(
+      checkWith(CI_PATH, partialCi).includes("event:push.branches"),
+      `singleJob=${singleJob}`,
+    );
+  }
+
+  mkdirSync(join(repoRoot, "target"), { recursive: true });
+  const renamedDir = mkdtempSync(join(repoRoot, "target/h63-branch-lock-"));
+  try {
+    cpSync(join(repoRoot, ".github"), join(renamedDir, ".github"), {
+      recursive: true,
+    });
+    const renamedPolicy = structuredClone(POLICY);
+    const renamedCi = structuredClone(ci);
+    renamedCi.on.push.branches = ["**"];
+    renamedCi.jobs = { build: ci.jobs.linux };
+    renamedPolicy.ciPushBranches = ["**"];
+    renamedPolicy.expected[CI_PATH] = renamedCi;
+    writeFileSync(
+      join(renamedDir, CI_PATH),
+      `${JSON.stringify(renamedCi, undefined, 2)}\n`,
+    );
+    const renamedSig = structuredClone(signatures);
+    renamedSig.on.push.branches = ["master"];
+    renamedSig.jobs = { build: ci.jobs.linux };
+    renamedPolicy.signaturesPushBranches = ["master"];
+    renamedPolicy.expected[signaturesPath] = renamedSig;
+    writeFileSync(
+      join(renamedDir, signaturesPath),
+      `${JSON.stringify(renamedSig, undefined, 2)}\n`,
+    );
+    const repoIssues = repositoryFindings(renamedDir, renamedPolicy, TOOL_SPEC);
+    assert.ok(
+      repoIssues.some(
+        (item) => item.path === CI_PATH && item.rule === "event:push.branches",
+      ),
+      JSON.stringify(repoIssues),
+    );
+    assert.ok(
+      repoIssues.some(
+        (item) =>
+          item.path === CI_PATH &&
+          item.rule === "policy-expected:event:push.branches",
+      ),
+      JSON.stringify(repoIssues),
+    );
+    assert.ok(
+      repoIssues.some(
+        (item) =>
+          item.path === signaturesPath && item.rule === "event:push.branches",
+      ),
+      JSON.stringify(repoIssues),
+    );
+    assert.ok(
+      repoIssues.some(
+        (item) =>
+          item.path === signaturesPath &&
+          item.rule === "policy-expected:event:push.branches",
+      ),
+      JSON.stringify(repoIssues),
+    );
+  } finally {
+    rmSync(renamedDir, { recursive: true, force: true });
+  }
+
   const mergeRun = {
     id: 101,
     run_attempt: 1,

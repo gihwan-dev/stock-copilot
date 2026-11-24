@@ -27,7 +27,7 @@
 
 - 병합은 메인 에이전트가 `git merge --no-ff`로 한다. 병합 커밋도 훅의 검사를 거친다. 2.8의 조건을 통과한 경우 정적 검사만 다시 한다. fast-forward가 된 경우에는 병합 직후 `just base=<병합 전 기준 브랜치 끝> check`를 돌린다 (ADR 0015).
 - 검사 명령은 `just base=<HEAD 또는 40자리 커밋 ID> check`다. 브리프의 기준 커밋을 `base`로 준다 (ADR 0013).
-- 푸시는 메인 에이전트만 한다. 서브에이전트는 푸시하지 않는다. 작업 브랜치는 로컬 범위 검사(`just check-fast`)와 원격 서명 검사(`signatures.yml`)만 거치고, 전체 원격 CI(`ci.yml`: Linux·macOS·병렬 변경분 변이)는 `master`와 `merge/**` 병합 커밋 푸시에서만 실행한다. CI의 서명 검사는 푸시 뒤에 도는 사후 탐지다 ([harness.md](harness.md) 7.6).
+- 푸시는 메인 에이전트만 한다. 서브에이전트는 푸시하지 않는다. 작업 브랜치는 로컬 커밋 범위 검사(`just check-fast`)·로컬 푸시 훅(`just check-full`)과 원격 서명 검사(`signatures.yml`, `lock-point.txt` 설정 후 활성)만 거치고, 전체 원격 CI(`ci.yml`: Linux·macOS·병렬 변경분 변이)는 `master`와 `merge/**` 병합 커밋 푸시에서만 실행한다. CI의 서명 검사는 푸시 뒤에 도는 사후 탐지다 ([harness.md](harness.md) 7.6).
 
 ### 2.1 브리프
 
@@ -171,7 +171,7 @@
 git --no-replace-objects diff --quiet --no-ext-diff --no-textconv master <branch> -- justfile lefthook.yml .github .claude .codex .cargo .config harness crates/xtask Cargo.toml Cargo.lock pnpm-lock.yaml .node-version rust-toolchain.toml
 ```
 
-통과하면 메인은 `git merge --no-ff --no-commit <branch>`로 병합을 준비하고 문서·생성 등록을 스테이징한 뒤 `just merge-gate <branch>`를 실행한다. 이 명령은 같은 SHA의 GitHub `ci.yml`의 Linux·macOS·병렬 변경분 변이(`diff-mutants-plan`, 실행된 조각, `diff-mutants-verdict`) 작업과 `signatures.yml`의 서명 작업이 해당 push 실행의 최신 회차에서 모두 성공했는지 직접 확인한다. `ci.yml`은 `master`와 `merge/**` 푸시에서만 실행되므로 일반 작업 브랜치 푸시에는 `ci.yml` 실행이 없으며 병합 게이트의 원격 증거는 `merge/**` 병합 커밋(또는 `master`) 푸시 실행에서 나온다. Linux 검사·네트워크 차단 테스트·시각 회귀, macOS 전체 검사, 변경분 변이 계획·조각·최종 합산, 서명 워크플로 진입 단계도 각각 성공해야 한다. 단계 성공만으로 서명 검사가 활성 상태였다는 뜻은 아니다. 실패·취소·진행 중·누락은 거부한다. `just remote-check <sha>`는 같은 원격 판정만 별도로 실행한다. 공개 조회는 인증 없이 가능하며 토큰이 필요한 경우 `GH_TOKEN` 또는 `GITHUB_TOKEN`을 환경에서만 받는다.
+통과하면 메인은 두 경로 중 하나로 원격 전체 CI 증거를 사용한다. 첫째, `merge/<작업 ID>` 브랜치에서 `--no-ff` 병합 커밋을 만들어 `origin/merge/<작업 ID>`로 푸시하고 `just remote-check <병합 커밋 SHA>`로 `ci.yml`(Linux·`macos-branch`·병렬 변경분 변이)과 `signatures.yml` 성공을 확인한 뒤 `master`를 해당 병합 커밋으로 fast-forward(`git merge --ff-only`)한다. 둘째, `just merge-gate <branch>`로 병합 커밋 훅의 전체 검사 재실행을 생략하려면 `<branch>` 끝 SHA가 `merge/**` 푸시로 `ci.yml`을 통과한 실행을 갖고 있어야 한다(`ci.yml`은 `master`와 `merge/**` 푸시에서만 실행되며 `merge-gate`는 `master`를 거부하고 비-`master` 브랜치 끝 SHA의 `ci.yml`·`signatures.yml` push 실행을 요구하므로, 일반 작업 브랜치 푸시만으로는 `ci.yml` 실행이 없어 닫힌 실패로 거부된다). `just merge-gate <branch>`는 `git merge --no-ff --no-commit <branch>`로 병합을 준비하고 문서·생성 등록을 스테이징한 뒤 실행하며, 같은 SHA의 GitHub `ci.yml`의 Linux·macOS·병렬 변경분 변이(`diff-mutants-plan`, 실행된 조각, `diff-mutants-verdict`) 작업과 `signatures.yml`의 서명 작업이 해당 push 실행의 최신 회차에서 모두 성공했는지 직접 확인한다. Linux 검사·네트워크 차단 테스트·시각 회귀, macOS 전체 검사, 변경분 변이 계획·조각·최종 합산, 서명 워크플로 진입 단계도 각각 성공해야 한다. 단계 성공만으로 서명 검사가 활성 상태였다는 뜻은 아니다. 실패·취소·진행 중·누락은 거부한다. `just remote-check <sha>`는 같은 원격 판정만 별도로 실행한다. 공개 조회는 인증 없이 가능하며 토큰이 필요한 경우 `GH_TOKEN` 또는 `GITHUB_TOKEN`을 환경에서만 받는다.
 
 원격 성공을 증거로 사용할 때는 대상과 현재 로컬 `master`의 보호 경로도 비교한다. 기준 `master`의 `harness/agent-writable.txt` 밖의 파일이나 Cargo·패키지 명세, 잠금 파일, 빌드 진입점이 다르면 원격 성공과 관계없이 생략을 거부한다. 워크플로와 그 호출 도구를 작업 브랜치에서 바꾸고 같은 이름의 성공 단계를 만드는 경우를 막기 위한 조건이다. 정당한 하네스 변경도 이 경로에서는 일반 전체 검사를 받는다. 비교에는 대상 Git 객체와 메인이 관리하는 로컬 `master`가 필요하다. 메인은 명령과 비교 코드 자체를 `master`의 신뢰된 내용으로 실행해야 한다. 이미 병합 인덱스에 적힌 미검증 도구가 검사기 자체를 바꾸는 경우에는 그 도구의 자기 검사만으로 신뢰를 만들 수 없다.
 

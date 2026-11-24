@@ -93,23 +93,51 @@ const eventFindings = (on, policy) => {
   });
 };
 
+const EXPECTED_CI_PUSH_BRANCHES = ["master", "merge/**"];
+const EXPECTED_SIGNATURES_PUSH_BRANCHES = ["**"];
+
+const pushBranchSpec = (path, policy) => {
+  if (path === ".github/workflows/ci.yml") {
+    return {
+      literal: EXPECTED_CI_PUSH_BRANCHES,
+      configured: policy.ciPushBranches,
+    };
+  }
+  if (path === ".github/workflows/signatures.yml") {
+    return {
+      literal: EXPECTED_SIGNATURES_PUSH_BRANCHES,
+      configured: policy.signaturesPushBranches,
+    };
+  }
+  return undefined;
+};
+
+const pushBranchMatches = (on, spec) =>
+  isDeepStrictEqual(spec.configured, spec.literal) &&
+  isDeepStrictEqual(on?.push?.branches, spec.configured);
+
 const pushBranchFindings = (path, on, jobs, policy) => {
-  if (
-    path === ".github/workflows/ci.yml" &&
-    ("linux" in jobs || "macos" in jobs || "macos-branch" in jobs)
-  ) {
-    return isDeepStrictEqual(policy.ciPushBranches, ["master", "merge/**"]) &&
-      isDeepStrictEqual(on?.push?.branches, policy.ciPushBranches)
-      ? []
-      : [finding("event", "push.branches")];
+  const spec = pushBranchSpec(path, policy);
+  if (spec === undefined) {
+    return [];
   }
-  if (path === ".github/workflows/signatures.yml" && "signatures" in jobs) {
-    return isDeepStrictEqual(policy.signaturesPushBranches, ["**"]) &&
-      isDeepStrictEqual(on?.push?.branches, policy.signaturesPushBranches)
-      ? []
-      : [finding("event", "push.branches")];
+  const applies =
+    path === ".github/workflows/ci.yml"
+      ? "linux" in jobs || "macos" in jobs || "macos-branch" in jobs
+      : "signatures" in jobs;
+  return applies && !pushBranchMatches(on, spec)
+    ? [finding("event", "push.branches")]
+    : [];
+};
+
+const repositoryPushBranchIssues = (path, workflow, policy) => {
+  const spec = pushBranchSpec(path, policy);
+  if (spec === undefined || !isObject(workflow)) {
+    return [];
   }
-  return [];
+  return pushBranchMatches(workflow.on, spec)
+    ? []
+    : [finding("event", "push.branches")];
 };
 
 const stepFindings = (job, step, policy, toolSpec) => {
@@ -410,11 +438,23 @@ export const repositoryFindings = (root, policy, toolSpec) => {
         const text = readFileSync(join(root, path), "utf8");
         const expected = `${JSON.stringify(policy.expected[path], undefined, 2)}\n`;
         return [
-          ...workflowFindings(path, text, policy, toolSpec),
-          ...workflowFindings(path, expected, policy, toolSpec).map(
-            (rule) => `policy-expected:${rule}`,
-          ),
-          ...(text === expected ? [] : [finding("expected")]),
+          ...new Set([
+            ...workflowFindings(path, text, policy, toolSpec),
+            ...repositoryPushBranchIssues(
+              path,
+              readJsonOrUndefined(join(root, path)),
+              policy,
+            ),
+            ...workflowFindings(path, expected, policy, toolSpec).map(
+              (rule) => `policy-expected:${rule}`,
+            ),
+            ...repositoryPushBranchIssues(
+              path,
+              policy.expected[path],
+              policy,
+            ).map((rule) => `policy-expected:${rule}`),
+            ...(text === expected ? [] : [finding("expected")]),
+          ]),
         ].map((rule) => ({ path, rule }));
       }),
     ...expectedSlotIssues,
