@@ -1,4 +1,5 @@
 mod article_reader;
+mod dart_corp_map;
 mod dart_disclosures;
 mod endpoint;
 mod headers;
@@ -9,6 +10,11 @@ mod registry;
 mod rss;
 
 pub use article_reader::{ArticleReadError, ArticleReader};
+pub use dart_corp_map::{
+    DartCorpCodeMap, DartCorpMapClient, DartCorpReconciliation, DartCorpRecord,
+    DartMatchFailureReason, MatchedDartInstrument, UnmatchedDartInstrument, extract_corp_code_xml,
+    parse_corp_code_xml,
+};
 pub use dart_disclosures::{
     DartAmendmentKind, DartCorpClass, DartCorpCode, DartCorrectionGroupKey, DartCorrectionStatus,
     DartDisclosureClient, DartDisclosureEntry, DartDisclosureFeed, DartDisclosurePage,

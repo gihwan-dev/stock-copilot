@@ -16,3 +16,4 @@
 | N-02 | 깨진 RSS 피드(비UTF-8·HTML 오류 페이지·미종결 XML·전체 항목 URL 무효)는 `InvalidResponse(Schema)`로 거부하고, 정상 피드 내 개별 손상 항목만 건너뜀 | 개별 손상 항목 하나에도 전체 피드 폐기 |
 | N-17 | `SourceAiBodyReadSettings`에서 `Yonhap`·`GoogleNews`는 켜기 자체를 타입·오류로 봉인하고, `ArticleReader`는 본문 읽기가 켜진 언론사 RSS의 `https` 기사 도메인(`www.edaily.co.kr`, `finance.yahoo.com` 포함)만 일회성 읽기 허용 | 웹 출처나 `http` 기사 주소까지 일회성 읽기 허용 |
 | N-03 | DART `list.json`의 정정 공시는 `[기재정정]`·`[첨부정정]`·`[첨부추가]`·`[변경등록]`·`[발행조건확정]`·`[정정]` 접두와 `rm`의 `정`/`철` 표시를 분해해 `(corp_code, 기본 보고서명)`으로 원공시와 묶고, 접수 시각이 없으므로 `PublicationTime::NotProvided`로 기록 | 접수일의 00:00을 임의 발행 시각으로 채우거나 정정 접두를 원문 그대로 별도 공시로 분리 |
+| N-04 | `corpCode.xml` ZIP 해제는 새 외부 패키지 없이 중앙 디렉터리+`flate2` Deflate(압축 해제 상한 64MiB)로 구현하고, 국내 마스터 대조에서 미매칭(`MissingInDart`)과 중복 종목코드(`AmbiguousStockCode`)를 모두 대응 실패 목록으로 반환 | 외부 `zip` 크레이트 추가 또는 중복 종목코드 중 첫 항목을 임의 선택 |
