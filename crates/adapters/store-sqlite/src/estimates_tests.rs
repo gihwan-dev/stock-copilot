@@ -69,7 +69,7 @@ fn quantity(value: &str) -> Quantity {
 fn ratio(value: &str) -> Ratio {
     Ratio::parse(&NumericInput::try_new(value).expect("input")).expect("ratio")
 }
-fn master_for(instrument_id: &str, symbol: &str) -> MasterInstrument {
+pub(crate) fn master_for(instrument_id: &str, symbol: &str) -> MasterInstrument {
     MasterInstrument::try_new(MasterInstrumentRow {
         listing_market: MasterCode::try_new("KOSPI").expect("market"),
         instrument_id: InstrumentId::try_new(instrument_id).expect("instrument"),
@@ -224,7 +224,7 @@ fn outcome_for(task: &CostEligibleTask, high: &str, low: &str) -> EstimateOutcom
         local(day(70)),
     )
 }
-fn cal_key(model_name: &str) -> CalibrationKey {
+pub(crate) fn cal_key(model_name: &str) -> CalibrationKey {
     CalibrationKey::new(
         CalibrationModel::new(
             ModelIdentityPart::try_new("claude").expect("provider"),
@@ -532,7 +532,7 @@ fn sample_submission_input(
     }
 }
 
-fn seed_resolved_and_append_only_rows(
+pub(crate) fn seed_resolved_and_append_only_rows(
     rt: &tokio::runtime::Runtime,
     database: &Database,
     task_id: &CalibrationEstimateId,

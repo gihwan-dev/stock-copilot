@@ -578,7 +578,10 @@ impl ClaudeEventDecoder {
             events.push(AiEvent::Unknown(untrusted(raw_line)?));
         }
         self.last_result_num_turns = object.get("num_turns").and_then(Value::as_u64);
-        self.last_structured_output = object.get("structured_output").cloned();
+        self.last_structured_output = match outcome {
+            ResultOutcome::Ok => object.get("structured_output").cloned(),
+            ResultOutcome::Error => None,
+        };
         self.turn_delta_state = TurnDeltaState::NoneYet;
         self.turn_model_seen = TurnModelSeen::No;
         Ok(events)

@@ -84,3 +84,14 @@ pub(crate) mod wake_tests;
 pub(crate) mod watchlist;
 #[cfg(test)]
 pub(crate) mod watchlist_tests;
+
+pub(crate) mod briefing;
+#[cfg(test)]
+pub(crate) mod briefing_tests;
+
+#[cfg(test)]
+pub(crate) mod close_evidence_tests;
+
+pub(crate) mod ai_jobs;
+#[cfg(test)]
+pub(crate) mod ai_jobs_tests;

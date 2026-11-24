@@ -11,29 +11,104 @@ pub enum PromptFileError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PromptFile {
-    id: String,
-    version: String,
-    task: String,
-    body: String,
+pub struct PromptSource(String);
+
+impl PromptSource {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
-const KEYS: [&str; 6] = ["id", "version", "task", "inputs", "output_schema", "tools"];
-const PROVIDER_TOOL_NAMES: [&str; 9] = [
-    "mcp__",
-    "WebSearch",
-    "WebFetch",
-    "Bash(",
-    "TodoWrite",
-    "web_search_preview",
-    "apply_patch",
-    "functions.",
-    "computer_use",
-];
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptId(String);
+
+impl PromptId {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptVersion(String);
+
+impl PromptVersion {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptTask(String);
+
+impl PromptTask {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptBody(String);
+
+impl PromptBody {
+    #[must_use]
+    pub fn new(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptFile {
+    id: PromptId,
+    version: PromptVersion,
+    task: PromptTask,
+    body: PromptBody,
+}
 
 impl PromptFile {
-    pub fn parse(source: &str) -> Result<Self, PromptFileError> {
+    pub fn parse(source: &PromptSource) -> Result<Self, PromptFileError> {
+        let keys = ["id", "version", "task", "inputs", "output_schema", "tools"];
+        let provider_tool_names = [
+            "mcp__",
+            "WebSearch",
+            "WebFetch",
+            "Bash(",
+            "TodoWrite",
+            "web_search_preview",
+            "apply_patch",
+            "functions.",
+            "computer_use",
+        ];
         let rest = source
+            .as_str()
             .strip_prefix("---\n")
             .ok_or(PromptFileError::MissingFrontMatter)?;
         let (header, body) = rest
@@ -42,7 +117,7 @@ impl PromptFile {
         let mut values: [Option<&str>; 6] = [None; 6];
         for line in header.lines() {
             let (key, raw) = line.split_once(':').ok_or(PromptFileError::MalformedLine)?;
-            let index = KEYS
+            let index = keys
                 .iter()
                 .position(|known| *known == key)
                 .ok_or(PromptFileError::UnknownKey)?;
@@ -61,42 +136,123 @@ impl PromptFile {
         if body.trim().is_empty() {
             return Err(PromptFileError::EmptyBody);
         }
-        if PROVIDER_TOOL_NAMES.iter().any(|name| body.contains(name)) {
+        if provider_tool_names.iter().any(|name| body.contains(name)) {
             return Err(PromptFileError::ProviderToolName);
         }
-        let field = |index: usize| {
-            values
-                .get(index)
-                .copied()
-                .flatten()
-                .map(str::to_owned)
-                .ok_or(PromptFileError::MissingKey)
+        let [Some(id), Some(version), Some(task), ..] = values else {
+            return Err(PromptFileError::MissingKey);
         };
         Ok(Self {
-            id: field(0)?,
-            version: field(1)?,
-            task: field(2)?,
-            body: body.to_owned(),
+            id: PromptId::new(id),
+            version: PromptVersion::new(version),
+            task: PromptTask::new(task),
+            body: PromptBody::new(body),
         })
     }
 
     #[must_use]
-    pub fn id(&self) -> &str {
+    pub const fn id(&self) -> &PromptId {
         &self.id
     }
 
     #[must_use]
-    pub fn version(&self) -> &str {
+    pub const fn version(&self) -> &PromptVersion {
         &self.version
     }
 
     #[must_use]
-    pub fn task(&self) -> &str {
+    pub const fn task(&self) -> &PromptTask {
         &self.task
     }
 
     #[must_use]
-    pub fn body(&self) -> &str {
+    pub const fn body(&self) -> &PromptBody {
         &self.body
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptLocationError {
+    Format(PromptFileError),
+    TaskFolderMismatch,
+    VersionFileMismatch,
+    InvalidDigest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptDigest(String);
+
+impl PromptDigest {
+    pub fn try_from_hex(value: &str) -> Result<Self, PromptLocationError> {
+        if value.len() != 64
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(PromptLocationError::InvalidDigest);
+        }
+        Ok(Self(value.to_owned()))
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptRef {
+    id: PromptId,
+    version: PromptVersion,
+    digest: PromptDigest,
+}
+
+impl PromptRef {
+    #[must_use]
+    pub const fn id(&self) -> &PromptId {
+        &self.id
+    }
+    #[must_use]
+    pub const fn version(&self) -> &PromptVersion {
+        &self.version
+    }
+    #[must_use]
+    pub const fn digest(&self) -> &PromptDigest {
+        &self.digest
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadedPrompt {
+    file: PromptFile,
+    digest: PromptDigest,
+}
+
+impl LoadedPrompt {
+    pub fn load(
+        task_folder: &PromptTask,
+        version_file: &PromptVersion,
+        source: &PromptSource,
+        digest: PromptDigest,
+    ) -> Result<Self, PromptLocationError> {
+        let file = PromptFile::parse(source).map_err(PromptLocationError::Format)?;
+        if file.task() != task_folder {
+            return Err(PromptLocationError::TaskFolderMismatch);
+        }
+        if file.version() != version_file {
+            return Err(PromptLocationError::VersionFileMismatch);
+        }
+        Ok(Self { file, digest })
+    }
+    #[must_use]
+    pub const fn file(&self) -> &PromptFile {
+        &self.file
+    }
+    #[must_use]
+    pub fn prompt_ref(&self) -> PromptRef {
+        PromptRef {
+            id: self.file.id.clone(),
+            version: self.file.version.clone(),
+            digest: self.digest.clone(),
+        }
     }
 }
