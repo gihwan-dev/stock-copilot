@@ -38,14 +38,15 @@ const commandErrorSchema = z
   .strict()
   .readonly();
 
-export type OpenExternalStatus = "opened";
+type OpenExternalStatus = "opened";
 
 export type OpenExternalResult = { readonly status: OpenExternalStatus };
 
-export const openExternalResultSchema = z
+const openExternalResultSchema = z
   .object({ status: z.literal("opened") })
   .strict()
   .readonly();
+
 const settleWithSchema = <T>(
   outcome: CommandOutcome,
   schema: Readonly<z.ZodType<T>>,
@@ -70,3 +71,8 @@ export const settleAppVersion = (
   outcome: CommandOutcome,
 ): Result<AppVersion, IpcFailure> =>
   settleWithSchema(outcome, appVersionSchema);
+
+export const settleOpenExternal = (
+  outcome: CommandOutcome,
+): Result<OpenExternalResult, IpcFailure> =>
+  settleWithSchema(outcome, openExternalResultSchema);

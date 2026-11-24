@@ -64,7 +64,7 @@ test("Vite includes src classes but excludes tests and ESLint class probes", () 
     mkdirSync(join(desktop, "eslint"));
     writeFileSync(
       join(desktop, "tests/zz-probe.mjs"),
-      '"p-[13px] z-50 bg-[#ff0000] absolute fixed table";',
+      '"p-[13px] z-50 bg-[#ff0000] float-left fixed table";',
     );
     writeFileSync(join(desktop, "eslint/zz-probe.mjs"), '"m-[17px]";');
     writeFileSync(
@@ -86,7 +86,7 @@ test("Vite includes src classes but excludes tests and ESLint class probes", () 
       "13px",
       "17px",
       ".z-50",
-      ".absolute{",
+      ".float-left{",
       ".fixed{",
       ".table{",
     ])
