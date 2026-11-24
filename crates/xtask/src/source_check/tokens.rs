@@ -21,7 +21,7 @@ pub(crate) const TOOL_ATTRIBUTES: [&str; 3] = ["clippy", "rustfmt", "mutants"];
 
 const STANDARD_ROOTS: [&str; 3] = ["core", "std", "alloc"];
 
-pub(crate) const BANNED_MACROS: [&str; 7] = [
+pub(crate) const BANNED_MACROS: [&str; 12] = [
     "macro_rules",
     "include",
     "include_str",
@@ -29,6 +29,11 @@ pub(crate) const BANNED_MACROS: [&str; 7] = [
     "asm",
     "global_asm",
     "naked_asm",
+    "paste",
+    "_tauri_specta_paste",
+    "fn_datatype",
+    "_fn_datatype",
+    "_fn_datatype_internal",
 ];
 
 pub(crate) const ENVIRONMENT_MACRO: &str = "env";

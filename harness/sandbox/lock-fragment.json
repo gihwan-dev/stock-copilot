@@ -48,6 +48,7 @@
         "./crates/adapters/store-sqlite/schema.snapshot.sql",
         "./crates/testkit-ports/src/lib.rs",
         "./crates/testkit-ports/src/script.rs",
+        "./crates/testkit-ports/src/scripted_identity_confirmation.rs",
         "./crates/testkit-ports/src/scripted_presence.rs",
         "./crates/trade-fakes",
         "./crates/xtask",

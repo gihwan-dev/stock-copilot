@@ -6,6 +6,7 @@ use std::str::FromStr;
 mod ast;
 mod composition;
 mod endpoint;
+mod identity_confirmation;
 mod schema_surface;
 
 use proc_macro2::{TokenStream, TokenTree};
@@ -86,6 +87,21 @@ fn scan_rust(
         endpoint::check(relative, &file, &stream, &rules.host_needle)
             .into_iter()
             .map(|rule| Finding::new(rule, String::from(relative))),
+    );
+    findings.extend(
+        identity_confirmation::check(
+            &rules.identity_confirmation,
+            &identity_confirmation::CheckContext {
+                crate_name,
+                source_aliases: &package.source_aliases,
+                relative,
+                text,
+                file: &file,
+                tokens: &stream,
+            },
+        )
+        .into_iter()
+        .map(|rule| Finding::new(rule, String::from(relative))),
     );
     let mut ast = AstRules::new(rules, crate_name, relative, &file);
     ast.visit_file(&file);
