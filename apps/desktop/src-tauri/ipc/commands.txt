@@ -1,1 +1,3 @@
 app_version
+get_settings
+set_order_permission

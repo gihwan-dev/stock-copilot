@@ -6,10 +6,6 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/Badge.tsx Badge",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/ChatInput.tsx ChatInput",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
@@ -30,10 +26,6 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/Disclosure.tsx Disclosure",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/DonutChart.tsx DonutChart",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
@@ -47,10 +39,6 @@
     },
     {
       "issue": "exports src/shared/ds/GridItem.tsx GridItem",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
-      "issue": "exports src/shared/ds/Inline.tsx Inline",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -74,10 +62,6 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/Numbers.tsx Percent",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/Numbers.tsx PriceChange",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
@@ -87,6 +71,10 @@
     },
     {
       "issue": "exports src/shared/ds/Numbers.tsx Quantity",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Numbers.tsx TimestampText",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -103,10 +91,6 @@
     },
     {
       "issue": "exports src/shared/ds/StatusBar.tsx StatusBar",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
-      "issue": "exports src/shared/ds/Switch.tsx Switch",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -134,10 +118,6 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/index.ts Badge",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/index.ts Button",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
@@ -155,10 +135,6 @@
     },
     {
       "issue": "exports src/shared/ds/index.ts DirectionBadge",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
-      "issue": "exports src/shared/ds/index.ts Disclosure",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -190,10 +166,6 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/index.ts Inline",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/index.ts LineChart",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
@@ -203,10 +175,6 @@
     },
     {
       "issue": "exports src/shared/ds/index.ts Money",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
-      "issue": "exports src/shared/ds/index.ts Percent",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -238,15 +206,15 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/index.ts Switch",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/index.ts Table",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
       "issue": "exports src/shared/ds/index.ts TextField",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts TimestampText",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -256,10 +224,6 @@
     {
       "issue": "exports src/shared/ds/index.ts Treemap",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
-      "issue": "exports src/shared/lib/brand.ts parseChartDecimal",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
       "issue": "exports src/shared/lib/brand.ts parseCount",
@@ -274,19 +238,11 @@
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "exports src/shared/lib/index.ts parseChartDecimal",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
       "issue": "exports src/shared/lib/index.ts parseCount",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
       "issue": "exports src/shared/lib/index.ts parseMoney",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "exports src/shared/lib/index.ts parsePercentDisplay",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
@@ -315,10 +271,6 @@
     },
     {
       "issue": "exports src/shared/lib/money.ts parseMoney",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "exports src/shared/lib/money.ts parsePercentDisplay",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
@@ -474,18 +426,6 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "types src/shared/lib/brand.ts Count",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "types src/shared/lib/brand.ts Ticker",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "types src/shared/lib/brand.ts Timestamp",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
       "issue": "types src/shared/lib/index.ts Count",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
@@ -499,10 +439,6 @@
     },
     {
       "issue": "types src/shared/lib/index.ts Err",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "types src/shared/lib/index.ts Locale",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
@@ -522,19 +458,7 @@
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "types src/shared/lib/index.ts Ticker",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "types src/shared/lib/index.ts Timestamp",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
       "issue": "types src/shared/lib/money.ts Currency",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "types src/shared/lib/money.ts DecimalParseError",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {

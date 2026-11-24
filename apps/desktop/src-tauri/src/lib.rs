@@ -50,6 +50,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             let refresh = tauri::async_runtime::block_on(startup::start(&ports, |data| {
                 publish_main(app.handle(), data)
             }))?;
+            app.manage(ipc::state::ScreenState::from_ports(&ports));
             app.manage(database.status());
             app.manage(Lifecycle::new(refresh, database));
             app.manage(ports);

@@ -6,18 +6,21 @@ import {
   parseMoney,
   parsePercentDisplay,
   parseQuantity,
+  parseTimestamp,
 } from "../../lib";
 import { LineChart } from "../LineChart";
 import { AreaChart } from "../AreaChart";
 import { DonutChart } from "../DonutChart";
 import { Treemap } from "../Treemap";
 import {
+  DataText,
   Money,
   Percent,
   Quantity,
   Probability,
   PriceChange,
   DirectionBadge,
+  TimestampText,
 } from "../Numbers";
 import { Markdown } from "../Markdown";
 import { Text } from "../Text";
@@ -36,6 +39,8 @@ type ContentStory = {
     | "Probability"
     | "PriceChange"
     | "DirectionBadge"
+    | "DataText"
+    | "TimestampText"
     | "Markdown"
     | "ChatInput";
   readonly render: (theme?: "light" | "dark") => ReactElement | null;
@@ -133,6 +138,22 @@ export const contentStressStories: readonly ContentStory[] = [
         onOpenLink={onSend}
       />
     ),
+  },
+  {
+    component: "DataText",
+    render: (): ReactElement | null => {
+      const parsed = parseFreeText(stressFixtures.english);
+      return parsed.kind === "ok" ? <DataText value={parsed.value} /> : null;
+    },
+  },
+  {
+    component: "TimestampText",
+    render: (): ReactElement | null => {
+      const parsed = parseTimestamp("2026-11-24T15:30:00+09:00");
+      return parsed.kind === "ok" ? (
+        <TimestampText value={parsed.value} />
+      ) : null;
+    },
   },
   ...chatStress,
 ];

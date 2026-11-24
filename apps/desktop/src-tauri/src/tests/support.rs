@@ -5,7 +5,7 @@ use crate::{
 };
 use std::sync::Arc;
 #[derive(Debug)]
-pub(super) struct TestPorts;
+pub(crate) struct TestPorts;
 impl PortTypes for TestPorts {
     type BrokerRead = testkit_ports::scripted::ScriptedBrokerRead;
     type MarketInfo = Unavailable;
@@ -29,7 +29,7 @@ impl PortTypes for TestPorts {
     type Notifier = Unavailable;
     type UserPresence = testkit_ports::ScriptedPresence;
 }
-pub(super) fn ports() -> Ports<TestPorts> {
+pub(crate) fn ports() -> Ports<TestPorts> {
     Ports {
         broker_read: Arc::new(testkit_ports::scripted::ScriptedBrokerRead::default()),
         market_info: Arc::new(Unavailable),

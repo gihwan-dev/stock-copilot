@@ -15,6 +15,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
+import { SettingsScreen } from "../features/settings";
 import {
   AppShell,
   Card,
@@ -119,24 +120,17 @@ const TransactionsPlaceholder = (): ReactElement => {
   );
 };
 
-const SettingsPlaceholder = (): ReactElement => {
+const SettingsRouteView = (): ReactElement => {
   const go = use(NavigationContext);
   return (
-    <Page
-      title={text("app.settingsTitle", "ko")}
-      actions={{
-        label: text("app.backToHome", "ko"),
-        onPress: (): void => {
-          go("/");
-        },
+    <SettingsScreen
+      onBack={(): void => {
+        go("/");
       }}
-    >
-      <Section title={text("app.settingsTitle", "ko")}>
-        <Card title={text("app.settingsTitle", "ko")}>
-          <Text>{text("app.readySummary", "ko")}</Text>
-        </Card>
-      </Section>
-    </Page>
+      onOpenStatus={(): void => {
+        go("/settings/status");
+      }}
+    />
   );
 };
 
@@ -188,7 +182,7 @@ const transactionsRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
-  component: SettingsPlaceholder,
+  component: SettingsRouteView,
 });
 
 const statusRoute = createRoute({

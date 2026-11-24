@@ -62,6 +62,8 @@ type Component =
   | "Probability"
   | "PriceChange"
   | "DirectionBadge"
+  | "DataText"
+  | "TimestampText"
   | "Markdown"
   | "ChatInput";
 type Story = {

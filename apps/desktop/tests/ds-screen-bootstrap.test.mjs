@@ -173,7 +173,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId,parseFreeText} from "./brand"; export type {InputValue,BrandError,FreeText} from "./brand"; export {err,ok} from "./result"; export type {Result} from "./result"; export {queryKeys,type AppQueryKey} from "./query-keys";',
+      'export * from "./brand"; export * from "./money"; export * from "./result"; export * from "./query-keys";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(

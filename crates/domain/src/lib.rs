@@ -4,7 +4,8 @@ pub use money::{Amount, AmountError, AmountInput, Currency, Money, MoneyError};
 mod money_display;
 pub use money_display::{
     DisplayDigits, DisplayDirection, DisplayMoney, DisplayMoneyChange, DisplayPrecision,
-    DisplayPrecisionError, MoneyChange, display_change, display_money,
+    DisplayPrecisionError, MoneyChange, display_change, display_money, display_percent,
+    display_quotient_percent,
 };
 
 mod account_id;

@@ -7,6 +7,13 @@ import {
   type CoreUiEvent,
   type IpcFailure,
 } from "./schema";
+import {
+  settleOrderSwitchOutcome,
+  settleSettingsView,
+  type OrderPermissionState,
+  type OrderSwitchOutcome,
+  type SettingsView,
+} from "./settings-schema";
 import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
@@ -34,6 +41,38 @@ export const appVersion = (): Promise<Result<AppVersion, IpcFailure>> => {
       return settleAppVersion(outcome);
     })
     .catch((): Result<AppVersion, IpcFailure> => {
+      timer.cancel();
+      return err(frameworkFailure);
+    });
+  return Promise.race([request, timer.promise]);
+};
+
+export const getSettings = (): Promise<Result<SettingsView, IpcFailure>> => {
+  const timer = createTimeout<SettingsView>();
+  const request = commands
+    .getSettings({ scope: "all" })
+    .then((outcome): Result<SettingsView, IpcFailure> => {
+      timer.cancel();
+      return settleSettingsView(outcome);
+    })
+    .catch((): Result<SettingsView, IpcFailure> => {
+      timer.cancel();
+      return err(frameworkFailure);
+    });
+  return Promise.race([request, timer.promise]);
+};
+
+export const setOrderPermission = (
+  permission: OrderPermissionState,
+): Promise<Result<OrderSwitchOutcome, IpcFailure>> => {
+  const timer = createTimeout<OrderSwitchOutcome>();
+  const request = commands
+    .setOrderPermission({ permission })
+    .then((outcome): Result<OrderSwitchOutcome, IpcFailure> => {
+      timer.cancel();
+      return settleOrderSwitchOutcome(outcome);
+    })
+    .catch((): Result<OrderSwitchOutcome, IpcFailure> => {
       timer.cancel();
       return err(frameworkFailure);
     });
