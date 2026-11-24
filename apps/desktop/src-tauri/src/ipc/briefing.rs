@@ -171,12 +171,15 @@ fn map_source(source: &BriefingSource) -> UiBriefingSource {
 
 fn map_record(record: &BriefingRecord) -> Option<UiBriefing> {
     let finished_at = kst_iso(record.finished_at)?;
-    let (status, failure, body, sources) = match &record.outcome {
-        BriefingOutcome::Completed { body, sources } => (
+    let (status, failure, body, cited) = match &record.outcome {
+        BriefingOutcome::Completed {
+            body,
+            sources: origins,
+        } => (
             UiBriefingStatus::Completed,
             UiBriefingFailure::None,
             body.as_untrusted_str().to_owned(),
-            sources.iter().map(map_source).collect(),
+            origins.iter().map(map_source).collect(),
         ),
         BriefingOutcome::Failed(failure) => (
             UiBriefingStatus::Failed,
@@ -191,7 +194,7 @@ fn map_record(record: &BriefingRecord) -> Option<UiBriefing> {
         status,
         failure,
         body,
-        sources,
+        sources: cited,
     })
 }
 

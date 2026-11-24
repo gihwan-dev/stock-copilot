@@ -238,8 +238,13 @@ mod watchlist_tests;
 
 mod briefing;
 pub use briefing::BriefingStore;
+
+mod shared;
+pub use shared::{SharedClosure, SharedDatabase, SqliteRepositories, not_opened};
 #[cfg(test)]
 mod briefing_tests;
+#[cfg(test)]
+mod shared_tests;
 
 #[cfg(test)]
 mod signal_store_boundary_tests;
