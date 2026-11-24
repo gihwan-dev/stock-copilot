@@ -105,6 +105,7 @@ impl EventSubscriber for SchedulerEventSubscriber {
             | DomainEvent::AiBudgetChanged
             | DomainEvent::MarketSessionChanged(_)
             | DomainEvent::WatchlistChanged
+            | DomainEvent::AiJobFinished(_)
             | DomainEvent::BrokerConnectionChanged => {
                 self.wake.wake();
                 Ok(())

@@ -331,6 +331,11 @@ pub use ai_request::{
     RunSpec, StoredUserMessage, UserMessageId, Utilization,
 };
 
+mod ai_job_record;
+pub use ai_job_record::{
+    AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
+    AiJobTimingError, AiJobUsageMeter, ListAiJobUsage, ListAiJobUsageError, RecordAiJobFinished,
+};
 mod ai_provider;
 pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
@@ -560,8 +565,13 @@ pub use news_data_settings::{
 
 mod deep_research;
 pub use deep_research::{
-    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchEvidenceSource,
-    ResearchWebCollector, ResearchWebOutcome, ResearchWebStore,
+    AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
+    DeepResearchRun, DeepResearchStages, DraftResearchCases, FinishResearch, FinishResearchError,
+    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchAnalyst,
+    ResearchCaseError, ResearchCases, ResearchCheckpoint, ResearchCheckpointStore,
+    ResearchConcluder, ResearchConclusion, ResearchEvidenceSource, ResearchModels, ResearchOutcome,
+    ResearchPrincipleCheck, ResearchStage, ResearchWebCollector, ResearchWebOutcome,
+    ResearchWebStore, RunDeepResearch, VerifyResearchClaims,
 };
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
