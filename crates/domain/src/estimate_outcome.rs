@@ -146,6 +146,10 @@ impl OutcomeEvidence {
         self.interval
     }
     #[must_use]
+    pub const fn horizon(&self) -> Horizon {
+        self.horizon
+    }
+    #[must_use]
     pub const fn at(&self) -> Timestamp {
         self.at
     }
@@ -157,6 +161,32 @@ impl OutcomeEvidence {
     pub const fn adjustment(&self) -> &OutcomeAdjustment {
         &self.adjustment
     }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedOutcomeAdjustment {
+    pub instrument: InstrumentId,
+    pub reference_at: Timestamp,
+    pub basis: AdjustmentBasis,
+    pub ratios: Vec<ShareRatio>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedOutcomeEvidence {
+    pub instrument: InstrumentId,
+    pub interval: TimeInterval,
+    pub horizon: Horizon,
+    pub at: Timestamp,
+    pub period: Option<CandlePeriod>,
+    pub adjustment: SavedOutcomeAdjustment,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SavedEstimateOutcome {
+    Success(SavedOutcomeEvidence),
+    Failure {
+        evidence: SavedOutcomeEvidence,
+        reason: OutcomeFailure,
+    },
+    Ongoing(SavedOutcomeEvidence),
+    Unavailable(OutcomeUnavailable),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutcomeSuccess(OutcomeEvidence);
@@ -236,6 +266,70 @@ impl EstimateOutcome {
         ) {
             Ok(result) => result,
             Err(reason) => Self::Unavailable(reason),
+        }
+    }
+    #[must_use]
+    pub fn saved_state(&self) -> SavedEstimateOutcome {
+        let save_evidence = |evidence: &OutcomeEvidence| SavedOutcomeEvidence {
+            instrument: evidence.instrument.clone(),
+            interval: evidence.interval,
+            horizon: evidence.horizon,
+            at: evidence.at,
+            period: evidence.period,
+            adjustment: SavedOutcomeAdjustment {
+                instrument: evidence.adjustment.instrument.clone(),
+                reference_at: evidence.adjustment.reference_at,
+                basis: evidence.adjustment.basis,
+                ratios: evidence.adjustment.ratios.clone(),
+            },
+        };
+        match self {
+            Self::Success(value) => SavedEstimateOutcome::Success(save_evidence(&value.0)),
+            Self::Failure(value) => SavedEstimateOutcome::Failure {
+                evidence: save_evidence(&value.evidence),
+                reason: value.reason,
+            },
+            Self::Ongoing(value) => SavedEstimateOutcome::Ongoing(save_evidence(&value.0)),
+            Self::Unavailable(reason) => SavedEstimateOutcome::Unavailable(*reason),
+        }
+    }
+    pub fn restore_from_saved_state(
+        saved: SavedEstimateOutcome,
+    ) -> Result<Self, OutcomeUnavailable> {
+        let restore_evidence = |input: SavedOutcomeEvidence| {
+            if input.adjustment.instrument != input.instrument
+                || *input.adjustment.basis.as_timestamp() < input.adjustment.reference_at
+            {
+                return Err(OutcomeUnavailable::Adjustment);
+            }
+            Ok(OutcomeEvidence {
+                instrument: input.instrument,
+                interval: input.interval,
+                horizon: input.horizon,
+                at: input.at,
+                period: input.period,
+                adjustment: OutcomeAdjustment {
+                    instrument: input.adjustment.instrument,
+                    reference_at: input.adjustment.reference_at,
+                    basis: input.adjustment.basis,
+                    ratios: input.adjustment.ratios,
+                },
+            })
+        };
+        match saved {
+            SavedEstimateOutcome::Success(evidence) => {
+                Ok(Self::Success(OutcomeSuccess(restore_evidence(evidence)?)))
+            }
+            SavedEstimateOutcome::Failure { evidence, reason } => {
+                Ok(Self::Failure(OutcomeFailed {
+                    evidence: restore_evidence(evidence)?,
+                    reason,
+                }))
+            }
+            SavedEstimateOutcome::Ongoing(evidence) => {
+                Ok(Self::Ongoing(OutcomePending(restore_evidence(evidence)?)))
+            }
+            SavedEstimateOutcome::Unavailable(reason) => Ok(Self::Unavailable(reason)),
         }
     }
     #[must_use]

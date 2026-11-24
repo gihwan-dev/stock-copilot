@@ -24,8 +24,8 @@ mod tests {
         NetPurchaseError, NetPurchaseIncomplete, NetPurchaseScope, NumericInput, NxtTrading,
         OpenOrderCoverage, OppositeOpenOrder, OrderDateFilter, OrderPageExhaustion, OrderSide,
         OrderSymbolFilter, Price, Quantity, ResolvedOrderInstrument, Symbol, TimeInterval,
-        Timestamp, TradingSuspension, UnfilledQuantity, net_purchase_amount, net_purchases,
-        opposite_open_order,
+        Timestamp, TradingSuspension, UnfilledQuantity, opposite_open_order,
+        proven_net_purchase_amount, proven_net_purchases,
     };
     use serde_json::{Value, json};
     use std::{
@@ -956,9 +956,12 @@ mod tests {
         let window = day_window("2026-03-28T09:00:00+09:00", "2026-03-28T15:00:00+09:00");
 
         let closed = run(reader.closed_orders(&account, window)).expect("closed");
-        assert_eq!(closed.completeness(), ClosedOrderCompleteness::Complete);
-        assert_eq!(closed.orders().len(), 3);
-        let proof = closed.completeness_proof().expect("proof");
+        assert_eq!(
+            closed.orders().completeness(),
+            ClosedOrderCompleteness::Complete
+        );
+        assert_eq!(closed.orders().orders().len(), 3);
+        let proof = closed.proof();
         assert_eq!(proof.scope().account_id(), &account);
         assert_eq!(proof.scope().evaluation_window(), window);
         assert_eq!(proof.scope().date_filter(), OrderDateFilter::Unfiltered);
@@ -967,7 +970,7 @@ mod tests {
             &OrderSymbolFilter::AllSymbols
         );
         assert_eq!(proof.exhaustion(), OrderPageExhaustion::Exhausted);
-        let totals = net_purchases(&closed, window);
+        let totals = proven_net_purchases(&closed, window);
         assert_eq!(
             totals.currency(Currency::Krw),
             Ok(money("500000", Currency::Krw))
@@ -1022,20 +1025,28 @@ mod tests {
         let window = day_window("2026-03-28T09:00:00+09:00", "2026-03-28T15:00:00+09:00");
 
         let restarted = run(reader.closed_orders(&account, window)).expect("cursor restart");
-        assert_eq!(restarted.completeness(), ClosedOrderCompleteness::Complete);
+        assert_eq!(
+            restarted.orders().completeness(),
+            ClosedOrderCompleteness::Complete
+        );
         assert!(
             restarted
+                .orders()
                 .orders()
                 .contains_key(&BrokerOrderId::try_new("synthetic-closed-kr-restart").expect("id"))
         );
 
         let repeated = run(reader.closed_orders(&account, window)).expect("repeated cursor");
         assert_eq!(
-            repeated.completeness(),
+            repeated.orders().completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
         );
         assert_eq!(
-            net_purchase_amount(&repeated, window, NetPurchaseScope::Currency(Currency::Krw)),
+            proven_net_purchase_amount(
+                &repeated,
+                window,
+                NetPurchaseScope::Currency(Currency::Krw)
+            ),
             Err(NetPurchaseError::Incomplete(NetPurchaseIncomplete::Query(
                 ClosedOrderIncomplete::MissingPages
             )))
@@ -1064,21 +1075,21 @@ mod tests {
 
         let mid_failed = run(reader.closed_orders(&account, window)).expect("mid failure");
         assert_eq!(
-            mid_failed.completeness(),
+            mid_failed.orders().completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::RequestFailed)
         );
-        assert_eq!(mid_failed.orders().len(), 1);
+        assert_eq!(mid_failed.orders().orders().len(), 1);
 
         let page1_failed = run(reader.closed_orders(&account, window)).expect_err("page1 fail");
         assert_eq!(page1_failed.endpoint(), ReadEndpoint::ClosedOrders);
 
         let partial = run(reader.closed_orders(&account, window)).expect("partial rejected");
         assert_eq!(
-            partial.completeness(),
+            partial.orders().completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::RejectedRows)
         );
         assert_eq!(
-            net_purchase_amount(&partial, window, NetPurchaseScope::Currency(Currency::Krw)),
+            proven_net_purchase_amount(&partial, window, NetPurchaseScope::Currency(Currency::Krw)),
             Err(NetPurchaseError::Incomplete(NetPurchaseIncomplete::Query(
                 ClosedOrderIncomplete::RejectedRows
             )))
@@ -1116,9 +1127,10 @@ mod tests {
 
         let past = day_window("2026-03-28T09:00:00+09:00", "2026-03-28T11:00:00+09:00");
         let old = run(reader.closed_orders(&account, past)).expect("old");
-        assert_eq!(old.completeness(), ClosedOrderCompleteness::Complete);
+        let complete = ClosedOrderCompleteness::Complete;
+        assert_eq!(old.orders().completeness(), complete);
         assert_eq!(
-            net_purchase_amount(&old, past, NetPurchaseScope::Currency(Currency::Krw)),
+            proven_net_purchase_amount(&old, past, NetPurchaseScope::Currency(Currency::Krw)),
             Err(NetPurchaseError::Incomplete(
                 NetPurchaseIncomplete::UnallocatableExecution
             ))
@@ -1127,18 +1139,14 @@ mod tests {
         let straddling = day_window("2026-03-28T09:00:00+09:00", "2026-03-28T15:00:00+09:00");
         let early = run(reader.closed_orders(&account, straddling)).expect("early");
         assert_eq!(
-            early.completeness(),
+            early.orders().completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
         );
+        let krw = NetPurchaseScope::Currency(Currency::Krw);
+        let too_early = NetPurchaseIncomplete::ObservationTooEarly;
         assert_eq!(
-            net_purchase_amount(
-                &early,
-                straddling,
-                NetPurchaseScope::Currency(Currency::Krw)
-            ),
-            Err(NetPurchaseError::Incomplete(
-                NetPurchaseIncomplete::ObservationTooEarly
-            ))
+            proven_net_purchase_amount(&early, straddling, krw),
+            Err(NetPurchaseError::Incomplete(too_early))
         );
 
         for start_at in ["2026-03-28T12:00:00+09:00", "2026-03-28T13:00:00+09:00"] {
@@ -1194,7 +1202,7 @@ mod tests {
         );
         let mid_empty = run(reader.closed_orders(&account, window)).expect("empty p2");
         assert_eq!(
-            mid_empty.completeness(),
+            mid_empty.orders().completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::RequestFailed)
         );
         for _case in 0_u8..4 {
@@ -1236,10 +1244,10 @@ mod tests {
         let window = day_window("2026-03-28T09:00:00+09:00", "2026-03-28T15:00:00+09:00");
         let stopped = run(reader.closed_orders(&AccountId::new(413), window)).expect("row limit");
         assert_eq!(
-            stopped.completeness(),
+            stopped.orders().completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
         );
-        assert!(stopped.orders().is_empty());
+        assert!(stopped.orders().orders().is_empty());
         let wire = String::from_utf8(server.finish().expect("finish")).expect("utf8");
         assert!(!wire.contains("cursor=never-fetched"));
     }
@@ -1313,14 +1321,11 @@ mod tests {
         let limited = run(reader.closed_orders(&account, window)).expect("row limit");
         assert_eq!(time.now(), start);
         assert_eq!(
-            limited.completeness(),
+            limited.orders().completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
         );
-        assert_eq!(limited.orders().len(), 4096);
-        assert_eq!(
-            limited.completeness_proof().expect("p").exhaustion(),
-            OrderPageExhaustion::MorePages
-        );
+        assert_eq!(limited.orders().orders().len(), 4096);
+        assert_eq!(limited.proof().exhaustion(), OrderPageExhaustion::MorePages);
         run(reader.open_orders(&account)).expect("2");
         assert_eq!(time.now(), start.checked_add(step).expect("t1"));
         run(reader.order(&account, &id)).expect("3");
