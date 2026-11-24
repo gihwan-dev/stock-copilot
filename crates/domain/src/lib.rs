@@ -570,7 +570,7 @@ mod net_purchase_closed;
 mod net_purchase_daily;
 pub use net_purchase::{
     NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope, NetPurchases,
-    net_purchase_amount, net_purchases, proven_net_purchase_amount, proven_net_purchases,
+    proven_net_purchase_amount, proven_net_purchases,
 };
 pub use net_purchase_closed::{ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet};
 pub use net_purchase_daily::{
@@ -672,6 +672,9 @@ pub use valuation_price_evidence::{
 };
 
 mod valuation_recompute_contract;
+
+mod valuation_day_inputs;
+pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
 
 mod valuation_recompute;
 pub use valuation_recompute::{
