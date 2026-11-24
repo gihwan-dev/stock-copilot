@@ -6,7 +6,7 @@ use application::{
     TransactionAdmission, TransactionToolFilter, TransactionToolKind, TransactionToolLine,
     TransactionsToolView,
 };
-use domain::Currency;
+use domain::{Currency, Quantity};
 use serde_json::{Map, Value, json};
 
 use crate::catalog::render::{
@@ -15,8 +15,8 @@ use crate::catalog::render::{
 };
 use crate::pagination::{CursorStore, PageRequest, PaginationContext, paginate_items};
 use crate::tools::{
-    McpTool, ToolAccessKind, ToolErrorPayload, ToolFuture, ToolInvocation, ToolRegistry,
-    ToolRegistryError, ToolSpec, build_object_schema,
+    McpTool, ToolAccessKind, ToolErrorCode, ToolErrorPayload, ToolFuture, ToolInvocation,
+    ToolRegistry, ToolRegistryError, ToolSpec, build_object_schema,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,8 +133,8 @@ impl<P: PortfolioToolReads + 'static, C: Clock + 'static> McpTool for PortfolioT
                 PortfolioToolKind::Transactions => self.transactions(&invocation).await,
                 PortfolioToolKind::Performance => {
                     let period = parse_period(invocation.arguments.get("period"))?;
-                    let view = self.reads.performance(period).await;
-                    Ok(render_performance(&require(view)?))
+                    let view = require(self.reads.performance(period).await)?;
+                    matching_period(&view, period).map(render_performance)
                 }
             }
         })
@@ -339,6 +339,17 @@ fn transaction_items(view: &TransactionsToolView, filter: TransactionToolFilter)
                 let right_symbol = right.symbol.as_ref().map_or("", |symbol| symbol.as_str());
                 left_symbol.cmp(right_symbol)
             })
+            .then_with(|| {
+                left.amount
+                    .amount()
+                    .as_decimal()
+                    .cmp(&right.amount.amount().as_decimal())
+            })
+            .then_with(|| {
+                let left_qty = left.quantity.as_ref().map(Quantity::as_decimal);
+                let right_qty = right.quantity.as_ref().map(Quantity::as_decimal);
+                left_qty.cmp(&right_qty)
+            })
     });
     lines
         .into_iter()
@@ -376,6 +387,21 @@ fn parse_period(raw: Option<&Value>) -> Result<PerformancePeriod, ToolErrorPaylo
             Some("period"),
             "period must be one of 1m, 3m, 6m, 1y, since_start",
         )),
+    }
+}
+
+fn matching_period(
+    view: &PerformanceToolView,
+    requested: PerformancePeriod,
+) -> Result<&PerformanceToolView, ToolErrorPayload> {
+    if view.period == requested {
+        Ok(view)
+    } else {
+        Err(ToolErrorPayload::retryable(
+            ToolErrorCode::UpstreamUnavailable,
+            Some("period"),
+            "stored performance does not match the requested period",
+        ))
     }
 }
 

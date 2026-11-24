@@ -350,3 +350,38 @@ impl ToolCallLedger for MemoryToolCallLedger {
         }
     }
 }
+#[derive(Debug, Default)]
+pub struct MemoryAuditHeadAnchor {
+    head: State<Option<application::AuditHead>>,
+    fail_next_store: State<Option<SystemPortError>>,
+}
+impl MemoryAuditHeadAnchor {
+    #[must_use]
+    pub fn head(&self) -> Option<application::AuditHead> {
+        self.head.write().clone()
+    }
+    pub fn replace_head(&self, head: Option<application::AuditHead>) {
+        *self.head.write() = head;
+    }
+    pub fn fail_next_store(&self, error: SystemPortError) {
+        *self.fail_next_store.write() = Some(error);
+    }
+}
+impl application::AuditHeadAnchor for MemoryAuditHeadAnchor {
+    fn load_head(
+        &self,
+    ) -> impl Future<Output = Result<Option<application::AuditHead>, SystemPortError>> + Send {
+        std::future::ready(Ok(self.head.write().clone()))
+    }
+    fn store_head(
+        &self,
+        head: &application::AuditHead,
+    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+        let failure = self.fail_next_store.write().take();
+        if let Some(error) = failure {
+            return std::future::ready(Err(error));
+        }
+        *self.head.write() = Some(head.clone());
+        std::future::ready(Ok(WriteCompleted))
+    }
+}
