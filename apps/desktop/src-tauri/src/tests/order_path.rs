@@ -1,5 +1,6 @@
 mod extended;
 mod fixture;
+mod unknown_retry;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
