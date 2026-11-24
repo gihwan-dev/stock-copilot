@@ -10,6 +10,7 @@ export { SegmentedControl } from "./SegmentedControl";
 export { Select } from "./Select";
 export { TextField } from "./TextField";
 export { Card } from "./Card";
+export { AppShell, type PanelState } from "./AppShell";
 export { Page } from "./Page";
 export { Section } from "./Section";
 export { Grid } from "./Grid";

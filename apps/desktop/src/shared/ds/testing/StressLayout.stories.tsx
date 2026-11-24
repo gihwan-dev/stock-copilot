@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { AppShell } from "../AppShell";
 import { Button } from "../Button";
 import { Card } from "../Card";
 import { Divider } from "../Divider";
@@ -14,6 +15,7 @@ import { Toolbar } from "../Toolbar";
 import { stressFixtures } from "./stress";
 
 type Component =
+  | "AppShell"
   | "Page"
   | "Section"
   | "Grid"
@@ -33,6 +35,31 @@ const label = stressFixtures.company;
 const action = { label, onPress: (): void => undefined };
 
 export const layoutStressStories: readonly Story[] = [
+  {
+    component: "AppShell",
+    render: (): ReactElement => (
+      <AppShell
+        list={
+          <Stack gap="space-2">
+            <Text>{label}</Text>
+            <Text>{stressFixtures.english}</Text>
+          </Stack>
+        }
+        chat={
+          <Stack gap="space-2">
+            <Text>{label}</Text>
+            <Text>{stressFixtures.paragraph}</Text>
+          </Stack>
+        }
+      >
+        <Page title={label} actions={action}>
+          <Section title={label}>
+            <Text>{stressFixtures.paragraph}</Text>
+          </Section>
+        </Page>
+      </AppShell>
+    ),
+  },
   {
     component: "Page",
     render: (): ReactElement => (

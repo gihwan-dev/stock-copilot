@@ -32,32 +32,41 @@ const numericComponents = new Set([
 ]);
 const Example = ({ render, theme }) => render(theme);
 const Stage = ({ component, render, theme }) =>
-  createElement(
-    ScrollArea,
-    { direction: "vertical" },
-    numericComponents.has(component)
-      ? createElement(
-          "div",
-          { className: "py-space-3" },
-          createElement(
-            ScrollArea,
-            { direction: "horizontal" },
-            createElement(
+  component === "AppShell"
+    ? createElement(
+        "div",
+        {
+          "data-catalog-content": "",
+          className: "flex-1 scroll-flex flex flex-col w-full h-full",
+        },
+        createElement(Example, { render, theme }),
+      )
+    : createElement(
+        ScrollArea,
+        { direction: "vertical" },
+        numericComponents.has(component)
+          ? createElement(
               "div",
-              { "data-catalog-content": "", className: "w-max" },
+              { className: "py-space-3" },
+              createElement(
+                ScrollArea,
+                { direction: "horizontal" },
+                createElement(
+                  "div",
+                  { "data-catalog-content": "", className: "w-max" },
+                  createElement(Example, { render, theme }),
+                ),
+              ),
+            )
+          : createElement(
+              "div",
+              {
+                "data-catalog-content": "",
+                className: "w-full scroll-flex py-space-3",
+              },
               createElement(Example, { render, theme }),
             ),
-          ),
-        )
-      : createElement(
-          "div",
-          {
-            "data-catalog-content": "",
-            className: "w-full scroll-flex py-space-3",
-          },
-          createElement(Example, { render, theme }),
-        ),
-  );
+      );
 export const renderCatalog = (component, theme, sample) => {
   const story = samples.find(
     (story) => story.component === component && story.sample === sample,
@@ -67,7 +76,10 @@ export const renderCatalog = (component, theme, sample) => {
   return createElement(
     "div",
     {
-      className: "h-full flex flex-col bg-surface text-ink p-space-4",
+      className:
+        component === "AppShell"
+          ? "h-full flex flex-col bg-surface text-ink"
+          : "h-full flex flex-col bg-surface text-ink p-space-4",
       "data-catalog-component": component,
       "data-catalog-theme": theme,
       "data-catalog-sample": sample,
@@ -76,7 +88,10 @@ export const renderCatalog = (component, theme, sample) => {
       "section",
       {
         key: `${component}-${sample}-${theme}`,
-        className: "flex-1 scroll-flex flex flex-col bg-surface px-space-4",
+        className:
+          component === "AppShell"
+            ? "flex-1 scroll-flex flex flex-col bg-surface"
+            : "flex-1 scroll-flex flex flex-col bg-surface px-space-4",
       },
       createElement(Stage, { component, render: story.render, theme }),
     ),

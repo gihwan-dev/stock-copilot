@@ -202,6 +202,7 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/inline-classes-d.ts src/shared/ds/inline-classes-d.ts",
   "files src/shared/ds/layout-children.tsx src/shared/ds/layout-children.tsx",
   "files src/shared/ds/testing/StressLayout.stories.tsx src/shared/ds/testing/StressLayout.stories.tsx",
+  "files src/shared/ds/AppShell.tsx src/shared/ds/AppShell.tsx",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {

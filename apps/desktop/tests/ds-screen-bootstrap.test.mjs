@@ -123,6 +123,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "chartNavigation",
         "chatEventValue",
         "chatCommit",
+        "shellDismiss",
       ],
     );
     const returns = inputExports.map((entry) =>
@@ -139,6 +140,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       ['"ignore" | "next" | "previous" | "first" | "last"'],
       ["Result<FreeText, BrandError>"],
       ['"commit" | "ignore"'],
+      ['"ignore" | "dismiss"'],
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),

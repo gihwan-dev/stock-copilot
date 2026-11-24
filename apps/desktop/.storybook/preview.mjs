@@ -8,6 +8,7 @@ export default {
         order: [
           "레이아웃",
           [
+            "AppShell",
             "Page",
             "Section",
             "Grid",

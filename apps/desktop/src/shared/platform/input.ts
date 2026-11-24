@@ -107,3 +107,11 @@ export const chatCommit = (
   event.preventDefault();
   return "commit";
 };
+
+export const shellDismiss = (
+  event: Readonly<KeyboardEvent<HTMLDivElement>>,
+): "dismiss" | "ignore" => {
+  if (event.key !== "Escape") return "ignore";
+  event.preventDefault();
+  return "dismiss";
+};

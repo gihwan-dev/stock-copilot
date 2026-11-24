@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
-import { text } from "../lib";
+import { text, type UiText } from "../lib";
+import { AppShell } from "./AppShell";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { Card } from "./Card";
@@ -16,6 +17,7 @@ import { Text } from "./Text";
 import { Toolbar } from "./Toolbar";
 
 type Component =
+  | "AppShell"
   | "Page"
   | "Section"
   | "Grid"
@@ -28,7 +30,7 @@ type Component =
 
 type Story = {
   readonly component: Component;
-  readonly state: "normal" | "long";
+  readonly state: "normal" | "open" | "long";
   readonly themes: readonly ["light", "dark"];
   readonly render: () => ReactElement;
 };
@@ -51,82 +53,96 @@ const action: Action = {
 
 const entry = (
   component: Component,
-  state: "normal" | "long",
+  state: "normal" | "open" | "long",
   render: () => ReactElement,
-): Story => ({
-  component,
-  state,
-  themes: ["light", "dark"],
-  render,
-});
+): Story => ({ component, state, themes: ["light", "dark"], render });
+
+const sampleCard = (heading: UiText): ReactElement => (
+  <Card title={heading}>
+    <Text>{description}</Text>
+  </Card>
+);
+
+const sampleShellPage = (heading: UiText): ReactElement => (
+  <Page title={title}>
+    <Section title={sectionTitle}>{sampleCard(heading)}</Section>
+  </Page>
+);
+
+const sampleList = (first: UiText): ReactElement => (
+  <Stack gap="space-2">
+    <Text>{first}</Text>
+    <Text>{companyThree}</Text>
+  </Stack>
+);
+
+const sampleChat = (lead: UiText): ReactElement => (
+  <Stack gap="space-2">
+    <Text variant="label">{lead}</Text>
+    <Text>{description}</Text>
+  </Stack>
+);
 
 export const layoutComponentStories: readonly Story[] = [
-  entry("Page", "normal", (): ReactElement => (
-    <Page title={title}>
-      <Section title={sectionTitle}>
-        <Card title={companyTwo}>
-          <Text>{description}</Text>
-        </Card>
-      </Section>
-    </Page>
+  entry("AppShell", "normal", (): ReactElement => (
+    <AppShell
+      list={sampleList(companyTwo)}
+      chat={sampleChat(text("shell.chat", "ko"))}
+    >
+      {sampleShellPage(companyTwo)}
+    </AppShell>
   )),
+  entry("AppShell", "open", (): ReactElement => (
+    <AppShell
+      defaultChatOpen="open"
+      defaultListOpen="open"
+      list={sampleList(companyTwo)}
+      chat={sampleChat(text("shell.chat", "ko"))}
+    >
+      {sampleShellPage(companyTwo)}
+    </AppShell>
+  )),
+  entry("AppShell", "long", (): ReactElement => (
+    <AppShell list={sampleList(company)} chat={sampleChat(company)}>
+      {sampleShellPage(company)}
+    </AppShell>
+  )),
+  entry("Page", "normal", (): ReactElement => sampleShellPage(companyTwo)),
   entry("Page", "normal", (): ReactElement => (
     <Page title={title} actions={action}>
-      <Section title={sectionTitle}>
-        <Card title={companyTwo}>
-          <Text>{description}</Text>
-        </Card>
-      </Section>
+      <Section title={sectionTitle}>{sampleCard(companyTwo)}</Section>
     </Page>
   )),
   entry("Section", "normal", (): ReactElement => (
-    <Section title={sectionTitle}>
-      <Card title={companyTwo}>
-        <Text>{description}</Text>
-      </Card>
-    </Section>
+    <Section title={sectionTitle}>{sampleCard(companyTwo)}</Section>
   )),
   entry("Grid", "normal", (): ReactElement => (
     <Grid>
       <GridItem span={{ narrow: 12, medium: 6, wide: 4 }}>
-        <Card title={companyTwo}>
-          <Text>{description}</Text>
-        </Card>
+        {sampleCard(companyTwo)}
       </GridItem>
       <GridItem span={{ narrow: 12, medium: 6, wide: 4 }}>
-        <Card title={companyThree}>
-          <Text>{description}</Text>
-        </Card>
+        {sampleCard(companyThree)}
       </GridItem>
       <GridItem span={{ narrow: 12, medium: 12, wide: 4 }}>
-        <Card title={sectionTitle}>
-          <Text>{description}</Text>
-        </Card>
+        {sampleCard(sectionTitle)}
       </GridItem>
     </Grid>
   )),
   entry("Grid", "normal", (): ReactElement => (
     <Grid>
       <GridItem span={{ narrow: 12, medium: 8, wide: 9 }}>
-        <Card title={sectionTitle}>
-          <Text>{description}</Text>
-        </Card>
+        {sampleCard(sectionTitle)}
       </GridItem>
       <GridItem span={{ narrow: 12, medium: 4, wide: 3 }}>
-        <Card title={companyTwo}>
-          <Text>{description}</Text>
-        </Card>
+        {sampleCard(companyTwo)}
       </GridItem>
     </Grid>
   )),
   ...([3, 4, 6, 8, 9, 12] as const).map((span) =>
     entry("GridItem", "normal", (): ReactElement => (
       <Grid>
-        <GridItem span={span}>
-          <Card title={companyTwo}>
-            <Text>{description}</Text>
-          </Card>
-        </GridItem>
+        <GridItem span={span}>{sampleCard(companyTwo)}</GridItem>
       </Grid>
     )),
   ),
@@ -188,9 +204,7 @@ export const layoutComponentStories: readonly Story[] = [
         <Card title={companyTwo}>
           <Text>{day}</Text>
         </Card>
-        <Card title={sectionTitle}>
-          <Text>{description}</Text>
-        </Card>
+        {sampleCard(sectionTitle)}
       </Split>
     )),
   ),

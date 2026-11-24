@@ -73,6 +73,12 @@ const catalog = {
   "catalog.secondDate": { ko: "11월 12일" as UiText },
   "catalog.thirdDate": { ko: "11월 13일" as UiText },
   "app.title": { ko: "주식 코파일럿" as UiText },
+  "shell.stockList": { ko: "종목 목록" as UiText },
+  "shell.chat": { ko: "AI 채팅" as UiText },
+  "shell.openList": { ko: "종목 목록 펼치기" as UiText },
+  "shell.closeList": { ko: "종목 목록 닫기" as UiText },
+  "shell.openChat": { ko: "채팅 열기" as UiText },
+  "shell.closeChat": { ko: "채팅 닫기" as UiText },
 } as const;
 
 export type MessageKey = keyof typeof catalog;

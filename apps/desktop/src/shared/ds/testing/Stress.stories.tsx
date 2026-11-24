@@ -24,6 +24,7 @@ import { layoutStressStories } from "./StressLayout.stories";
 import { stressFixtures } from "./stress";
 
 type Component =
+  | "AppShell"
   | "Page"
   | "Section"
   | "Grid"
