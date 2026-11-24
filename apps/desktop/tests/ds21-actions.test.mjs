@@ -35,7 +35,9 @@ for (const name of ["Card", "EmptyState", "Dialog", "StatusBar"]) {
       assert.equal(button.getAttribute("type"), "button");
       assert.equal(
         button.classList.contains(
-          name === "Dialog" ? "h-control-height" : "h-control-height-sm",
+          name === "Dialog"
+            ? "min-h-control-height"
+            : "min-h-control-height-sm",
         ),
         true,
       );
@@ -125,7 +127,7 @@ for (const mode of ["cancel", "confirm", "none", "empty"]) {
         ),
         true,
       );
-      assert.equal(buttons[0].classList.contains("h-control-height"), true);
+      assert.equal(buttons[0].classList.contains("min-h-control-height"), true);
       await w.act(() => w.user.click(buttons[0]));
       assert.deepEqual(Array.from(w.calls), [mode]);
     }
