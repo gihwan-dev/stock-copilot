@@ -21,3 +21,7 @@
 | AI-14 | 구조화 출력은 `AiEvent`에 변형을 더하지 않고, 결과 줄의 `structured_output`을 `ClaudeEventStream::structured_output()`으로만 넘긴다(사전 점검 0턴 결과 제외, 격리 통과 뒤에만) | `AiEvent::StructuredOutput` 추가 |
 | AI-14 | 스키마는 `WEB_COLLECTION_JSON_SCHEMA`(`items[]{url,title,summary?}`, 최대 20). 주소가 `NormalizedUrl`이 아니거나 제목이 비었거나 요약이 문자열이 아니면 그 항목만 버리고, `items` 배열이 없으면 실패(`Unavailable`). 실행 중 `ToolCall`·`McpUnavailable`이 나오면 `Rejected` | 하나라도 틀리면 전체 실패 |
 | AI-14 | 수집 실행 ID는 `collect-<시계 초>-<순번>`, 모델은 `Fast`, 추론 강도 `Low` | 설정값 |
+| AI-16 | `EnsureVerifiedCliVersion`가 분석 사전 점검 → 관측 버전(`CliVersionSource`, Claude는 사전 점검 init의 `claude_code_version`) → 확인한 버전 목록(`VerifiedCliVersions`)에 있으면 바로 사용, 없으면 수집 사전 점검까지 통과하고 그 사이 버전이 그대로일 때만 목록에 기록한다. 결과가 앞 결과와 다르면 `SelfCheckChanged` 하나를 낸다 | 버전마다 사용자 확인 |
+| AI-16 | 실패·버전 모름·저장 실패는 AI만 끈다(`AiGate::Disabled`). 자체 점검에는 4·5번(설치·로그인)이나 6번(`ai_environment`)으로만 남겨 주 화면 띠가 생기지 않는다(로그인 실패는 기존 5번 규칙대로 띠가 생긴다). 점검 호출 자체의 오류는 6번 `CliVersion`으로 본다 | 오류를 4번으로 |
+| AI-16 | 목록 저장은 S-09 전까지 포트와 가짜만 둔다. 조립 루트는 앱 시작과 관측 버전이 바뀔 때 부른다 | 매 실행마다 |
+| 묶음 | 마스터에서 들어온 채팅 문구 "터미널에서 Claude에 다시 로그인해 주세요"가 U-28(터미널 명령 요구 금지) 검사에 걸려 check-lite가 실패해, design 2.6 5번 문장 결로 "Claude Code에 로그인하면 AI 기능이 다시 켜져요."로 바꿨다 | 검사 예외 |

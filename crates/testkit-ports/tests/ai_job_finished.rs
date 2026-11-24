@@ -155,7 +155,7 @@ mod tests {
         assert_eq!(run_id.job_id(), &job("sched-7.a_b"));
         assert_eq!(run_id.as_str(), "sched-7.a_b");
         let spec = application::RunSpec::new(
-            run_id.clone(),
+            run_id,
             application::RunInput::Analysis(
                 application::AnalysisPrompt::try_new("brief").expect("prompt"),
             ),

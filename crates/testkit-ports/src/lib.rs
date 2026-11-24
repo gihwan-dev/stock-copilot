@@ -1,3 +1,5 @@
+mod cli_versions;
+pub use cli_versions::{MemoryVerifiedCliVersions, ScriptedCliVersionSource};
 mod ai_job_records;
 pub use ai_job_records::MemoryAiJobRecords;
 mod script;

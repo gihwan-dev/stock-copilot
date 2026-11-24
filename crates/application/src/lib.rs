@@ -336,6 +336,11 @@ pub use ai_job_record::{
     AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
     AiJobTimingError, AiJobUsageMeter, ListAiJobUsage, ListAiJobUsageError, RecordAiJobFinished,
 };
+mod cli_version_gate;
+pub use cli_version_gate::{
+    AiGate, CliVersion, CliVersionGateOutcome, CliVersionGateReport, CliVersionSource,
+    EnsureVerifiedCliVersion, VerifiedCliVersions,
+};
 mod ai_provider;
 pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
