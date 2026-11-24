@@ -55,3 +55,7 @@ pub(crate) mod estimates_tests;
 pub(crate) mod signals;
 #[cfg(test)]
 pub(crate) mod signals_tests;
+
+pub(crate) mod audit;
+#[cfg(test)]
+pub(crate) mod audit_tests;

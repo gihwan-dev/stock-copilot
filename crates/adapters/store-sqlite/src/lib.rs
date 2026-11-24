@@ -179,3 +179,8 @@ mod signals;
 pub use signals::SignalStore;
 #[cfg(test)]
 mod signals_tests;
+
+mod audit;
+pub use audit::AuditStore;
+#[cfg(test)]
+mod audit_tests;

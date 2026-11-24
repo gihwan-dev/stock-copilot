@@ -1,3 +1,4 @@
+CREATE UNIQUE INDEX audit_log_entry ON audit_log(at_payload, kind, payload);
 CREATE INDEX daily_valuation_snapshots_lookup ON daily_valuation_snapshots(account, as_of_seconds, as_of_nanos, id);
 CREATE INDEX estimate_calibrations_lookup ON estimate_calibrations(key_hash, position DESC);
 CREATE INDEX estimate_resolution_unavailable_task ON estimate_resolution_unavailable(task_id, id);
@@ -16,6 +17,14 @@ CREATE INDEX proposal_validation_reports_lookup ON proposal_validation_reports(p
 CREATE INDEX signal_occurrences_instrument ON signal_occurrences(instrument_id, id);
 CREATE INDEX signal_occurrences_symbol ON signal_occurrences(market, symbol, id);
 CREATE INDEX transaction_entries_account_id ON transaction_entries(account, id);
+CREATE TABLE audit_log (
+    seq INTEGER PRIMARY KEY CHECK (seq >= 1),
+    at_payload TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    prev_hash TEXT NOT NULL CHECK (length(prev_hash) = 64),
+    hash TEXT NOT NULL UNIQUE CHECK (length(hash) = 64)
+) STRICT;
 CREATE TABLE daily_valuation_days (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL,
@@ -346,6 +355,9 @@ CREATE TABLE transaction_sources (
     row_id INTEGER PRIMARY KEY REFERENCES transaction_rows(id),
     source TEXT NOT NULL
 ) STRICT;
+CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+CREATE TRIGGER audit_log_seq BEFORE INSERT ON audit_log WHEN NEW.seq IS NOT (SELECT coalesce(max(seq), 0) + 1 FROM audit_log) BEGIN SELECT RAISE(ABORT, 'audit_log seq must be contiguous'); END;
 CREATE TRIGGER daily_valuation_days_no_delete BEFORE DELETE ON daily_valuation_days BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;
 CREATE TRIGGER daily_valuation_days_no_replace BEFORE INSERT ON daily_valuation_days WHEN EXISTS (SELECT 1 FROM daily_valuation_days WHERE account = NEW.account AND day_year = NEW.day_year AND day_month = NEW.day_month AND day_number = NEW.day_number) BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;
 CREATE TRIGGER daily_valuation_days_no_update BEFORE UPDATE ON daily_valuation_days BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;

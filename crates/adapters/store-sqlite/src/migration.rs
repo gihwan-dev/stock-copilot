@@ -48,6 +48,7 @@ pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
         "0011_proposals_and_signals.sql",
         crate::sql::signals::CREATE,
     ),
+    ("0012_audit_log.sql", crate::sql::audit::CREATE),
 ];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {
@@ -65,9 +66,7 @@ pub(crate) fn apply(
         authorize(context.action, &policy)
     }))?;
     let result = apply_guarded(connection, at, migrations, &guarded);
-    connection.authorizer(
-        None::<fn(rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Authorization>,
-    )?;
+    crate::connection::install_audit_guard(connection)?;
     result.map_err(|error| {
         if error
             .sqlite_error()
@@ -218,6 +217,9 @@ fn authorize(
     guarded: &AtomicBool,
 ) -> rusqlite::hooks::Authorization {
     use rusqlite::hooks::{AuthAction, Authorization};
+    if crate::connection::audit_protected(&action) {
+        return Authorization::Deny;
+    }
     match action {
         AuthAction::Transaction { .. }
         | AuthAction::Savepoint { .. }
