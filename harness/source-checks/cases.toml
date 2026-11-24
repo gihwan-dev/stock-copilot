@@ -923,3 +923,8 @@ expect = ["macro:_fn_datatype"]
 example = "macro-fn-datatype-internal.rs"
 path = "apps/desktop/src-tauri/src/lib.rs"
 expect = ["macro:_fn_datatype_internal"]
+
+[[source]]
+example = "macro-collect-functions.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:_collect_functions"]

@@ -13,9 +13,10 @@ use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
 use syn::{
     Attribute, Expr, ExprAsync, ExprCall, ExprClosure, ExprForLoop, ExprLoop, ExprMatch, ExprPath,
-    ExprStruct, ExprWhile, Fields, ImplItem, ImplItemFn, ImplItemType, Item, ItemExternCrate,
-    ItemImpl, ItemMod, ItemStruct, ItemType, ItemUse, LitByteStr, LitCStr, LitStr, Macro, Pat,
-    Path, PathArguments, Stmt, Token, TraitItemType, Type, TypePath, UseRename, Visibility,
+    ExprStruct, ExprWhile, Fields, FnArg, ImplItem, ImplItemFn, ImplItemType, Item, ItemEnum,
+    ItemExternCrate, ItemFn, ItemImpl, ItemMod, ItemStruct, ItemType, ItemUse, LitByteStr, LitCStr,
+    LitStr, Macro, Pat, Path, PathArguments, ReturnType, Signature, Stmt, Token, TraitItemType,
+    Type, TypePath, TypeReference, UseRename, Visibility,
 };
 
 use super::super::rules::IdentityConfirmationRules;
@@ -26,12 +27,27 @@ const ALLOWED_DERIVES: [&str; 3] = ["Debug", "PartialEq", "Eq"];
 const DEFINING_MACRO_BANNED: [&str; 8] = [
     "impl", "struct", "mod", "fn", "const", "static", "type", "use",
 ];
-const BANNED_PASTE_MACROS: [&str; 5] = [
+const CONFIRMED_WRAPPER_TYPES: [&str; 5] = [
+    "IdentityChangeConfirmation",
+    "ConfirmedIdentifierChange",
+    "MappingCorrectionConfirmation",
+    "ConfirmedRetirementCorrection",
+    "ConfirmedLinkCorrection",
+];
+const ORIGIN_ENUM_TYPE: &str = "IdentityConfirmationOrigin";
+const EXTRACTED_CONFIRMATION_TYPES: [&str; 4] = [
+    "UserIdentityConfirmation",
+    "IdentityConfirmationOrigin",
+    "IdentityChangeConfirmation",
+    "MappingCorrectionConfirmation",
+];
+const BANNED_PASTE_MACROS: [&str; 6] = [
     "paste",
     "_tauri_specta_paste",
     "fn_datatype",
     "_fn_datatype",
     "_fn_datatype_internal",
+    "_collect_functions",
 ];
 const PASTE_REEXPORT_CRATES: [&str; 2] = ["tauri_specta", "specta"];
 const PASTE_REEXPORT_MODULES: [&str; 2] = ["internal", "function"];
@@ -50,6 +66,15 @@ enum DefiningTarget {
     Other,
     Confirmation,
     Seal,
+    Wrapper,
+    Origin,
+}
+
+const fn matches_defining_seal_target(target: DefiningTarget) -> bool {
+    match target {
+        DefiningTarget::Confirmation | DefiningTarget::Seal => true,
+        DefiningTarget::Other | DefiningTarget::Wrapper | DefiningTarget::Origin => false,
+    }
 }
 
 fn private(vis: &Visibility) -> bool {
@@ -133,7 +158,7 @@ fn stream_literal_contains(tokens: TokenStream, needle: &str) -> bool {
     })
 }
 
-fn is_cfg_test_mod(item: &ItemMod) -> bool {
+pub(crate) fn is_cfg_test_mod(item: &ItemMod) -> bool {
     item.ident.unraw() == "tests"
         && private(&item.vis)
         && item.content.is_some()
@@ -386,9 +411,7 @@ impl PromptCheck<'_> {
         let mut idents = Vec::new();
         token_idents(tokens, &mut idents);
         let has_prompt = idents.iter().any(|ident| ident == &self.rules.prompt_trait);
-        let is_use_only = idents.iter().any(|ident| ident == "use")
-            && !idents.iter().any(|ident| ident == "impl");
-        if has_prompt && !is_use_only && !self.impl_allowed() {
+        if has_prompt && !self.impl_allowed() {
             self.findings.insert(Rule::IdentityConfirmationPromptImpl);
         }
         if has_pair(&idents, &self.rules.prompt_trait, "as").is_some()
@@ -412,8 +435,10 @@ impl PromptCheck<'_> {
 
 impl<'ast> Visit<'ast> for PromptCheck<'_> {
     fn visit_attribute(&mut self, i: &'ast Attribute) {
+        let tokens = i.to_token_stream();
         if !self.impl_allowed()
-            && stream_literal_contains(i.to_token_stream(), &self.rules.prompt_trait)
+            && (stream_literal_contains(tokens.clone(), &self.rules.prompt_trait)
+                || stream_contains_ident(tokens, &self.rules.prompt_trait))
         {
             self.findings.insert(Rule::IdentityConfirmationPromptImpl);
         }
@@ -567,6 +592,169 @@ fn is_unit_struct_fields(fields: &Fields) -> bool {
     }
 }
 
+fn all_fields_private(fields: &Fields) -> bool {
+    match fields {
+        Fields::Unit => true,
+        Fields::Named(named) => named.named.iter().all(|field| private(&field.vis)),
+        Fields::Unnamed(unnamed) => unnamed.unnamed.iter().all(|field| private(&field.vis)),
+    }
+}
+
+fn tokens_contain_extracted_confirmation(value: &impl ToTokens) -> bool {
+    let mut idents = Vec::new();
+    token_idents(value.to_token_stream(), &mut idents);
+    idents
+        .iter()
+        .any(|ident| EXTRACTED_CONFIRMATION_TYPES.contains(&ident.as_str()))
+}
+
+fn unwrap_group_or_paren_type(ty: &Type) -> &Type {
+    if let Type::Group(group) = ty {
+        unwrap_group_or_paren_type(&group.elem)
+    } else if let Type::Paren(paren) = ty {
+        unwrap_group_or_paren_type(&paren.elem)
+    } else {
+        ty
+    }
+}
+
+fn type_is_shared_ref(ty: &Type) -> bool {
+    match unwrap_group_or_paren_type(ty) {
+        Type::Reference(reference) => reference.mutability.is_none(),
+        Type::Array(_)
+        | Type::BareFn(_)
+        | Type::Group(_)
+        | Type::ImplTrait(_)
+        | Type::Infer(_)
+        | Type::Macro(_)
+        | Type::Never(_)
+        | Type::Paren(_)
+        | Type::Path(_)
+        | Type::Ptr(_)
+        | Type::Slice(_)
+        | Type::TraitObject(_)
+        | Type::Tuple(_)
+        | Type::Verbatim(_)
+        | _ => false,
+    }
+}
+
+struct MutRefFinder {
+    found: bool,
+}
+
+impl<'ast> Visit<'ast> for MutRefFinder {
+    fn visit_type_reference(&mut self, i: &'ast TypeReference) {
+        if i.mutability.is_some() {
+            self.found = true;
+        }
+        visit::visit_type_reference(self, i);
+    }
+}
+
+fn type_has_mut_ref(ty: &Type) -> bool {
+    let mut finder = MutRefFinder { found: false };
+    finder.visit_type(ty);
+    finder.found
+}
+
+fn is_shared_self_only_signature(sig: &Signature) -> bool {
+    if !sig.generics.params.is_empty() || sig.generics.where_clause.is_some() {
+        return false;
+    }
+    if sig.inputs.len() != 1 {
+        return false;
+    }
+    matches_shared_receiver(sig.inputs.first())
+}
+
+fn matches_shared_receiver(arg: Option<&FnArg>) -> bool {
+    let Some(FnArg::Receiver(receiver)) = arg else {
+        return false;
+    };
+    receiver.reference.is_some() && receiver.mutability.is_none() && receiver.colon_token.is_none()
+}
+
+fn input_exposes_callback_confirmation(ty: &Type) -> bool {
+    if !tokens_contain_extracted_confirmation(ty) {
+        return false;
+    }
+    let mut idents = Vec::new();
+    token_idents(ty.to_token_stream(), &mut idents);
+    let has_fn_trait = idents
+        .iter()
+        .any(|ident| ident == "Fn" || ident == "FnMut" || ident == "FnOnce");
+    has_fn_trait
+        || match unwrap_group_or_paren_type(ty) {
+            Type::BareFn(_) | Type::ImplTrait(_) | Type::TraitObject(_) => true,
+            Type::Array(_)
+            | Type::Group(_)
+            | Type::Infer(_)
+            | Type::Macro(_)
+            | Type::Never(_)
+            | Type::Paren(_)
+            | Type::Path(_)
+            | Type::Ptr(_)
+            | Type::Reference(_)
+            | Type::Slice(_)
+            | Type::Tuple(_)
+            | Type::Verbatim(_)
+            | _ => false,
+        }
+}
+
+fn signature_has_mut_input(sig: &Signature) -> bool {
+    sig.inputs.iter().any(|input| match input {
+        FnArg::Receiver(receiver) => receiver.mutability.is_some(),
+        FnArg::Typed(typed) => type_has_mut_ref(&typed.ty),
+    })
+}
+
+fn signature_exposes_owned_confirmation(sig: &Signature) -> bool {
+    if signature_has_mut_input(sig) {
+        return true;
+    }
+    let has_callback = sig.inputs.iter().any(|input| match input {
+        FnArg::Receiver(_) => false,
+        FnArg::Typed(typed) => input_exposes_callback_confirmation(&typed.ty),
+    });
+    if has_callback {
+        return true;
+    }
+    match &sig.output {
+        ReturnType::Default => false,
+        ReturnType::Type(_, ret_ty) => {
+            !type_is_shared_ref(ret_ty) && tokens_contain_extracted_confirmation(ret_ty.as_ref())
+        }
+    }
+}
+
+fn is_valid_wrapper_impl(impl_item: &ItemImpl, rules: &IdentityConfirmationRules) -> bool {
+    if impl_item.trait_.is_some() {
+        return false;
+    }
+    impl_item.items.iter().all(|member| {
+        let ImplItem::Fn(method) = member else {
+            return false;
+        };
+        if unraw(&method.sig.ident) == "new" {
+            let returns_self = match &method.sig.output {
+                ReturnType::Type(_, ret_ty) => {
+                    single_segment_type_name(ret_ty).as_deref() == Some("Self")
+                }
+                ReturnType::Default => false,
+            };
+            returns_self
+                && !signature_has_mut_input(&method.sig)
+                && !tokens_contain(method, &rules.issuer_function)
+                && !tokens_contain(method, &rules.seal_type)
+        } else {
+            is_shared_self_only_signature(&method.sig)
+                && !signature_exposes_owned_confirmation(&method.sig)
+        }
+    })
+}
+
 struct DefiningFileCheck<'a> {
     rules: &'a IdentityConfirmationRules,
     scope: Scope,
@@ -646,9 +834,53 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
             if !valid {
                 self.findings.insert(Rule::IdentityConfirmationIssuance);
             }
+        } else if self.scope == Scope::Product && CONFIRMED_WRAPPER_TYPES.contains(&name.as_str()) {
+            let valid = all_fields_private(&i.fields)
+                && i.generics.params.is_empty()
+                && i.generics.where_clause.is_none()
+                && i.attrs.iter().all(is_allowed_derive);
+            if !valid {
+                self.findings.insert(Rule::IdentityConfirmationIssuance);
+            }
+        } else if self.scope == Scope::Product
+            && !private(&i.vis)
+            && tokens_contain_extracted_confirmation(&i.fields)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_item_struct(self, i);
         self.in_canonical_seal_field = outer_seal_field;
+    }
+
+    fn visit_item_enum(&mut self, i: &'ast ItemEnum) {
+        if self.scope != Scope::Product {
+            visit::visit_item_enum(self, i);
+            return;
+        }
+        let name = unraw(&i.ident);
+        let invalid_origin = name == ORIGIN_ENUM_TYPE
+            && (!i.generics.params.is_empty()
+                || i.generics.where_clause.is_some()
+                || !i.attrs.iter().all(is_allowed_derive));
+        let leaking_other = name != ORIGIN_ENUM_TYPE
+            && !private(&i.vis)
+            && i.variants
+                .iter()
+                .any(|variant| tokens_contain_extracted_confirmation(&variant.fields));
+        if invalid_origin || leaking_other {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_item_enum(self, i);
+    }
+
+    fn visit_item_fn(&mut self, i: &'ast ItemFn) {
+        if self.scope == Scope::Product
+            && !private(&i.vis)
+            && signature_exposes_owned_confirmation(&i.sig)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_item_fn(self, i);
     }
 
     fn visit_type_path(&mut self, i: &'ast TypePath) {
@@ -666,7 +898,8 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
     fn visit_impl_item_type(&mut self, i: &'ast ImplItemType) {
         if self.scope == Scope::Product
             && (tokens_contain(i, &self.rules.confirmation_type)
-                || tokens_contain(i, &self.rules.seal_type))
+                || tokens_contain(i, &self.rules.seal_type)
+                || tokens_contain_extracted_confirmation(i))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -676,7 +909,8 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
     fn visit_trait_item_type(&mut self, i: &'ast TraitItemType) {
         if self.scope == Scope::Product
             && (tokens_contain(i, &self.rules.confirmation_type)
-                || tokens_contain(i, &self.rules.seal_type))
+                || tokens_contain(i, &self.rules.seal_type)
+                || tokens_contain_extracted_confirmation(i))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -688,14 +922,25 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
         let name = type_last_name(&i.self_ty);
         let is_confirmation = name.as_deref() == Some(self.rules.confirmation_type.as_str());
         let is_seal = name.as_deref() == Some(self.rules.seal_type.as_str());
+        let is_wrapper = name
+            .as_deref()
+            .is_some_and(|item_name| CONFIRMED_WRAPPER_TYPES.contains(&item_name));
+        let is_origin = name.as_deref() == Some(ORIGIN_ENUM_TYPE);
         self.target = if is_confirmation {
             DefiningTarget::Confirmation
         } else if is_seal {
             DefiningTarget::Seal
+        } else if is_wrapper {
+            DefiningTarget::Wrapper
+        } else if is_origin {
+            DefiningTarget::Origin
         } else {
             DefiningTarget::Other
         };
-        if is_seal {
+        if is_seal || (self.scope == Scope::Product && is_origin) {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        if self.scope == Scope::Product && is_wrapper && !is_valid_wrapper_impl(i, self.rules) {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         if is_confirmation {
@@ -718,6 +963,13 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
     }
 
     fn visit_impl_item_fn(&mut self, i: &'ast ImplItemFn) {
+        if self.scope == Scope::Product
+            && self.target == DefiningTarget::Other
+            && !private(&i.vis)
+            && signature_exposes_owned_confirmation(&i.sig)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
         let outer = self.in_canonical_issuer;
         self.in_canonical_issuer = self.scope == Scope::Product
             && self.target == DefiningTarget::Confirmation
@@ -732,7 +984,7 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
                 name == &self.rules.confirmation_type
                     || name == &self.rules.seal_type
                     || name == &self.rules.issuer_function
-                    || (name == "Self" && self.target != DefiningTarget::Other)
+                    || (name == "Self" && matches_defining_seal_target(self.target))
             });
             if forbidden {
                 self.findings.insert(Rule::IdentityConfirmationIssuance);
@@ -746,7 +998,7 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
             let forbidden = segment_names(&i.path).iter().any(|name| {
                 name == &self.rules.confirmation_type
                     || name == &self.rules.seal_type
-                    || (name == "Self" && self.target != DefiningTarget::Other)
+                    || (name == "Self" && matches_defining_seal_target(self.target))
             });
             if forbidden {
                 self.findings.insert(Rule::IdentityConfirmationIssuance);
@@ -758,7 +1010,8 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
     fn visit_item_type(&mut self, i: &'ast ItemType) {
         if self.scope == Scope::Product
             && (tokens_contain(&i.ty, &self.rules.confirmation_type)
-                || tokens_contain(&i.ty, &self.rules.seal_type))
+                || tokens_contain(&i.ty, &self.rules.seal_type)
+                || tokens_contain_extracted_confirmation(&i.ty))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -851,7 +1104,10 @@ fn is_confirmed_decision_pat(pat: &Pat) -> bool {
     }
 }
 
-fn is_direct_canonical_issuer_path(rules: &IdentityConfirmationRules, expr: &ExprPath) -> bool {
+pub(crate) fn is_direct_canonical_issuer_path(
+    rules: &IdentityConfirmationRules,
+    expr: &ExprPath,
+) -> bool {
     if expr.qself.is_some() {
         return false;
     }
@@ -1143,6 +1399,7 @@ fn stream_has_paste_macro_call(tokens: TokenStream) -> bool {
                 if name == "_tauri_specta_paste"
                     || name == "_fn_datatype"
                     || name == "_fn_datatype_internal"
+                    || name == "_collect_functions"
                 {
                     return true;
                 }
@@ -1262,6 +1519,23 @@ impl<'ast> Visit<'ast> for ReexportedPasteCheck<'_> {
     }
 }
 
+fn contains_paste_bracket_text(text: &str) -> bool {
+    let mut after_open = false;
+    for ch in text.chars() {
+        if after_open {
+            if ch == '<' {
+                return true;
+            }
+            if !ch.is_whitespace() {
+                after_open = ch == '[';
+            }
+        } else if ch == '[' {
+            after_open = true;
+        }
+    }
+    false
+}
+
 fn may_touch_identity_confirmation(
     rules: &IdentityConfirmationRules,
     ctx: &CheckContext<'_>,
@@ -1274,7 +1548,8 @@ fn may_touch_identity_confirmation(
         || ctx.text.contains("paste")
         || ctx.text.contains("internal")
         || ctx.text.contains("fn_datatype")
-        || ctx.text.contains("[<")
+        || ctx.text.contains("_collect_functions")
+        || contains_paste_bracket_text(ctx.text)
         || ctx.text.contains("specta")
         || ctx.text.contains('\\')
     {

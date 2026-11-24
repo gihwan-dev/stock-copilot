@@ -2,6 +2,7 @@ mod graph;
 mod metadata;
 pub(crate) mod rules;
 mod source;
+pub(crate) mod structural;
 mod tokens;
 
 use std::collections::BTreeSet;
@@ -121,6 +122,7 @@ pub(crate) enum CheckFailure {
     Io { path: PathBuf, error: io::Error },
     Rules(String),
     Graph(String),
+    Structural(String),
 }
 
 impl fmt::Display for CheckFailure {
@@ -130,6 +132,7 @@ impl fmt::Display for CheckFailure {
             Self::Io { path, error } => write!(f, "{}: {error}", path.display()),
             Self::Rules(problem) => write!(f, "{RULES_PATH}: {problem}"),
             Self::Graph(problem) => write!(f, "의존 그래프: {problem}"),
+            Self::Structural(problem) => write!(f, "구조적 발급 검사: {problem}"),
         }
     }
 }
@@ -146,7 +149,9 @@ pub(crate) fn check_workspace(
 fn run(manifest: &Path) -> Result<BTreeSet<Finding>, CheckFailure> {
     let workspace = load_workspace(manifest, &[])?;
     let rules = load_rules(&workspace.root.join(RULES_PATH))?;
-    check_workspace(&workspace, &rules)
+    let mut findings = check_workspace(&workspace, &rules)?;
+    findings.extend(structural::check_structural(&workspace, &rules)?);
+    Ok(findings)
 }
 
 fn report(outcome: &Result<BTreeSet<Finding>, CheckFailure>) -> io::Result<ExitCode> {

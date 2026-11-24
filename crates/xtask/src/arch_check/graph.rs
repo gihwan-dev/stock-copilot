@@ -147,6 +147,18 @@ impl CrateGraph {
             .find(|node| node.origin == Origin::Member && &node.name == target)
             .map(|_| ())
     }
+
+    pub(crate) fn members_reaching(&self, target: &CrateName) -> BTreeSet<CrateName> {
+        self.members()
+            .filter(|member| {
+                &member.name == target
+                    || self
+                        .reaches_member(member, target, FirstHop::AnyKind)
+                        .is_some()
+            })
+            .map(|member| member.name.clone())
+            .collect()
+    }
 }
 
 fn arrow(from: &CrateName, to: &CrateName) -> String {

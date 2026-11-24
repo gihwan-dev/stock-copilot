@@ -789,3 +789,126 @@ fn r3_as_prompt_trait_alias_and_non_expr_macro_are_blocked() {
         BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
     );
 }
+
+fn defining_file_base() -> (String, String) {
+    let seal_head = String::from(
+        "#[derive(Debug, PartialEq, Eq)] struct UserIdentityConfirmationSeal;
+#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);
+impl UserIdentityConfirmation { #[must_use] pub const fn issue_after_user_confirmation() -> Self { Self(UserIdentityConfirmationSeal) } }",
+    );
+    let base = format!(
+        "{seal_head}
+#[derive(Debug, PartialEq, Eq)] pub enum IdentityConfirmationOrigin {{ UserConfirmed(UserIdentityConfirmation), BrokerObservation, AiSuggestion }}
+#[derive(Debug, PartialEq, Eq)] pub struct IdentityChangeConfirmation {{ origin: IdentityConfirmationOrigin }}
+impl IdentityChangeConfirmation {{ #[must_use] pub const fn new(origin: IdentityConfirmationOrigin) -> Self {{ Self {{ origin }} }} #[must_use] pub const fn origin(&self) -> &IdentityConfirmationOrigin {{ &self.origin }} }}
+#[derive(Debug, PartialEq, Eq)] pub struct ConfirmedIdentifierChange {{ confirmation: IdentityChangeConfirmation }}
+impl ConfirmedIdentifierChange {{ #[must_use] pub const fn new(confirmation: IdentityChangeConfirmation) -> Self {{ Self {{ confirmation }} }} #[must_use] pub const fn confirmation(&self) -> &IdentityChangeConfirmation {{ &self.confirmation }} }}"
+    );
+    (seal_head, base)
+}
+
+#[test]
+fn h66_defining_file_wrapper_extraction_is_blocked() {
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let (seal_head, base) = defining_file_base();
+    assert!(scan("domain", defining, &base).is_empty());
+    for bad in [
+        format!(
+            "{base}\nimpl ConfirmedIdentifierChange {{ #[must_use] pub fn into_confirmation(self) -> IdentityChangeConfirmation {{ self.confirmation }} }}"
+        ),
+        format!(
+            "{base}\nimpl IdentityChangeConfirmation {{ #[must_use] pub fn into_origin(self) -> IdentityConfirmationOrigin {{ self.origin }} }}"
+        ),
+        format!(
+            "{base}\nimpl IdentityChangeConfirmation {{ pub fn take(&mut self) -> Option<IdentityConfirmationOrigin> {{ None }} }}"
+        ),
+        format!("{base}\nimpl IdentityChangeConfirmation {{ pub fn mutate(&mut self) {{}} }}"),
+        format!(
+            "{base}\nimpl IdentityChangeConfirmation {{ pub fn drain(self, out: &mut Option<IdentityConfirmationOrigin>) {{ let _ = out; }} }}"
+        ),
+        format!(
+            "{base}\nimpl From<ConfirmedIdentifierChange> for IdentityChangeConfirmation {{ fn from(value: ConfirmedIdentifierChange) -> Self {{ value.confirmation }} }}"
+        ),
+        format!("{base}\ntrait Marker {{}} impl Marker for ConfirmedIdentifierChange {{}}"),
+        format!(
+            "{base}\npub fn extract_origin(change: ConfirmedIdentifierChange) -> IdentityConfirmationOrigin {{ change.confirmation.origin }}"
+        ),
+        format!("{base}\npub struct SmuggleWrapper(pub IdentityConfirmationOrigin);"),
+        format!(
+            "{seal_head}\n#[derive(Debug, PartialEq, Eq)] pub struct ConfirmedIdentifierChange {{ pub confirmation: IdentityChangeConfirmation }}"
+        ),
+        format!(
+            "{seal_head}\n#[derive(Debug, Clone, PartialEq, Eq)] pub struct ConfirmedIdentifierChange {{ confirmation: IdentityChangeConfirmation }}"
+        ),
+        format!(
+            "{seal_head}\n#[derive(Debug, Clone, PartialEq, Eq)] pub enum IdentityConfirmationOrigin {{ UserConfirmed(UserIdentityConfirmation) }}"
+        ),
+        format!("{base}\nimpl IdentityConfirmationOrigin {{ pub fn unpack(self) {{}} }}"),
+        format!(
+            "{base}\npub fn mutate_free(out: &mut Option<IdentityConfirmationOrigin>) {{ let _ = out; }}"
+        ),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn h66_defining_file_type_alias_and_callback_extraction_are_blocked() {
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let (_, base) = defining_file_base();
+    for bad in [
+        format!("{base}\ntype OriginAlias = IdentityConfirmationOrigin;"),
+        format!(
+            "{base}\nimpl ConfirmedIdentifierChange {{ pub fn leak_cb(self, cb: fn(IdentityChangeConfirmation)) {{ cb(self.confirmation); }} }}"
+        ),
+        format!(
+            "{base}\npub fn leak_free_cb(change: ConfirmedIdentifierChange, cb: impl FnOnce(IdentityConfirmationOrigin)) {{ cb(change.confirmation.origin); }}"
+        ),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn h66_prompt_macro_attr_and_spaced_paste_bypasses_are_blocked() {
+    assert_eq!(
+        scan(
+            "store-sqlite",
+            "crates/adapters/store-sqlite/src/lib.rs",
+            "pub fn f() { custom_macro!(use AutoPrompt => IdentityConfirmationPrompt); }",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
+    );
+    assert_eq!(
+        scan(
+            "store-sqlite",
+            "crates/adapters/store-sqlite/src/lib.rs",
+            "#[some_attr(IdentityConfirmationPrompt)] pub struct Fake;",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
+    );
+    assert_eq!(
+        scan(
+            "src-tauri",
+            "apps/desktop/src-tauri/src/lib.rs",
+            "pub fn f() { cf![[ <x y> ]::g]; }",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationIssuance])
+    );
+    assert_eq!(
+        scan(
+            "src-tauri",
+            "apps/desktop/src-tauri/src/lib.rs",
+            "pub(crate) use specta::_collect_functions as cf;",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationIssuance])
+    );
+}
