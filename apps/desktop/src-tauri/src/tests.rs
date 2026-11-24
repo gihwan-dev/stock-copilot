@@ -13,6 +13,7 @@ mod residency;
 mod responsiveness;
 mod scheduling;
 mod startup;
+mod stored_jobs;
 pub(crate) mod support;
 
 #[test]
