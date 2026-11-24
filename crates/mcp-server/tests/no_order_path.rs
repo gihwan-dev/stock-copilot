@@ -5,7 +5,8 @@ mod tests {
     use std::sync::Arc;
 
     use application::{AiRunId, ToolName};
-    use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
+    use application::{ArticleFetchFailure, WebResearchToolOutcome};
+    use domain::{Nanosecond, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText};
     use mcp_server::{
         AnalysisCatalogPorts, ToolErrorCode, ToolInvocation, ToolRegistry, build_analysis_catalog,
         make_cursor_store, validate_arguments_against_schema,
@@ -15,11 +16,11 @@ mod tests {
     use serde_json::{Map, Value};
     use testkit_ports::SteppedClock;
     use testkit_ports::tool_read_fakes::{
-        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads, MarketReadCall,
-        NewsReadCall, PortfolioReadCall,
+        FixedArticleToolPort, FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
+        FixedWebResearchToolPort,
     };
 
-    const STATE_CHANGING_ALLOWED: [&str; 0] = [];
+    const STATE_CHANGING_ALLOWED: [&str; 1] = ["request_web_research"];
 
     const FORBIDDEN_FRAGMENTS: [&str; 16] = [
         "order",
@@ -52,6 +53,25 @@ mod tests {
         news: Arc<FixedNewsToolReads>,
     }
 
+    fn research_fake() -> FixedWebResearchToolPort {
+        let known: Vec<Symbol> = ["005930", "000660", "AAPL", "035420"]
+            .into_iter()
+            .map(|code| Symbol::try_new(code).expect("종목"))
+            .collect();
+        FixedWebResearchToolPort::new(
+            Ok(known),
+            Ok(WebResearchToolOutcome {
+                summary: UntrustedText::try_new("조사 요약").expect("요약"),
+                collected_at: Timestamp::from_parts(
+                    UnixSeconds::new(1_764_000_000_i64),
+                    Nanosecond::new(0_u32),
+                    OffsetSeconds::new(0_i32),
+                )
+                .expect("시각"),
+            }),
+        )
+    }
+
     fn catalog() -> Catalog {
         let clock = Arc::new(SteppedClock::new(
             Timestamp::from_parts(
@@ -65,9 +85,16 @@ mod tests {
             portfolio: Arc::new(FixedPortfolioToolReads::default()),
             market: Arc::new(FixedMarketToolReads::default()),
             news: Arc::new(FixedNewsToolReads::default()),
+            research: Arc::new(research_fake()),
+            article: Arc::new(FixedArticleToolPort::new(
+                Vec::new(),
+                Vec::new(),
+                Err(ArticleFetchFailure::NotFound),
+            )),
         };
         let registry =
-            build_analysis_catalog(&ports, &make_cursor_store(clock)).expect("카탈로그 조립");
+            build_analysis_catalog(&ports, &clock, &make_cursor_store(Arc::clone(&clock)))
+                .expect("카탈로그 조립");
         Catalog {
             registry,
             portfolio: ports.portfolio,
@@ -128,6 +155,100 @@ mod tests {
             .boxed()
     }
 
+    fn value_for_schema(schema: &Value) -> BoxedStrategy<Value> {
+        if let Some(values) = schema.get("enum").and_then(Value::as_array) {
+            return prop::sample::select(values.clone()).boxed();
+        }
+        match schema.get("type").and_then(Value::as_str) {
+            Some("string") => prop_oneof![
+                3 => prop::sample::select(vec!["005930", "000660", "AAPL", "035420"])
+                    .prop_map(|text| Value::String(text.to_owned())),
+                1 => "[ -~]{0,16}".prop_map(Value::String),
+            ]
+            .boxed(),
+            Some("integer") => {
+                let low = schema
+                    .get("minimum")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0_i64);
+                let high = schema
+                    .get("maximum")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(1_000_i64);
+                prop_oneof![
+                    4 => (low..=high).prop_map(Value::from),
+                    1 => any::<i64>().prop_map(Value::from),
+                ]
+                .boxed()
+            }
+            Some("array") => {
+                let item = schema.get("items").cloned().unwrap_or(Value::Null);
+                let low = schema
+                    .get("minItems")
+                    .and_then(Value::as_u64)
+                    .and_then(|value| usize::try_from(value).ok())
+                    .unwrap_or(0_usize);
+                let high = schema
+                    .get("maxItems")
+                    .and_then(Value::as_u64)
+                    .and_then(|value| usize::try_from(value).ok())
+                    .unwrap_or(4_usize);
+                prop::collection::vec(value_for_schema(&item), low..=high)
+                    .prop_map(Value::Array)
+                    .boxed()
+            }
+            Some(_) | None => any_value(),
+        }
+    }
+
+    fn schema_arguments(schema: &Map<String, Value>) -> BoxedStrategy<Map<String, Value>> {
+        let required: Vec<String> = schema
+            .get("required")
+            .and_then(Value::as_array)
+            .map_or_else(Vec::new, |items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            });
+        let properties: Vec<(String, Value)> = schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .map_or_else(Vec::new, |props| {
+                props
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            });
+        let fields: Vec<BoxedStrategy<Option<(String, Value)>>> = properties
+            .into_iter()
+            .map(|(key, prop_schema)| {
+                let must = required.contains(&key);
+                (any::<bool>(), value_for_schema(&prop_schema))
+                    .prop_map(move |(include, value)| {
+                        (must || include).then(|| (key.clone(), value))
+                    })
+                    .boxed()
+            })
+            .collect();
+        (
+            fields,
+            prop::option::weighted(
+                0.1_f64,
+                (prop::sample::select(PROBE_KEYS.to_vec()), any_value()),
+            ),
+        )
+            .prop_map(|(entries, probe)| {
+                let mut map: Map<String, Value> = entries.into_iter().flatten().collect();
+                if let Some((key, value)) = probe {
+                    map.insert(key.to_owned(), value);
+                }
+                map
+            })
+            .boxed()
+    }
+
     fn runtime() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -140,12 +261,12 @@ mod tests {
         registry: &ToolRegistry,
         name: &ToolName,
         args: &Map<String, Value>,
-    ) -> Result<(), TestCaseError> {
+    ) -> Result<Reach, TestCaseError> {
         let (spec, tool) = registry
             .get(name)
             .ok_or_else(|| TestCaseError::fail("등록된 도구"))?;
         if validate_arguments_against_schema(args, spec.input_schema()).is_err() {
-            return Ok(());
+            return Ok(Reach::RejectedBySchema);
         }
         let run_id = AiRunId::try_new("run-m05").map_err(|_err| TestCaseError::fail("실행 ID"))?;
         let outcome = rt.block_on(tool.invoke(ToolInvocation {
@@ -155,7 +276,7 @@ mod tests {
         match outcome {
             Ok(value) => {
                 if value.is_object() {
-                    Ok(())
+                    Ok(Reach::Body)
                 } else {
                     Err(TestCaseError::fail("성공 결과는 객체여야 한다"))
                 }
@@ -171,56 +292,56 @@ mod tests {
                 | ToolErrorCode::ResponseTooLarge
                 | ToolErrorCode::LedgerUnavailable
                 | ToolErrorCode::DataUnavailable
-                | ToolErrorCode::UpstreamUnavailable => Ok(()),
+                | ToolErrorCode::UpstreamUnavailable
+                | ToolErrorCode::RateLimited => Ok(Reach::Body),
             },
         }
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Reach {
+        RejectedBySchema,
+        Body,
+    }
+
     #[test]
-    fn every_registered_tool_survives_random_arguments_with_read_only_port_calls() {
+    fn every_registered_tool_survives_random_arguments_and_reaches_its_body() {
         let catalog = catalog();
         let rt = runtime();
         let names = catalog.registry.tool_names();
         assert!(!names.is_empty(), "카탈로그가 비어 있으면 안 된다");
         for name in &names {
+            let (spec, _tool) = catalog.registry.get(name).expect("등록된 도구");
+            let strategy = prop_oneof![
+                1 => arguments(),
+                3 => schema_arguments(spec.input_schema()),
+            ];
+            let reached = std::cell::Cell::new(0_u32);
             let mut runner = TestRunner::new(Config::with_cases(testkit::property_cases()));
             runner
-                .run(&arguments(), |args| {
-                    invoke_once(&rt, &catalog.registry, name, &args)
+                .run(&strategy, |args| {
+                    let reach = invoke_once(&rt, &catalog.registry, name, &args)?;
+                    reached.set(
+                        reached
+                            .get()
+                            .saturating_add(u32::from(reach == Reach::Body)),
+                    );
+                    Ok(())
                 })
                 .expect("무작위 인자 호출");
+            assert!(
+                reached.get() > 0_u32,
+                "{}: 무작위 인자 일부는 검증을 지나 도구 본문까지 닿아야 한다",
+                name.as_str()
+            );
         }
-        assert!(
-            !catalog.portfolio.calls().is_empty() && !catalog.market.calls().is_empty(),
-            "무작위 인자 일부는 검증을 지나 도구 본문까지 닿아야 한다"
-        );
-        for call in catalog.portfolio.calls() {
-            match call {
-                PortfolioReadCall::Portfolio
-                | PortfolioReadCall::Allocation
-                | PortfolioReadCall::Transactions
-                | PortfolioReadCall::Performance(_) => {}
-            }
-        }
-        assert!(
-            !catalog.news.calls().is_empty(),
-            "뉴스 도구 본문까지 닿아야 한다"
-        );
-        for call in catalog.news.calls() {
-            match call {
-                NewsReadCall::SearchNews(_) | NewsReadCall::Disclosures(_) => {}
-            }
-        }
-        for call in catalog.market.calls() {
-            match call {
-                MarketReadCall::Quote(..)
-                | MarketReadCall::Candles(..)
-                | MarketReadCall::Overview
-                | MarketReadCall::Rankings(..)
-                | MarketReadCall::Sectors(..)
-                | MarketReadCall::InvestorFlow(..) => {}
-            }
-        }
+        let port_calls = catalog
+            .portfolio
+            .calls()
+            .len()
+            .saturating_add(catalog.market.calls().len())
+            .saturating_add(catalog.news.calls().len());
+        assert!(port_calls > 0_usize, "읽기 포트까지 호출이 닿아야 한다");
     }
 
     #[test]
