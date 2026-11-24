@@ -92,3 +92,8 @@ sha256 = "a1e452df05ddd2495bc6732b163d2f424c8032b4a82896b85e32ff8bea90f9d4"
 number = 19
 file = "0019_briefings.sql"
 sha256 = "41806b251d92b8043b3254d6b3ce012ea2a7b4c064ba30a7fdd2e1bb3ec1fc70"
+
+[[migration]]
+number = 20
+file = "0020_ai_jobs_and_principles.sql"
+sha256 = "6ee9ce61f012f1e84e3400711ba7aa941e856f83b775939682acb96aa0a64320"

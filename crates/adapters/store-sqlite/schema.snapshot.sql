@@ -1,3 +1,4 @@
+CREATE INDEX ai_job_records_finished ON ai_job_records(finished_seconds, finished_nanos);
 CREATE UNIQUE INDEX audit_log_entry ON audit_log(at_payload, kind, payload);
 CREATE INDEX chat_entries_user_message ON chat_entries(session_id, user_message_id, position);
 CREATE INDEX chat_run_ledger_run ON chat_run_ledger(run_id);
@@ -25,6 +26,12 @@ CREATE INDEX wake_triggers_by_time ON wake_triggers(recorded_seconds, recorded_n
 CREATE UNIQUE INDEX wake_triggers_daily_once ON wake_triggers(kind, instrument, recorded_day) WHERE kind != 'disclosure';
 CREATE UNIQUE INDEX wake_triggers_disclosure_once ON wake_triggers(disclosure_source, receipt, instrument, grade, action) WHERE kind = 'disclosure';
 CREATE INDEX web_collected_items_subject ON web_collected_items(subject_kind, subject, id);
+CREATE TABLE ai_job_records (
+    job_id TEXT PRIMARY KEY,
+    finished_seconds INTEGER NOT NULL,
+    finished_nanos INTEGER NOT NULL CHECK (finished_nanos BETWEEN 0 AND 999999999),
+    payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE audit_log (
     seq INTEGER PRIMARY KEY CHECK (seq >= 1),
     at_payload TEXT NOT NULL,
@@ -192,6 +199,11 @@ CREATE TABLE instrument_mappings (
     PRIMARY KEY (instrument_id, market, symbol, isin),
     UNIQUE (market, symbol, isin),
     CHECK ((status = 'superseded' AND superseded_event_seq IS NOT NULL) OR (status IN ('active', 'retired') AND superseded_event_seq IS NULL))
+) STRICT;
+CREATE TABLE investment_principles (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    schema_version INTEGER NOT NULL CHECK (schema_version >= 1),
+    payload TEXT NOT NULL
 ) STRICT;
 CREATE TABLE market_candles (
     instrument TEXT NOT NULL,
@@ -462,6 +474,8 @@ CREATE TABLE web_collected_items (
     subject TEXT NOT NULL,
     payload TEXT NOT NULL
 ) STRICT;
+CREATE TRIGGER ai_job_records_no_delete BEFORE DELETE ON ai_job_records BEGIN SELECT RAISE(ABORT, 'ai job records are append only'); END;
+CREATE TRIGGER ai_job_records_no_update BEFORE UPDATE ON ai_job_records BEGIN SELECT RAISE(ABORT, 'ai job records are append only'); END;
 CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER audit_log_seq BEFORE INSERT ON audit_log WHEN NEW.seq IS NOT (SELECT coalesce(max(seq), 0) + 1 FROM audit_log) BEGIN SELECT RAISE(ABORT, 'audit_log seq must be contiguous'); END;
@@ -511,6 +525,7 @@ CREATE TRIGGER instrument_mappings_insert_active_only BEFORE INSERT ON instrumen
 CREATE TRIGGER instrument_mappings_no_delete BEFORE DELETE ON instrument_mappings WHEN OLD.status != 'active' OR NOT EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'link_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND next_symbol = OLD.symbol AND next_isin = OLD.isin) BEGIN SELECT RAISE(ABORT, 'instrument mappings cannot be deleted'); END;
 CREATE TRIGGER instrument_mappings_no_replace BEFORE INSERT ON instrument_mappings WHEN EXISTS (SELECT 1 FROM instrument_mappings WHERE market = NEW.market AND upper(symbol) = upper(NEW.symbol) AND instrument_id != NEW.instrument_id) OR EXISTS (SELECT 1 FROM instrument_mappings WHERE upper(isin) = upper(NEW.isin) AND instrument_id != NEW.instrument_id) OR EXISTS (SELECT 1 FROM instrument_mappings WHERE instrument_id = NEW.instrument_id AND (status IN ('active', 'retired') OR market != NEW.market OR (upper(symbol) = upper(NEW.symbol) AND upper(isin) = upper(NEW.isin)))) OR (EXISTS (SELECT 1 FROM instrument_mappings WHERE instrument_id = NEW.instrument_id) AND NOT EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = NEW.instrument_id) AND event_kind = 'identifier_changed' AND instrument_id = NEW.instrument_id AND market = NEW.market AND next_symbol = NEW.symbol AND next_isin = NEW.isin)) BEGIN SELECT RAISE(ABORT, 'instrument mapping cannot replace existing history'); END;
 CREATE TRIGGER instrument_mappings_retire_only BEFORE UPDATE ON instrument_mappings WHEN NEW.instrument_id != OLD.instrument_id OR NEW.market != OLD.market OR NEW.symbol != OLD.symbol OR NEW.isin != OLD.isin OR NOT ((OLD.status = 'active' AND NEW.status = 'retired' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NULL) OR (OLD.status = 'active' AND NEW.status = 'superseded' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NOT NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = NEW.superseded_event_seq AND seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'identifier_changed' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin)) OR (OLD.status = 'retired' AND NEW.status = 'active' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'retirement_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin)) OR (OLD.status = 'superseded' AND NEW.status = 'active' AND OLD.superseded_event_seq IS NOT NULL AND NEW.superseded_event_seq IS NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'link_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin))) BEGIN SELECT RAISE(ABORT, 'instrument mapping transition is not permitted'); END;
+CREATE TRIGGER investment_principles_no_delete BEFORE DELETE ON investment_principles BEGIN SELECT RAISE(ABORT, 'investment principles are replaced, not deleted'); END;
 CREATE TRIGGER news_data_settings_no_delete BEFORE DELETE ON news_data_settings BEGIN SELECT RAISE(ABORT, 'news data settings are replaced, not deleted'); END;
 CREATE TRIGGER order_rate_limit_no_delete BEFORE DELETE ON order_rate_limit BEGIN SELECT RAISE(ABORT, 'order rate limit is replaced, not deleted'); END;
 CREATE TRIGGER order_submissions_no_delete BEFORE DELETE ON order_submissions BEGIN SELECT RAISE(ABORT, 'order submissions are append only'); END;
