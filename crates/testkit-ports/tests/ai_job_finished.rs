@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiRunId, EventBusBuilder,
-        EventSubscriber, RecordAiJobFinished, RunKind, RunPurpose, SubscriberFailure,
-        SystemFailure, SystemPort, SystemPortError,
+        AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRun, AiJobTiming, AiRunId,
+        EventBusBuilder, EventSubscriber, RecordAiJobFinished, RunKind, RunPurpose,
+        SubscriberFailure, SystemFailure, SystemPort, SystemPortError, TokenUsage,
     };
     use domain::{
         AiJobId, DomainEvent, DomainEventKind, Nanosecond, OffsetSeconds, Timestamp, UnixSeconds,
@@ -38,11 +38,10 @@ mod tests {
     }
     fn record(id: &str, outcome: AiJobOutcome) -> AiJobFinishRecord {
         AiJobFinishRecord::new(
-            job(id),
-            RunKind::Analysis,
-            RunPurpose::Chat,
+            AiJobRun::new(job(id), RunKind::Analysis, RunPurpose::Chat),
             outcome,
-            at(100),
+            AiJobTiming::try_new(at(90), at(100)).expect("시간"),
+            TokenUsage::zero(),
         )
     }
     struct Observer {
@@ -102,11 +101,14 @@ mod tests {
         let (events, received) = bus(&records);
         let chat = record("chat-1", AiJobOutcome::Completed);
         let scheduled = AiJobFinishRecord::new(
-            job("sched-1"),
-            RunKind::Collection,
-            RunPurpose::WebCollection,
+            AiJobRun::new(
+                job("sched-1"),
+                RunKind::Collection,
+                RunPurpose::WebCollection,
+            ),
             AiJobOutcome::Interrupted,
-            at(120),
+            AiJobTiming::try_new(at(110), at(120)).expect("시간"),
+            TokenUsage::zero(),
         );
         let usecase = RecordAiJobFinished::new(records.as_ref(), &events);
         run(usecase.execute(scheduled.clone())).expect("예약 저장");
@@ -152,6 +154,23 @@ mod tests {
         let run_id = AiRunId::try_new("sched-7.a_b").expect("실행 ID");
         assert_eq!(run_id.job_id(), &job("sched-7.a_b"));
         assert_eq!(run_id.as_str(), "sched-7.a_b");
+        let spec = application::RunSpec::new(
+            run_id.clone(),
+            application::RunInput::Analysis(
+                application::AnalysisPrompt::try_new("brief").expect("prompt"),
+            ),
+            application::ModelSelection::Default,
+            application::ReasoningEffort::Default,
+            RunPurpose::MorningBriefing,
+        );
+        assert_eq!(
+            AiJobRun::of_spec(&spec),
+            AiJobRun::new(
+                job("sched-7.a_b"),
+                RunKind::Analysis,
+                RunPurpose::MorningBriefing
+            )
+        );
         assert_eq!(
             AiRunId::try_new("a/b"),
             Err(application::IdentifierError::InvalidFormat)

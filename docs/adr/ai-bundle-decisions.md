@@ -15,3 +15,5 @@
 | AI-18 | 프로필은 `(version 1)(allow default)` 위에 주어진 절대 경로마다 `(deny file-read* file-write* (subpath …))`. 경로에 `"`·`\`·제어 문자가 있거나 상대 경로·`/`면 거부해 SBPL 주입을 막는다. 네트워크 규칙은 넣지 않는다(CLI가 구독 API에 닿아야 하고 SBPL은 호스트 단위 허용을 못 한다) | 외부 네트워크 허용 목록 |
 | AI-18 | 감싸기는 `/usr/bin/sandbox-exec -p <프로필> <claude> <원래 인자>`이고 환경 변수·작업 폴더는 그대로. `preview_command_plan`이 감싼 명령을 돌려주므로 채팅·일회 실행 모두 같은 경로로 감싼다 | 실행 종류별 선택 |
 | AI-18 | 자가 점검은 허용 폴더·거부 폴더의 표지 파일을 같은 프로필(+거부 폴더)로 `/bin/cat`하게 해, 허용 표지만 나오고 종료 코드가 실패면 적용, 거부 표지가 나오면 미적용, 그 밖은 사용 불가로 본다. 적용이 아니면 조립 루트가 겹 없이(`without_sandbox`) 띄운다. 실제 `sandbox-exec` 안에서의 구독 인증 확인은 AI-12(사용자 실측)로 남긴다 | 점검 실패 시 AI 끄기 |
+| AI-08 | 종료 기록에 시작·종료 시각(`AiJobTiming`, 소요 시간은 `Timestamp::elapsed_until`)과 토큰 합(`TokenUsage`, 입력·출력·캐시 읽기·캐시 생성)을 둔다. 토큰은 실행 중 `TokenUsage` 사건을 `AiJobUsageMeter`가 포화 덧셈으로 모두 더한다 | 마지막 사건만 쓰기 |
+| AI-08 | 조회는 `ListAiJobUsage(from, through)`가 종료 시각 창의 기록을 최근 것부터 돌려준다. 저장은 S-09 전까지 `AiJobRecordStore` 포트와 `testkit-ports` 가짜로만 둔다. 목적별 합계는 AI-10 화면 작업 때 더한다 | 지금 목적별 합계 |

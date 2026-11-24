@@ -1,6 +1,6 @@
 use crate::script::State;
 use application::{AiJobFinishRecord, AiJobRecordStore, AiJobRecordWrite, SystemPortError};
-use domain::AiJobId;
+use domain::{AiJobId, Timestamp};
 use std::collections::VecDeque;
 
 #[derive(Debug, Default)]
@@ -50,6 +50,25 @@ impl MemoryAiJobRecords {
 }
 
 impl AiJobRecordStore for MemoryAiJobRecords {
+    fn finished_between(
+        &self,
+        from: Timestamp,
+        through: Timestamp,
+    ) -> impl Future<Output = Result<Vec<AiJobFinishRecord>, SystemPortError>> + Send {
+        let failure = self.lookup_failures.write().pop_front();
+        let outcome = match failure {
+            Some(error) => Err(error),
+            None => Ok(self
+                .records
+                .write()
+                .iter()
+                .filter(|stored| stored.finished_at() >= from && stored.finished_at() <= through)
+                .cloned()
+                .collect()),
+        };
+        std::future::ready(outcome)
+    }
+
     fn store_finished(
         &self,
         record: &AiJobFinishRecord,
