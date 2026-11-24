@@ -637,6 +637,19 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod trade_cost_confirmation;
+pub use trade_cost_confirmation::{
+    ConfirmedTradeCost, EstimatedTradeCost, TradeCostDisplay, trade_cost_display,
+};
+mod order_progress;
+pub use order_progress::{
+    OrderProgress, OrderProgressChange, order_progress, order_progress_change,
+};
+mod order_reconciliation;
+pub use order_reconciliation::{
+    BrokerOrderCoverage, LocalSubmission, LocalSubmissionResult, ReconciliationIssue,
+    ReconciliationReport, ReconciliationStatus, reconcile_orders,
+};
 mod order_button;
 pub use order_button::{
     OrderButtonHiddenReason, OrderButtonState, ProposalAvailability, order_button_state,

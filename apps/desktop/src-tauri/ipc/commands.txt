@@ -3,6 +3,7 @@ cancel_chat_turn
 get_chat_history
 get_settings
 open_external
+request_order_approval
 resubscribe_chat_turn
 send_chat_message
 set_order_permission

@@ -646,6 +646,10 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod track_orders;
+pub use track_orders::{OrderHistoryRow, TrackSubmittedOrders, TrackedOrder, TrackedOrderUpdate};
+mod order_reconciliation;
+pub use order_reconciliation::{ReconcileOrdersError, ReconcileSubmittedOrders, SubmissionLedger};
 mod order_button;
 pub use order_button::ReadOrderButton;
 mod order_rate_limit;
