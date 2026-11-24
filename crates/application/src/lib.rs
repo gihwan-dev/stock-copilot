@@ -572,6 +572,17 @@ mod candidate_discovery;
 pub use candidate_discovery::{
     DiscoverCandidates, DiscoveryError, DiscoveryList, DiscoveryLists, DiscoveryReport,
 };
+mod weekly_review;
+pub use weekly_review::{
+    RunWeeklyReview, ScorecardRefresh, ScorecardUpdate, WeeklyFindings, WeeklyNarrative,
+    WeeklyReviewCard, WeeklyReviewCards, WeeklyReviewError, WeeklyReviewInputs,
+    WeeklyReviewNarrator, WeeklyReviewRun, WeeklyReviewSource,
+};
+mod paired_comparison;
+pub use paired_comparison::{
+    ComparisonArm, ComparisonArmResult, ComparisonArmRunner, PairedComparison, PairedComparisonLog,
+    PairingError, PairingRun, RunPairedComparison,
+};
 mod deep_research;
 pub use deep_research::{
     AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
@@ -635,6 +646,10 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod track_orders;
+pub use track_orders::{OrderHistoryRow, TrackSubmittedOrders, TrackedOrder, TrackedOrderUpdate};
+mod order_reconciliation;
+pub use order_reconciliation::{ReconcileOrdersError, ReconcileSubmittedOrders, SubmissionLedger};
 mod order_button;
 pub use order_button::ReadOrderButton;
 mod order_rate_limit;

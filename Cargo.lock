@@ -3770,6 +3770,7 @@ name = "src-tauri"
 version = "0.1.0"
 dependencies = [
  "application",
+ "approval-command",
  "broker-toss",
  "domain",
  "platform-macos",

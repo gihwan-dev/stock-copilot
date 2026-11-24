@@ -64,7 +64,7 @@ async fn secret_presence<S: SecretStore>(store: &S, key: SecretKey) -> SecretPre
 }
 
 fn saturating_account_count(count: usize) -> u16 {
-    u16::try_from(count).unwrap_or(u16::MAX)
+    u16::try_from(count).ok().unwrap_or(u16::MAX)
 }
 
 impl<P: PortTypes> ScreenBackend for PortsBackend<P> {
