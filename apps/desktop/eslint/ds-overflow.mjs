@@ -63,6 +63,7 @@ export const LENGTH_EXCEPTIONS = [
       "h-chart-height-lg",
     ],
   ],
+  ["src/shared/ds/CandleChart.tsx", ["h-chart-height"]],
 ];
 const lengthException = (file) =>
   LENGTH_EXCEPTIONS.find(([path]) => path === file)?.[1] ?? [];

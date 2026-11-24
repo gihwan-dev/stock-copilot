@@ -183,6 +183,9 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/testing/overflow.ts src/shared/ds/testing/overflow.ts",
   "files src/shared/ds/testing/overflow-geometry.ts src/shared/ds/testing/overflow-geometry.ts",
   "files src/shared/ds/testing/stress.ts src/shared/ds/testing/stress.ts",
+  "files src/shared/ds/CandleChart.tsx src/shared/ds/CandleChart.tsx",
+  "files src/shared/lib/canvas-chart.ts src/shared/lib/canvas-chart.ts",
+  "files src/shared/platform/canvasTheme.ts src/shared/platform/canvasTheme.ts",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {

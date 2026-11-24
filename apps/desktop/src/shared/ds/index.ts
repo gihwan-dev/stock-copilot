@@ -21,7 +21,12 @@ export { LineChart } from "./LineChart";
 export { AreaChart } from "./AreaChart";
 export { DonutChart } from "./DonutChart";
 export { Treemap } from "./Treemap";
-export type { ChartPoint } from "./chart-types";
+export { CandleChart } from "./CandleChart";
+export type {
+  ChartPoint,
+  CandlePoint,
+  CandleThemePalette,
+} from "./chart-types";
 
 export {
   Money,

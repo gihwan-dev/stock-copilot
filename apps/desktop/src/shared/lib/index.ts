@@ -39,5 +39,15 @@ export { emptyInputValue, parseInputValue } from "./brand";
 
 export type { ChartDecimal, ChartCoordinate, ChartPath } from "./brand";
 export { parseChartDecimal, chartCoordinate, chartPath } from "./brand";
-export type { FreeText, ExternalUrl } from "./brand";
-export { parseFreeText, emptyFreeText, parseExternalUrl } from "./brand";
+export type { FreeText, ExternalUrl, CanvasColor } from "./brand";
+export {
+  parseFreeText,
+  emptyFreeText,
+  parseExternalUrl,
+  parseCanvasColor,
+} from "./brand";
+export type {
+  CandleThemePalette,
+  CanvasCandleMark,
+  CandleCanvasScene,
+} from "./canvas-chart";

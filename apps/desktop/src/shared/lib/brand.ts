@@ -73,3 +73,10 @@ export const parseExternalUrl = (
   input: unknown,
 ): Result<ExternalUrl, BrandError> =>
   fromParse(externalUrlSchema.safeParse(input));
+
+export type CanvasColor = string & Brand<"CanvasColor">;
+const canvasColorSchema = z.string().trim().min(1).brand<"CanvasColor">();
+export const parseCanvasColor = (
+  input: unknown,
+): Result<CanvasColor, BrandError> =>
+  fromParse(canvasColorSchema.safeParse(input));
