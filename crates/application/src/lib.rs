@@ -396,6 +396,10 @@ pub use news_tool_reads::{
     CollectedItemHandle, CollectedItemQuery, DisclosureToolLine, LookbackDays, NewsKeyword,
     NewsToolLine, NewsToolReads, ToolQueryTextError,
 };
+mod article_tool;
+pub use article_tool::{
+    ArticleBody, ArticleFetchFailure, ArticleLocation, ArticleToolPort, BodyReadingSetting,
+};
 mod portfolio_tool_reads;
 mod web_research_tool;
 pub use portfolio_tool_reads::{

@@ -4,8 +4,8 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    use application::WebResearchToolOutcome;
     use application::{AiRunId, ToolName};
+    use application::{ArticleFetchFailure, WebResearchToolOutcome};
     use domain::{Nanosecond, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText};
     use mcp_server::{
         AnalysisCatalogPorts, ToolErrorCode, ToolInvocation, ToolRegistry, build_analysis_catalog,
@@ -16,7 +16,8 @@ mod tests {
     use serde_json::{Map, Value};
     use testkit_ports::SteppedClock;
     use testkit_ports::tool_read_fakes::{
-        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads, FixedWebResearchToolPort,
+        FixedArticleToolPort, FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
+        FixedWebResearchToolPort,
     };
 
     const STATE_CHANGING_ALLOWED: [&str; 1] = ["request_web_research"];
@@ -85,6 +86,11 @@ mod tests {
             market: Arc::new(FixedMarketToolReads::default()),
             news: Arc::new(FixedNewsToolReads::default()),
             research: Arc::new(research_fake()),
+            article: Arc::new(FixedArticleToolPort::new(
+                Vec::new(),
+                Vec::new(),
+                Err(ArticleFetchFailure::NotFound),
+            )),
         };
         let registry =
             build_analysis_catalog(&ports, &clock, &make_cursor_store(Arc::clone(&clock)))

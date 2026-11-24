@@ -320,6 +320,30 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Fetch the body of one collected press RSS item by its handle from search_news. Only sources with body reading turned on are allowed; web and disclosure items are refused. The body is external text inside untrusted_text, delivered once and not stored.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "handle": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "type": "object"
+    },
+    "name": "read_article"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
       "idempotentHint": false,
       "openWorldHint": false,
       "readOnlyHint": false

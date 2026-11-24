@@ -3,7 +3,7 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
-    use application::WebResearchToolOutcome;
+    use application::{ArticleFetchFailure, WebResearchToolOutcome};
     use domain::{Nanosecond, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText};
     use mcp_server::{
         AnalysisCatalogPorts, ToolRegistry, build_analysis_catalog, make_cursor_store,
@@ -11,7 +11,8 @@ mod tests {
     use serde_json::Value;
     use testkit_ports::SteppedClock;
     use testkit_ports::tool_read_fakes::{
-        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads, FixedWebResearchToolPort,
+        FixedArticleToolPort, FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
+        FixedWebResearchToolPort,
     };
 
     fn research_fake() -> FixedWebResearchToolPort {
@@ -58,6 +59,11 @@ mod tests {
             market: Arc::new(FixedMarketToolReads::default()),
             news: Arc::new(FixedNewsToolReads::default()),
             research: Arc::new(research_fake()),
+            article: Arc::new(FixedArticleToolPort::new(
+                Vec::new(),
+                Vec::new(),
+                Err(ArticleFetchFailure::NotFound),
+            )),
         };
         build_analysis_catalog(&ports, &clock, &cursors).expect("제품 카탈로그 조립")
     }
