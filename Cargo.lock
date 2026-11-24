@@ -76,6 +76,13 @@ dependencies = [
 [[package]]
 name = "approval-command"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "order-execution",
+ "testkit",
+ "testkit-ports",
+]
 
 [[package]]
 name = "arrayvec"
