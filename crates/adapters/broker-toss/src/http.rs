@@ -68,12 +68,28 @@ impl fmt::Debug for RawResponse {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublicDocsRoute {
+    Versions,
+    LatestOpenApi,
+}
+
+impl PublicDocsRoute {
+    const fn path(self) -> &'static str {
+        match self {
+            Self::Versions => "/openapi-docs/versions.json",
+            Self::LatestOpenApi => "/openapi-docs/latest/openapi.json",
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct ResponseHeaders {
     retry_after: Option<String>,
     limit: Option<String>,
     remaining: Option<String>,
     reset: Option<String>,
+    last_modified: Option<String>,
 }
 
 impl fmt::Debug for ResponseHeaders {
@@ -112,6 +128,10 @@ impl ResponseHeaders {
     #[must_use]
     pub fn reset(&self) -> Option<&str> {
         self.reset.as_deref()
+    }
+    #[must_use]
+    pub fn last_modified(&self) -> Option<&str> {
+        self.last_modified.as_deref()
     }
 }
 
@@ -286,6 +306,21 @@ impl TossHttpClient {
             attempt = attempt.saturating_add(1);
         }
     }
+    pub async fn get_public_doc(
+        &self,
+        route: PublicDocsRoute,
+    ) -> Result<RawResponse, TossHttpError> {
+        let mut url = self.origin.clone();
+        url.set_path(route.path());
+        receive(
+            self.client
+                .get(url)
+                .send()
+                .await
+                .map_err(|_error| TossHttpError::Transport)?,
+        )
+        .await
+    }
 }
 
 pub(crate) async fn receive(mut response: reqwest::Response) -> Result<RawResponse, TossHttpError> {
@@ -295,6 +330,7 @@ pub(crate) async fn receive(mut response: reqwest::Response) -> Result<RawRespon
         limit: header(response.headers(), "X-RateLimit-Limit"),
         remaining: header(response.headers(), "X-RateLimit-Remaining"),
         reset: header(response.headers(), "X-RateLimit-Reset"),
+        last_modified: header(response.headers(), "Last-Modified"),
     };
     let mut chunks = Vec::new();
     let mut length = 0_usize;

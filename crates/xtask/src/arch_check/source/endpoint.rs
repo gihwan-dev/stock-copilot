@@ -355,6 +355,7 @@ fn closed_client_method(item: &syn::ImplItem) -> bool {
         "fn new(endpoint: &TossEndpoint, clock: Arc<dyn Clock>, wait: Arc<dyn crate::RequestWait>) -> Result<Self, TossHttpError> {}",
         "async fn get(&self, request: &ReadRequest, token: &SecretValue) -> Result<RawResponse, TossHttpError> {}",
         "async fn send_token(&self, body: SecretValue) -> Result<RawResponse, TossHttpError> {}",
+        "async fn get_public_doc(&self, route: PublicDocsRoute) -> Result<RawResponse, TossHttpError> {}",
     ].iter().any(|text| syn::parse_str::<syn::ImplItemFn>(text).is_ok_and(|expected| expected.sig.to_token_stream().to_string() == actual.to_token_stream().to_string()))
 }
 

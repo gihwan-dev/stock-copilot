@@ -429,3 +429,10 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
+mod spec_check;
+pub use spec_check::{
+    CheckTossSpec, HttpLastModified, SchemaReviewState, SpecChangeReason, SpecCheckReport,
+    SpecDocumentSnapshot, SpecDriftStatus, SpecFetchError, SpecHash, SpecStatusRecord,
+    SpecVersionLabel, TossSpecBaseline, TossSpecObservation, TossSpecSource,
+    TossSpecStatusRepository, evaluate_spec_drift,
+};

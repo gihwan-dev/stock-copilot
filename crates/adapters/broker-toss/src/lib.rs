@@ -12,7 +12,7 @@ mod http;
 mod request;
 mod token;
 pub use endpoint::TossEndpoint;
-pub use http::{RawResponse, ResponseHeaders, TossHttpClient, TossHttpError};
+pub use http::{PublicDocsRoute, RawResponse, ResponseHeaders, TossHttpClient, TossHttpError};
 pub use request::{QueryKey, ReadRequest, ReadRoute, RouteId};
 pub use token::issue_token;
 
@@ -47,3 +47,10 @@ pub use instrument_ports::TossInstrumentRead;
 mod instrument_market;
 mod order_info_read;
 mod order_read;
+mod sha256;
+mod spec_check;
+pub use sha256::{sha256_digest, sha256_hex};
+pub use spec_check::{
+    PINNED_LAST_MODIFIED, PINNED_NORMALIZED_SPEC_SHA256, PINNED_SPEC_VERSION, TossSpecClient,
+    normalized_json_sha256, pinned_spec_baseline,
+};
