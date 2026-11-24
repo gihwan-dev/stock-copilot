@@ -1,12 +1,12 @@
 use crate::{Script, SteppedClock, script::State};
 use application::{
     AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, BackgroundPreemption, ChatChunk,
-    ChatChunkSink, ChatHistory, ChatQueueAcquisition, ChatQueuePort, ChatRepository, ChatRunLedger,
-    ChatRunLedgerEntry, ChatSequence, ChatSessionId, ChatSessionRecord, ChatSessionSummary,
-    ChatSignalState, ChatSinkClosed, ChatStopSignal, InformationError, IsolationCheck,
-    RecordOutcome, RunKind, RunSpec, StoredChatEntry, StoredUserMessage, SystemFailure, SystemPort,
-    SystemPortError, UserMessageId, WarmChatId, WarmChatProbe, WarmChatRequest, WarmChatRuntime,
-    WarmChatSession, WriteCompleted,
+    ChatChunkSink, ChatHistory, ChatNumberEvidence, ChatNumberEvidenceSet, ChatQueueAcquisition,
+    ChatQueuePort, ChatRepository, ChatRunLedger, ChatRunLedgerEntry, ChatSequence, ChatSessionId,
+    ChatSessionRecord, ChatSessionSummary, ChatSignalState, ChatSinkClosed, ChatStopSignal,
+    InformationError, IsolationCheck, RecordOutcome, RunKind, RunSpec, StoredChatEntry,
+    StoredUserMessage, SystemFailure, SystemPort, SystemPortError, ToolPayloadJson, UserMessageId,
+    WarmChatId, WarmChatProbe, WarmChatRequest, WarmChatRuntime, WarmChatSession, WriteCompleted,
 };
 use domain::{TimeSpan, Timestamp, UntrustedText};
 use std::collections::BTreeMap;
@@ -306,6 +306,56 @@ impl MemoryChatRunLedger {
 
     pub fn fail_next_record(&self, error: SystemPortError) {
         self.state.write().fail_next = Some(error);
+    }
+}
+
+impl ChatNumberEvidence for MemoryChatRunLedger {
+    fn evidence_for_run(
+        &self,
+        _run: &AiRunId,
+    ) -> impl Future<Output = Result<ChatNumberEvidenceSet, SystemPortError>> + Send {
+        ready(Ok(ChatNumberEvidenceSet::NotConfigured))
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MemoryNumberEvidence {
+    state: Arc<State<MemoryNumberEvidenceState>>,
+}
+
+#[derive(Debug, Default)]
+struct MemoryNumberEvidenceState {
+    payloads: Vec<(AiRunId, ToolPayloadJson)>,
+    failure: Option<SystemPortError>,
+}
+
+impl MemoryNumberEvidence {
+    pub fn record(&self, run: AiRunId, payload: ToolPayloadJson) {
+        self.state.write().payloads.push((run, payload));
+    }
+
+    pub fn fail_with(&self, error: SystemPortError) {
+        self.state.write().failure = Some(error);
+    }
+}
+
+impl ChatNumberEvidence for MemoryNumberEvidence {
+    fn evidence_for_run(
+        &self,
+        run: &AiRunId,
+    ) -> impl Future<Output = Result<ChatNumberEvidenceSet, SystemPortError>> + Send {
+        let state = self.state.write();
+        ready(match &state.failure {
+            Some(error) => Err(*error),
+            None => Ok(ChatNumberEvidenceSet::Payloads(
+                state
+                    .payloads
+                    .iter()
+                    .filter(|(owner, _)| owner == run)
+                    .map(|(_, payload)| payload.clone())
+                    .collect(),
+            )),
+        })
     }
 }
 

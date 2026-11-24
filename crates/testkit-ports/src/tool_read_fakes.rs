@@ -1,8 +1,8 @@
 use application::{
-    AllocationToolView, CandleWindow, CandlesToolView, InvestorFlowToolView,
-    MarketOverviewToolView, MarketToolReads, PerformancePeriod, PerformanceToolView,
-    PortfolioToolReads, PortfolioToolView, QuoteToolView, RankingToolKind, RankingsToolView,
-    SectorsToolView, SystemPortError, TransactionsToolView,
+    AllocationToolView, CandleWindow, CandlesToolView, CollectedItemQuery, DisclosureToolLine,
+    InvestorFlowToolView, MarketOverviewToolView, MarketToolReads, NewsToolLine, NewsToolReads,
+    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, QuoteToolView,
+    RankingToolKind, RankingsToolView, SectorsToolView, SystemPortError, TransactionsToolView,
 };
 
 use domain::{KnownMarket, Symbol};
@@ -232,5 +232,72 @@ impl MarketToolReads for FixedMarketToolReads {
     ) -> impl Future<Output = ReadReply<InvestorFlowToolView>> + Send {
         self.record(MarketReadCall::InvestorFlow(symbol.clone(), market));
         ready(self.investor_flow.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NewsReadCall {
+    SearchNews(CollectedItemQuery),
+    Disclosures(CollectedItemQuery),
+}
+
+#[derive(Debug)]
+pub struct FixedNewsToolReads {
+    news: Result<Vec<NewsToolLine>, SystemPortError>,
+    disclosures: Result<Vec<DisclosureToolLine>, SystemPortError>,
+    calls: State<Vec<NewsReadCall>>,
+}
+
+impl Default for FixedNewsToolReads {
+    fn default() -> Self {
+        Self {
+            news: Ok(Vec::new()),
+            disclosures: Ok(Vec::new()),
+            calls: State::default(),
+        }
+    }
+}
+
+impl FixedNewsToolReads {
+    #[must_use]
+    pub fn with_news(mut self, reply: Result<Vec<NewsToolLine>, SystemPortError>) -> Self {
+        self.news = reply;
+        self
+    }
+
+    #[must_use]
+    pub fn with_disclosures(
+        mut self,
+        reply: Result<Vec<DisclosureToolLine>, SystemPortError>,
+    ) -> Self {
+        self.disclosures = reply;
+        self
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<NewsReadCall> {
+        self.calls.write().clone()
+    }
+}
+
+impl NewsToolReads for FixedNewsToolReads {
+    fn search_news(
+        &self,
+        query: &CollectedItemQuery,
+    ) -> impl Future<Output = Result<Vec<NewsToolLine>, SystemPortError>> + Send {
+        self.calls
+            .write()
+            .push(NewsReadCall::SearchNews(query.clone()));
+        ready(self.news.clone())
+    }
+
+    fn disclosures(
+        &self,
+        query: &CollectedItemQuery,
+    ) -> impl Future<Output = Result<Vec<DisclosureToolLine>, SystemPortError>> + Send {
+        self.calls
+            .write()
+            .push(NewsReadCall::Disclosures(query.clone()));
+        ready(self.disclosures.clone())
     }
 }
