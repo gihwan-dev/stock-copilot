@@ -18,6 +18,12 @@ use parse::{BUNDLES_DIR, Bundle, Target, parse as parse_bundle, valid_bundle_rel
 type Findings = BTreeSet<Finding<Rule>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum TrailerPolicy {
+    Required,
+    OptionalConsistent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Outcome {
     Approved,
     Rejected,
@@ -242,9 +248,10 @@ fn current_scope_matches_head(root: &Path, head: &str, current: &Files) -> bool 
     head_scoped == current_scoped
 }
 
-fn check_intro_isolation(
+fn check_intro_isolation_path(
     root: &Path,
-    loaded: &LoadedBundle,
+    base_commit: &str,
+    bundle_path: &str,
     intro: &str,
 ) -> Result<(), (IntervalMatch, String)> {
     let Some(intro_parents) = commit_parents(root, intro) else {
@@ -254,20 +261,29 @@ fn check_intro_isolation(
         ));
     };
     let intro_parent = intro_parents.first().map(String::as_str);
-    if intro_parents.len() != 1 || intro_parent != Some(loaded.bundle.base_commit.as_str()) {
+    if intro_parents.len() != 1 || intro_parent != Some(base_commit) {
         return Err((
             IntervalMatch::Unrelated,
             String::from("구간 불일치: 묶음 커밋의 부모가 base_commit과 다르다"),
         ));
     }
     let intro_paths = intro_parent.and_then(|parent| diff_tree_paths(root, parent, intro));
-    if intro_paths.as_deref() != Some(std::slice::from_ref(&loaded.path)) {
+    let expected = String::from(bundle_path);
+    if intro_paths.as_deref() != Some(std::slice::from_ref(&expected)) {
         return Err((
             IntervalMatch::Mismatch,
             String::from("묶음 도입 커밋에 묶음 외 파일 변경이 포함돼 있다"),
         ));
     }
     Ok(())
+}
+
+fn check_intro_isolation(
+    root: &Path,
+    loaded: &LoadedBundle,
+    intro: &str,
+) -> Result<(), (IntervalMatch, String)> {
+    check_intro_isolation_path(root, &loaded.bundle.base_commit, &loaded.path, intro)
 }
 
 fn evaluate_committed_merge_head(
@@ -612,9 +628,10 @@ pub(super) fn trailer_problems(
     revision: &str,
     expected_bundle_path: &str,
     expected_count: usize,
+    policy: TrailerPolicy,
 ) -> Vec<String> {
     let Some(message) = git(root, &["show", "-s", "--format=%B", revision]) else {
-        return Vec::new();
+        return vec![format!("병합 커밋 메시지를 읽지 못했다: {revision}")];
     };
     let mut bundle_lines = Vec::new();
     let mut count_lines = Vec::new();
@@ -625,24 +642,36 @@ pub(super) fn trailer_problems(
             count_lines.push(value.trim().to_owned());
         }
     }
-    let mut problems = Vec::new();
-    if !bundle_lines.is_empty()
-        && (bundle_lines.len() != 1
-            || bundle_lines.first().map(String::as_str) != Some(expected_bundle_path))
+    if policy == TrailerPolicy::OptionalConsistent
+        && bundle_lines.is_empty()
+        && count_lines.is_empty()
     {
-        problems.push(format!(
-            "병합 커밋 메시지 불일치: Test-Diff-Bundle 기대 {expected_bundle_path}, 실제 {}",
+        return Vec::new();
+    }
+    let mut problems = Vec::new();
+    if bundle_lines.len() != 1
+        || bundle_lines.first().map(String::as_str) != Some(expected_bundle_path)
+    {
+        let actual = if bundle_lines.is_empty() {
+            String::from("없음")
+        } else {
             bundle_lines.join(", ")
+        };
+        problems.push(format!(
+            "병합 커밋 메시지 불일치: Test-Diff-Bundle 기대 {expected_bundle_path}, 실제 {actual}"
         ));
     }
     let expected_text = expected_count.to_string();
-    if !count_lines.is_empty()
-        && (count_lines.len() != 1
-            || count_lines.first().map(String::as_str) != Some(expected_text.as_str()))
+    if count_lines.len() != 1
+        || count_lines.first().map(String::as_str) != Some(expected_text.as_str())
     {
-        problems.push(format!(
-            "병합 커밋 메시지 불일치: Test-Diff-Findings 기대 {expected_text}, 실제 {}",
+        let actual = if count_lines.is_empty() {
+            String::from("없음")
+        } else {
             count_lines.join(", ")
+        };
+        problems.push(format!(
+            "병합 커밋 메시지 불일치: Test-Diff-Findings 기대 {expected_text}, 실제 {actual}"
         ));
     }
     problems
@@ -736,11 +765,16 @@ fn evaluate_loaded_bundle(
             let mut problems =
                 compare_findings_and_files(&loaded.bundle, inputs.files, inputs.raw_findings);
             if context.pending == MergePending::Committed {
+                let policy = match loaded.bundle.target {
+                    Target::MergeHead(_) => TrailerPolicy::Required,
+                    Target::Commit(_) | Target::Tree(_) => TrailerPolicy::OptionalConsistent,
+                };
                 problems.extend(trailer_problems(
                     root,
                     context.head,
                     &loaded.path,
                     loaded.bundle.findings.len(),
+                    policy,
                 ));
             }
             if problems.is_empty() {

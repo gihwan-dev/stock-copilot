@@ -12,7 +12,8 @@ use crate::test_diff::{
 
 use super::parse::{BUNDLES_DIR, Bundle, FileEntry, Target, parse, render};
 use super::{
-    commit_parents, compare_findings_and_files, current_worktree_tree, trailer_problems, tree_of,
+    TrailerPolicy, check_intro_isolation_path, commit_parents, compare_findings_and_files,
+    current_worktree_tree, trailer_problems, tree_of,
 };
 
 const WORKTREE_TARGET: &str = "WORKTREE";
@@ -275,13 +276,11 @@ fn check_merge_head_binding(
     base: &str,
     target: &str,
 ) -> Vec<String> {
+    let canonical_path = format!("{BUNDLES_DIR}/{}.toml", bundle.task);
     if target == WORKTREE_TARGET {
         let pending = commit(root, "MERGE_HEAD");
         let base_ok = base == bundle.base_commit
-            || commit_parents(root, base).is_some_and(|parents| {
-                parents.len() == 1
-                    && parents.first().map(String::as_str) == Some(bundle.base_commit.as_str())
-            });
+            || check_intro_isolation_path(root, &bundle.base_commit, &canonical_path, base).is_ok();
         if pending.as_deref() == Some(merge_head) && base_ok {
             return Vec::new();
         }
@@ -293,18 +292,58 @@ fn check_merge_head_binding(
     let Some(parents) = commit_parents(root, target) else {
         return vec![format!("대상 커밋 부모를 읽지 못했다: {target}")];
     };
-    let direct_merge = parents.len() == 2 && parents.get(1).map(String::as_str) == Some(merge_head);
-    let direct_branch = target == merge_head && base == bundle.base_commit;
-    let base_matches =
-        base == bundle.base_commit || parents.first().map(String::as_str) == Some(base);
-    if direct_branch || (direct_merge && base_matches) {
-        Vec::new()
-    } else {
-        vec![format!(
-            "구간 불일치: merge_head={merge_head}, base_commit={}와 대상({base}..{target})이 맞지 않는다",
-            bundle.base_commit
-        )]
+    if target == merge_head && base == bundle.base_commit {
+        return Vec::new();
     }
+    if parents.len() == 2
+        && parents.get(1).map(String::as_str) == Some(merge_head)
+        && let Some(intro) = parents.first().map(String::as_str)
+        && (base == intro || base == bundle.base_commit)
+    {
+        return match check_intro_isolation_path(root, &bundle.base_commit, &canonical_path, intro) {
+            Ok(()) => Vec::new(),
+            Err((_, reason)) => vec![reason],
+        };
+    }
+    vec![format!(
+        "구간 불일치: merge_head={merge_head}, base_commit={}와 대상({base}..{target})이 맞지 않는다",
+        bundle.base_commit
+    )]
+}
+
+fn check_tree_binding(
+    root: &Path,
+    bundle: &Bundle,
+    expected_tree: &str,
+    base: &str,
+    target: &str,
+) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    if base != bundle.base_commit {
+        problems.push(format!(
+            "구간 불일치: base {base} != 묶음 base_commit {}",
+            bundle.base_commit
+        ));
+    }
+    let actual_tree = if target == WORKTREE_TARGET {
+        current_worktree_tree(root)?
+    } else {
+        let valid_merge = commit_parents(root, target).is_some_and(|parents| {
+            parents.len() == 2 && parents.first().map(String::as_str) == Some(base)
+        });
+        if !valid_merge {
+            problems.push(format!(
+                "병합 커밋이 아니거나 첫 부모가 기준 커밋과 다르다: {target}"
+            ));
+        }
+        tree_of(root, target).ok_or_else(|| format!("대상 트리 해시를 읽지 못했다: {target}"))?
+    };
+    if actual_tree != expected_tree {
+        problems.push(format!(
+            "트리 해시 불일치: 실제 {actual_tree}, 묶음 {expected_tree}"
+        ));
+    }
+    Ok(problems)
 }
 
 fn check_target_binding(
@@ -336,25 +375,7 @@ fn check_target_binding(
             Ok(problems)
         }
         Target::Tree(expected_tree) => {
-            let mut problems = Vec::new();
-            if base != bundle.base_commit {
-                problems.push(format!(
-                    "구간 불일치: base {base} != 묶음 base_commit {}",
-                    bundle.base_commit
-                ));
-            }
-            let actual_tree = if target == WORKTREE_TARGET {
-                current_worktree_tree(root)?
-            } else {
-                tree_of(root, target)
-                    .ok_or_else(|| format!("대상 트리 해시를 읽지 못했다: {target}"))?
-            };
-            if actual_tree != *expected_tree {
-                problems.push(format!(
-                    "트리 해시 불일치: 실제 {actual_tree}, 묶음 {expected_tree}"
-                ));
-            }
-            Ok(problems)
+            check_tree_binding(root, bundle, expected_tree, base, target)
         }
     }
 }
@@ -390,13 +411,21 @@ pub(crate) fn check_bundle_file(
         &findings,
     ));
     if target != WORKTREE_TARGET {
-        let canonical_bundle_path = format!("{BUNDLES_DIR}/{}.toml", bundle.task);
-        problems.extend(trailer_problems(
-            root,
-            target,
-            &canonical_bundle_path,
-            bundle.findings.len(),
-        ));
+        let trailer_policy = match &bundle.target {
+            Target::MergeHead(merge_head) if target == merge_head => None,
+            Target::MergeHead(_) => Some(TrailerPolicy::Required),
+            Target::Commit(_) | Target::Tree(_) => Some(TrailerPolicy::OptionalConsistent),
+        };
+        if let Some(policy) = trailer_policy {
+            let canonical_bundle_path = format!("{BUNDLES_DIR}/{}.toml", bundle.task);
+            problems.extend(trailer_problems(
+                root,
+                target,
+                &canonical_bundle_path,
+                bundle.findings.len(),
+                policy,
+            ));
+        }
     }
     Ok(problems)
 }

@@ -948,21 +948,21 @@
   },
   {
     "path": "{root}/harness/test-diff/bundles/D-56.toml",
-    "decision": "deny",
-    "rules": ["main-only-path"],
+    "decision": "warn",
+    "rules": ["protected-path"],
     "role": "implementer"
   },
   {
     "path": "{root}/harness/test-diff/bundles/D-56.toml",
     "decision": "deny",
-    "rules": ["main-only-path"],
+    "rules": ["protected-path"],
     "role": "implementer",
     "lock": "on"
   },
   {
     "path": "{root}/harness/test-diff/Bundles/D-56.toml",
-    "decision": "deny",
-    "rules": ["main-only-path"],
+    "decision": "warn",
+    "rules": ["protected-path"],
     "role": "implementer"
   },
   {
@@ -979,8 +979,14 @@
   },
   {
     "path": "{root}/harness/test-diff/bundles/D-56.toml",
-    "decision": "allow",
-    "rules": []
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "path": "{root}/harness/test-diff/bundles/D-56.toml",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
   },
   {
     "path": "{root}/apps/desktop/src/zz/eslint.config.mjs",

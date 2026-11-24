@@ -118,10 +118,42 @@ const verifyJob = (jobs, name, sha, attempt, requiredSteps) => {
   return problems;
 };
 
+const PLATFORM_JOB_NAMES = {
+  linux: "diff-mutants-linux",
+  macos: "diff-mutants-macos",
+};
+
 const isAnyShardJobName = (name) =>
   typeof name === "string" &&
   (name.startsWith("diff-mutants-linux") ||
     name.startsWith("diff-mutants-macos"));
+
+const verifySkippedPlatformJob = (jobs, name, sha, attempt) => {
+  const matches = jobs.filter((job) => job?.name === name);
+  if (matches.length === 0) {
+    return [];
+  }
+  if (matches.length > 1) {
+    return [`건너뛴 플랫폼 작업이 중복됐다: ${name} (${matches.length}건)`];
+  }
+  const [job] = matches;
+  const problems = [];
+  if (job.head_sha !== sha) {
+    problems.push(`${name}: head_sha가 다르다`);
+  }
+  if (job.run_attempt !== attempt) {
+    problems.push(`${name}: run_attempt가 다르다`);
+  }
+  if (job.status !== "completed" || job.conclusion !== "skipped") {
+    problems.push(
+      `${name}: 건너뜀 완료 상태가 아니다(status=${job.status}, conclusion=${job.conclusion})`,
+    );
+  }
+  if (!Array.isArray(job.steps) || job.steps.length !== 0) {
+    problems.push(`${name}: 건너뛴 플랫폼 작업에 실행 단계가 포함돼 있다`);
+  }
+  return problems;
+};
 
 export const evaluateAggregate = (input, jobs) => {
   const problems = [];
@@ -160,6 +192,7 @@ export const evaluateAggregate = (input, jobs) => {
     }
   }
   let expectedNames = [];
+  const allowedSkipped = new Set();
   if (
     total.value !== undefined &&
     linuxCount.value !== undefined &&
@@ -204,6 +237,12 @@ export const evaluateAggregate = (input, jobs) => {
         `diff-mutants-macos 결과(${input?.macosResult})가 기대값(${expectedMacosResult})과 다르다`,
       );
     }
+    if (linuxCount.value === 0) {
+      allowedSkipped.add(PLATFORM_JOB_NAMES.linux);
+    }
+    if (macosCount.value === 0) {
+      allowedSkipped.add(PLATFORM_JOB_NAMES.macos);
+    }
     expectedNames = expectedShardJobs(expectedLinux, expectedMacos);
   }
   if (!Array.isArray(jobs)) {
@@ -218,8 +257,17 @@ export const evaluateAggregate = (input, jobs) => {
         ...verifyJob(jobs, name, sha, attempt, SHARD_REQUIRED_STEPS),
       );
     }
+    for (const skippedName of allowedSkipped) {
+      problems.push(
+        ...verifySkippedPlatformJob(jobs, skippedName, sha, attempt),
+      );
+    }
     for (const job of jobs) {
-      if (isAnyShardJobName(job?.name) && !expectedSet.has(job.name)) {
+      if (
+        isAnyShardJobName(job?.name) &&
+        !expectedSet.has(job.name) &&
+        !allowedSkipped.has(job.name)
+      ) {
         problems.push(`계획에 없는 변이 조각 작업이 존재한다: ${job.name}`);
       }
     }

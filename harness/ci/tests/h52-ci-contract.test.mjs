@@ -29,6 +29,38 @@ test("작업 브랜치 push도 macOS 전체 검사와 변경분 변이를 실행
     ),
   );
   assert.equal(
+    ci.jobs["diff-mutants-linux"].if,
+    "github.event_name == 'push' && needs.diff-mutants-plan.outputs.run_linux == 'yes'",
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-linux"].steps.some(
+      (step) =>
+        step.run ===
+        'node harness/ci/linux/offline.mjs just mutants-diff-platform-shard "$MUTATION_BASE" linux "$MUTATION_SHARD"',
+    ),
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-linux"].steps.some(
+      (step) => step.run === "node harness/ci/diff-mutants-shard.mjs summary",
+    ),
+  );
+  assert.equal(
+    ci.jobs["diff-mutants-macos"].if,
+    "github.event_name == 'push' && needs.diff-mutants-plan.outputs.run_macos == 'yes'",
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-macos"].steps.some(
+      (step) =>
+        step.run ===
+        'just mutants-diff-platform-shard "$MUTATION_BASE" macos "$MUTATION_SHARD"',
+    ),
+  );
+  assert.ok(
+    ci.jobs["diff-mutants-macos"].steps.some(
+      (step) => step.run === "node harness/ci/diff-mutants-shard.mjs summary",
+    ),
+  );
+  assert.equal(
     ci.jobs["diff-mutants-verdict"].if,
     "always() && github.event_name == 'push'",
   );

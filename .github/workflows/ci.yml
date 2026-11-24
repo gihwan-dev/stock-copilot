@@ -393,7 +393,7 @@
       "runs-on": "macos-15",
       "timeout-minutes": 180,
       "concurrency": {
-        "group": "${{ github.workflow }}-diff-mutants-macos-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+        "group": "macos-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
         "queue": "max",
         "cancel-in-progress": false
       },

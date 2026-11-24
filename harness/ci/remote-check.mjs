@@ -125,10 +125,37 @@ const REQUIRED_STEPS = {
 
 const SHARD_STEPS = ["diff mutants shard", "diff mutants summary"];
 const SHARD_JOB_NAME = /^diff-mutants-(?:linux|macos) \([0-7]\/[1-8]\)$/u;
-const isAnyShardJob = (job) =>
+const SKIPPED_PLATFORM_JOBS = new Set([
+  "diff-mutants-linux",
+  "diff-mutants-macos",
+]);
+const isSkippedPlatformJob = (job) =>
+  typeof job?.name === "string" && SKIPPED_PLATFORM_JOBS.has(job.name);
+const isShardJob = (job) =>
   typeof job?.name === "string" &&
+  !SKIPPED_PLATFORM_JOBS.has(job.name) &&
   (job.name.startsWith("diff-mutants-linux") ||
     job.name.startsWith("diff-mutants-macos"));
+
+const validSkippedPlatformJob = (sha, run, job) =>
+  isSkippedPlatformJob(job) &&
+  job.status === "completed" &&
+  job.conclusion === "skipped" &&
+  job.head_sha === sha &&
+  job.run_attempt === run.run_attempt &&
+  Array.isArray(job.steps) &&
+  job.steps.length === 0;
+
+const validSkippedPlatformEntries = (sha, run, jobs, shardJobs) => {
+  const skipped = jobs.filter(isSkippedPlatformJob);
+  const names = new Set(skipped.map((job) => job.name));
+  if (names.size !== skipped.length) return false;
+  if (!skipped.every((job) => validSkippedPlatformJob(sha, run, job)))
+    return false;
+  return skipped.every(
+    (job) => !shardJobs.some((shard) => shard.name.startsWith(`${job.name} (`)),
+  );
+};
 
 const validShardJob = (sha, run, job) =>
   SHARD_JOB_NAME.test(job.name) &&
@@ -213,7 +240,7 @@ const missingRequiredSteps = (sha, run, jobs, workflow) => {
   const shardMissing =
     workflow.file === "ci.yml"
       ? jobs
-          .filter(isAnyShardJob)
+          .filter(isShardJob)
           .flatMap((entry) =>
             entry.status === "completed" &&
             entry.conclusion === "success" &&
@@ -249,11 +276,12 @@ export const checkRun = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
   );
   if (!requiredOk) return false;
   if (workflow.file !== "ci.yml") return true;
-  const shardJobs = jobs.filter(isAnyShardJob);
+  const shardJobs = jobs.filter(isShardJob);
   const shardNames = new Set(shardJobs.map((job) => job.name));
   return (
     shardNames.size === shardJobs.length &&
-    shardJobs.every((job) => validShardJob(sha, run, job))
+    shardJobs.every((job) => validShardJob(sha, run, job)) &&
+    validSkippedPlatformEntries(sha, run, jobs, shardJobs)
   );
 };
 
@@ -300,8 +328,7 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
       ? "RETRY_CANCELLED"
       : "INVALID_EVIDENCE";
   }
-  const shardJobs =
-    workflow.file === "ci.yml" ? jobs.filter(isAnyShardJob) : [];
+  const shardJobs = workflow.file === "ci.yml" ? jobs.filter(isShardJob) : [];
   const shardNames = new Set(shardJobs.map((job) => job.name));
   if (
     shardNames.size !== shardJobs.length ||
@@ -310,7 +337,9 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
         !SHARD_JOB_NAME.test(job.name) ||
         job.head_sha !== sha ||
         job.run_attempt !== run.run_attempt,
-    )
+    ) ||
+    (workflow.file === "ci.yml" &&
+      !validSkippedPlatformEntries(sha, run, jobs, shardJobs))
   ) {
     return "INVALID_EVIDENCE";
   }
@@ -536,9 +565,7 @@ const FAILURE_MESSAGES = {
   RETRY_TIMED_OUT:
     "작업이 시간 초과되어 재시도 대상이다; 원인은 확인되지 않았다",
   RETRY_MUTATION_TIMED_OUT:
-    "변경분 변이 조각이 20분 제한에 도달해 재시도 또는 추가 분할 대상이다",
-  RETRY_MUTATION_BUDGET:
-    "변경분 변이의 다음 조각을 실행하기에 작업 시간이 부족해 재시도 또는 변경 분할 대상이다",
+    "변경분 변이 조각이 시간 제한에 도달해 재시도 또는 추가 분할 대상이다",
   PENDING: "작업이 아직 진행 중이다",
   CHECK_FAILED: "검사 또는 준비 단계가 실패했다; 실행 로그를 확인한다",
   MISSING_REQUIRED_STEPS: "성공 실행에 현재 필수 단계가 없다",

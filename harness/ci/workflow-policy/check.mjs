@@ -324,11 +324,60 @@ const filesUnder = (root, relative) =>
     },
   );
 
+const sharedMacosSlotFindings = (ci, nightly) => {
+  const ciSlot = ci?.jobs?.["diff-mutants-macos"]?.concurrency;
+  const weeklySlot = nightly?.jobs?.mutants?.concurrency;
+  const dailySlot = nightly?.jobs?.["mutants-daily"]?.concurrency;
+  if (
+    ciSlot === undefined ||
+    weeklySlot === undefined ||
+    dailySlot === undefined
+  ) {
+    return [];
+  }
+  const shared =
+    isDeepStrictEqual(ciSlot, weeklySlot) &&
+    isDeepStrictEqual(ciSlot, dailySlot) &&
+    typeof ciSlot.group === "string" &&
+    !ciSlot.group.includes("github.workflow");
+  return shared
+    ? []
+    : [
+        {
+          path: ".github/workflows/ci.yml",
+          rule: finding("strategy", "shared-macos-mutants-slot"),
+        },
+      ];
+};
+
+const readJsonOrUndefined = (filePath) => {
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8"));
+  } catch {
+    return undefined;
+  }
+};
+
 export const repositoryFindings = (root, policy, toolSpec) => {
   const files = Object.keys(policy.expected).sort();
   const present = existsSync(join(root, GITHUB_DIRECTORY))
     ? filesUnder(root, GITHUB_DIRECTORY).sort()
     : [];
+  const ciPath = ".github/workflows/ci.yml";
+  const nightlyPath = ".github/workflows/nightly.yml";
+  const expectedSlotIssues = sharedMacosSlotFindings(
+    policy.expected[ciPath],
+    policy.expected[nightlyPath],
+  );
+  const diskSlotIssues =
+    expectedSlotIssues.length === 0 &&
+    present.includes(ciPath) &&
+    present.includes(nightlyPath)
+      ? sharedMacosSlotFindings(
+          readJsonOrUndefined(join(root, ciPath)),
+          readJsonOrUndefined(join(root, nightlyPath)),
+        )
+      : [];
   return [
     ...present
       .filter((path) => !files.includes(path))
@@ -349,6 +398,8 @@ export const repositoryFindings = (root, policy, toolSpec) => {
           ...(text === expected ? [] : [finding("expected")]),
         ].map((rule) => ({ path, rule }));
       }),
+    ...expectedSlotIssues,
+    ...diskSlotIssues,
   ];
 };
 

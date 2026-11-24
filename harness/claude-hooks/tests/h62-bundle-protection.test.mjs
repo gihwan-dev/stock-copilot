@@ -19,6 +19,7 @@ import {
 } from "./fixture.mjs";
 
 const BUNDLE_PATH = "harness/test-diff/bundles/D-56.toml";
+const APPROVALS_PATH = "harness/test-diff/approvals.toml";
 
 test("승인 묶음 경로는 허용 목록·샌드박스·Codex·병합 게이트에서 보호된다", () => {
   assert.equal(isWritable(realAllowlist, BUNDLE_PATH), false);
@@ -33,15 +34,17 @@ test("승인 묶음 경로는 허용 목록·샌드박스·Codex·병합 게이�
   assert.match(codex, /"harness" = "read"/u);
 });
 
-test("구현 담당과 리뷰어·비판자 세션은 승인 묶음 경로에 쓸 수 없다", () => {
+test("승인 묶음 경로는 approvals.toml과 동일한 보호 규칙으로 모든 역할과 잠금 상태에 적용된다", () => {
   const fixture = createFixture();
-  const full = join(fixture.root, BUNDLE_PATH);
-  const check = (role, lock) => {
+  const check = (relativePath, role, lock) => {
     const verdict = decideEdit(
       {
         hook_event_name: "PreToolUse",
         tool_name: "Write",
-        tool_input: { file_path: full, content: 'task = "D-56"\n' },
+        tool_input: {
+          file_path: join(fixture.root, relativePath),
+          content: 'task = "D-56"\n',
+        },
         cwd: fixture.root,
         ...roleInput(role),
       },
@@ -49,24 +52,42 @@ test("구현 담당과 리뷰어·비판자 세션은 승인 묶음 경로에 �
     );
     return { decision: verdict.decision, rules: ruleSet(verdict) };
   };
-  assert.deepEqual(check("implementer", LOCK.off), {
-    decision: "deny",
-    rules: ["main-only-path"],
+  for (const role of [
+    "implementer",
+    "adversarial-reviewer",
+    "review-critic",
+    undefined,
+  ]) {
+    for (const lock of [LOCK.off, LOCK.on]) {
+      assert.deepEqual(
+        check(BUNDLE_PATH, role, lock),
+        check(APPROVALS_PATH, role, lock),
+        `${role ?? "main"} lock=${lock}`,
+      );
+    }
+  }
+  assert.deepEqual(check(BUNDLE_PATH, "implementer", LOCK.off), {
+    decision: "warn",
+    rules: ["protected-path"],
   });
-  assert.deepEqual(check("implementer", LOCK.on), {
+  assert.deepEqual(check(BUNDLE_PATH, "implementer", LOCK.on), {
     decision: "deny",
-    rules: ["main-only-path"],
+    rules: ["protected-path"],
   });
-  assert.deepEqual(check("adversarial-reviewer", LOCK.off), {
+  assert.deepEqual(check(BUNDLE_PATH, "adversarial-reviewer", LOCK.off), {
     decision: "deny",
     rules: ["role-without-edits"],
   });
-  assert.deepEqual(check("review-critic", LOCK.off), {
+  assert.deepEqual(check(BUNDLE_PATH, "review-critic", LOCK.off), {
     decision: "deny",
     rules: ["role-without-edits"],
   });
-  assert.deepEqual(check(undefined, LOCK.off), {
-    decision: "allow",
-    rules: [],
+  assert.deepEqual(check(BUNDLE_PATH, undefined, LOCK.off), {
+    decision: "warn",
+    rules: ["protected-path"],
+  });
+  assert.deepEqual(check(BUNDLE_PATH, undefined, LOCK.on), {
+    decision: "deny",
+    rules: ["protected-path"],
   });
 });

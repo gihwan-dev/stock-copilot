@@ -1,5 +1,11 @@
 import { strict as assert } from "node:assert";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -20,7 +26,11 @@ import {
 import { checkRun, failureCode } from "../remote-check.mjs";
 import { mkdtempSync } from "../test-temp.mjs";
 import { installActionSpec, readTools } from "../tools.mjs";
-import { readPolicy, workflowFindings } from "../workflow-policy/check.mjs";
+import {
+  readPolicy,
+  repositoryFindings,
+  workflowFindings,
+} from "../workflow-policy/check.mjs";
 import { repoRoot } from "./signature-repo.mjs";
 
 const BASE = "a".repeat(40);
@@ -601,4 +611,292 @@ test("H-63 워크플로 정책은 macOS 동시 실행 상한 2·2슬롯 대기�
     ]),
     "CHECK_FAILED",
   );
+});
+
+test("H-63 건너뛴 매트릭스 플랫폼 작업 응답을 실제 GitHub Actions 형식으로 합산·원격 검증하고 위조를 거부한다", () => {
+  const skippedJob = (name, overrides = {}) => ({
+    name,
+    head_sha: HEAD,
+    run_attempt: 1,
+    status: "completed",
+    conclusion: "skipped",
+    steps: [],
+    ...overrides,
+  });
+  const planJob = makeJob("diff-mutants-plan", ["range", "diff mutants plan"]);
+  const linuxShard0 = makeJob("diff-mutants-linux (0/2)", [
+    "diff mutants shard",
+    "diff mutants summary",
+  ]);
+  const linuxShard1 = makeJob("diff-mutants-linux (1/2)", [
+    "diff mutants shard",
+    "diff mutants summary",
+  ]);
+  const skippedLinux = skippedJob("diff-mutants-linux");
+  const skippedMacos = skippedJob("diff-mutants-macos");
+
+  const linuxOnlyInput = {
+    sha: HEAD,
+    runAttempt: "1",
+    planResult: "success",
+    linuxResult: "success",
+    macosResult: "skipped",
+    total: "35",
+    linuxCount: "35",
+    macosCount: "0",
+    linuxShards: '["0/2","1/2"]',
+    macosShards: "[]",
+    runLinux: "yes",
+    runMacos: "no",
+  };
+  assert.equal(
+    evaluateAggregate(linuxOnlyInput, [
+      planJob,
+      linuxShard0,
+      linuxShard1,
+      skippedMacos,
+    ]).ok,
+    true,
+  );
+
+  const zeroInput = {
+    sha: HEAD,
+    runAttempt: "1",
+    planResult: "success",
+    linuxResult: "skipped",
+    macosResult: "skipped",
+    total: "0",
+    linuxCount: "0",
+    macosCount: "0",
+    linuxShards: "[]",
+    macosShards: "[]",
+    runLinux: "no",
+    runMacos: "no",
+  };
+  assert.equal(
+    evaluateAggregate(zeroInput, [planJob, skippedLinux, skippedMacos]).ok,
+    true,
+  );
+
+  assert.equal(
+    evaluateAggregate(linuxOnlyInput, [
+      planJob,
+      linuxShard0,
+      linuxShard1,
+      skippedMacos,
+      skippedMacos,
+    ]).ok,
+    false,
+  );
+  assert.equal(
+    evaluateAggregate(linuxOnlyInput, [
+      planJob,
+      linuxShard0,
+      linuxShard1,
+      skippedLinux,
+      skippedMacos,
+    ]).ok,
+    false,
+  );
+  assert.equal(
+    evaluateAggregate(linuxOnlyInput, [
+      planJob,
+      linuxShard0,
+      linuxShard1,
+      skippedJob("diff-mutants-macos", { conclusion: "failure" }),
+    ]).ok,
+    false,
+  );
+  assert.equal(
+    evaluateAggregate(linuxOnlyInput, [
+      planJob,
+      linuxShard0,
+      linuxShard1,
+      skippedJob("diff-mutants-macos", {
+        steps: [
+          {
+            name: "diff mutants shard",
+            status: "completed",
+            conclusion: "success",
+          },
+        ],
+      }),
+    ]).ok,
+    false,
+  );
+  assert.equal(
+    evaluateAggregate(linuxOnlyInput, [
+      planJob,
+      linuxShard0,
+      linuxShard1,
+      skippedJob("diff-mutants-macos", { head_sha: OTHER }),
+    ]).ok,
+    false,
+  );
+  assert.equal(
+    evaluateAggregate(linuxOnlyInput, [
+      planJob,
+      linuxShard0,
+      linuxShard1,
+      skippedJob("diff-mutants-macos", { run_attempt: 2 }),
+    ]).ok,
+    false,
+  );
+  assert.equal(
+    evaluateAggregate(linuxOnlyInput, [
+      planJob,
+      linuxShard0,
+      linuxShard1,
+      skippedJob("diff-mutants-macos-fake"),
+    ]).ok,
+    false,
+  );
+
+  const run = {
+    id: 91,
+    run_attempt: 1,
+    head_sha: HEAD,
+    event: "push",
+    head_branch: "feature",
+    status: "completed",
+    conclusion: "success",
+    path: CI_PATH,
+    repository: { full_name: "gihwan-dev/stock-copilot" },
+    head_repository: { full_name: "gihwan-dev/stock-copilot" },
+  };
+  const baseJobs = [
+    makeJob("linux", [
+      "container visual regression",
+      "linux check",
+      "linux tests without network",
+    ]),
+    makeJob("macos-branch", ["branch checkout", "just check"]),
+    planJob,
+    makeJob("diff-mutants-verdict", ["diff mutants aggregate"]),
+  ];
+  assert.equal(
+    checkRun(HEAD, run, [...baseJobs, linuxShard0, linuxShard1, skippedMacos]),
+    true,
+  );
+  assert.equal(
+    checkRun(HEAD, run, [...baseJobs, skippedLinux, skippedMacos]),
+    true,
+  );
+  assert.equal(
+    checkRun(HEAD, run, [...baseJobs, linuxShard0, skippedLinux, skippedMacos]),
+    false,
+  );
+  assert.equal(
+    checkRun(HEAD, run, [...baseJobs, skippedMacos, skippedMacos]),
+    false,
+  );
+  assert.equal(
+    checkRun(HEAD, run, [
+      ...baseJobs,
+      skippedJob("diff-mutants-macos", { head_sha: OTHER }),
+    ]),
+    false,
+  );
+  assert.equal(
+    checkRun(HEAD, run, [
+      ...baseJobs,
+      skippedJob("diff-mutants-macos", {
+        steps: [
+          {
+            name: "checkout",
+            status: "completed",
+            conclusion: "success",
+          },
+        ],
+      }),
+    ]),
+    false,
+  );
+  const failedPlan = {
+    ...planJob,
+    conclusion: "failure",
+    runner_id: 21,
+    runner_name: "hosted",
+    steps: [
+      { name: "range", status: "completed", conclusion: "success" },
+      { name: "diff mutants plan", status: "completed", conclusion: "failure" },
+    ],
+  };
+  const failedVerdict = {
+    ...baseJobs[3],
+    conclusion: "failure",
+    runner_id: 22,
+    runner_name: "hosted",
+    steps: [
+      {
+        name: "diff mutants aggregate",
+        status: "completed",
+        conclusion: "failure",
+      },
+    ],
+  };
+  assert.equal(
+    failureCode(HEAD, { ...run, conclusion: "failure" }, [
+      baseJobs[0],
+      baseJobs[1],
+      failedPlan,
+      failedVerdict,
+      skippedLinux,
+      skippedMacos,
+    ]),
+    "CHECK_FAILED",
+  );
+  assert.equal(
+    failureCode(HEAD, { ...run, conclusion: "failure" }, [
+      baseJobs[0],
+      baseJobs[1],
+      failedPlan,
+      failedVerdict,
+      linuxShard0,
+      skippedLinux,
+      skippedMacos,
+    ]),
+    "INVALID_EVIDENCE",
+  );
+});
+
+test("H-63과 H-59 macOS 변이 작업은 워크플로 간 공통 2슬롯 대기열을 공유해야 통과한다", () => {
+  const ci = JSON.parse(readFileSync(join(repoRoot, CI_PATH), "utf8"));
+  const nightly = JSON.parse(
+    readFileSync(join(repoRoot, ".github/workflows/nightly.yml"), "utf8"),
+  );
+  const ciConcurrency = ci.jobs["diff-mutants-macos"].concurrency;
+  assert.deepEqual(ciConcurrency, nightly.jobs.mutants.concurrency);
+  assert.deepEqual(ciConcurrency, nightly.jobs["mutants-daily"].concurrency);
+  assert.equal(ciConcurrency.group.includes("github.workflow"), false);
+  assert.deepEqual(repositoryFindings(repoRoot, POLICY, TOOL_SPEC), []);
+
+  const separatedPolicy = structuredClone(POLICY);
+  const separatedGroup = "${{ github.workflow }}-diff-mutants-macos-slot-0";
+  separatedPolicy.expected[CI_PATH].jobs[
+    "diff-mutants-macos"
+  ].concurrency.group = separatedGroup;
+  const dir = mkdtempSync(join(repoRoot, "target/h63-slot-"));
+  try {
+    cpSync(join(repoRoot, ".github"), join(dir, ".github"), {
+      recursive: true,
+    });
+    const ciCopy = structuredClone(ci);
+    ciCopy.jobs["diff-mutants-macos"].concurrency.group = separatedGroup;
+    writeFileSync(
+      join(dir, CI_PATH),
+      `${JSON.stringify(ciCopy, undefined, 2)}\n`,
+    );
+    const findings = repositoryFindings(dir, separatedPolicy, TOOL_SPEC);
+    assert.ok(
+      findings.some(
+        (item) =>
+          item.path === CI_PATH &&
+          item.rule === "strategy:shared-macos-mutants-slot",
+      ),
+      JSON.stringify(findings),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

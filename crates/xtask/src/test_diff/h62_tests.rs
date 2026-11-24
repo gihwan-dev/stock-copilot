@@ -9,6 +9,7 @@ use crate::git_base::BaseUse;
 use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
 
 use super::bundle::command::{DraftMode, check_bundle_file, draft_bundle, message_trailers};
+use super::bundle::{TrailerPolicy, trailer_problems};
 use super::{Files, approval, base_files, compare_files};
 
 struct CaseSpec {
@@ -338,7 +339,11 @@ fn assert_case_reproduction(spec: &CaseSpec) {
     assert_eq!(raw_findings.len(), spec.expected_count, "{}", spec.task);
 
     let (without_bundle, _) = evaluate(&repo.root, &repo.pre_bundle, &repo.before, &repo.after);
-    assert_eq!(without_bundle, 0, "{} combined push A+M passes", spec.task);
+    assert_eq!(
+        without_bundle, 0,
+        "{} remote CI range pre_bundle..merge passes after bundle push",
+        spec.task
+    );
 
     let (branch_ci, diag) = evaluate(&repo.root, &repo.bundle_commit, &repo.before, &repo.after);
     assert_eq!(branch_ci, 0, "{} merge-check CI: {diag}", spec.task);
@@ -461,9 +466,20 @@ fn replace_bundle_and_remerge(
         &["update-ref", "refs/remotes/origin/master", &bundle_commit],
     );
     git(&root, &["checkout", "--quiet", "-b", "merge-check"]);
+    let merge_message = format!(
+        "Merge {}: mutated bundle check\n\nTest-Diff-Bundle: {bundle_path}\nTest-Diff-Findings: {}\n",
+        spec.task, spec.expected_count
+    );
     git(
         &root,
-        &["merge", "--quiet", "--no-ff", "--no-edit", "feature"],
+        &[
+            "merge",
+            "--quiet",
+            "--no-ff",
+            "-m",
+            &merge_message,
+            "feature",
+        ],
     );
     evaluate(&root, &bundle_commit, &before, &after)
 }
@@ -602,9 +618,18 @@ fn h62_s21_structural_checker_is_not_widened_and_bundle_resolves_only_the_approv
         &repo.root,
         &["checkout", "--quiet", "-b", "s21-with-bundle"],
     );
+    let trailers = message_trailers(&repo.root, Path::new(bundle_path)).expect("s21 trailers");
+    let merge_message = format!("Merge S-21: approved bundle\n\n{trailers}");
     git(
         &repo.root,
-        &["merge", "--quiet", "--no-ff", "--no-edit", "feature"],
+        &[
+            "merge",
+            "--quiet",
+            "--no-ff",
+            "-m",
+            &merge_message,
+            "feature",
+        ],
     );
     let (with_bundle, pass_diag) = evaluate(&repo.root, &bundle_commit, &repo.before, &repo.after);
     assert_eq!(with_bundle, 0, "{pass_diag}");
@@ -805,20 +830,29 @@ fn h62_merge_introduced_bundle_is_rejected() {
 
 #[test]
 fn h62_shallow_repository_rejects_bundle() {
-    let shallow = setup_live_merge(&D57_CASE, "h62-shallow");
-    fs::write(
-        shallow.root.join(".git/shallow"),
-        format!("{}\n", shallow.bundle_commit),
-    )
-    .expect("shallow");
-    let (shallow_remaining, shallow_diag) = evaluate(
-        &shallow.root,
-        &shallow.bundle_commit,
-        &shallow.before,
-        &shallow.after,
-    );
-    assert_eq!(shallow_remaining, 5);
-    assert!(shallow_diag.contains("신뢰 실패"), "{shallow_diag}");
+    for (label, use_pre_bundle) in [
+        ("h62-shallow-bundle", false),
+        ("h62-shallow-ancestor", true),
+    ] {
+        let shallow = setup_live_merge(&D57_CASE, label);
+        let boundary = if use_pre_bundle {
+            &shallow.pre_bundle
+        } else {
+            &shallow.bundle_commit
+        };
+        fs::write(shallow.root.join(".git/shallow"), format!("{boundary}\n")).expect("shallow");
+        let (shallow_remaining, shallow_diag) = evaluate(
+            &shallow.root,
+            &shallow.bundle_commit,
+            &shallow.before,
+            &shallow.after,
+        );
+        assert_eq!(shallow_remaining, 5, "{label}");
+        assert!(
+            shallow_diag.contains("신뢰 실패"),
+            "{label}: {shallow_diag}"
+        );
+    }
 }
 
 #[test]
@@ -890,6 +924,181 @@ fn h62_mismatched_merge_commit_trailers_are_rejected() {
     assert!(
         trailer_diag.contains("병합 커밋 메시지 불일치"),
         "{trailer_diag}"
+    );
+}
+
+#[test]
+fn h62_missing_half_present_and_unreadable_trailers_are_rejected() {
+    let repo = setup_live_merge(&D57_CASE, "h62-trailer-required");
+    for (branch, message) in [
+        ("missing-both", "Merge D-57 without trailers"),
+        (
+            "bundle-only",
+            "Merge D-57\n\nTest-Diff-Bundle: harness/test-diff/bundles/D-57.toml\n",
+        ),
+        ("findings-only", "Merge D-57\n\nTest-Diff-Findings: 5\n"),
+    ] {
+        git(
+            &repo.root,
+            &["checkout", "--quiet", "-b", branch, &repo.bundle_commit],
+        );
+        git(
+            &repo.root,
+            &["merge", "--quiet", "--no-ff", "-m", message, "feature"],
+        );
+        let merge_head = git(&repo.root, &["rev-parse", "HEAD"]);
+        let (remaining, diag) =
+            evaluate(&repo.root, &repo.bundle_commit, &repo.before, &repo.after);
+        assert_eq!(remaining, 5, "{branch}");
+        assert!(diag.contains("병합 커밋 메시지 불일치"), "{branch}: {diag}");
+        let check_issues = check_bundle_file(
+            &repo.root,
+            Path::new(&repo.bundle_path),
+            &repo.bundle_commit,
+            &merge_head,
+        )
+        .expect("check bundle");
+        assert!(
+            check_issues
+                .iter()
+                .any(|item| item.contains("병합 커밋 메시지 불일치")),
+            "{branch}: {check_issues:?}"
+        );
+    }
+    let unreadable = trailer_problems(
+        &repo.root,
+        "0000000000000000000000000000000000000000",
+        &repo.bundle_path,
+        5,
+        TrailerPolicy::OptionalConsistent,
+    );
+    assert!(
+        unreadable.iter().any(|item| item.contains("읽지 못했다")),
+        "{unreadable:?}"
+    );
+    let half_optional = trailer_problems(
+        &repo.root,
+        "bundle-only",
+        &repo.bundle_path,
+        5,
+        TrailerPolicy::OptionalConsistent,
+    );
+    assert!(
+        half_optional
+            .iter()
+            .any(|item| item.contains("Test-Diff-Findings")),
+        "{half_optional:?}"
+    );
+}
+
+#[test]
+fn h62_local_unpushed_bundle_is_rejected_until_origin_master_advances() {
+    let root = fresh_directory(&repository_root(), "h62-unpushed-bundle");
+    let before = load_case_files(&D57_CASE, "before");
+    let after = load_case_files(&D57_CASE, "after");
+    git(&root, &["init", "--quiet", "-b", "master"]);
+    write_files(&root, &before);
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "base"]);
+    let pre_bundle = git(&root, &["rev-parse", "HEAD"]);
+    git(
+        &root,
+        &["update-ref", "refs/remotes/origin/master", &pre_bundle],
+    );
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    write_files(&root, &after);
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "feature"]);
+    let feature = git(&root, &["rev-parse", "HEAD"]);
+    git(&root, &["checkout", "--quiet", "master"]);
+    let drafted =
+        draft_bundle(&root, "D-57", &pre_bundle, &feature, DraftMode::MergeHead).expect("draft");
+    let bundle_path = "harness/test-diff/bundles/D-57.toml";
+    fs::create_dir_all(root.join(bundle_path).parent().expect("parent")).expect("mkdir");
+    fs::write(root.join(bundle_path), drafted).expect("write");
+    git(&root, &["add", bundle_path]);
+    git(&root, &["commit", "--quiet", "-m", "local unpushed bundle"]);
+    let bundle_commit = git(&root, &["rev-parse", "HEAD"]);
+    let trailers = message_trailers(&root, Path::new(bundle_path)).expect("trailers");
+    let message = format!("Merge D-57\n\n{trailers}");
+    git(
+        &root,
+        &["merge", "--quiet", "--no-ff", "-m", &message, "feature"],
+    );
+    let (before_push, diag) = evaluate(&root, &pre_bundle, &before, &after);
+    assert_eq!(before_push, 5);
+    assert!(diag.contains("신뢰 실패"), "{diag}");
+
+    git(
+        &root,
+        &["update-ref", "refs/remotes/origin/master", &bundle_commit],
+    );
+    let (after_push, pass_diag) = evaluate(&root, &bundle_commit, &before, &after);
+    assert_eq!(after_push, 0, "{pass_diag}");
+}
+
+#[test]
+fn h62_check_bundle_file_enforces_intro_isolation_and_tree_merge() {
+    let repo = setup_live_merge(&D57_CASE, "h62-command-strict");
+    let preview_ok = check_bundle_file(
+        &repo.root,
+        Path::new(&repo.bundle_path),
+        &repo.pre_bundle,
+        &repo.feature,
+    )
+    .expect("preview check");
+    assert!(preview_ok.is_empty(), "{preview_ok:?}");
+
+    let bundle_text = fs::read_to_string(repo.root.join(&repo.bundle_path)).expect("read");
+    git(
+        &repo.root,
+        &["checkout", "--quiet", "-b", "dirty-intro", &repo.pre_bundle],
+    );
+    fs::create_dir_all(repo.root.join(&repo.bundle_path).parent().expect("parent")).expect("mkdir");
+    fs::write(repo.root.join(&repo.bundle_path), &bundle_text).expect("write");
+    fs::write(repo.root.join("extra.txt"), "extra\n").expect("extra");
+    git(&repo.root, &["add", &repo.bundle_path, "extra.txt"]);
+    git(&repo.root, &["commit", "--quiet", "-m", "mixed intro"]);
+    let mixed_intro = git(&repo.root, &["rev-parse", "HEAD"]);
+    let trailers = message_trailers(&repo.root, Path::new(&repo.bundle_path)).expect("trailers");
+    let msg = format!("Merge D-57\n\n{trailers}");
+    git(
+        &repo.root,
+        &["merge", "--quiet", "--no-ff", "-m", &msg, "feature"],
+    );
+    let bad_merge = git(&repo.root, &["rev-parse", "HEAD"]);
+    let intro_issues = check_bundle_file(
+        &repo.root,
+        Path::new(&repo.bundle_path),
+        &mixed_intro,
+        &bad_merge,
+    )
+    .expect("check mixed intro");
+    assert!(
+        intro_issues
+            .iter()
+            .any(|item| item.contains("묶음 외 파일")),
+        "{intro_issues:?}"
+    );
+
+    let tree_draft = draft_bundle(
+        &repo.root,
+        "D-57",
+        &repo.bundle_commit,
+        &repo.merge,
+        DraftMode::TargetTree,
+    )
+    .expect("tree draft");
+    let tree_probe = repo.root.join("target-tree-probe/D-57.toml");
+    fs::create_dir_all(tree_probe.parent().expect("parent")).expect("mkdir");
+    fs::write(&tree_probe, tree_draft).expect("write tree probe");
+    let non_merge = check_bundle_file(&repo.root, &tree_probe, &repo.pre_bundle, &repo.feature)
+        .expect("check non-merge tree");
+    assert!(
+        non_merge
+            .iter()
+            .any(|item| item.contains("병합 커밋이 아니")),
+        "{non_merge:?}"
     );
 }
 
@@ -1004,6 +1213,12 @@ fn h62_malformed_wildcard_and_removed_finding_bundles_fail_closed() {
                 "task = \"H-99\"\nbase_commit = \"{base}\"\nmerge_head = \"{feature}\"\nreason = \"bad\"\nfindings = [\"test-diff:modified:sample tests::a\"]\n[[file]]\npath = \"crates/sample/src/lib.rs\"\nbefore_sha256 = \"{old_h}\"\nafter_sha256 = \"{new_h}\"\n"
             ),
         ),
+        (
+            "same-before-after",
+            format!(
+                "task = \"H-62\"\nbase_commit = \"{base}\"\nmerge_head = \"{feature}\"\nreason = \"bad\"\nfindings = [\"test-diff:modified:sample tests::a\"]\n[[file]]\npath = \"crates/sample/src/lib.rs\"\nbefore_sha256 = \"{old_h}\"\nafter_sha256 = \"{old_h}\"\n"
+            ),
+        ),
     ] {
         let probe = root.join(format!("target-{name}/H-62.toml"));
         fs::create_dir_all(probe.parent().expect("parent")).expect("mkdir");
@@ -1062,9 +1277,11 @@ fn setup_mutants_bundle_repo() -> (PathBuf, String, &'static str, &'static str) 
         &["update-ref", "refs/remotes/origin/master", &bundle_commit],
     );
     git(&root, &["checkout", "--quiet", "-b", "merge-check"]);
+    let trailers = message_trailers(&root, Path::new(bundle_path)).expect("trailers");
+    let merge_msg = format!("Merge H-62\n\n{trailers}");
     git(
         &root,
-        &["merge", "--quiet", "--no-ff", "--no-edit", "feature"],
+        &["merge", "--quiet", "--no-ff", "-m", &merge_msg, "feature"],
     );
     (root, bundle_commit, path, after)
 }
