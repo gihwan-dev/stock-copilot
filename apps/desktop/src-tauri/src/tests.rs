@@ -5,7 +5,7 @@ mod database;
 mod ipc_contract;
 mod lifecycle;
 mod startup;
-mod support;
+pub(crate) mod support;
 
 #[test]
 fn build_app_builds_empty_app_on_mock_runtime() {

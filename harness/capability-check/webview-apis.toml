@@ -18,7 +18,6 @@ names = [
     "append_invoke_initialization_script",
     "register_uri_scheme_protocol",
     "register_asynchronous_uri_scheme_protocol",
-    "Channel",
     "plugin",
     "plugin_boxed",
     "register_plugin",
@@ -81,3 +80,8 @@ reason = "제품 주 창은 탐색 차단과 함께 만들고 U-01 테스트는 
 names = ["invoke_key"]
 allowed-files = ["src/tests/ipc_contract.rs"]
 reason = "U-02 실제 명령 역직렬화 회귀의 InvokeRequest에 Tauri 모의 런타임의 고정 키를 넣는다. 제품 IPC 통로를 추가하지 않는다"
+
+[[api]]
+names = ["Channel"]
+allowed-files = ["src/ipc/chat.rs"]
+reason = "C-02 채팅 스트림이 요청별 Channel<ChatChunkEvent>로만 조각을 전달한다 (architecture.md 3.5)"

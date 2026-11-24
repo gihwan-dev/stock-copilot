@@ -52,6 +52,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             }))?;
             app.manage(database.status());
             app.manage(Lifecycle::new(refresh, database));
+            app.manage(ipc::chat_hub::ChatIpcState::from_ports(&ports));
             app.manage(ports);
             Ok(())
         })
