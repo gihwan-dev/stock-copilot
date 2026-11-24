@@ -80,7 +80,6 @@ export const settleOpenExternal = (
 export type SecretText = string & Brand<"SecretText">;
 export type IpAddressText = string & Brand<"IpAddressText">;
 export type AccountRef = string & Brand<"AccountRef">;
-export type AccountNumberText = string & Brand<"AccountNumberText">;
 export type ClockTime = string & Brand<"ClockTime">;
 export type ConfigPathText = string & Brand<"ConfigPathText">;
 export type ContactText = string & Brand<"ContactText">;
@@ -90,7 +89,7 @@ export type UsagePercent = string & Brand<"UsagePercent">;
 
 export type FieldError = { readonly kind: "invalid-field" };
 
-export const secretSchema = z
+const secretSchema = z
   .string()
   .trim()
   .min(1)

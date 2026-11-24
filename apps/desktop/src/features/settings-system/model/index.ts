@@ -1,2 +1,2 @@
-export type { AccountsView, ActionOutcome } from "./system";
+export type { ActionOutcome } from "./system";
 export { useAccountChange, useAccounts, useDataActions } from "./system";
