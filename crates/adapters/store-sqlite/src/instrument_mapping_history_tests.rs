@@ -1608,38 +1608,52 @@ fn history_roundtrips_user_reason_containing_nul_byte() {
     let db = Database::open(&path, &key(), &clock()).expect("open");
     let target_id = id("inst-0000000000000001");
     let src = source(KnownMarket::Kr, "005930", "KR7005930003");
-    let nul_note = UserReason::try_new(UntrustedText::try_new("정정\0사유").expect("untrusted"))
-        .expect("note");
-    let event = MappingHistoryEvent::RetirementCorrected {
-        instrument_id: target_id.clone(),
-        source: src.clone(),
-        disclosure: DisclosureKey::from_receipt(ReceiptNo::Dart(
-            DartReceiptNo::try_new("20261124000099").expect("dart"),
-        )),
-        note: nul_note,
-        corrected_at: Timestamp::from_parts(
-            UnixSeconds::new(1_763_942_400),
-            Nanosecond::new(7),
-            OffsetSeconds::new(32_400),
-        )
-        .expect("timestamp"),
-    };
-    let seeded = event.clone();
+    let raw_cases = [
+        ("\0사유", "20261124000090"),
+        (" \0사유", "20261124000091"),
+        ("\0", "20261124000092"),
+        ("\t\n\0\r ", "20261124000093"),
+        ("정정\0사유", "20261124000094"),
+    ];
+    let events: Vec<MappingHistoryEvent> = raw_cases
+        .into_iter()
+        .enumerate()
+        .map(|(offset, (raw_note, receipt))| {
+            let note = UserReason::try_new(UntrustedText::try_new(raw_note).expect("untrusted"))
+                .expect("note");
+            MappingHistoryEvent::RetirementCorrected {
+                instrument_id: target_id.clone(),
+                source: src.clone(),
+                disclosure: DisclosureKey::from_receipt(ReceiptNo::Dart(
+                    DartReceiptNo::try_new(receipt).expect("dart"),
+                )),
+                note,
+                corrected_at: Timestamp::from_parts(
+                    UnixSeconds::new(1_763_942_400),
+                    Nanosecond::new(u32::try_from(offset).expect("offset")),
+                    OffsetSeconds::new(32_400),
+                )
+                .expect("timestamp"),
+            }
+        })
+        .collect();
+    let seeded_events = events.clone();
     let seeded_id = target_id.clone();
     rt.block_on(db.write(move |tx| {
         insert_active_mapping(tx, &seeded_id, &src)?;
-        apply_seed_retirement_corrected(tx, 1, &seeded, &seeded_id, &src)
+        for (index, event) in seeded_events.iter().enumerate() {
+            let seq = i64::try_from(index.checked_add(1).expect("seq")).expect("seq");
+            apply_seed_retirement_corrected(tx, seq, event, &seeded_id, &src)?;
+        }
+        Ok(())
     }))
-    .expect("seed event with embedded NUL note");
+    .expect("seed events with leading, standalone, whitespace+NUL, and embedded NUL notes");
     rt.block_on(db.close()).expect("close");
 
-    let reopened = Database::open(&path, &key(), &clock()).expect("reopen with NUL note");
+    let reopened = Database::open(&path, &key(), &clock()).expect("reopen with NUL notes");
     let store = InstrumentMappingStore::new(&reopened);
-    assert_eq!(rt.block_on(store.history()), Ok(vec![event.clone()]));
-    assert_eq!(
-        rt.block_on(store.history_for_id(&target_id)),
-        Ok(vec![event])
-    );
+    assert_eq!(rt.block_on(store.history()), Ok(events.clone()));
+    assert_eq!(rt.block_on(store.history_for_id(&target_id)), Ok(events));
     rt.block_on(reopened.close()).expect("close reopened");
 }
 

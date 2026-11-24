@@ -17,7 +17,7 @@ CREATE TABLE instrument_mapping_events (
     action_to_symbol TEXT CHECK (action_to_symbol IS NULL OR (instr(action_to_symbol, char(0)) = 0 AND length(action_to_symbol) BETWEEN 1 AND 32 AND action_to_symbol GLOB '[A-Za-z0-9]*' AND action_to_symbol NOT GLOB '*[^A-Za-z0-9.-]*')),
     action_from_count TEXT CHECK (action_from_count IS NULL OR (instr(action_from_count, char(0)) = 0 AND length(action_from_count) BETWEEN 1 AND 20 AND action_from_count NOT GLOB '*[^0-9]*' AND action_from_count NOT GLOB '0*')),
     action_to_count TEXT CHECK (action_to_count IS NULL OR (instr(action_to_count, char(0)) = 0 AND length(action_to_count) BETWEEN 1 AND 20 AND action_to_count NOT GLOB '*[^0-9]*' AND action_to_count NOT GLOB '0*')),
-    note TEXT NOT NULL CHECK (length(CAST(note AS BLOB)) BETWEEN 1 AND 512 AND length(trim(note, ' ' || char(9) || char(10) || char(13))) > 0),
+    note TEXT NOT NULL CHECK (length(CAST(note AS BLOB)) BETWEEN 1 AND 512 AND length(CAST(trim(note, ' ' || char(9) || char(10) || char(13)) AS BLOB)) > 0),
     recorded_seconds INTEGER NOT NULL CHECK (recorded_seconds BETWEEN -62135596800 AND 253402300799),
     recorded_nanos INTEGER NOT NULL CHECK (recorded_nanos >= 0 AND recorded_nanos < 1000000000),
     recorded_offset INTEGER NOT NULL CHECK (recorded_offset BETWEEN -86340 AND 86340 AND recorded_offset % 60 = 0),

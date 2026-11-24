@@ -181,6 +181,7 @@ enum Op {
         id_slot: usize,
     },
     Retire {
+        id_slot: usize,
         source: usize,
     },
     Link {
@@ -203,53 +204,72 @@ enum Op {
     },
 }
 
+fn link_op_strategy() -> impl Strategy<Value = Op> {
+    (
+        0_usize..3,
+        0_usize..10,
+        0_usize..10,
+        prop::bool::ANY,
+        1_700_000_000_i64..1_800_000_000_i64,
+    )
+        .prop_map(|(id_slot, prev, next, use_split, timestamp)| Op::Link {
+            id_slot,
+            prev,
+            next,
+            action_kind: if use_split {
+                LinkActionKind::Split
+            } else {
+                LinkActionKind::Other
+            },
+            timestamp,
+        })
+}
+
 fn op_strategy() -> impl Strategy<Value = Op> {
-    prop::strategy::Union::new(vec![
-        (0_usize..8, 0_usize..3)
-            .prop_map(|(source, id_slot)| Op::Ensure { source, id_slot })
-            .boxed(),
-        (0_usize..8)
-            .prop_map(|source| Op::Retire { source })
-            .boxed(),
+    prop::strategy::Union::new_weighted(vec![
         (
-            0_usize..3,
-            0_usize..8,
-            0_usize..8,
-            prop::bool::ANY,
-            1_700_000_000_i64..1_800_000_000_i64,
-        )
-            .prop_map(|(id_slot, prev, next, use_split, timestamp)| Op::Link {
-                id_slot,
-                prev,
-                next,
-                action_kind: if use_split {
-                    LinkActionKind::Split
-                } else {
-                    LinkActionKind::Other
-                },
-                timestamp,
-            })
-            .boxed(),
-        (0_usize..3, 0_usize..8, 1_700_000_000_i64..1_800_000_000_i64)
-            .prop_map(|(id_slot, source, timestamp)| Op::CorrectRetirement {
-                id_slot,
-                source,
-                timestamp,
-            })
-            .boxed(),
+            2,
+            (0_usize..10, 0_usize..3)
+                .prop_map(|(source, id_slot)| Op::Ensure { source, id_slot })
+                .boxed(),
+        ),
         (
-            0_usize..3,
-            0_usize..8,
-            0_usize..8,
-            1_700_000_000_i64..1_800_000_000_i64,
-        )
-            .prop_map(|(id_slot, prev, next, timestamp)| Op::CorrectLink {
-                id_slot,
-                prev,
-                next,
-                timestamp,
-            })
-            .boxed(),
+            2,
+            (0_usize..3, 0_usize..10)
+                .prop_map(|(id_slot, source)| Op::Retire { id_slot, source })
+                .boxed(),
+        ),
+        (4, link_op_strategy().boxed()),
+        (
+            2,
+            (
+                0_usize..3,
+                0_usize..10,
+                1_700_000_000_i64..1_800_000_000_i64,
+            )
+                .prop_map(|(id_slot, source, timestamp)| Op::CorrectRetirement {
+                    id_slot,
+                    source,
+                    timestamp,
+                })
+                .boxed(),
+        ),
+        (
+            2,
+            (
+                0_usize..3,
+                0_usize..10,
+                0_usize..10,
+                1_700_000_000_i64..1_800_000_000_i64,
+            )
+                .prop_map(|(id_slot, prev, next, timestamp)| Op::CorrectLink {
+                    id_slot,
+                    prev,
+                    next,
+                    timestamp,
+                })
+                .boxed(),
+        ),
     ])
 }
 
@@ -307,72 +327,239 @@ fn correction_confirmation(
     )
 }
 
+use std::cell::Cell;
+
+#[derive(Default)]
+struct PropStats {
+    id_changed: Cell<usize>,
+    retire_corr: Cell<usize>,
+    link_corr: Cell<usize>,
+    max_chain_len: Cell<usize>,
+}
+
+fn superseded_count_for_id(mappings: &InstrumentMappings, id: &InstrumentId) -> usize {
+    mappings.for_id(id).map_or(0, |rows| {
+        rows.iter()
+            .filter(|entry| match entry.status() {
+                InstrumentMappingStatus::Superseded => true,
+                InstrumentMappingStatus::Active | InstrumentMappingStatus::Retired => false,
+            })
+            .count()
+    })
+}
+
+impl PropStats {
+    fn observe_history(&self, mappings: &InstrumentMappings, ids: &[InstrumentId; 3]) {
+        for event in mappings.history() {
+            match event {
+                MappingHistoryEvent::IdentifierChanged { .. } => {
+                    self.id_changed.set(self.id_changed.get().saturating_add(1));
+                }
+                MappingHistoryEvent::RetirementCorrected { .. } => {
+                    self.retire_corr
+                        .set(self.retire_corr.get().saturating_add(1));
+                }
+                MappingHistoryEvent::LinkCorrected { .. } => {
+                    self.link_corr.set(self.link_corr.get().saturating_add(1));
+                }
+            }
+        }
+        let max_len = ids
+            .iter()
+            .map(|tracked_id| superseded_count_for_id(mappings, tracked_id))
+            .max()
+            .unwrap_or(0);
+        if max_len > self.max_chain_len.get() {
+            self.max_chain_len.set(max_len);
+        }
+    }
+}
+
+fn current_active_source(
+    mappings: &InstrumentMappings,
+    id: &InstrumentId,
+) -> Option<InstrumentSource> {
+    mappings
+        .for_id(id)
+        .ok()?
+        .into_iter()
+        .find_map(|entry| match entry.status() {
+            InstrumentMappingStatus::Active => Some(entry.source().clone()),
+            InstrumentMappingStatus::Superseded | InstrumentMappingStatus::Retired => None,
+        })
+}
+
+fn current_retired_source(
+    mappings: &InstrumentMappings,
+    id: &InstrumentId,
+) -> Option<InstrumentSource> {
+    mappings
+        .for_id(id)
+        .ok()?
+        .into_iter()
+        .find_map(|entry| match entry.status() {
+            InstrumentMappingStatus::Retired => Some(entry.source().clone()),
+            InstrumentMappingStatus::Active | InstrumentMappingStatus::Superseded => None,
+        })
+}
+
+fn latest_link_for_id(
+    mappings: &InstrumentMappings,
+    id: &InstrumentId,
+) -> Option<(InstrumentSource, InstrumentSource)> {
+    let mut stack = Vec::new();
+    for event in mappings.history_for_id(id) {
+        match event {
+            MappingHistoryEvent::IdentifierChanged { previous, next, .. } => {
+                stack.push((previous, next));
+            }
+            MappingHistoryEvent::LinkCorrected { .. } => {
+                let _popped = stack.pop();
+            }
+            MappingHistoryEvent::RetirementCorrected { .. } => {}
+        }
+    }
+    stack.pop()
+}
+
+fn apply_correct_link(
+    mappings: &mut InstrumentMappings,
+    id: &InstrumentId,
+    fallback: (&InstrumentSource, &InstrumentSource),
+    serial: u8,
+    timestamp: i64,
+) {
+    let (target_prev, target_next) = latest_link_for_id(mappings, id)
+        .unwrap_or_else(|| (fallback.0.clone(), fallback.1.clone()));
+    let correction = ConfirmedLinkCorrection::new(
+        id.clone(),
+        target_prev,
+        target_next,
+        correction_confirmation(serial, "속성 테스트 연결 정정", timestamp),
+    );
+    let _res = mappings.correct_link(correction);
+}
+
+fn apply_ensure_op(mappings: &mut InstrumentMappings, source: &InstrumentSource, id_slot: usize) {
+    let mut local = IndependentInstrumentIdIssuer::new();
+    for _ in 0..id_slot {
+        let _skip = local.issue().expect("건너뛰기");
+    }
+    let cand = local.issue().expect("후보");
+    let _res = mappings.ensure(source, cand);
+}
+
+fn apply_correct_retirement_op(
+    mappings: &mut InstrumentMappings,
+    id: &InstrumentId,
+    fallback: &InstrumentSource,
+    serial: u8,
+    timestamp: i64,
+) {
+    let target = current_retired_source(mappings, id).unwrap_or_else(|| fallback.clone());
+    let correction = ConfirmedRetirementCorrection::new(
+        id.clone(),
+        target,
+        correction_confirmation(serial, "속성 테스트 폐지 정정", timestamp),
+    );
+    let _res = mappings.correct_retirement(correction);
+}
+
+fn pick_link_next(
+    sources: &[InstrumentSource; 10],
+    market: KnownMarket,
+    raw_idx: usize,
+) -> &InstrumentSource {
+    let idx = if raw_idx == 9 {
+        match market {
+            KnownMarket::Kr => 5,
+            KnownMarket::Us => 0,
+        }
+    } else {
+        let base: usize = match market {
+            KnownMarket::Kr => 0,
+            KnownMarket::Us => 5,
+        };
+        base.saturating_add(raw_idx.rem_euclid(5))
+    };
+    sources.get(idx).expect("다음 원본")
+}
+
+fn apply_retire_op(
+    mappings: &mut InstrumentMappings,
+    id: &InstrumentId,
+    fallback: &InstrumentSource,
+) {
+    let target = current_active_source(mappings, id).unwrap_or_else(|| fallback.clone());
+    let _res = mappings.retire(&target);
+}
+
 fn apply_op(
     mappings: &mut InstrumentMappings,
-    sources: &[InstrumentSource; 8],
+    sources: &[InstrumentSource; 10],
     ids: &[InstrumentId; 3],
     step: usize,
     op: Op,
 ) {
     let serial = u8::try_from(step.rem_euclid(90).saturating_add(1)).expect("순번");
     match op {
-        Op::Ensure {
-            source: source_idx,
-            id_slot,
-        } => {
-            let mut local = IndependentInstrumentIdIssuer::new();
-            for _ in 0..id_slot {
-                let _skip = local.issue().expect("건너뛰기");
-            }
-            let cand = local.issue().expect("후보");
-            let _res = mappings.ensure(sources.get(source_idx).expect("원본"), cand);
+        Op::Ensure { source, id_slot } => {
+            apply_ensure_op(mappings, sources.get(source).expect("원본"), id_slot);
         }
-        Op::Retire { source: source_idx } => {
-            let _res = mappings.retire(sources.get(source_idx).expect("원본"));
-        }
+        Op::Retire { id_slot, source } => apply_retire_op(
+            mappings,
+            ids.get(id_slot).expect("종목 ID"),
+            sources.get(source).expect("원본"),
+        ),
         Op::Link {
             id_slot,
             prev,
             next,
             action_kind,
             timestamp,
-        } => apply_link_op(
-            mappings,
-            LinkOp {
-                id: ids.get(id_slot).expect("종목 ID"),
-                prev: sources.get(prev).expect("이전 원본"),
-                next: sources.get(next).expect("다음 원본"),
-                action_kind,
-                serial,
-                timestamp,
-            },
-        ),
+        } => {
+            let id = ids.get(id_slot).expect("종목 ID");
+            let active_prev = current_active_source(mappings, id)
+                .unwrap_or_else(|| sources.get(prev).expect("이전 원본").clone());
+            let chosen_next = pick_link_next(sources, active_prev.market(), next);
+            apply_link_op(
+                mappings,
+                LinkOp {
+                    id,
+                    prev: &active_prev,
+                    next: chosen_next,
+                    action_kind,
+                    serial,
+                    timestamp,
+                },
+            );
+        }
         Op::CorrectRetirement {
             id_slot,
-            source: source_idx,
+            source,
             timestamp,
-        } => {
-            let correction = ConfirmedRetirementCorrection::new(
-                ids.get(id_slot).expect("종목 ID").clone(),
-                sources.get(source_idx).expect("원본").clone(),
-                correction_confirmation(serial, "속성 테스트 폐지 정정", timestamp),
-            );
-            let _res = mappings.correct_retirement(correction);
-        }
+        } => apply_correct_retirement_op(
+            mappings,
+            ids.get(id_slot).expect("종목 ID"),
+            sources.get(source).expect("원본"),
+            serial,
+            timestamp,
+        ),
         Op::CorrectLink {
             id_slot,
             prev,
             next,
             timestamp,
-        } => {
-            let correction = ConfirmedLinkCorrection::new(
-                ids.get(id_slot).expect("종목 ID").clone(),
-                sources.get(prev).expect("이전 원본").clone(),
-                sources.get(next).expect("다음 원본").clone(),
-                correction_confirmation(serial, "속성 테스트 연결 정정", timestamp),
-            );
-            let _res = mappings.correct_link(correction);
-        }
+        } => apply_correct_link(
+            mappings,
+            ids.get(id_slot).expect("종목 ID"),
+            (
+                sources.get(prev).expect("이전 원본"),
+                sources.get(next).expect("다음 원본"),
+            ),
+            serial,
+            timestamp,
+        ),
     }
 }
 
@@ -415,16 +602,18 @@ fn assert_corrupted_state_rejected(
     }
 }
 
-fn verify_ops_sequence(ops: Vec<Op>) {
+fn verify_ops_sequence(ops: Vec<Op>, stats: &PropStats) {
     let sources = [
         source(KnownMarket::Kr, "005930", "KR7005930003"),
         source(KnownMarket::Kr, "005930", "kr7005930003"),
         source(KnownMarket::Kr, "005931", "KR7005930003"),
         source(KnownMarket::Kr, "005930", "KR7005930999"),
+        source(KnownMarket::Kr, "005932", "KR7005930888"),
         source(KnownMarket::Us, "fb.A", "us30303m1027"),
         source(KnownMarket::Us, "FB.a", "US30303M1027"),
         source(KnownMarket::Us, "meta", "US30303M1027"),
         source(KnownMarket::Us, "META", "us30303m9999"),
+        source(KnownMarket::Us, "meta.B", "us30303m8888"),
     ];
     let mut id_lookup = IndependentInstrumentIdIssuer::new();
     let ids = [
@@ -448,14 +637,20 @@ fn verify_ops_sequence(ops: Vec<Op>) {
         );
         assert_corrupted_state_rejected(&all_records, mappings.history());
     }
+    stats.observe_history(&mappings, &ids);
 }
 
 #[test]
 fn every_valid_domain_state_passes_persisted_ledger_verification() {
+    let stats = PropStats::default();
     TestRunner::new(Config::with_cases(testkit::property_cases()))
         .run(&prop::collection::vec(op_strategy(), 1..40), |ops| {
-            verify_ops_sequence(ops);
+            verify_ops_sequence(ops, &stats);
             Ok(())
         })
         .expect("도메인 원장 검증 속성");
+    assert!(stats.id_changed.get() > 0);
+    assert!(stats.retire_corr.get() > 0);
+    assert!(stats.link_corr.get() > 0);
+    assert!(stats.max_chain_len.get() >= 2);
 }

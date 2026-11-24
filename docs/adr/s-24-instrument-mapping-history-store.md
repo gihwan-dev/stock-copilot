@@ -22,12 +22,12 @@ S-24는 D-55의 `UserIdentityConfirmation` 봉인 경계와 맞물려 있으므�
 
 ## 스키마와 제약 (`0009_instrument_mapping_history.sql`)
 
-마이그레이션 `0009_instrument_mapping_history.sql`(SHA-256 `c46bc37a755478e6c1005aad9ca6d627d1cf0c2232b23e26a08ae5fe730be3f1`)은 기존 `0008`의 `instrument_mappings`를 무손실 이관하면서 감사 사건 표와 확장된 원장 표를 구성한다. 기존 `0008_instrument_mappings.sql`과 `instrument_id_issuer`는 변경하지 않는다.
+마이그레이션 `0009_instrument_mapping_history.sql`(SHA-256 `b6e60a6119333d85641ea8073b26f04673105104d97493a36a40be319f8a25fb`)은 기존 `0008`의 `instrument_mappings`를 무손실 이관하면서 감사 사건 표와 확장된 원장 표를 구성한다. 기존 `0008_instrument_mappings.sql`과 `instrument_id_issuer`는 변경하지 않는다.
 
 | 대상 | 종류 | 정의 | 역할 |
 |---|---|---|---|
 | `instrument_mapping_events` | `STRICT` 테이블 | `seq INTEGER PRIMARY KEY CHECK (seq > 0)`, `event_kind`, `instrument_id`, `market`, `prev_symbol`, `prev_isin`, `next_symbol`, `next_isin`, `disclosure_source`, `disclosure_receipt_no`, `action_kind`, `action_year`, `action_month`, `action_day`, `action_from_symbol`, `action_to_symbol`, `action_from_count`, `action_to_count`, `note`, `recorded_seconds`, `recorded_nanos`, `recorded_offset` | 감사 사건 추가 전용 원장. `Split`/`ReverseSplit` 주수 열은 `MONEY_SEGMENTS` 회피를 위해 `action_from_count`/`action_to_count`(앞자리 `0` 금지 양의 10진 `TEXT`, 최대 20자리)를 사용하며 `u64::MAX`까지 무손실 표현 |
-| 사건 테이블 열·행 `CHECK` | 복합 제약 | 도메인 문법(`InstrumentId`·`KnownMarket`·`Symbol`·`IsinCode`·`DisclosureKey` DART/KIND 14자리 숫자·SEC EDGAR `10-2-6`·`UserReason` UTF-8 1..512바이트 및 공백 전용 금지 — `0006_thesis_store.sql`과 동일하게 도메인 유효 NUL 바이트 보존·`Timestamp` 초/나노초/분단위 오프셋) + `event_kind`별 필수/NULL 열 일치 + `link_corrected`·`identifier_changed` 대소문자 무시 변경 검증 + `SymbolChange`/`Split`/`ReverseSplit` 변형별 열 및 비율 방향 정합 | 깨진 사건 직렬화 행 삽입을 DB 계층에서 1차 차단(유니코드 공백·달력 일자 유효성·오프셋 적용 연도 범위·`u64::MAX` 초과는 Rust 디코더와 `domain`이 닫힘 검증) |
+| 사건 테이블 열·행 `CHECK` | 복합 제약 | 도메인 문법(`InstrumentId`·`KnownMarket`·`Symbol`·`IsinCode`·`DisclosureKey` DART/KIND 14자리 숫자·SEC EDGAR `10-2-6`·`UserReason` `length(CAST(note AS BLOB)) BETWEEN 1 AND 512` 및 `length(CAST(trim(note, ' \t\n\r') AS BLOB)) > 0` — SQLite `length(TEXT)`의 NUL 절단을 피해 `0006_thesis_store.sql`과 동일하게 앞자리·단독·중간 NUL 포함 도메인 유효 `UserReason`을 무손실 보존·`Timestamp` 초/나노초/분단위 오프셋) + `event_kind`별 필수/NULL 열 일치 + `link_corrected`·`identifier_changed` 대소문자 무시 변경 검증 + `SymbolChange`/`Split`/`ReverseSplit` 변형별 열 및 비율 방향 정합 | 깨진 사건 직렬화 행 삽입을 DB 계층에서 1차 차단(유니코드 공백·달력 일자 유효성·오프셋 적용 연도 범위·`u64::MAX` 초과는 Rust 디코더와 `domain`이 닫힘 검증) |
 | `instrument_mapping_events_instrument_seq` | `INDEX` | `(instrument_id, seq)` | `history_for_id` 및 트리거의 `max(seq) WHERE instrument_id = ...` 점조회(풀스캔 0건) |
 | `instrument_mapping_events_no_update` / `no_delete` | `BEFORE UPDATE` / `BEFORE DELETE` 트리거 | 모든 수정·삭제에 `RAISE(ABORT, ...)` | 감사 사건 추가 전용 불변성 강제 |
 | `instrument_mapping_events_monotonic_seq` | `BEFORE INSERT` 트리거 | `NEW.seq != coalesce((SELECT max(seq) FROM instrument_mapping_events), 0) + 1` 시 `RAISE(ABORT, ...)` | `1..=N` 공백 없는 단조 순번 강제(`INSERT OR REPLACE` 포함 차단) |
@@ -73,6 +73,7 @@ S-24는 D-55의 `UserIdentityConfirmation` 봉인 경계와 맞물려 있으므�
 | 1. 2단계 쓰기 포트(`InstrumentMappingCorrectionRepository`)의 메서드 서명과 오류 열거형 (H-64 연동) | A) 도메인 요청 타입(`ConfirmedIdentifierChange`, `RetirementCorrection`, `LinkCorrection`)을 그대로 받는 별도 쓰기 포트 + `MappingTransitionStoreError { Transition(MappingTransitionError), Storage(SystemPortError) }` / B) `application` 전용 입력 DTO로 감싼 뒤 내부에서 도메인 규칙 검증 | 사용자 확인 화면·유스케이스가 오연결·폐지 정정 실패 이유를 얼마나 세밀하게 표시하고 재시도할지에 영향 | S-24 1단계에서는 읽기 전용 `InstrumentMappingHistoryRepository`만 정의하고, 쓰기 3연산 포트는 H-64 착륙 후 S-24 2단계에서 확정 |
 | 2. 사건 이력 증가에 따른 `Database::open` 검증 비용 상한 | A) 현행처럼 열기 시 전체 `instrument_mapping_events` 재생·대조 유지(개인용 앱에서 식별자 변경·정정은 평생 수십~수백 건 수준) / B) 체크포인트 스냅샷 도입 | 앱 시작 시간(`PERF-1` 2초)에 영향 | 현행 O(N log N) 전체 재생·대조 유지; 수만 건 이상으로 커질 때 재검토 |
 | 3. 로컬 오프라인 변조 위협 모델 한계(S-16 인계) | A) 열기 시점 스키마·사건 재생·`superseded_event_seq` 대조만 유지 / B) S-16 키체인 고정 HMAC 체인에 `instrument_mapping_events` 머리값을 결합 | 32바이트 DB 키와 오프라인 파일 쓰기 권한을 가진 공격자가 트리거 제거→사건+원장 동시 재작성→트리거 복구를 수행할 때 탐지 가능 여부에 영향 | 1단계는 로컬 스키마·재생 불변식 닫힘 검증을 제공하며, 오프라인 동시 재작성 탐지는 S-16 범위로 명시 |
+| 4. `retirement_corrected` 이후 재폐지된 행의 사건 없는 재활성화 차단 위치 (`0009` 확정 전 판단) | A) 현행처럼 `0009` 스키마를 단순하게 유지하고 2단계 쓰기 경계·회귀 테스트(인계 6번)에서 새 `retirement_corrected` 사건 없이 재활성화를 금지 / B) `0009`에 `retirement_corrected` 1회 소비를 기록하는 보조 열·표(`last_retirement_correction_seq` 등)를 추가해 트리거 차원에서도 차단 | 일반 `retire`가 D-55 감사 사건이 아닌 구조에서 2단계 쓰기 버그나 원시 SQL 재활성화를 DB 트리거까지 막을지와 `0009` 스키마 복잡도에 영향 | 현행 선택지 A 유지(ADR 39행·2단계 인계 6번에 명시); `0009`가 `master`에 병합·고정되기 전 메인이 A/B 확정 |
 
 ## 2단계 인계 (H-64 착륙 후 S-24 2단계 범위)
 
@@ -135,9 +136,9 @@ assertion_change = true
 | 기존 테스트 변경 (`test-diff-fast`) | 위 표의 기계적 고정 개수 갱신 2건(`migration_tests.rs` `8→9`, `tests.rs` `55→64`)만 보고, 그 외 0건 |
 | 커버리지 (`cargo llvm-cov`) | `domain/src/disclosure.rs` 영역 237/237(100.00%)·함수 20/20(100.00%)·줄 165/165(100.00%); `domain/src/instrument_mapping.rs` 영역 816/816(100.00%)·함수 64/64(100.00%)·줄 617/617(100.00%); `domain/src/instrument_mapping_change.rs` 영역 198/198(100.00%)·함수 28/28(100.00%)·줄 224/224(100.00%); `adapters/store-sqlite/src/instrument_mapping.rs` 함수 98/98(100.00%)·줄 892/896(99.55%)·영역 1443/1526(94.56%) |
 | 자동 변경분 변이 (`just mutants-daily 4c13d306ed6190f2fbd970822a92ddf88f1a7529 0/1`) | `mutants: 선택 변이 158개` / `158 mutants tested in 51m: 120 caught, 38 unviable` / `mutants: 위반 없음` (생존 0건, 시간 초과 0건) |
-| 손 변형 (`target/S-24/work`) | 격리 사본에서 25건(M01~M25) 실제 컴파일·실행, **25/25 검출(생존 0건)** 후 `target/S-24` 삭제 확인 |
+| 손 변형 (`target/S-24/work`) | 격리 사본에서 26건(M01~M26) 실제 컴파일·실행, **26/26 검출(생존 0건)** 후 `target/S-24` 삭제 확인 |
 
-### 손 변형 목록 (M01~M25, 격리 사본 실측)
+### 손 변형 목록 (M01~M26, 격리 사본 실측)
 
 | 번호 | 대상 파일 | 변형 내용 | 결과 및 검출 테스트 |
 |---|---|---|---|
@@ -166,3 +167,4 @@ assertion_change = true
 | M23 | `crates/testkit-ports/src/memory.rs` | `MemoryInstrumentMappingHistoryStore::try_from_verified`에서 `verify_persisted_mapping_ledger` 생략 | 검출 (`testkit-ports::instrument_mapping_history_contract::tests::memory_history_store_passes_shared_populated_history_contract_and_rejects_inconsistent_seed`) |
 | M24 | `crates/testkit-ports/src/memory.rs` | `MemoryInstrumentMappingHistoryStore::history_for_id`에서 ID 필터 제거 | 검출 (`testkit-ports::instrument_mapping_history_contract::tests::memory_history_store_passes_shared_populated_history_contract_and_rejects_inconsistent_seed`) |
 | M25 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `RecordSetValidator::observe`에서 `*counter > 1`을 `*counter < 1`로 변경 | 검출 (`store-sqlite::instrument_mapping_history_tests::lookup_rejects_multiple_terminal_records_for_same_id_in_partial_slice`) |
+| M26 | `migrations/0009_instrument_mapping_history.sql` + `src/sql/instrument_mapping.rs` | `note` CHECK의 `length(CAST(trim(...) AS BLOB)) > 0`을 `length(trim(...)) > 0`으로 되돌려 앞자리 NUL `UserReason` 거부 | 검출 (`store-sqlite::instrument_mapping_history_tests::history_roundtrips_user_reason_containing_nul_byte`) |
