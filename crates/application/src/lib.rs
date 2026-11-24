@@ -400,6 +400,9 @@ pub use analysis_tools::{
     ScorecardSelection, ScorecardView,
 };
 
+mod prompt_file;
+pub use prompt_file::{PromptFile, PromptFileError};
+
 mod submit_estimate_tool;
 pub use submit_estimate_tool::{
     EstimateRunContext, EstimateToolArguments, SubmitEstimateTool, SubmitEstimateToolError,
