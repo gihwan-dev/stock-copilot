@@ -33,3 +33,6 @@ pub(crate) const ESCAPE_ROLLBACK: &str =
     "ROLLBACK; CREATE TABLE partial (id INTEGER) STRICT; INSERT INTO absent VALUES (1)";
 pub(crate) const ESCAPE_SAVEPOINT: &str =
     "SAVEPOINT escaped; CREATE TABLE partial (id INTEGER) STRICT";
+pub(crate) const AUTO_VACUUM: &str = "PRAGMA auto_vacuum";
+pub(crate) const FREELIST: &str = "PRAGMA freelist_count";
+pub(crate) const FILL_FREELIST: &str = "CREATE TABLE j13_filler(payload TEXT) STRICT; WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 400) INSERT INTO j13_filler SELECT hex(randomblob(512)) FROM n; DROP TABLE j13_filler;";

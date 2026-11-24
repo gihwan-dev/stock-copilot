@@ -8,6 +8,7 @@ pub use money_display::{
 };
 
 mod account_id;
+mod ai_job_id;
 mod briefing_id;
 pub use briefing_id::{BriefingId, BriefingKind};
 mod client_order_id;
@@ -19,6 +20,7 @@ mod instrument_master;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
+pub use ai_job_id::{AiJobId, AiJobIdError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
 pub use instrument_issuer::{
@@ -686,6 +688,18 @@ mod deep_research;
 pub use deep_research::{
     EvidenceBundle, EvidenceBundleError, EvidenceItem, EvidenceItemId, EvidenceItemIdError,
     EvidenceKind, ResearchTopic, research_search_plan,
+};
+
+mod deep_research_claims;
+pub use deep_research_claims::{
+    CitedEvidence, ClaimCheckBasis, ClaimSupport, ResearchClaim, ResearchClaimError,
+    ResearchClaimText, ResearchDraft, ResearchStance, VerifiedClaim,
+};
+
+mod deep_research_review;
+pub use deep_research_review::{
+    ResearchCount, ResearchSourceWarning, ResearchTally, research_source_warnings,
+    tally_research_claims,
 };
 
 mod valuation_day_inputs;

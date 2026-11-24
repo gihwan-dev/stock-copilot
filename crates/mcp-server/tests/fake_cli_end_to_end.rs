@@ -12,9 +12,10 @@ mod tests {
     };
     use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
     use mcp_server::{
-        McpServerConfig, McpServerHandle, McpTool, PeerInspectorMode, PeerProcessTarget,
-        RunIdentity, RunServerDeps, RunServerRequest, RunSocketSpec, ToolAccessKind, ToolFuture,
-        ToolInvocation, ToolLedgerMode, ToolRegistry, ToolSpec, build_object_schema,
+        AuthRejection, ConnectionEvent, ConnectionRejection, McpServerConfig, McpServerHandle,
+        McpTool, PeerInspectorMode, PeerProcessTarget, RunIdentity, RunServerDeps,
+        RunServerRequest, RunSocketSpec, ToolAccessKind, ToolFuture, ToolInvocation,
+        ToolLedgerMode, ToolRegistry, ToolSpec, build_object_schema,
     };
     use serde_json::{Map, Value, json};
     use testkit::fake_ai_cli::{
@@ -143,9 +144,14 @@ mod tests {
             .register(Arc::new(FixtureQuoteTool::new()))
             .expect("등록");
         let ledger = Arc::new(MemoryToolCallLedger::recording());
-        let inspector = Arc::new(ScriptedPeerProcessInspector::new(vec![Ok(
-            PeerProcessInfo::new(expected_parent_pid(), expected_exe_path()),
-        )]));
+        let inspector = Arc::new(ScriptedPeerProcessInspector::new((0_u8..4_u8).map(
+            |_slot| {
+                Ok(PeerProcessInfo::new(
+                    expected_parent_pid(),
+                    expected_exe_path(),
+                ))
+            },
+        )));
         let spec = RunSocketSpec::generate_under(base.path()).expect("소켓 사양");
         let deps = RunServerDeps::new(
             Arc::clone(&clock),
@@ -302,6 +308,29 @@ mod tests {
         assert_generation_round_trip(McpProtocolGeneration::V2025_06_18, "2025-06-18");
     }
 
+    fn assert_only_auth_rejections(events: &[ConnectionEvent], expected: &[AuthRejection]) {
+        let rejections: Vec<ConnectionRejection> = events
+            .iter()
+            .filter_map(|event| match event {
+                ConnectionEvent::Rejected { reason, .. } => Some(*reason),
+                ConnectionEvent::Accepted { .. }
+                | ConnectionEvent::Closed { .. }
+                | ConnectionEvent::AcceptFailed { .. }
+                | ConnectionEvent::SessionTaskFailed { .. } => None,
+            })
+            .collect();
+        let wanted: Vec<ConnectionRejection> = expected
+            .iter()
+            .map(|reason| ConnectionRejection::Auth(*reason))
+            .collect();
+        assert_eq!(rejections, wanted, "토큰 검사에서 거부된 이유: {events:?}");
+        assert_eq!(
+            rejections.len(),
+            events.len(),
+            "수락·세션 실패 없이 거부만 있어야 한다: {events:?}"
+        );
+    }
+
     fn assert_rejected_without_calls(run: &CliRun, server: &RunningServer) {
         assert!(
             run.record.mcp_tools_discovered.is_empty(),
@@ -335,8 +364,13 @@ mod tests {
                 other.ledger.records().is_empty(),
                 "다른 실행 원장도 비어 있다"
             );
-            let _first = target.handle.shutdown().await;
-            let _second = other.handle.shutdown().await;
+            let target_events = target.handle.shutdown().await;
+            assert_only_auth_rejections(
+                &target_events,
+                &[AuthRejection::InvalidToken, AuthRejection::InvalidToken],
+            );
+            let other_events = other.handle.shutdown().await;
+            assert!(other_events.is_empty(), "다른 실행 서버에는 연결이 없다");
         });
     }
 
@@ -351,7 +385,8 @@ mod tests {
             );
             let run = run_fake_cli(&base, "fake-empty", &fake, String::new()).await;
             assert_rejected_without_calls(&run, &server);
-            let _events = server.handle.shutdown().await;
+            let events = server.handle.shutdown().await;
+            assert_only_auth_rejections(&events, &[AuthRejection::MissingToken]);
         });
     }
 
@@ -378,7 +413,11 @@ mod tests {
                 assert_rejected_without_calls(&run, &server);
                 assert_token_absent(&run, &token);
             }
-            let _events = server.handle.shutdown().await;
+            let events = server.handle.shutdown().await;
+            assert_only_auth_rejections(
+                &events,
+                &[AuthRejection::TokenExpired, AuthRejection::TokenExpired],
+            );
         });
     }
 }

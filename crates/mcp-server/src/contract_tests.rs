@@ -285,10 +285,16 @@ fn render_transcript(transcript: &[Value]) -> String {
 fn assert_matches_snapshot(name: &str, file_name: &str, outcome: &Outcome) {
     let expected = parse_snapshot(&fixture_text(file_name));
     let rendered = render_transcript(&outcome.transcript);
-    assert!(
-        !rendered.contains(&outcome.raw_token),
-        "{name} 기록에 실행 토큰이 없어야 한다"
-    );
+    for record in &outcome.records {
+        assert!(
+            !record
+                .arguments_json()
+                .as_str()
+                .contains(&outcome.raw_token)
+                && !record.result_json().as_str().contains(&outcome.raw_token),
+            "{name} 원장 기록에 실행 토큰이 없어야 한다"
+        );
+    }
     assert_eq!(
         outcome.transcript, expected,
         "{name} JSON 줄 스냅샷이 달라졌다. 실제 기록:\n{rendered}\n"
