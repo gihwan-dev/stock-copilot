@@ -434,3 +434,5 @@ pub use order_gate::{
     OrderGateCollectedFacts, OrderGateError, OrderGateOutcome, OrderGatePolicyContext,
     ValidateOrderProposal,
 };
+mod order_rate_limit;
+pub use order_rate_limit::{CheckOrderRateLimit, OrderRateRepository};

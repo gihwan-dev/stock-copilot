@@ -693,3 +693,8 @@ pub use order_query_proof::{
 };
 mod order_gate;
 pub use order_gate::{OrderGateFacts, validate_proposal};
+mod order_rate_limit;
+pub use order_rate_limit::{
+    HourlyOrderLimit, HourlyOrderLimitError, OrderCount, OrderRateDecision,
+    evaluate_hourly_order_limit,
+};
