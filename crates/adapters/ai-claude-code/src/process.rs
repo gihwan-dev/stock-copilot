@@ -53,6 +53,7 @@ enum ChildState {
 
 pub(crate) struct SharedChild {
     cancel_requested: AtomicBool,
+    interrupted: AtomicBool,
     state: Mutex<ChildState>,
 }
 
@@ -63,6 +64,7 @@ impl fmt::Debug for SharedChild {
                 "cancel_requested",
                 &self.cancel_requested.load(Ordering::Acquire),
             )
+            .field("interrupted", &self.interrupted.load(Ordering::Acquire))
             .finish_non_exhaustive()
     }
 }
@@ -72,6 +74,7 @@ impl SharedChild {
         let pgid = child.id();
         Arc::new(Self {
             cancel_requested: AtomicBool::new(false),
+            interrupted: AtomicBool::new(false),
             state: Mutex::new(ChildState::Running { child, pgid }),
         })
     }
@@ -80,10 +83,15 @@ impl SharedChild {
         self.cancel_requested.load(Ordering::Acquire)
     }
 
+    pub(crate) fn was_interrupted(&self) -> bool {
+        self.interrupted.load(Ordering::Acquire)
+    }
+
     pub(crate) async fn send_interrupt(&self) -> bool {
         let guard = self.state.lock().await;
         match &*guard {
             ChildState::Running { pgid, .. } => {
+                self.interrupted.store(true, Ordering::Release);
                 send_signal_to_process_group(*pgid, ProcessSignal::Interrupt);
                 true
             }
@@ -103,19 +111,53 @@ impl SharedChild {
         }
     }
 
-    pub(crate) fn reap_blocking(&self, force_kill: ForceKill) -> Option<ExitStatus> {
+    pub(crate) fn reap_with_grace_blocking(&self, grace_ms: u64) -> Option<ExitStatus> {
+        let mut waited_ms = 0_u64;
+        let step_ms = 10_u64;
+        let (_wait_tx, wait_rx) = std::sync::mpsc::channel::<()>();
+        loop {
+            match self.try_reap_if_exited() {
+                TryReapOutcome::StillRunning => {}
+                TryReapOutcome::Exited(status) => return Some(status),
+                TryReapOutcome::Failed => return None,
+            }
+            if waited_ms >= grace_ms || self.is_cancelled() {
+                return self.force_kill_and_reap_blocking();
+            }
+            match wait_rx.recv_timeout(std::time::Duration::from_millis(step_ms)) {
+                Ok(()) | Err(_) => {}
+            }
+            waited_ms = waited_ms.saturating_add(step_ms);
+        }
+    }
+
+    fn try_reap_if_exited(&self) -> TryReapOutcome {
         let mut guard = self.state.blocking_lock();
-        let should_kill = force_kill == ForceKill::Yes || self.is_cancelled();
+        match &mut *guard {
+            ChildState::Running { child, .. } => match child.try_wait() {
+                Ok(Some(status)) => {
+                    *guard = ChildState::Reaped(status);
+                    TryReapOutcome::Exited(status)
+                }
+                Ok(None) => TryReapOutcome::StillRunning,
+                Err(_) => {
+                    *guard = ChildState::ReapFailed;
+                    TryReapOutcome::Failed
+                }
+            },
+            ChildState::Reaped(status) => TryReapOutcome::Exited(*status),
+            ChildState::ReapFailed => TryReapOutcome::Failed,
+        }
+    }
+
+    pub(crate) fn force_kill_and_reap_blocking(&self) -> Option<ExitStatus> {
+        let mut guard = self.state.blocking_lock();
         match &mut *guard {
             ChildState::Running { child, pgid } => {
                 let target_pgid = *pgid;
-                if should_kill {
-                    terminate_running_child(child, target_pgid);
-                }
+                terminate_running_child(child, target_pgid);
                 let waited = child.wait();
-                if should_kill {
-                    send_signal_to_process_group(target_pgid, ProcessSignal::Kill);
-                }
+                send_signal_to_process_group(target_pgid, ProcessSignal::Kill);
                 if let Ok(status) = waited {
                     *guard = ChildState::Reaped(status);
                     Some(status)
@@ -139,9 +181,10 @@ fn terminate_running_child(child: &mut Child, target_pgid: u32) {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ForceKill {
-    No,
-    Yes,
+enum TryReapOutcome {
+    StillRunning,
+    Exited(ExitStatus),
+    Failed,
 }
 
 pub(crate) struct ChildCancelGuard {
@@ -190,7 +233,10 @@ pub(crate) struct SpawnedChild {
     pub(crate) stdout: ChildStdout,
 }
 
-pub(crate) fn spawn_isolated_child(spec: &SpawnSpec) -> io::Result<SpawnedChild> {
+pub(crate) fn spawn_isolated_child(
+    spec: &SpawnSpec,
+    mcp_token: Option<&application::SecretValue>,
+) -> io::Result<SpawnedChild> {
     let mut command = Command::new(&spec.executable);
     command
         .args(&spec.args)
@@ -202,6 +248,11 @@ pub(crate) fn spawn_isolated_child(spec: &SpawnSpec) -> io::Result<SpawnedChild>
         .process_group(0_i32);
     for (key, value) in &spec.env {
         command.env(key, value);
+    }
+    if let Some(secret) = mcp_token {
+        let token_str = std::str::from_utf8(secret.as_exposed_secret())
+            .map_err(|_error| io::Error::new(io::ErrorKind::InvalidInput, "non-utf8 mcp token"))?;
+        command.env(crate::command::MCP_TOKEN_ENV_KEY, token_str);
     }
     let mut child = command.spawn()?;
     let stdin = child
