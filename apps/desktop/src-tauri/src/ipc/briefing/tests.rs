@@ -96,20 +96,19 @@ fn newest_briefing_is_latest_and_the_rest_are_past_in_descending_order() {
     assert_eq!(latest.finished_at, "2026-11-25T08:20:00+09:00");
     assert_eq!(latest.status, UiBriefingStatus::Completed);
     assert_eq!(latest.failure, UiBriefingFailure::None);
-    assert_eq!(latest.sources.len(), 2);
-    assert_eq!(latest.sources[0].kind, UiBriefingSourceKind::News);
-    assert_eq!(
-        latest.sources[0].url.as_deref(),
-        Some("https://example.com/a")
-    );
-    assert_eq!(latest.sources[1].kind, UiBriefingSourceKind::Web);
-    assert_eq!(latest.sources[1].url, None);
+    let cited = &latest.sources;
+    assert_eq!(cited.len(), 2);
+    assert_eq!(cited[0].kind, UiBriefingSourceKind::News);
+    assert_eq!(cited[0].url.as_deref(), Some("https://example.com/a"));
+    assert_eq!(cited[1].kind, UiBriefingSourceKind::Web);
+    assert_eq!(cited[1].url, None);
     let past: Vec<&str> = view.past.iter().map(|item| item.id.date.as_str()).collect();
     assert_eq!(past, vec!["2026-11-24", "2026-11-23"]);
     assert_eq!(view.past[0].status, UiBriefingStatus::Failed);
     assert_eq!(view.past[0].failure, UiBriefingFailure::AiUnavailable);
     assert_eq!(view.past[0].body, "");
-    assert_eq!(view.past[0].sources, Vec::new());
+    let uncited = &view.past[0].sources;
+    assert_eq!(uncited, &Vec::new());
 }
 
 #[test]

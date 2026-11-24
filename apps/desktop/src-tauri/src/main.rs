@@ -1,6 +1,7 @@
 use src_tauri::audit_queue::AuditEventQueue;
-use src_tauri::ipc::briefing::BriefingIpcState;
+use src_tauri::ipc::briefing::{BriefingHistory, BriefingIpcState};
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
+use src_tauri::ipc::state::BoxFuture;
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
     NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
@@ -9,7 +10,7 @@ use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, atta
 use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
 };
-use src_tauri::sqlite_ports::{SharedDatabase, SqliteRepositories};
+use src_tauri::sqlite_ports::{SharedDatabase, SqliteRepositories, not_opened};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
     database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
@@ -123,8 +124,27 @@ fn product_builder(
         ))
         .manage(scheduler_events)
         .manage(repositories.shared().clone())
-        .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
+        .manage(BriefingIpcState::new(Arc::new(ProductBriefings(
+            repositories.shared().clone(),
+        ))))
         .manage(ui_events)
+}
+
+struct ProductBriefings(SharedDatabase);
+
+impl BriefingHistory for ProductBriefings {
+    fn recent(
+        &self,
+    ) -> BoxFuture<'_, Result<Vec<application::BriefingRecord>, application::SystemPortError>> {
+        Box::pin(async move {
+            let guard = self.0.read().await;
+            let database = guard
+                .as_ref()
+                .ok_or_else(|| not_opened(application::SystemPort::Repository))?;
+            application::BriefingRepository::recent(&store_sqlite::BriefingStore::new(database))
+                .await
+        })
+    }
 }
 
 type ProductNotifier = FilteredNotifier<UnavailableNotificationDelivery>;
@@ -466,5 +486,69 @@ mod product_bus_tests {
             receiver.recv_timeout(Duration::from_millis(300)).is_err(),
             "꺼 둔 알림은 보내지 않는다"
         );
+    }
+}
+
+#[cfg(test)]
+mod product_briefing_tests {
+    use super::ProductBriefings;
+    use application::{BriefingOutcome, BriefingRecord, BriefingRepository, SecretValue};
+    use domain::{
+        BriefingId, BriefingKind, CalendarDate, CalendarYear, DayNumber, MonthNumber, UntrustedText,
+    };
+    use src_tauri::ipc::briefing::{BriefingIpcState, UiBriefingStatus, load_briefings_view};
+    use src_tauri::sqlite_ports::SharedDatabase;
+    use std::sync::Arc;
+
+    fn finished_at() -> domain::Timestamp {
+        broker_toss::TossTimestamp::try_from("2026-11-24T23:20:00Z")
+            .expect("clock")
+            .into_domain()
+    }
+
+    #[test]
+    fn product_briefing_ipc_reads_briefings_saved_in_the_installed_database() {
+        let directory = std::path::PathBuf::from("../../../target/chat2")
+            .join(format!("product-briefings-{}", std::process::id()));
+        let shared = SharedDatabase::new();
+        let state = BriefingIpcState::new(Arc::new(ProductBriefings(shared.clone())));
+        tauri::async_runtime::block_on(async {
+            assert!(
+                load_briefings_view(&state).await.is_err(),
+                "설치 전에는 읽지 못한다"
+            );
+            let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+            src_tauri::database::prepare_directory(&path).expect("폴더");
+            let clock = testkit_ports::SteppedClock::new(finished_at());
+            let database =
+                store_sqlite::Database::open(&path, &SecretValue::new(vec![83; 32]), &clock)
+                    .expect("열기");
+            let date = CalendarDate::from_parts(
+                CalendarYear::new(2026),
+                MonthNumber::new(11),
+                DayNumber::new(25),
+            )
+            .expect("date");
+            let record = BriefingRecord {
+                id: BriefingId::new(BriefingKind::Morning, date),
+                finished_at: finished_at(),
+                outcome: BriefingOutcome::Completed {
+                    body: UntrustedText::try_new("오늘 브리핑").expect("text"),
+                    sources: Vec::new(),
+                },
+            };
+            let _saved = store_sqlite::BriefingStore::new(&database)
+                .save(&record)
+                .await
+                .expect("저장");
+            assert!(shared.install(database).await.is_none());
+            let view = load_briefings_view(&state).await.expect("조회");
+            let latest = view.latest.expect("최근 브리핑");
+            assert_eq!(latest.body, "오늘 브리핑");
+            assert_eq!(latest.status, UiBriefingStatus::Completed);
+            assert_eq!(latest.finished_at, "2026-11-25T08:20:00+09:00");
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
     }
 }
