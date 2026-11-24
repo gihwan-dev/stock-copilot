@@ -9,6 +9,7 @@ mod process;
 mod provider;
 mod queue;
 mod quota;
+mod sandbox;
 
 pub use chat_session::{
     ChatProcessReuse, ChatTurnConfig, ChatTurnOutput, CliRecordCleanup, PersistentChatSession,
@@ -44,4 +45,8 @@ pub use quota::{
     BudgetSummaryKind, DEFAULT_SCHEDULED_CAP_PERCENT, DEFAULT_UNKNOWN_RESET_COOLDOWN_SECONDS,
     QuotaConfigError, QuotaDecision, QuotaPolicy, QuotaState, QuotaTracker, QuotaTransition,
     ResetSource, WorkCategory, utilization_from_percent,
+};
+pub use sandbox::{
+    ProbeExit, SYSTEM_SANDBOX_EXEC, SandboxLayer, SandboxProbeOutcome, SandboxProfile,
+    SandboxProfileError, classify_sandbox_probe, probe_sandbox_layer,
 };

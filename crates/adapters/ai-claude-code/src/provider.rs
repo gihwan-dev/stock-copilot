@@ -60,6 +60,7 @@ pub struct ClaudeCodeConfig {
     collection_json_schema: Option<String>,
     model_defaults: ModelDefaults,
     cli_projects_dir: Option<PathBuf>,
+    sandbox: Option<crate::sandbox::SandboxLayer>,
 }
 
 impl fmt::Debug for ClaudeCodeConfig {
@@ -80,6 +81,7 @@ impl fmt::Debug for ClaudeCodeConfig {
             )
             .field("model_defaults", &self.model_defaults)
             .field("has_cli_projects_dir", &self.cli_projects_dir.is_some())
+            .field("has_sandbox", &self.sandbox.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -109,7 +111,20 @@ impl ClaudeCodeConfig {
             collection_json_schema: None,
             model_defaults: ModelDefaults::new(highest, fast),
             cli_projects_dir: None,
+            sandbox: None,
         })
+    }
+
+    #[must_use]
+    pub fn with_sandbox(mut self, layer: crate::sandbox::SandboxLayer) -> Self {
+        self.sandbox = Some(layer);
+        self
+    }
+
+    #[must_use]
+    pub fn without_sandbox(mut self) -> Self {
+        self.sandbox = None;
+        self
     }
 
     #[must_use]
@@ -218,7 +233,11 @@ impl ClaudeCodeConfig {
             host_env: self.host_env.as_ref(),
             mcp_token: self.mcp_token.as_ref(),
         };
-        build_command_plan(&input)
+        let plan = build_command_plan(&input)?;
+        Ok(match &self.sandbox {
+            Some(layer) => plan.wrapped_in_sandbox(layer),
+            None => plan,
+        })
     }
 
     fn mcp_source_for(&self, kind: RunKind) -> Result<McpConfigSource<'_>, CommandBuildError> {
