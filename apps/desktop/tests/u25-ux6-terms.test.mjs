@@ -12,7 +12,7 @@ const screenRoots = [
 ];
 
 const skippedFile =
-  /\.test\.|\.stories\.|\/tests?\/|_tests?\.rs$|\/testing\/|\/ipc\/bindings\.ts$/;
+  /\.test\.|\.stories\.|\/tests?\/|[/_]tests?\.rs$|\/testing\/|\/ipc\/bindings\.ts$/;
 
 const literal =
   /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`|>[^<>{}]*</g;

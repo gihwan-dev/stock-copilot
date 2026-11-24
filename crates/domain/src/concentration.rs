@@ -24,7 +24,7 @@ impl ConcentrationThreshold {
         }
         Ok(Self(value))
     }
-    pub(crate) const fn from_count(value: u16) -> Self {
+    pub(crate) const fn new(value: u16) -> Self {
         Self(value)
     }
     pub(crate) const fn as_u16(&self) -> u16 {
