@@ -2,14 +2,14 @@ mod observations;
 mod port_error;
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
-    CalendarDate, Candle, CandlePeriod, ClosedOrderSet, CommissionRateFact, CreditTrade, Currency,
-    FlowInterval, FxPair, FxRate, FxRateKind, IndicatorCode, InstrumentMaster, InvestorFlow,
+    CalendarDate, Candle, CandlePeriod, CommissionRateFact, CreditTrade, Currency, FlowInterval,
+    FxPair, FxRate, FxRateKind, IndicatorCode, InstrumentMaster, InvestorFlow,
     InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
     MarketIndicatorQuote, OrderFxRates, Orderbook, PriceAdjustment, PriceLimits, ProgramTrade,
-    QuoteInstrument, RankingLimit, ResolvedOrderInstrument, SectorCatalog, SectorComposition,
-    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
-    SettlementWindow, ShortSelling, StockRanking, StockWarnings, TimeInterval, Timestamp,
-    TransactionFilter,
+    ProvenClosedOrderSet, QuoteInstrument, RankingLimit, ResolvedOrderInstrument, SectorCatalog,
+    SectorComposition, SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending,
+    SellableQuantityFact, SettlementWindow, ShortSelling, StockRanking, StockWarnings,
+    TimeInterval, Timestamp, TransactionFilter,
 };
 pub use observations::{
     HoldingsObservation, IncompleteReason, IncompleteTransactions, QuarantinedTransaction,
@@ -125,7 +125,7 @@ pub trait BrokerRead: Send + Sync {
         &self,
         account: &AccountId,
         evaluation_window: TimeInterval,
-    ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send;
+    ) -> impl Future<Output = Result<ProvenClosedOrderSet, PortError>> + Send;
     fn order(
         &self,
         account: &AccountId,
@@ -361,7 +361,11 @@ pub use sync_transactions::{
 mod sync_portfolio;
 pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
 mod change_risk_settings;
-pub use change_risk_settings::{ChangeRiskSettings, RiskSettingsChangeOutcome};
+pub use change_risk_settings::{
+    ChangeRiskSettings, RiskAudit, RiskAuditSink, RiskSettingsChangeOutcome, WithoutRiskAudit,
+};
+mod audit_events;
+pub use audit_events::{AuditEventRecorder, AuditEventSink};
 
 mod update_investor_profile;
 pub use update_investor_profile::{
@@ -410,7 +414,9 @@ pub use transaction_observation::{
 
 mod valuation_gap;
 pub use valuation_gap::{
-    PlanValuationGap, ValuationCalendarSource, ValuationDayRepository, ValuationGapError,
+    BackfillValuationDays, PlanValuationGap, ValuationBackfillError, ValuationCalendarSource,
+    ValuationDayInputSource, ValuationDayRepository, ValuationDaySuccessSource, ValuationGapError,
+    ValuationInputError,
 };
 mod run_full_inspection;
 pub use run_full_inspection::{
@@ -445,6 +451,13 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
+mod spec_check;
+pub use spec_check::{
+    CheckTossSpec, HttpLastModified, SchemaReviewState, SpecChangeReason, SpecCheckReport,
+    SpecDocumentSnapshot, SpecDriftStatus, SpecFetchError, SpecHash, SpecStatusRecord,
+    SpecVersionLabel, TossSpecBaseline, TossSpecObservation, TossSpecSource,
+    TossSpecStatusRepository, evaluate_spec_drift,
+};
 mod open_external;
 pub use open_external::{
     CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
@@ -468,6 +481,26 @@ pub use collection_schedule::{
 mod record_wake_trigger;
 pub use record_wake_trigger::{
     RecordWakeTriggers, TriggerWrite, WakeTriggerOutcome, WakeTriggerRepository,
+};
+
+mod stock_web_collection;
+pub use stock_web_collection::{
+    RunStockWebCollection, STOCK_WEB_TOPICS, StockWebCollectionOutcome, StockWebCollectionReport,
+    StockWebCollectionResult, WebCollectionFailure, WebCollectionReservation, WebCollectionRunner,
+    WebCollectionStore, WebFinding, plan_stock_web_collection,
+};
+
+mod important_disclosures;
+pub use important_disclosures::{
+    DisclosureCardFact, DisclosureCardLevel, DisclosureTriggerLog, GetImportantDisclosureCards,
+    ImportantDisclosureCard,
+};
+
+mod news_data_settings;
+pub use news_data_settings::{
+    AliasName, GetNewsDataSettings, NewsDataSettings, NewsDataSettingsChange,
+    NewsDataSettingsError, NewsDataSettingsRepository, NewsSettingValueError, SecContactSetting,
+    SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
 mod web_search_guard;

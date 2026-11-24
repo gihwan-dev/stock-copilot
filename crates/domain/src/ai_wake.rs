@@ -83,6 +83,60 @@ pub const fn disclosure_action(grade: DisclosureGrade, holding: HoldingStatus) -
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MovePercent(u8);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NewsBurstCount(u8);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WakeThresholdError {
+    OutOfRange,
+}
+
+impl MovePercent {
+    pub const fn try_new(value: u8) -> Result<Self, WakeThresholdError> {
+        if value == 0 || value > 30 {
+            return Err(WakeThresholdError::OutOfRange);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn as_u8(&self) -> &u8 {
+        &self.0
+    }
+}
+
+impl NewsBurstCount {
+    pub const fn try_new(value: u8) -> Result<Self, WakeThresholdError> {
+        if value < 2 || value > 50 {
+            return Err(WakeThresholdError::OutOfRange);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn as_u8(&self) -> &u8 {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WakeThresholds {
+    pub daily_move: MovePercent,
+    pub news_per_hour: NewsBurstCount,
+}
+
+impl Default for WakeThresholds {
+    fn default() -> Self {
+        Self {
+            daily_move: MovePercent(5),
+            news_per_hour: NewsBurstCount(5),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TriggerJudgement {
     Triggered,
@@ -92,6 +146,15 @@ pub enum TriggerJudgement {
 
 #[must_use]
 pub fn daily_move_trigger(previous_close: &Price, current: &Price) -> TriggerJudgement {
+    daily_move_trigger_with(previous_close, current, WakeThresholds::default())
+}
+
+#[must_use]
+pub fn daily_move_trigger_with(
+    previous_close: &Price,
+    current: &Price,
+    thresholds: WakeThresholds,
+) -> TriggerJudgement {
     let previous = previous_close.as_money();
     let latest = current.as_money();
     if previous.currency() != latest.currency() {
@@ -106,7 +169,7 @@ pub fn daily_move_trigger(previous_close: &Price, current: &Price) -> TriggerJud
         .checked_sub(base)
         .map(|change| change.abs())
         .and_then(|change| change.checked_mul(Decimal::ONE_HUNDRED));
-    let threshold = base.checked_mul(Decimal::from(5_u8));
+    let threshold = base.checked_mul(Decimal::from(thresholds.daily_move.0));
     match (scaled_change, threshold) {
         (Some(change), Some(limit)) if change >= limit => TriggerJudgement::Triggered,
         (Some(_), Some(_)) => TriggerJudgement::Quiet,
@@ -116,6 +179,16 @@ pub fn daily_move_trigger(previous_close: &Price, current: &Price) -> TriggerJud
 
 #[must_use]
 pub fn news_burst_trigger(published: &[Timestamp], now: Timestamp) -> TriggerJudgement {
+    news_burst_trigger_with(published, now, WakeThresholds::default())
+}
+
+#[must_use]
+pub fn news_burst_trigger_with(
+    published: &[Timestamp],
+    now: Timestamp,
+    thresholds: WakeThresholds,
+) -> TriggerJudgement {
+    let needed = usize::from(thresholds.news_per_hour.0);
     let Ok(window) = TimeSpan::try_new(SpanSeconds::new(3_600), Nanosecond::new(0)) else {
         return TriggerJudgement::Undetermined;
     };
@@ -125,9 +198,9 @@ pub fn news_burst_trigger(published: &[Timestamp], now: Timestamp) -> TriggerJud
     let recent = published
         .iter()
         .filter(|stamp| start < **stamp && **stamp <= now)
-        .take(5)
+        .take(needed)
         .count();
-    if recent >= 5 {
+    if recent >= needed {
         TriggerJudgement::Triggered
     } else {
         TriggerJudgement::Quiet

@@ -12,15 +12,16 @@ mod tests {
         BrokerAccountTypeCode, BrokerOrder, BrokerOrderId, BrokerOrderMoney, BrokerOrderPrice,
         BrokerOrderRow, BrokerOrderSet, BrokerOrderSize, BrokerOrderStatus, BrokerOrderTime,
         BrokerOrderType, BrokerTimeInForce, BuyingPower, CalendarDate, Cancellation, Candle,
-        CandlePeriod, ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet,
-        CommissionRateFact, CommissionValidity, CommonShare, CompletionAttestation, CostRate,
-        Currency, CurrencyAmounts, DisplayInstrumentName, FlowInterval, FxPair, FxRate, FxRateKind,
-        FxSource, Holding, HoldingObservation, IndicatorCode, IndicatorUnit, InstrumentId,
-        InvestorFlow, KnownMarket, ListingStatus, Market, MarketCalendar, MarketIndicatorCandle,
-        MarketIndicatorQuote, MarketSession, MasterCode, MasterInstrument, MasterInstrumentFacts,
-        MasterInstrumentRow, MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds,
-        OpenOrderCoverage, OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment,
-        PriceLimitRange, PriceLimits, PriceLimitsInput, Quantity, Quote, QuoteInstrument,
+        CandlePeriod, ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderPageCollector,
+        ClosedOrderQueryScope, CommissionRateFact, CommissionValidity, CommonShare,
+        CompletionAttestation, CostRate, Currency, CurrencyAmounts, DisplayInstrumentName,
+        FlowInterval, FxPair, FxRate, FxRateKind, FxSource, Holding, HoldingObservation,
+        IndicatorCode, IndicatorUnit, InstrumentId, InvestorFlow, KnownMarket, ListingStatus,
+        Market, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote, MarketSession,
+        MasterCode, MasterInstrument, MasterInstrumentFacts, MasterInstrumentRow,
+        MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds, OpenOrderCoverage,
+        OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment, PriceLimitRange,
+        PriceLimits, PriceLimitsInput, ProvenClosedOrderSet, Quantity, Quote, QuoteInstrument,
         RankingCautionFilter, RankingDuration, RankingKind, RankingLimit, RankingResponseInput,
         Ratio, ReportedPortfolio, ResolvedOrderInstrument, SectorComposition,
         SectorCompositionScope, SectorId, SellableQuantityFact, SessionInformation, Settlement,
@@ -339,17 +340,15 @@ mod tests {
             &self,
             account: &AccountId,
             _evaluation_window: TimeInterval,
-        ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send {
+        ) -> impl Future<Output = Result<ProvenClosedOrderSet, PortError>> + Send {
+            let mut collector = ClosedOrderPageCollector::start(ClosedOrderQueryScope::unfiltered(
+                account.clone(),
+                interval(),
+            ));
+            collector.record_page_limit_reached();
             std::future::ready(outcome(
                 self.0,
-                ClosedOrderSet::new(
-                    account.clone(),
-                    vec![],
-                    interval(),
-                    a20_observed(),
-                    ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages),
-                )
-                .expect("종료 집합"),
+                collector.finish(a20_observed()).expect("종료 집합"),
                 ReadEndpoint::ClosedOrders,
             ))
         }
@@ -966,7 +965,7 @@ mod tests {
         );
         let open_orders: Result<BrokerOrderSet, PortError> = ready(port.open_orders(&account));
         assert_eq!(open_orders, Err(failure(ReadEndpoint::OpenOrders)));
-        let closed_orders: Result<ClosedOrderSet, PortError> =
+        let closed_orders: Result<ProvenClosedOrderSet, PortError> =
             ready(port.closed_orders(&account, interval()));
         assert_eq!(closed_orders, Err(failure(ReadEndpoint::ClosedOrders)));
         let order: Result<BrokerOrder, PortError> = ready(port.order(&account, &id));
@@ -1185,11 +1184,11 @@ mod tests {
         assert_eq!(open.account_id(), &account);
         assert_eq!(open.coverage(), OpenOrderCoverage::Incomplete);
         let closed = ready(port.closed_orders(&account, interval())).expect("종료");
-        assert_eq!(closed.account_id(), &account);
-        assert_eq!(closed.covered(), interval());
-        assert_eq!(closed.observed_at(), a20_observed());
+        assert_eq!(closed.orders().account_id(), &account);
+        assert_eq!(closed.orders().covered(), interval());
+        assert_eq!(closed.orders().observed_at(), a20_observed());
         assert_eq!(
-            closed.completeness(),
+            closed.orders().completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
         );
         let order = ready(port.order(&account, &id)).expect("단건");
@@ -1364,13 +1363,17 @@ mod tests {
         let account = AccountId::new(83);
         let response = ready(FakeBroker(Scenario::Complete).closed_orders(&account, evaluation))
             .expect("부분 조회");
-        assert_eq!(response.account_id(), &account);
-        assert_eq!(response.covered(), interval());
-        assert_eq!(response.observed_at(), a20_observed());
-        assert_ne!(response.covered(), evaluation);
-        assert_ne!(response.observed_at(), evaluation.end());
         assert_eq!(
-            domain::net_purchase_amount(
+            response.orders().completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
+        );
+        assert_eq!(response.orders().account_id(), &account);
+        assert_eq!(response.orders().covered(), interval());
+        assert_eq!(response.orders().observed_at(), a20_observed());
+        assert_ne!(response.orders().covered(), evaluation);
+        assert_ne!(response.orders().observed_at(), evaluation.end());
+        assert_eq!(
+            domain::proven_net_purchase_amount(
                 &response,
                 evaluation,
                 domain::NetPurchaseScope::Currency(Currency::Usd)

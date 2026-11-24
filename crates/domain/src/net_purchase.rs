@@ -95,13 +95,13 @@ pub fn proven_net_purchase_amount(
     net_purchase_amount(orders.orders(), period, scope)
 }
 #[must_use]
-pub fn net_purchases(orders: &ClosedOrderSet, period: TimeInterval) -> NetPurchases {
+pub(crate) fn net_purchases(orders: &ClosedOrderSet, period: TimeInterval) -> NetPurchases {
     NetPurchases {
         kr: net_purchase_amount(orders, period, NetPurchaseScope::Currency(Currency::Krw)),
         us: net_purchase_amount(orders, period, NetPurchaseScope::Currency(Currency::Usd)),
     }
 }
-pub fn net_purchase_amount(
+pub(crate) fn net_purchase_amount(
     orders: &ClosedOrderSet,
     period: TimeInterval,
     scope: NetPurchaseScope<'_>,
