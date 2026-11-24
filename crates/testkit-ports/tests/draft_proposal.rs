@@ -189,6 +189,7 @@ mod tests {
             master: source.clone(),
             book,
             limits,
+            sellable_quantity: None,
         }
     }
 
@@ -1599,8 +1600,11 @@ mod tests {
             &AccountId::new(4321),
             proposal_id("sell"),
         ));
-        let Err(DraftProposalError::SellDraftUnavailable) = result else {
-            panic!("매도 경로 미구현")
+        let Err(DraftProposalError::SellQuantity(
+            domain::NoSellDraftQuantity::SellableQuantityUnknown,
+        )) = result
+        else {
+            panic!("매도가능수량 미확인")
         };
         assert_eq!(
             run(repository.snapshot(&source.row().instrument_id)).expect("상태"),
@@ -1612,8 +1616,8 @@ mod tests {
 
     #[test]
     fn sell_reversal_does_not_return_a_previous_buy_draft() {
-        let source = fixtures::master();
-        let now = fixtures::day(60);
+        use domain::NoSellDraftQuantity::SellableQuantityUnknown;
+        let (source, now) = (fixtures::master(), fixtures::day(60));
         let data = Data::new(market(&source, now));
         let repository = seeded(&source, &data);
         let scheduler = Scheduler::default();
@@ -1663,8 +1667,8 @@ mod tests {
                 proposal_id("after-sell"),
             ),
         );
-        let Err(DraftProposalError::SellDraftUnavailable) = result else {
-            panic!("매도 경로 미구현")
+        let Err(DraftProposalError::SellQuantity(SellableQuantityUnknown)) = result else {
+            panic!("매도가능수량 미확인")
         };
         assert!(
             run(repository.draft(&old_id, &source))
@@ -3423,6 +3427,7 @@ mod tests {
             master: source.clone(),
             book,
             limits,
+            sellable_quantity: None,
         }
     }
 
@@ -4445,5 +4450,2055 @@ mod tests {
             application::buy_limit_intent(&plan, &market_limit, AccountId::new(4321), key),
             Err(application::BuyLimitIntentError::Instrument)
         );
+    }
+
+    mod sell_draft_tests {
+        use super::{
+            AccountId, Barrier, BuySignalOccurrenceId, ClientOrderId, Currency, Data,
+            DraftProposal, DraftProposalError, DraftProposalInputs, DraftProposalOutcome,
+            EvaluateSignals, EventBusBuilder, InstrumentId, Market, MasterInstrument,
+            MemorySignalEvaluationRepository, PairedData, ProposalId, ProposalRepository,
+            Scheduler, ScriptedClock, SignalRepository, SubmitEstimate, Timestamp,
+            calculated_limit, calendars_with_day60, draft_evidence, event_bus, fixtures,
+            kr_stored_estimate, market, proposal_id, run, seeded, us_book_and_limits, us_eligible,
+            us_fx_rates, us_local, us_market, us_master, us_price,
+        };
+
+        fn kr_sell_fact(
+            source: &MasterInstrument,
+            account: AccountId,
+            quantity: &str,
+            observed_at: Timestamp,
+        ) -> domain::SellableQuantityFact {
+            let instrument = source
+                .order_gate_facts()
+                .and_then(|facts| facts.instrument_for(domain::OrderSide::Sell))
+                .expect("매도 종목");
+            domain::SellableQuantityFact::from_lookup_result(
+                account,
+                instrument,
+                fixtures::quantity(quantity),
+                observed_at,
+            )
+            .expect("매도가능수량")
+        }
+
+        fn kr_sell_inputs(
+            source: &MasterInstrument,
+            now: Timestamp,
+            account: AccountId,
+            held: &str,
+            sellable: Option<&str>,
+        ) -> DraftProposalInputs {
+            let mut facts = market(source, now);
+            let holding = domain::Holding::new(
+                source.order_instrument().expect("종목"),
+                fixtures::quantity(held),
+                domain::AcquisitionPrice::try_new(fixtures::money("87", Currency::Krw))
+                    .expect("매입가"),
+                domain::HoldingObservation::new(Some(fixtures::price("100")), None, now),
+            )
+            .expect("보유");
+            let raw_portfolio = domain::Portfolio::new(
+                vec![holding],
+                domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), now),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
+            )
+            .expect("포트");
+            facts.evaluation.valuation = Some(raw_portfolio.evaluate(None));
+            facts
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .portfolio = Some(raw_portfolio);
+            facts.sellable_quantity =
+                sellable.map(|value| kr_sell_fact(source, account, value, now));
+            facts
+        }
+
+        fn submit_kr(
+            repository: &MemorySignalEvaluationRepository,
+            bus: &application::EventBus,
+            task: &str,
+            probability: &str,
+            source: &MasterInstrument,
+        ) {
+            run(SubmitEstimate::new(repository, bus).execute(
+                &fixtures::run_id(),
+                vec![fixtures::input(task, probability, source)],
+            ))
+            .expect("제출");
+            let submitted = run(repository.snapshot(&source.row().instrument_id)).expect("스냅숏");
+            repository.save_sources(
+                submitted.submission.expect("과제"),
+                application::SignalSourceFacts {
+                    items: vec![fixtures::item()],
+                    disclosures: vec![],
+                    tools: vec![],
+                },
+            );
+        }
+
+        fn kr_sell_setup(
+            source: &MasterInstrument,
+            now: Timestamp,
+            account: AccountId,
+            held: &str,
+            sellable: Option<&str>,
+        ) -> (Data, MemorySignalEvaluationRepository) {
+            let data = Data::new(kr_sell_inputs(source, now, account.clone(), held, sellable));
+            let repository = MemorySignalEvaluationRepository::new(fixtures::assignments());
+            repository.select_account(account);
+            repository
+                .advance_calibration_head(fixtures::head(0))
+                .expect("위치");
+            let bus = EventBusBuilder::default().build();
+            submit_kr(&repository, &bus, "task-old", "1", source);
+            run(EvaluateSignals::new(&repository, &data, &bus).execute(
+                &source.row().instrument_id,
+                now,
+                BuySignalOccurrenceId::try_new("unused-sell").expect("ID"),
+            ))
+            .expect("매도 평가");
+            (data, repository)
+        }
+
+        fn us_sell_inputs(
+            source: &MasterInstrument,
+            now: Timestamp,
+            account: AccountId,
+            held: &str,
+            sellable: Option<&str>,
+        ) -> DraftProposalInputs {
+            let mut facts = us_market(source, now);
+            let (_buy_fx, mid_fx) = us_fx_rates(now);
+            let holding = domain::Holding::new(
+                source.order_instrument().expect("종목"),
+                fixtures::quantity(held),
+                domain::AcquisitionPrice::try_new(fixtures::money("90", Currency::Usd))
+                    .expect("매입가"),
+                domain::HoldingObservation::new(Some(us_price("100")), None, us_local(now)),
+            )
+            .expect("미국 보유");
+            let raw_portfolio = domain::Portfolio::new(
+                vec![holding],
+                domain::BuyingPower::new(fixtures::money("0", Currency::Krw), now),
+                domain::BuyingPower::new(fixtures::money("11000", Currency::Usd), now),
+            )
+            .expect("포트");
+            facts.evaluation.valuation = Some(raw_portfolio.evaluate(Some(mid_fx)));
+            facts
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .portfolio = Some(raw_portfolio);
+            facts.sellable_quantity = sellable.map(|value| {
+                domain::SellableQuantityFact::from_lookup_result(
+                    account,
+                    source.order_instrument().expect("종목"),
+                    fixtures::quantity(value),
+                    us_local(now),
+                )
+                .expect("미국 매도가능수량")
+            });
+            facts
+        }
+
+        fn us_sell_setup(
+            source: &MasterInstrument,
+            now: Timestamp,
+            account: AccountId,
+            held: &str,
+            sellable: Option<&str>,
+        ) -> (Data, MemorySignalEvaluationRepository) {
+            let data = Data::new(us_sell_inputs(source, now, account.clone(), held, sellable));
+            let eligible = us_eligible(source);
+            let assignments = domain::EstimateAssignments::default()
+                .issue(
+                    fixtures::task_id("task-us-sell"),
+                    fixtures::run_id(),
+                    eligible.clone(),
+                )
+                .expect("발급");
+            let repository = MemorySignalEvaluationRepository::new(assignments);
+            repository.select_account(account);
+            repository
+                .advance_calibration_head(fixtures::head(0))
+                .expect("위치");
+            let bus = EventBusBuilder::default().build();
+            let part = domain::ModelIdentityPart::try_new("model-v1").expect("모델");
+            let prompt_hash = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+            run(SubmitEstimate::new(&repository, &bus).execute(
+                &fixtures::run_id(),
+                vec![application::EstimateSubmissionInput {
+                    task_id: fixtures::task_id("task-us-sell"),
+                    submission: fixtures::submission(&eligible, "1"),
+                    narrative: domain::EstimateNarrative {
+                        rationale: domain::UntrustedText::try_new("근거").expect("근거"),
+                        counterargument: domain::UntrustedText::try_new("반론").expect("반론"),
+                    },
+                    metadata: domain::EstimateMetadata {
+                        effort: application::ReasoningEffort::High,
+                        cli_version: part.clone(),
+                        prompt: domain::EstimatePrompt {
+                            id: domain::ScorecardPromptId::try_new("prompt").expect("ID"),
+                            version: part,
+                            hash: domain::PromptHash::try_new(prompt_hash).expect("해시"),
+                        },
+                        evidence_bundle: domain::EvidenceBundleId::try_new("bundle-us-sell")
+                            .expect("묶음"),
+                    },
+                }],
+            ))
+            .expect("제출");
+            let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("스냅숏");
+            repository.save_sources(
+                snapshot.submission.expect("과제"),
+                application::SignalSourceFacts {
+                    items: vec![fixtures::item()],
+                    disclosures: vec![],
+                    tools: vec![],
+                },
+            );
+            run(EvaluateSignals::new(&repository, &data, &bus).execute(
+                &source.row().instrument_id,
+                now,
+                BuySignalOccurrenceId::try_new("unused-us-sell").expect("ID"),
+            ))
+            .expect("미국 매도 평가");
+            (data, repository)
+        }
+
+        fn live_sell_plan(
+            eligible: &domain::CostEligibleTask,
+            data: &Data,
+            account: &AccountId,
+            now: Timestamp,
+        ) -> domain::SellDraftQuantityPlan {
+            let inputs = data.0.read().expect("입력").clone();
+            let head = inputs.evaluation.calibration_head.as_ref().expect("위치");
+            let calibrated = domain::calibrate_signal_submission(
+                inputs.evaluation.calibration.as_ref(),
+                head,
+                fixtures::submission(eligible, "1"),
+            )
+            .expect("보정");
+            let estimate =
+                domain::SignalEstimate::create(eligible, &calibrated, domain::Margin::default())
+                    .expect("추정");
+            let items = [fixtures::item()];
+            let ledger = domain::SignalSourceLedger::new(&items, &[], &[]);
+            let valuation = inputs.evaluation.valuation.as_ref().expect("포트폴리오");
+            let context = domain::SignalContext::new(
+                Some(valuation),
+                &inputs.evaluation.policy,
+                (&inputs.evaluation.assignments, &inputs.evaluation.security),
+                &ledger,
+                domain::SignalAssessmentFacts::new(
+                    domain::SignalTiming::new(now, &inputs.evaluation.calendars),
+                    inputs.evaluation.target_price.clone(),
+                    Some(head.clone()),
+                ),
+            );
+            let domain::SignalDecision::Sell(signal) =
+                domain::SignalDecision::assess(&estimate, &context)
+            else {
+                panic!("매도 신호 필요")
+            };
+            let facts = domain::SellDraftQuantityFacts::new(
+                account,
+                valuation,
+                inputs.sellable_quantity.as_ref(),
+            );
+            domain::calculate_sell_draft_quantity(
+                &signal,
+                &facts,
+                now,
+                &inputs.evaluation.calendars,
+            )
+            .into_plan()
+            .expect("매도 계획")
+        }
+
+        fn kr_sell_terms(quantity: &str, price: &str) -> domain::HistoricalOrderTerms {
+            domain::HistoricalOrderTerms::KrLimit {
+                side: domain::OrderSide::Sell,
+                quantity: domain::HistoricalWholeQuantity::try_new(fixtures::quantity(quantity))
+                    .expect("정수"),
+                price: domain::KrOrderPrice::try_new(fixtures::price(price)).expect("가격"),
+            }
+        }
+
+        fn us_sell_terms(quantity: &str, price: &str) -> domain::HistoricalOrderTerms {
+            domain::HistoricalOrderTerms::UsLimit {
+                side: domain::OrderSide::Sell,
+                quantity: domain::HistoricalWholeQuantity::try_new(fixtures::quantity(quantity))
+                    .expect("정수"),
+                price: domain::UsOrderPrice::try_new(us_price(price)).expect("미국 가격"),
+            }
+        }
+
+        fn kr_order_terms(quantity: &str, price: &str) -> domain::OrderTerms {
+            domain::OrderTerms::KrLimit {
+                side: domain::OrderSide::Sell,
+                quantity: domain::WholeOrderQuantity::try_new(fixtures::quantity(quantity))
+                    .expect("정수"),
+                price: domain::KrOrderPrice::try_new(fixtures::price(price)).expect("가격"),
+            }
+        }
+
+        fn us_order_terms(quantity: &str, price: &str) -> domain::OrderTerms {
+            domain::OrderTerms::UsLimit {
+                side: domain::OrderSide::Sell,
+                quantity: domain::WholeOrderQuantity::try_new(fixtures::quantity(quantity))
+                    .expect("정수"),
+                price: domain::UsOrderPrice::try_new(us_price(price)).expect("미국 가격"),
+            }
+        }
+
+        #[test]
+        fn sell_limit_intent_validates_direction_account_and_instrument() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let (data, _) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let eligible = fixtures::eligible_for_master("102", &source);
+            let plan = live_sell_plan(&eligible, &data, &account, now);
+            let key = ClientOrderId::try_new("sell-limit-test").expect("ID");
+            let buy_limit = calculated_limit(&source, now, "100", domain::OrderSide::Buy);
+            assert_eq!(
+                application::sell_limit_intent(&plan, &buy_limit, &account, key.clone()),
+                Err(application::SellLimitIntentError::Direction)
+            );
+            let valid_limit = calculated_limit(&source, now, "100", domain::OrderSide::Sell);
+            assert_eq!(
+                application::sell_limit_intent(
+                    &plan,
+                    &valid_limit,
+                    &AccountId::new(9999),
+                    key.clone()
+                ),
+                Err(application::SellLimitIntentError::Account)
+            );
+            let mut other_id = source.row().clone();
+            other_id.instrument_id = fixtures::id("other-sell-id");
+            let foreign_limit = calculated_limit(
+                &MasterInstrument::try_new(other_id).expect("다른 ID"),
+                now,
+                "100",
+                domain::OrderSide::Sell,
+            );
+            assert_eq!(
+                application::sell_limit_intent(&plan, &foreign_limit, &account, key.clone()),
+                Err(application::SellLimitIntentError::Instrument)
+            );
+            let mut other_symbol = source.row().clone();
+            other_symbol.symbol = domain::Symbol::try_new("000660").expect("다른 심볼");
+            let symbol_limit = calculated_limit(
+                &MasterInstrument::try_new(other_symbol).expect("다른 심볼"),
+                now,
+                "100",
+                domain::OrderSide::Sell,
+            );
+            assert_eq!(
+                application::sell_limit_intent(&plan, &symbol_limit, &account, key.clone()),
+                Err(application::SellLimitIntentError::Instrument)
+            );
+            let reduced = plan.reduce_quantity(fixtures::quantity("5")).expect("축소");
+            let intent = application::sell_limit_intent(&reduced, &valid_limit, &account, key)
+                .expect("축소 의도");
+            assert_eq!(intent.terms(), &kr_order_terms("5", "98"));
+            assert_eq!(intent.account_id(), &account);
+        }
+
+        #[test]
+        fn sell_limit_intent_rejects_market_mismatch_and_builds_us_reduced_order() {
+            let now = fixtures::day(60);
+            let mut us_row = us_master(now).row().clone();
+            us_row.symbol = domain::Symbol::try_new("AAPL01").expect("공통 심볼");
+            let us_source = MasterInstrument::try_new(us_row).expect("미국 마스터");
+            let account = AccountId::new(7777);
+            let (data, _) = us_sell_setup(&us_source, now, account.clone(), "12", Some("5"));
+            let eligible = us_eligible(&us_source);
+            let plan = live_sell_plan(&eligible, &data, &account, now);
+            let key = ClientOrderId::try_new("us-sell-limit").expect("ID");
+
+            let mut kr_same = fixtures::master().row().clone();
+            kr_same.instrument_id = us_source.row().instrument_id.clone();
+            kr_same.symbol = us_source.row().symbol.clone();
+            let kr_limit = calculated_limit(
+                &MasterInstrument::try_new(kr_same).expect("타 시장 마스터"),
+                now,
+                "100",
+                domain::OrderSide::Sell,
+            );
+            assert_eq!(
+                application::sell_limit_intent(&plan, &kr_limit, &account, key.clone()),
+                Err(application::SellLimitIntentError::Instrument)
+            );
+
+            let (us_book, us_limits) = us_book_and_limits(&us_source, now);
+            let us_table = domain::TickTable::from_master(&us_source).expect("표");
+            let valid_us = domain::calculate_limit_price(
+                &us_book,
+                Some(&us_table),
+                &us_limits,
+                domain::OrderSide::Sell,
+                now,
+            )
+            .expect("미국 지정가");
+            let reduced = plan.reduce_quantity(fixtures::quantity("2")).expect("축소");
+            let intent = application::sell_limit_intent(&reduced, &valid_us, &account, key)
+                .expect("미국 매도 의도");
+            assert_eq!(intent.terms(), &us_order_terms("2", "99"));
+            assert_eq!(intent.account_id(), &account);
+        }
+
+        fn assert_kr_sell_case(
+            source: &MasterInstrument,
+            now: Timestamp,
+            account: &AccountId,
+            case: (&str, &str, &str, &str),
+        ) {
+            let (held, sellable, expected, label) = case;
+            let (data, repository) =
+                kr_sell_setup(source, now, account.clone(), held, Some(sellable));
+            let scheduler = Scheduler::default();
+            let (bus, events) = event_bus();
+            let id = proposal_id(label);
+            let outcome = run(DraftProposal::new(
+                &repository,
+                &data,
+                &scheduler,
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(&source.row().instrument_id, account, id.clone()))
+            .expect("매도 초안 실행");
+            let DraftProposalOutcome::Created { proposal, .. } = outcome else {
+                panic!("매도 초안 생성 실패: {label}")
+            };
+            assert_eq!(proposal.id(), &id);
+            assert_eq!(proposal.intent().account_id(), account);
+            assert_eq!(proposal.intent().side(), domain::OrderSide::Sell);
+            assert_eq!(proposal.intent().terms(), kr_sell_terms(expected, "99"));
+            let stored = run(repository.draft(&id, source))
+                .expect("조회")
+                .expect("저장된 매도 초안");
+            assert_eq!(stored.id(), proposal.id());
+            assert_eq!(stored.intent(), proposal.intent());
+            assert_eq!(
+                events.read().expect("이벤트").as_slice(),
+                &[domain::DomainEvent::ProposalCreated(id)]
+            );
+            assert!(scheduler.calls.read().expect("예약").is_empty());
+        }
+
+        #[test]
+        fn open_market_kr_sell_draft_uses_full_holding_and_sellable_cap() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            for case in [
+                ("17", "17", "17", "sell-full"),
+                ("17", "11", "11", "sell-cap"),
+                ("7", "19", "7", "sell-held-bound"),
+            ] {
+                assert_kr_sell_case(&source, now, &account, case);
+            }
+        }
+
+        #[test]
+        fn open_market_us_sell_draft_supports_regular_and_day_market() {
+            let now = fixtures::day(60);
+            let source = us_master(now);
+            let account = AccountId::new(7777);
+            let (data, repository) = us_sell_setup(&source, now, account.clone(), "12", Some("5"));
+            let (bus, events) = event_bus();
+            let id = proposal_id("us-sell-regular");
+            let Ok(DraftProposalOutcome::Created { proposal, .. }) = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(&source.row().instrument_id, &account, id.clone())) else {
+                panic!("미국 정규장 매도 초안")
+            };
+            assert_eq!(proposal.intent().terms(), us_sell_terms("5", "99"));
+            assert_eq!(
+                events.read().expect("이벤트").as_slice(),
+                &[domain::DomainEvent::ProposalCreated(id)]
+            );
+
+            let base_us = fixtures::session(60, &Market::Us);
+            let us_data =
+                domain::SessionData::try_new(base_us.sessions()[0].session().interval(), None)
+                    .expect("세션");
+            let day_session = domain::MarketSession::try_new(
+                base_us.date(),
+                domain::SessionInformation::Us {
+                    day_market: Some(us_data),
+                    pre_market: None,
+                    regular_market: None,
+                    after_market: None,
+                },
+            )
+            .expect("데이마켓");
+            let (day_data, day_repo) = us_sell_setup(&source, now, account.clone(), "8", Some("8"));
+            day_data.0.write().expect("입력").evaluation.calendars =
+                calendars_with_day60(&Market::Us, &day_session, 59..=67);
+            let (day_bus, _) = event_bus();
+            let Ok(DraftProposalOutcome::Created {
+                proposal: day_prop, ..
+            }) = run(DraftProposal::new(
+                &day_repo,
+                &day_data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &day_bus,
+            )
+            .execute(
+                &source.row().instrument_id,
+                &account,
+                proposal_id("us-sell-day"),
+            ))
+            else {
+                panic!("미국 데이마켓 매도 초안")
+            };
+            assert_eq!(day_prop.intent().terms(), us_sell_terms("8", "99"));
+        }
+
+        #[test]
+        fn us_sell_draft_rejects_fractional_holding_and_sellable() {
+            let now = fixtures::day(60);
+            let source = us_master(now);
+            let account = AccountId::new(7777);
+            for (held, sellable, label) in [("10.5", "10", "frac-held"), ("10", "5.5", "frac-sell")]
+            {
+                let (data, repo) =
+                    us_sell_setup(&source, now, account.clone(), held, Some(sellable));
+                let (bus, events) = event_bus();
+                let err = run(DraftProposal::new(
+                    &repo,
+                    &data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(now),
+                    &bus,
+                )
+                .execute(&source.row().instrument_id, &account, proposal_id(label)))
+                .expect_err("소수점 매도 거부");
+                assert_eq!(
+                    err,
+                    DraftProposalError::SellQuantity(
+                        domain::NoSellDraftQuantity::FractionalQuantityUnsupported
+                    )
+                );
+                assert_eq!(repo.draft_attempts(), 0);
+                assert!(events.read().expect("이벤트").is_empty());
+            }
+        }
+
+        #[test]
+        fn sell_draft_rejects_zero_sellable_without_discarding_signal() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let (data, repo) = kr_sell_setup(&source, now, account.clone(), "17", Some("0"));
+            let before = run(repo.snapshot(&source.row().instrument_id)).expect("신호");
+            let (bus, events) = event_bus();
+            let err = run(DraftProposal::new(
+                &repo,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(
+                &source.row().instrument_id,
+                &account,
+                proposal_id("sell-zero"),
+            ))
+            .expect_err("매도가능수량 0 거부");
+            assert_eq!(
+                err,
+                DraftProposalError::SellQuantity(domain::NoSellDraftQuantity::ZeroSellableQuantity)
+            );
+            assert_eq!(
+                run(repo.snapshot(&source.row().instrument_id)).expect("보존"),
+                before
+            );
+            assert_eq!(repo.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn sell_draft_rejects_mismatched_and_pre_task_sellable() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let (data, repo) = kr_sell_setup(&source, now, account.clone(), "17", Some("10"));
+            let (bus, events) = event_bus();
+            data.0.write().expect("입력").sellable_quantity =
+                Some(kr_sell_fact(&source, AccountId::new(9999), "10", now));
+            assert_eq!(
+                run(DraftProposal::new(
+                    &repo,
+                    &data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(now),
+                    &bus,
+                )
+                .execute(
+                    &source.row().instrument_id,
+                    &account,
+                    proposal_id("sell-other-account"),
+                ))
+                .expect_err("계좌 불일치 거부"),
+                DraftProposalError::SellQuantity(domain::NoSellDraftQuantity::DifferentFact)
+            );
+            let stale_time = fixtures::at(now.utc_seconds().as_i64().checked_sub(1).expect("과거"));
+            data.0.write().expect("입력").sellable_quantity =
+                Some(kr_sell_fact(&source, account.clone(), "10", stale_time));
+            assert_eq!(
+                run(DraftProposal::new(
+                    &repo,
+                    &data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(now),
+                    &bus,
+                )
+                .execute(
+                    &source.row().instrument_id,
+                    &account,
+                    proposal_id("sell-pre-task"),
+                ))
+                .expect_err("과제 이전 매도가능수량 거부"),
+                DraftProposalError::SellQuantity(
+                    domain::NoSellDraftQuantity::StaleSellableQuantity
+                )
+            );
+            assert_eq!(repo.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn same_instrument_and_account_reuses_unexpired_sell_draft() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let (data, repository) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let (bus, events) = event_bus();
+            let first = proposal_id("sell-first");
+            let Ok(DraftProposalOutcome::Created { .. }) = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(&source.row().instrument_id, &account, first.clone())) else {
+                panic!("첫 매도 초안")
+            };
+            let Ok(DraftProposalOutcome::Existing { proposal_id: seen }) = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(
+                &source.row().instrument_id,
+                &account,
+                proposal_id("sell-second"),
+            )) else {
+                panic!("기존 매도 초안 재사용")
+            };
+            assert_eq!(seen, first);
+            assert_eq!(repository.draft_attempts(), 1);
+            assert_eq!(events.read().expect("이벤트").len(), 1);
+        }
+
+        fn create_draft_at(
+            repository: &MemorySignalEvaluationRepository,
+            data: &Data,
+            clock: &testkit_ports::SteppedClock,
+            bus: &application::EventBus,
+            target: (&InstrumentId, &AccountId, ProposalId),
+        ) -> domain::Proposal<domain::Draft> {
+            let outcome =
+                run(
+                    DraftProposal::new(repository, data, &Scheduler::default(), clock, bus)
+                        .execute(target.0, target.1, target.2),
+                )
+                .expect("초안 생성");
+            let DraftProposalOutcome::Created { proposal, .. } = outcome else {
+                panic!("초안 생성이어야 한다")
+            };
+            *proposal
+        }
+
+        fn evaluate_kr(
+            repository: &MemorySignalEvaluationRepository,
+            data: &Data,
+            source: &MasterInstrument,
+            params: (&str, &str, &str, Timestamp),
+        ) {
+            let eval_bus = EventBusBuilder::default().build();
+            submit_kr(repository, &eval_bus, params.0, params.1, source);
+            run(EvaluateSignals::new(repository, data, &eval_bus).execute(
+                &source.row().instrument_id,
+                params.3,
+                BuySignalOccurrenceId::try_new(params.2).expect("ID"),
+            ))
+            .expect("신호 평가");
+        }
+
+        #[test]
+        fn buy_to_sell_reversal_supersedes_buy_draft_and_creates_sell_draft() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let id_ref = &source.row().instrument_id;
+            let clock = testkit_ports::SteppedClock::new(now);
+            let buy_data = Data::new(market(&source, now));
+            let buy_repo = seeded(&source, &buy_data);
+            let (bus, events) = event_bus();
+            let buy_id = proposal_id("rev-buy-1");
+            assert_eq!(
+                create_draft_at(
+                    &buy_repo,
+                    &buy_data,
+                    &clock,
+                    &bus,
+                    (id_ref, &account, buy_id.clone())
+                )
+                .id(),
+                &buy_id
+            );
+            *buy_data.0.write().expect("입력") =
+                kr_sell_inputs(&source, now, account.clone(), "17", Some("11"));
+            evaluate_kr(
+                &buy_repo,
+                &buy_data,
+                &source,
+                ("task-new", "1", "rev-to-sell", now),
+            );
+            let sell_id = proposal_id("rev-sell-1");
+            let sell_prop = create_draft_at(
+                &buy_repo,
+                &buy_data,
+                &clock,
+                &bus,
+                (id_ref, &account, sell_id.clone()),
+            );
+            assert_eq!(sell_prop.intent().terms(), kr_sell_terms("11", "99"));
+            assert!(
+                run(buy_repo.draft(&buy_id, &source))
+                    .expect("매수 은닉")
+                    .is_none()
+            );
+            assert!(
+                run(buy_repo.draft(&sell_id, &source))
+                    .expect("매도 조회")
+                    .is_some()
+            );
+            assert_eq!(events.read().expect("이벤트").len(), 2);
+        }
+
+        #[test]
+        fn sell_to_buy_reversal_supersedes_sell_draft_and_creates_buy_draft() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let id_ref = &source.row().instrument_id;
+            let clock = testkit_ports::SteppedClock::new(now);
+            let (bus, events) = event_bus();
+            let (sell_data, sell_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let initial_sell = proposal_id("rev-sell-2");
+            assert_eq!(
+                create_draft_at(
+                    &sell_repo,
+                    &sell_data,
+                    &clock,
+                    &bus,
+                    (id_ref, &account, initial_sell.clone()),
+                )
+                .id(),
+                &initial_sell
+            );
+            *sell_data.0.write().expect("입력") = market(&source, now);
+            evaluate_kr(
+                &sell_repo,
+                &sell_data,
+                &source,
+                ("task-new", "99", "rev-to-buy", now),
+            );
+            let buy_prop = create_draft_at(
+                &sell_repo,
+                &sell_data,
+                &clock,
+                &bus,
+                (id_ref, &account, proposal_id("rev-buy-2")),
+            );
+            assert_eq!(buy_prop.intent().side(), domain::OrderSide::Buy);
+            assert!(
+                run(sell_repo.draft(&initial_sell, &source))
+                    .expect("매도 은닉")
+                    .is_none()
+            );
+            assert_eq!(events.read().expect("이벤트").len(), 2);
+        }
+
+        #[test]
+        fn account_switch_supersedes_old_sell_draft_and_rejects_stale_request() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account_a = AccountId::new(4321);
+            let account_b = AccountId::new(8888);
+            let (data, repository) =
+                kr_sell_setup(&source, now, account_a.clone(), "17", Some("11"));
+            let (bus, _) = event_bus();
+            let clock = testkit_ports::SteppedClock::new(now);
+            let id_ref = &source.row().instrument_id;
+            let draft_a = proposal_id("sell-acct-a");
+            assert_eq!(
+                create_draft_at(
+                    &repository,
+                    &data,
+                    &clock,
+                    &bus,
+                    (id_ref, &account_a, draft_a.clone()),
+                )
+                .id(),
+                &draft_a
+            );
+
+            repository.select_account(account_b.clone());
+            data.0.write().expect("입력").sellable_quantity =
+                Some(kr_sell_fact(&source, account_b.clone(), "9", now));
+            let draft_b = proposal_id("sell-acct-b");
+            let prop_b = create_draft_at(
+                &repository,
+                &data,
+                &clock,
+                &bus,
+                (id_ref, &account_b, draft_b.clone()),
+            );
+            assert_eq!(prop_b.intent().terms(), kr_sell_terms("9", "99"));
+            assert!(
+                run(repository.draft(&draft_a, &source))
+                    .expect("구 계좌 은닉")
+                    .is_none()
+            );
+
+            let stale_err =
+                run(
+                    DraftProposal::new(&repository, &data, &Scheduler::default(), &clock, &bus)
+                        .execute(id_ref, &account_a, proposal_id("sell-acct-a-late")),
+                )
+                .expect_err("지연 구 계좌 거부");
+            assert_eq!(stale_err, DraftProposalError::AccountChanged);
+            assert!(
+                run(repository.draft(&draft_b, &source))
+                    .expect("계좌 B 유지")
+                    .is_some()
+            );
+        }
+
+        #[test]
+        fn account_switch_supersedes_old_sell_draft_even_when_new_account_fails() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account_a = AccountId::new(4321);
+            let account_b = AccountId::new(8888);
+            let (data, repository) =
+                kr_sell_setup(&source, now, account_a.clone(), "17", Some("11"));
+            let (bus, _) = event_bus();
+            let clock = testkit_ports::SteppedClock::new(now);
+            let id_ref = &source.row().instrument_id;
+            let draft_a = proposal_id("sell-acct-old");
+            assert_eq!(
+                create_draft_at(
+                    &repository,
+                    &data,
+                    &clock,
+                    &bus,
+                    (id_ref, &account_a, draft_a.clone()),
+                )
+                .id(),
+                &draft_a
+            );
+
+            repository.select_account(account_b.clone());
+            data.0.write().expect("입력").sellable_quantity = None;
+            assert_eq!(
+                run(
+                    DraftProposal::new(&repository, &data, &Scheduler::default(), &clock, &bus)
+                        .execute(id_ref, &account_b, proposal_id("sell-acct-fail")),
+                )
+                .expect_err("신규 계좌 매도가능수량 미확인"),
+                DraftProposalError::SellQuantity(
+                    domain::NoSellDraftQuantity::SellableQuantityUnknown
+                )
+            );
+            repository.select_account(account_a);
+            assert!(
+                run(repository.draft(&draft_a, &source))
+                    .expect("구 계좌 초안 대체 확인")
+                    .is_none()
+            );
+        }
+
+        fn run_paired_sell(
+            deps: (
+                &MemorySignalEvaluationRepository,
+                &PairedData<'_>,
+                &Scheduler,
+                &application::EventBus,
+            ),
+            target: (&InstrumentId, &AccountId, Timestamp),
+            label: &str,
+        ) -> Result<DraftProposalOutcome, DraftProposalError> {
+            run(DraftProposal::new(
+                deps.0,
+                deps.1,
+                deps.2,
+                &testkit_ports::SteppedClock::new(target.2),
+                deps.3,
+            )
+            .execute(target.0, target.1, proposal_id(label)))
+        }
+
+        #[test]
+        fn concurrent_sell_drafts_for_one_instrument_create_and_emit_once() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let (data, repository) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let barrier = Barrier::new(2);
+            let paired = PairedData::new(data.0.read().expect("입력").clone(), &barrier);
+            let scheduler = Scheduler::default();
+            let (bus, events) = event_bus();
+            let deps = (&repository, &paired, &scheduler, &bus);
+            let target = (&source.row().instrument_id, &account, now);
+            let (first, second) = std::thread::scope(|scope| {
+                let left = scope.spawn(|| run_paired_sell(deps, target, "sell-race-a"));
+                let right = scope.spawn(|| run_paired_sell(deps, target, "sell-race-b"));
+                (left.join().expect("좌"), right.join().expect("우"))
+            });
+            let (created_id, existing_id) = match (first.expect("좌"), second.expect("우")) {
+                (
+                    DraftProposalOutcome::Created { proposal, .. },
+                    DraftProposalOutcome::Existing { proposal_id },
+                )
+                | (
+                    DraftProposalOutcome::Existing { proposal_id },
+                    DraftProposalOutcome::Created { proposal, .. },
+                ) => (proposal.id().clone(), proposal_id),
+                other => panic!("하나만 생성돼야 한다: {other:?}"),
+            };
+            assert_eq!(created_id, existing_id);
+            assert_eq!(
+                events.read().expect("이벤트").as_slice(),
+                &[domain::DomainEvent::ProposalCreated(created_id)]
+            );
+        }
+
+        #[test]
+        fn pre_store_recheck_rejects_stale_holding_and_local_clock_rollback() {
+            let source = fixtures::master();
+            let t0 = fixtures::day(60);
+            let t1 = fixtures::at(t0.utc_seconds().as_i64().checked_add(1).expect("1초"));
+            let t58 = fixtures::at(t0.utc_seconds().as_i64().checked_add(58).expect("58초"));
+            let t59 = fixtures::at(t0.utc_seconds().as_i64().checked_add(59).expect("59초"));
+            let t61 = fixtures::at(t0.utc_seconds().as_i64().checked_add(61).expect("61초"));
+            let account = AccountId::new(4321);
+
+            let (data_h, repo_h) = kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            let mut inputs_h = kr_sell_inputs(&source, t58, account.clone(), "17", Some("11"));
+            inputs_h.evaluation.valuation =
+                data_h.0.read().expect("입력").evaluation.valuation.clone();
+            inputs_h.sellable_quantity = Some(kr_sell_fact(&source, account.clone(), "11", t58));
+            *data_h.0.write().expect("입력") = inputs_h;
+            let (bus, events) = event_bus();
+            let clock_h = ScriptedClock::new([t58, t59, t59, t61], t61);
+            assert_eq!(
+                run(
+                    DraftProposal::new(&repo_h, &data_h, &Scheduler::default(), &clock_h, &bus)
+                        .execute(
+                            &source.row().instrument_id,
+                            &account,
+                            proposal_id("stale-holding-pre-store"),
+                        )
+                )
+                .expect_err("저장 직전 보유 60초 초과 거부"),
+                DraftProposalError::SellQuantity(domain::NoSellDraftQuantity::StaleHolding)
+            );
+            assert_eq!(repo_h.draft_attempts(), 0);
+
+            let (data_r, repo_r) = kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            let clock_r = ScriptedClock::new([t0, t0, t1, t0], t0);
+            assert_eq!(
+                run(
+                    DraftProposal::new(&repo_r, &data_r, &Scheduler::default(), &clock_r, &bus)
+                        .execute(
+                            &source.row().instrument_id,
+                            &account,
+                            proposal_id("sell-rollback"),
+                        )
+                )
+                .expect_err("로컬 시계 역행 거부"),
+                DraftProposalError::DraftStatus(domain::ProposalExecutionError::ClockRollback)
+            );
+            assert_eq!(repo_r.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn pre_store_recheck_rejects_stale_sellable_quantity() {
+            let source = fixtures::master();
+            let t0 = fixtures::day(60);
+            let t30 = fixtures::at(t0.utc_seconds().as_i64().checked_add(30).expect("30초"));
+            let t58 = fixtures::at(t0.utc_seconds().as_i64().checked_add(58).expect("58초"));
+            let t59 = fixtures::at(t0.utc_seconds().as_i64().checked_add(59).expect("59초"));
+            let t61 = fixtures::at(t0.utc_seconds().as_i64().checked_add(61).expect("61초"));
+            let account = AccountId::new(4321);
+            let (data_s, repo_s) = kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            let mut inputs_s = kr_sell_inputs(&source, t58, account.clone(), "17", Some("11"));
+            let holding_30 = domain::Holding::new(
+                source.order_instrument().expect("종목"),
+                fixtures::quantity("17"),
+                domain::AcquisitionPrice::try_new(fixtures::money("87", Currency::Krw))
+                    .expect("매입가"),
+                domain::HoldingObservation::new(Some(fixtures::price("100")), None, t30),
+            )
+            .expect("보유");
+            let raw_30 = domain::Portfolio::new(
+                vec![holding_30],
+                domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), t30),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), t30),
+            )
+            .expect("포트");
+            inputs_s.evaluation.valuation = Some(raw_30.evaluate(None));
+            inputs_s
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .portfolio = Some(raw_30);
+            inputs_s.sellable_quantity = Some(kr_sell_fact(&source, account.clone(), "11", t0));
+            *data_s.0.write().expect("입력") = inputs_s;
+            let (bus, events) = event_bus();
+            let clock_s = ScriptedClock::new([t58, t59, t59, t61], t61);
+            assert_eq!(
+                run(
+                    DraftProposal::new(&repo_s, &data_s, &Scheduler::default(), &clock_s, &bus)
+                        .execute(
+                            &source.row().instrument_id,
+                            &account,
+                            proposal_id("stale-sellable-pre-store"),
+                        )
+                )
+                .expect_err("저장 직전 매도가능수량 60초 초과 거부"),
+                DraftProposalError::SellQuantity(
+                    domain::NoSellDraftQuantity::StaleSellableQuantity
+                )
+            );
+            assert_eq!(repo_s.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn sell_draft_succeeds_after_fresh_holding_requery_and_rejects_drift_or_stale() {
+            let source = fixtures::master();
+            let t0 = fixtures::day(60);
+            let t5 = fixtures::at(t0.utc_seconds().as_i64().checked_add(5).expect("5초"));
+            let t61 = fixtures::at(t0.utc_seconds().as_i64().checked_add(61).expect("61초"));
+            let account = AccountId::new(4321);
+            let id_ref = &source.row().instrument_id;
+
+            let (data, repo) = kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            *data.0.write().expect("최신 잔고 재조회") =
+                kr_sell_inputs(&source, t5, account.clone(), "17", Some("11"));
+            let (bus, events) = event_bus();
+            let created = create_draft_at(
+                &repo,
+                &data,
+                &testkit_ports::SteppedClock::new(t5),
+                &bus,
+                (id_ref, &account, proposal_id("sell-requery-ok")),
+            );
+            assert_eq!(created.intent().terms(), kr_sell_terms("11", "99"));
+            assert_eq!(events.read().expect("이벤트").len(), 1);
+
+            let (drift_data, drift_repo) =
+                kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            *drift_data.0.write().expect("보유 변동") =
+                kr_sell_inputs(&source, t5, account.clone(), "15", Some("11"));
+            assert_eq!(
+                run(DraftProposal::new(
+                    &drift_repo,
+                    &drift_data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(t5),
+                    &bus,
+                )
+                .execute(id_ref, &account, proposal_id("sell-qty-drift")))
+                .expect_err("보유 수량 변동 거부"),
+                DraftProposalError::SignalChanged
+            );
+
+            let (stale_data, stale_repo) =
+                kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            let mut stale_inputs = kr_sell_inputs(&source, t61, account.clone(), "17", Some("11"));
+            stale_inputs.evaluation.valuation = stale_data
+                .0
+                .read()
+                .expect("기존 평가")
+                .evaluation
+                .valuation
+                .clone();
+            *stale_data.0.write().expect("오래된 보유 유지") = stale_inputs;
+            assert_eq!(
+                run(DraftProposal::new(
+                    &stale_repo,
+                    &stale_data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(t61),
+                    &bus,
+                )
+                .execute(id_ref, &account, proposal_id("sell-stale-old-holding")))
+                .expect_err("60초 초과 옛 보유 거부"),
+                DraftProposalError::SignalUnavailable(domain::NoSignalReason::Unavailable(
+                    domain::SignalUnavailable::StaleHolding
+                ))
+            );
+        }
+
+        #[test]
+        fn expired_sell_draft_keeps_signal_and_rebuilds_with_fresh_holding() {
+            let source = fixtures::master();
+            let t0 = fixtures::day(60);
+            let t601 = fixtures::at(t0.utc_seconds().as_i64().checked_add(601).expect("601초"));
+            let account = AccountId::new(4321);
+            let id_ref = &source.row().instrument_id;
+
+            let (data, repo) = kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            let (bus, events) = event_bus();
+            let first = proposal_id("sell-exp-1");
+            assert_eq!(
+                create_draft_at(
+                    &repo,
+                    &data,
+                    &testkit_ports::SteppedClock::new(t0),
+                    &bus,
+                    (id_ref, &account, first.clone()),
+                )
+                .id(),
+                &first
+            );
+            *data.0.write().expect("만료 후 최신 입력") =
+                kr_sell_inputs(&source, t601, account.clone(), "17", Some("9"));
+            let second = proposal_id("sell-exp-2");
+            let rebuilt = create_draft_at(
+                &repo,
+                &data,
+                &testkit_ports::SteppedClock::new(t601),
+                &bus,
+                (id_ref, &account, second.clone()),
+            );
+            assert_eq!(rebuilt.intent().terms(), kr_sell_terms("9", "99"));
+            assert!(
+                run(repo.draft(&first, &source))
+                    .expect("만료 초안 은닉")
+                    .is_none()
+            );
+            assert!(
+                run(repo.draft(&second, &source))
+                    .expect("재생성 초안 조회")
+                    .is_some()
+            );
+            assert_eq!(events.read().expect("이벤트").len(), 2);
+        }
+
+        fn kr_regular_opening_at(t_open: Timestamp) -> Vec<domain::MarketCalendar> {
+            let t_end = fixtures::at(
+                t_open
+                    .utc_seconds()
+                    .as_i64()
+                    .checked_add(3600)
+                    .expect("종료"),
+            );
+            let data = domain::SessionData::try_new(
+                domain::TimeInterval::try_new(t_open, t_end).expect("구간"),
+                None,
+            )
+            .expect("세션");
+            let session = domain::MarketSession::try_new(
+                fixtures::session(60, &Market::Kr).date(),
+                domain::SessionInformation::Kr {
+                    pre_market: None,
+                    regular_market: Some(data),
+                    after_market: None,
+                },
+            )
+            .expect("개장 세션");
+            calendars_with_day60(&Market::Kr, &session, 60..=66)
+        }
+
+        #[test]
+        fn closed_to_open_market_sell_signal_creates_draft_with_fresh_holding() {
+            let source = fixtures::master();
+            let t0 = fixtures::day(60);
+            let t_open = fixtures::at(t0.utc_seconds().as_i64().checked_add(120).expect("개장"));
+            let account = AccountId::new(4321);
+            let id_ref = &source.row().instrument_id;
+            let open_calendars = kr_regular_opening_at(t_open);
+            let (closed_data, closed_repo) =
+                kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            closed_data
+                .0
+                .write()
+                .expect("닫힘 캘린더")
+                .evaluation
+                .calendars = open_calendars.clone();
+            let (closed_bus, closed_events) = event_bus();
+            let Ok(DraftProposalOutcome::MarketClosed) = run(DraftProposal::new(
+                &closed_repo,
+                &closed_data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(t0),
+                &closed_bus,
+            )
+            .execute(id_ref, &account, proposal_id("sell-before-open"))) else {
+                panic!("개장 전 닫힘")
+            };
+            let mut open_inputs =
+                kr_sell_inputs(&source, t_open, account.clone(), "17", Some("11"));
+            open_inputs.evaluation.calendars = open_calendars;
+            *closed_data.0.write().expect("개장 후 최신 입력") = open_inputs;
+            let opened = create_draft_at(
+                &closed_repo,
+                &closed_data,
+                &testkit_ports::SteppedClock::new(t_open),
+                &closed_bus,
+                (id_ref, &account, proposal_id("sell-after-open")),
+            );
+            assert_eq!(opened.intent().terms(), kr_sell_terms("11", "99"));
+            assert_eq!(closed_events.read().expect("이벤트").len(), 1);
+        }
+
+        fn kr_sell_setup_at(
+            source: &MasterInstrument,
+            at: Timestamp,
+            account: AccountId,
+            held: &str,
+            sellable: Option<&str>,
+        ) -> (Data, MemorySignalEvaluationRepository) {
+            let data = Data::new(kr_sell_inputs(source, at, account.clone(), held, sellable));
+            let repository = MemorySignalEvaluationRepository::new(fixtures::assignments());
+            repository.select_account(account);
+            repository
+                .advance_calibration_head(fixtures::head(0))
+                .expect("위치");
+            let eval_bus = EventBusBuilder::default().build();
+            submit_kr(&repository, &eval_bus, "task-old", "1", source);
+            run(EvaluateSignals::new(&repository, &data, &eval_bus).execute(
+                &source.row().instrument_id,
+                at,
+                BuySignalOccurrenceId::try_new("unused-at").expect("ID"),
+            ))
+            .expect("시각 매도 평가");
+            (data, repository)
+        }
+
+        #[test]
+        fn sell_draft_rejects_regressed_holding_observation_in_reassessment() {
+            let source = fixtures::master();
+            let t0 = fixtures::day(60);
+            let t5 = fixtures::at(t0.utc_seconds().as_i64().checked_add(5).expect("5초"));
+            let t10 = fixtures::at(t0.utc_seconds().as_i64().checked_add(10).expect("10초"));
+            let account = AccountId::new(4321);
+            let id_ref = &source.row().instrument_id;
+            let (data, repository) =
+                kr_sell_setup_at(&source, t10, account.clone(), "17", Some("11"));
+            let mut older = kr_sell_inputs(&source, t10, account.clone(), "17", Some("11"));
+            let old_holding = domain::Holding::new(
+                source.order_instrument().expect("종목"),
+                fixtures::quantity("17"),
+                domain::AcquisitionPrice::try_new(fixtures::money("87", Currency::Krw))
+                    .expect("매입가"),
+                domain::HoldingObservation::new(Some(fixtures::price("100")), None, t5),
+            )
+            .expect("과거 보유");
+            let old_portfolio = domain::Portfolio::new(
+                vec![old_holding],
+                domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), t5),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), t5),
+            )
+            .expect("포트");
+            older.evaluation.valuation = Some(old_portfolio.evaluate(None));
+            older
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .portfolio = Some(old_portfolio);
+            *data.0.write().expect("과거 보유 주입") = older;
+            let (bus, events) = event_bus();
+            assert_eq!(
+                run(DraftProposal::new(
+                    &repository,
+                    &data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(t10),
+                    &bus,
+                )
+                .execute(id_ref, &account, proposal_id("sell-regressed-holding")))
+                .expect_err("신호 관측 이전 보유 거부"),
+                DraftProposalError::SignalChanged
+            );
+            assert_eq!(repository.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn sell_draft_preserves_signal_in_closed_and_unknown_market() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let (data, repository) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let (bus, events) = event_bus();
+            let closed = fixtures::at(now.utc_seconds().as_i64().checked_add(3601).expect("닫힘"));
+            let Ok(DraftProposalOutcome::MarketClosed) = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(closed),
+                &bus,
+            )
+            .execute(
+                &source.row().instrument_id,
+                &account,
+                proposal_id("sell-closed"),
+            )) else {
+                panic!("닫힌 장 매도")
+            };
+            data.0.write().expect("입력").evaluation.calendars.clear();
+            assert_eq!(
+                run(DraftProposal::new(
+                    &repository,
+                    &data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(now),
+                    &bus,
+                )
+                .execute(
+                    &source.row().instrument_id,
+                    &account,
+                    proposal_id("sell-unknown"),
+                ))
+                .expect_err("불명 장 거부"),
+                DraftProposalError::MarketUnknown
+            );
+            assert_eq!(repository.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn sell_draft_creates_in_kr_pre_market_and_hides_on_head_advance() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let (data, repository) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let base_kr = fixtures::session(60, &Market::Kr);
+            let kr_data =
+                domain::SessionData::try_new(base_kr.sessions()[0].session().interval(), None)
+                    .expect("국내 세션");
+            let pre = domain::MarketSession::try_new(
+                base_kr.date(),
+                domain::SessionInformation::Kr {
+                    pre_market: Some(kr_data),
+                    regular_market: None,
+                    after_market: None,
+                },
+            )
+            .expect("프리마켓");
+            data.0.write().expect("입력").evaluation.calendars =
+                calendars_with_day60(&Market::Kr, &pre, 60..=66);
+            let (bus, events) = event_bus();
+            let ext_id = proposal_id("sell-kr-pre");
+            let Ok(DraftProposalOutcome::Created { .. }) = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(&source.row().instrument_id, &account, ext_id.clone())) else {
+                panic!("프리마켓 매도 초안")
+            };
+            assert!(
+                run(repository.draft(&ext_id, &source))
+                    .expect("조회")
+                    .is_some()
+            );
+            repository
+                .advance_calibration_head(fixtures::head(1))
+                .expect("보정 전진");
+            assert!(
+                run(repository.draft(&ext_id, &source))
+                    .expect("전진 후 은닉")
+                    .is_none()
+            );
+            assert_eq!(events.read().expect("이벤트").len(), 1);
+        }
+
+        fn liquidation_candle(instrument_id: &InstrumentId, day_idx: i64) -> domain::Candle {
+            let text = if day_idx % 2 == 0 { "100" } else { "102" };
+            let px = fixtures::price(text);
+            let midnight = fixtures::local(fixtures::at(
+                fixtures::day(day_idx)
+                    .utc_seconds()
+                    .as_i64()
+                    .checked_sub(32_400)
+                    .expect("자정"),
+            ));
+            domain::Candle::try_new(
+                instrument_id.clone(),
+                domain::CandleTime::try_new(midnight, domain::CandlePeriod::Daily)
+                    .expect("일봉 시각"),
+                domain::PriceAdjustment::Adjusted(domain::AdjustmentBasis::new(fixtures::day(61))),
+                domain::Ohlcv::try_new(px, px, px, px, fixtures::quantity("13")).expect("OHLCV"),
+                domain::CandleObservation::new(fixtures::day(61), domain::CandleStatus::Finalized),
+            )
+            .expect("봉")
+        }
+
+        fn liquidation_task_and_evidence(
+            liq: &MasterInstrument,
+            now: Timestamp,
+        ) -> (domain::CostEligibleTask, domain::StoredEstimateEvidence) {
+            let candles: Vec<_> = (0_i64..61)
+                .map(|day_idx| liquidation_candle(&liq.row().instrument_id, day_idx))
+                .collect();
+            let sell_ref = liq
+                .price_observation_for(
+                    domain::OrderSide::Sell,
+                    fixtures::price("100"),
+                    fixtures::local(now),
+                )
+                .expect("매도 시세");
+            let task = domain::EstimateTask::create(
+                domain::EstimateContext::new(sell_ref, now),
+                domain::Volatility::calculate(&candles).expect("변동성"),
+                domain::Horizon::new(domain::HorizonSelection::FewDays),
+                domain::HoursPermission::default(),
+                domain::RiskAppetite::Neutral,
+            )
+            .expect("과제");
+            let zero = domain::CostRate::try_new(fixtures::ratio("0")).expect("비용");
+            let maturity = fixtures::at(
+                fixtures::day(65)
+                    .utc_seconds()
+                    .as_i64()
+                    .checked_add(3600)
+                    .expect("만기"),
+            );
+            let period =
+                domain::EstimateCostPeriod::from_calendar_result(&task, maturity).expect("기간");
+            let cost = domain::TradeCost::from_facts(
+                Some(domain::CommissionRateFact::from_commissions_result(
+                    Market::Kr,
+                    zero,
+                    domain::CommissionValidity::try_new(None, None).expect("유효"),
+                )),
+                Some(domain::TradeTaxFact::from_schedule_result(
+                    Market::Kr,
+                    zero,
+                    zero,
+                )),
+                period,
+            )
+            .expect("비용");
+            let eligible = domain::CostEligibleTask::assess(task.clone(), &cost).expect("적격");
+            let stored_est = domain::EstimateRestoreEvidence {
+                master: liq.row().clone(),
+                side: domain::OrderSide::Sell,
+                candles,
+                reference_price: fixtures::price("100"),
+                reference_at: fixtures::local(now),
+                task_at: now,
+                horizon: domain::Horizon::new(domain::HorizonSelection::FewDays),
+                permission: domain::HoursPermissionState::Disabled,
+                appetite: domain::RiskAppetite::Neutral,
+            }
+            .capture(&task, liq)
+            .expect("정리매매 과제 근거");
+            (eligible, stored_est)
+        }
+
+        fn submit_eligible_sell(
+            repo: &MemorySignalEvaluationRepository,
+            bus: &application::EventBus,
+            instrument_id: &InstrumentId,
+            eligible: &domain::CostEligibleTask,
+            task_label: &str,
+        ) {
+            let part = domain::ModelIdentityPart::try_new("model-v1").expect("모델");
+            let prompt_hash = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+            run(SubmitEstimate::new(repo, bus).execute(
+                &fixtures::run_id(),
+                vec![application::EstimateSubmissionInput {
+                    task_id: fixtures::task_id(task_label),
+                    submission: fixtures::submission(eligible, "1"),
+                    narrative: domain::EstimateNarrative {
+                        rationale: domain::UntrustedText::try_new("근거").expect("근거"),
+                        counterargument: domain::UntrustedText::try_new("반론").expect("반론"),
+                    },
+                    metadata: domain::EstimateMetadata {
+                        effort: application::ReasoningEffort::High,
+                        cli_version: part.clone(),
+                        prompt: domain::EstimatePrompt {
+                            id: domain::ScorecardPromptId::try_new("prompt").expect("ID"),
+                            version: part,
+                            hash: domain::PromptHash::try_new(prompt_hash).expect("해시"),
+                        },
+                        evidence_bundle: domain::EvidenceBundleId::try_new("bundle-liq")
+                            .expect("묶음"),
+                    },
+                }],
+            ))
+            .expect("제출");
+            let snap = run(repo.snapshot(instrument_id)).expect("스냅숏");
+            repo.save_sources(
+                snap.submission.expect("과제"),
+                application::SignalSourceFacts {
+                    items: vec![fixtures::item()],
+                    disclosures: vec![],
+                    tools: vec![],
+                },
+            );
+        }
+
+        fn kr_liquidation_setup(
+            now: Timestamp,
+            account: AccountId,
+        ) -> (MasterInstrument, Data, MemorySignalEvaluationRepository) {
+            let base = fixtures::master();
+            let mut liq_row = base.row().clone();
+            liq_row.korean_detail.as_mut().expect("국내").liquidation =
+                domain::LiquidationTrading::Liquidation;
+            let liq = MasterInstrument::try_new(liq_row).expect("정리매매");
+            let (eligible, stored_est) = liquidation_task_and_evidence(&liq, now);
+            let mut facts = kr_sell_inputs(&base, now, account.clone(), "17", Some("11"));
+            facts.master = liq.clone();
+            facts.evaluation.target_price = Some(
+                liq.price_observation_for(
+                    domain::OrderSide::Sell,
+                    fixtures::price("100"),
+                    fixtures::local(now),
+                )
+                .expect("정리매매 시세"),
+            );
+            facts.evaluation.security = domain::MasterInstrumentFacts::try_new(vec![liq.clone()])
+                .expect("마스터")
+                .policy_security_facts();
+            let basis = facts.evaluation.restoration.as_mut().expect("복원");
+            basis.master = liq.clone();
+            basis.estimate = stored_est;
+            let data = Data::new(facts);
+            let assignments = domain::EstimateAssignments::default()
+                .issue(
+                    fixtures::task_id("task-liq"),
+                    fixtures::run_id(),
+                    eligible.clone(),
+                )
+                .expect("발급");
+            let repo = MemorySignalEvaluationRepository::new(assignments);
+            repo.select_account(account);
+            repo.advance_calibration_head(fixtures::head(0))
+                .expect("위치");
+            let bus = EventBusBuilder::default().build();
+            submit_eligible_sell(&repo, &bus, &liq.row().instrument_id, &eligible, "task-liq");
+            run(EvaluateSignals::new(&repo, &data, &bus).execute(
+                &liq.row().instrument_id,
+                now,
+                BuySignalOccurrenceId::try_new("unused-liq").expect("ID"),
+            ))
+            .expect("정리매매 매도 평가");
+            (liq, data, repo)
+        }
+
+        #[test]
+        fn sell_draft_allows_liquidation_trading_and_rejects_suspended_master() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let (liq, data, repository) = kr_liquidation_setup(now, account.clone());
+            let (bus, _) = event_bus();
+            let liq_id = proposal_id("sell-liquidation");
+            let Ok(DraftProposalOutcome::Created { proposal, .. }) = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(&liq.row().instrument_id, &account, liq_id.clone())) else {
+                panic!("정리매매 매도 허용")
+            };
+            assert_eq!(proposal.intent().terms(), kr_sell_terms("11", "99"));
+            assert!(
+                run(repository.draft(&liq_id, &liq))
+                    .expect("정리매매 복원 조회")
+                    .is_some()
+            );
+
+            let (sus_data, sus_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let mut sus_row = source.row().clone();
+            sus_row.korean_detail.as_mut().expect("국내").krx =
+                domain::TradingSuspension::Suspended;
+            sus_data.0.write().expect("입력").master =
+                MasterInstrument::try_new(sus_row).expect("거래정지");
+            let err = run(DraftProposal::new(
+                &sus_repo,
+                &sus_data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(
+                &source.row().instrument_id,
+                &account,
+                proposal_id("sell-suspended"),
+            ))
+            .expect_err("거래정지 매도 거부");
+            let DraftProposalError::Master(_) = err else {
+                panic!("마스터 오류여야 한다: {err:?}")
+            };
+            assert_eq!(sus_repo.draft_attempts(), 0);
+        }
+
+        #[test]
+        fn buy_signal_reassessment_rejects_changed_buy_limit() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let data = Data::new(market(&source, now));
+            let repository = seeded(&source, &data);
+            let updated_portfolio = domain::Portfolio::new(
+                vec![],
+                domain::BuyingPower::new(fixtures::money("20000", Currency::Krw), now),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
+            )
+            .expect("포트")
+            .evaluate(None);
+            data.0.write().expect("입력").evaluation.valuation = Some(updated_portfolio);
+            let (bus, events) = event_bus();
+            let err = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(
+                &source.row().instrument_id,
+                &AccountId::new(4321),
+                proposal_id("buy-limit-changed"),
+            ))
+            .expect_err("매수 한도 변경 거부");
+            let DraftProposalError::SignalChanged = err else {
+                panic!("SignalChanged여야 한다: {err:?}")
+            };
+            assert_eq!(repository.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn sell_draft_allows_parallel_sellable_after_stored_signal_and_rejects_pre_stored() {
+            let source = fixtures::master();
+            let t0 = fixtures::day(60);
+            let t_prev = fixtures::at(t0.utc_seconds().as_i64().checked_add(9).expect("9초"));
+            let t_sig = fixtures::at(t0.utc_seconds().as_i64().checked_add(10).expect("10초"));
+            let t_eval = fixtures::at(t0.utc_seconds().as_i64().checked_add(15).expect("15초"));
+            let t_sellable =
+                fixtures::at(t0.utc_seconds().as_i64().checked_add(119).expect("119초"));
+            let t_open = fixtures::at(t0.utc_seconds().as_i64().checked_add(120).expect("120초"));
+            let account = AccountId::new(4321);
+            let id_ref = &source.row().instrument_id;
+
+            let (data, repo) = kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            let mut parallel = kr_sell_inputs(&source, t_open, account.clone(), "17", Some("11"));
+            parallel.sellable_quantity =
+                Some(kr_sell_fact(&source, account.clone(), "11", t_sellable));
+            *data.0.write().expect("병렬 조회 입력") = parallel;
+            let (bus, _) = event_bus();
+            let created = create_draft_at(
+                &repo,
+                &data,
+                &testkit_ports::SteppedClock::new(t_open),
+                &bus,
+                (id_ref, &account, proposal_id("sell-parallel-ok")),
+            );
+            assert_eq!(created.intent().terms(), kr_sell_terms("11", "99"));
+
+            let (data_pre, repo_pre) =
+                kr_sell_setup_at(&source, t_sig, account.clone(), "17", Some("11"));
+            let mut stale_pre = kr_sell_inputs(&source, t_eval, account.clone(), "17", Some("11"));
+            stale_pre.sellable_quantity =
+                Some(kr_sell_fact(&source, account.clone(), "11", t_prev));
+            *data_pre.0.write().expect("저장 신호 이전 매도가능") = stale_pre;
+            assert_eq!(
+                run(DraftProposal::new(
+                    &repo_pre,
+                    &data_pre,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(t_eval),
+                    &bus,
+                )
+                .execute(id_ref, &account, proposal_id("sell-pre-stored")))
+                .expect_err("저장 신호 이전 매도가능 거부"),
+                DraftProposalError::SellQuantity(
+                    domain::NoSellDraftQuantity::StaleSellableQuantity
+                )
+            );
+            assert_eq!(repo_pre.draft_attempts(), 0);
+        }
+
+        fn sell_non_tradable_masters(base: &MasterInstrument) -> Vec<MasterInstrument> {
+            let mut suspended = base.row().clone();
+            suspended.korean_detail.as_mut().expect("국내").krx =
+                domain::TradingSuspension::Suspended;
+            let mut delisted = base.row().clone();
+            delisted.listing_status = domain::ListingStatus::Delisted;
+            let mut scheduled = base.row().clone();
+            scheduled.listing_status = domain::ListingStatus::Scheduled;
+            let mut unknown_type = base.row().clone();
+            unknown_type.security_type = domain::MasterSecurityType::from_code(
+                domain::MasterCode::try_new("UNKNOWN_SEC").expect("유형"),
+            );
+            let mut missing_detail = base.row().clone();
+            missing_detail.korean_detail = None;
+            [suspended, delisted, scheduled, unknown_type, missing_detail]
+                .into_iter()
+                .map(|row| MasterInstrument::try_new(row).expect("비거래 마스터"))
+                .collect()
+        }
+
+        fn assert_blocked_sell_master_rejected(
+            source: &MasterInstrument,
+            blocked: &MasterInstrument,
+            stale_check: application::DraftCheck<'_>,
+            valid: (
+                &domain::Proposal<domain::Draft>,
+                &domain::DraftRestoreEvidence,
+            ),
+        ) {
+            let now = stale_check.at;
+            let account = stale_check.account;
+            let inst = &source.row().instrument_id;
+            let integrity = application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::RepositoryIntegrity,
+            );
+            let (data, repo) = kr_sell_setup(source, now, account.clone(), "17", Some("11"));
+            let snap = run(repo.snapshot(inst)).expect("스냅숏");
+            repo.save_master(blocked.clone());
+            assert_eq!(
+                run(repo.current_draft(inst, &snap, stale_check)),
+                Err(integrity)
+            );
+            assert_eq!(
+                run(repo.store_current_draft(
+                    inst,
+                    &snap,
+                    application::DraftStoreCandidate {
+                        proposal: valid.0,
+                        evidence: valid.1,
+                    },
+                    stale_check,
+                )),
+                Err(integrity)
+            );
+            let (bus, _) = event_bus();
+            let err = run(DraftProposal::new(
+                &repo,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(inst, account, proposal_id("sell-stale-master")))
+            .expect_err("저장소 비거래 전환 거부");
+            assert_eq!(err, DraftProposalError::Storage(integrity));
+        }
+
+        #[test]
+        fn sell_draft_fails_closed_when_stored_master_becomes_non_tradable() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let integrity = application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::RepositoryIntegrity,
+            );
+            let obs = source
+                .price_observation(fixtures::price("100"), fixtures::local(now))
+                .expect("시세");
+            let stale_check = application::DraftCheck {
+                account: &account,
+                at: now,
+                observation: &obs,
+                master: &source,
+            };
+            let (cand_data, cand_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let (bus, _) = event_bus();
+            let valid_id = proposal_id("sell-master-valid");
+            let valid_prop = create_draft_at(
+                &cand_repo,
+                &cand_data,
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+                (inst, &account, valid_id.clone()),
+            );
+            let valid_ev = draft_evidence(&source, &valid_prop);
+            let active_snap = run(cand_repo.snapshot(inst)).expect("스냅숏");
+            for blocked in sell_non_tradable_masters(&source) {
+                assert_blocked_sell_master_rejected(
+                    &source,
+                    &blocked,
+                    stale_check,
+                    (&valid_prop, &valid_ev),
+                );
+                cand_repo.save_master(blocked);
+                assert_eq!(
+                    run(cand_repo.draft(&valid_id, &source)).expect_err("낡은 조회 거부"),
+                    integrity
+                );
+                assert_eq!(
+                    run(cand_repo.current_draft(inst, &active_snap, stale_check)),
+                    Err(integrity)
+                );
+            }
+        }
+
+        #[test]
+        fn sell_absent_read_fails_closed_for_caller_blocked_or_other_master() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let integrity = application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::RepositoryIntegrity,
+            );
+            let obs = source
+                .price_observation(fixtures::price("100"), fixtures::local(now))
+                .expect("시세");
+            let (_, absent_repo) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let absent_snap = run(absent_repo.snapshot(inst)).expect("스냅숏");
+            for blocked in sell_non_tradable_masters(&source)
+                .into_iter()
+                .chain(std::iter::once(fixtures::other_master()))
+            {
+                let blocked_check = application::DraftCheck {
+                    account: &account,
+                    at: now,
+                    observation: &obs,
+                    master: &blocked,
+                };
+                assert_eq!(
+                    run(absent_repo.current_draft(inst, &absent_snap, blocked_check)),
+                    Err(integrity)
+                );
+            }
+        }
+
+        #[test]
+        fn sell_draft_rejects_missing_and_mismatched_restoration_evidence() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let (bus, events) = event_bus();
+
+            let (missing_data, missing_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            missing_data
+                .0
+                .write()
+                .expect("근거 제거")
+                .evaluation
+                .restoration = None;
+            assert_eq!(
+                run(DraftProposal::new(
+                    &missing_repo,
+                    &missing_data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(now),
+                    &bus,
+                )
+                .execute(inst, &account, proposal_id("sell-no-restoration")))
+                .expect_err("복원 근거 누락 거부"),
+                DraftProposalError::Evaluation(
+                    application::EvaluateSignalError::RestorationUnavailable
+                )
+            );
+            assert_eq!(missing_repo.draft_attempts(), 0);
+
+            let (bad_data, bad_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            bad_data
+                .0
+                .write()
+                .expect("타 종목 근거")
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .estimate = kr_stored_estimate(&fixtures::other_master());
+            let err = run(DraftProposal::new(
+                &bad_repo,
+                &bad_data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(inst, &account, proposal_id("sell-wrong-estimate")))
+            .expect_err("추정 근거 불일치 거부");
+            let DraftProposalError::Restoration(domain::DraftRestoreError::Estimate(_)) = err
+            else {
+                panic!("추정 근거 오류여야 한다: {err:?}")
+            };
+            assert_eq!(bad_repo.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn sell_store_rejects_tampered_draft_evidence_and_preserves_existing_draft() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let integrity = application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::RepositoryIntegrity,
+            );
+            let (bus, _) = event_bus();
+            let (ok_data, ok_repo) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let valid_id = proposal_id("sell-ev-keep");
+            assert_eq!(
+                create_draft_at(
+                    &ok_repo,
+                    &ok_data,
+                    &testkit_ports::SteppedClock::new(now),
+                    &bus,
+                    (inst, &account, valid_id.clone()),
+                )
+                .id(),
+                &valid_id
+            );
+            let (cand_data, cand_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let second_prop = create_draft_at(
+                &cand_repo,
+                &cand_data,
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+                (inst, &account, proposal_id("sell-ev-tampered")),
+            );
+            let snap = run(ok_repo.snapshot(inst)).expect("스냅숏");
+            let mut tampered_ev = draft_evidence(&source, &second_prop);
+            tampered_ev.terms = kr_sell_terms("5", "99");
+            let obs = source
+                .price_observation(fixtures::price("100"), fixtures::local(now))
+                .expect("시세");
+            assert_eq!(
+                run(ok_repo.store_current_draft(
+                    inst,
+                    &snap,
+                    application::DraftStoreCandidate {
+                        proposal: &second_prop,
+                        evidence: &tampered_ev,
+                    },
+                    application::DraftCheck {
+                        account: &account,
+                        at: now,
+                        observation: &obs,
+                        master: &source,
+                    },
+                )),
+                Err(integrity)
+            );
+            assert!(
+                run(ok_repo.draft(&valid_id, &source))
+                    .expect("기존 매도 초안 보존")
+                    .is_some()
+            );
+        }
+
+        #[test]
+        fn existing_sell_draft_is_reused_before_sellable_recalculation_until_expiry() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let (data, repo) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let (bus, events) = event_bus();
+            let first_id = proposal_id("sell-existing-card");
+            let created = create_draft_at(
+                &repo,
+                &data,
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+                (inst, &account, first_id.clone()),
+            );
+            assert_eq!(created.id(), &first_id);
+            let later = fixtures::at(now.utc_seconds().as_i64().checked_add(30).expect("30초"));
+            let mut zero_sellable =
+                kr_sell_inputs(&source, later, account.clone(), "17", Some("0"));
+            zero_sellable.sellable_quantity =
+                Some(kr_sell_fact(&source, account.clone(), "0", later));
+            *data.0.write().expect("매도가능 0") = zero_sellable;
+            let reuse_zero = run(DraftProposal::new(
+                &repo,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(later),
+                &bus,
+            )
+            .execute(inst, &account, proposal_id("sell-retry-zero")))
+            .expect("만료 전 기존 초안 유지(0)");
+            let DraftProposalOutcome::Existing { proposal_id: id_z } = reuse_zero else {
+                panic!("기존 초안 재사용이어야 한다: {reuse_zero:?}")
+            };
+            assert_eq!(id_z, first_id);
+
+            let none_sellable = kr_sell_inputs(&source, later, account.clone(), "17", None);
+            *data.0.write().expect("매도가능 미확인") = none_sellable;
+            let reuse_none = run(DraftProposal::new(
+                &repo,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(later),
+                &bus,
+            )
+            .execute(inst, &account, proposal_id("sell-retry-none")))
+            .expect("만료 전 기존 초안 유지(None)");
+            let DraftProposalOutcome::Existing { proposal_id: id_n } = reuse_none else {
+                panic!("기존 초안 재사용이어야 한다: {reuse_none:?}")
+            };
+            assert_eq!(id_n, first_id);
+            assert_eq!(events.read().expect("이벤트").len(), 1);
+        }
     }
 }

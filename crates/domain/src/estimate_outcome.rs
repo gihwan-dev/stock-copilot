@@ -806,19 +806,19 @@ pub(crate) fn estimate_entry_adjustment(
         adjustment
     })
 }
+pub(crate) struct VirtualExitInputs<'a> {
+    pub(crate) interval: TimeInterval,
+    pub(crate) horizon: Horizon,
+    pub(crate) sessions: Vec<crate::virtual_exit::VirtualExitSession>,
+    pub(crate) bars: Vec<&'a Candle>,
+}
+
 pub(crate) fn virtual_exit_inputs<'a>(
     signal: &crate::VirtualExitSignal,
     calendars: &[MarketCalendar],
     adjustment: &OutcomeAdjustment,
     candles: &'a [Candle],
-) -> Result<
-    (
-        TimeInterval,
-        Vec<crate::virtual_exit::VirtualExitSession>,
-        Vec<&'a Candle>,
-    ),
-    OutcomeUnavailable,
-> {
+) -> Result<VirtualExitInputs<'a>, OutcomeUnavailable> {
     let task = signal.task();
     let schedule = schedule_at(task, signal.entry().observed_at(), calendars)?;
     if schedule.interval.end() != signal.maturity() {
@@ -841,7 +841,12 @@ pub(crate) fn virtual_exit_inputs<'a>(
             })
         })
         .collect();
-    Ok((schedule.interval, sessions, bars))
+    Ok(VirtualExitInputs {
+        interval: schedule.interval,
+        horizon: schedule.horizon,
+        sessions,
+        bars,
+    })
 }
 
 #[cfg(test)]
