@@ -711,3 +711,5 @@ pub use external_url::{
     ExternalUrlInput, ExternalUrlPath, ExternalUrlPort, ExternalUrlQuery, ExternalUrlRejection,
     ExternalUrlScheme, FixedExternalUrl, ParsedExternalUrl,
 };
+mod order_gate;
+pub use order_gate::{OrderGateFacts, validate_proposal};
