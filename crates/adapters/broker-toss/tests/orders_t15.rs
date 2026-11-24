@@ -1141,13 +1141,73 @@ mod tests {
             ))
         );
 
-        let future = day_window("2026-03-28T13:00:00+09:00", "2026-03-28T15:00:00+09:00");
+        for start_at in ["2026-03-28T12:00:00+09:00", "2026-03-28T13:00:00+09:00"] {
+            let win = day_window(start_at, "2026-03-28T15:00:00+09:00");
+            assert_eq!(
+                run(reader.closed_orders(&account, win))
+                    .expect_err("future or equal")
+                    .kind(),
+                PortErrorKind::InvalidRequest(RequestRejection::UnsupportedQuery)
+            );
+        }
+        let _wire = server.finish().expect("finish");
+    }
+
+    #[test]
+    fn review1_rejects_empty_next_pages_and_execution_or_future_time_contradictions() {
+        let page1 = load_recording("recordings", "t15-orders-closed-page1");
+        let empty_next =
+            json!({"result": {"orders": [], "hasNext": true, "nextCursor": "c-empty"}});
+        let mut zero_avg = load_recording("recordings", "t15-order-detail-kr")["body"].clone();
+        zero_avg["result"]["execution"]["filledQuantity"] = json!("0");
+        zero_avg["result"]["execution"]["filledAmount"] = json!(null);
+        zero_avg["result"]["execution"]["filledAt"] = json!(null);
+        zero_avg["result"]["execution"]["averageFilledPrice"] = json!("70000");
+        let neg_comm = mutated_order("/result/execution/commission", json!("-10"));
+        let neg_tax = mutated_order("/result/execution/tax", json!("-5"));
+        let future_order = mutated_order("/result/orderedAt", json!("2027-01-01T09:30:00+09:00"));
+        let future_open = json!({"result": {"orders": [future_order["result"].clone()], "hasNext": false, "nextCursor": null}});
+
+        let server = ScriptedHttpServer::start(vec![
+            issued(),
+            reply("200 OK", &empty_next),
+            reply("200 OK", &page1["body"]),
+            reply("200 OK", &empty_next),
+            reply("200 OK", &zero_avg),
+            reply("200 OK", &neg_comm),
+            reply("200 OK", &neg_tax),
+            reply("200 OK", &future_order),
+            reply("200 OK", &future_open),
+        ])
+        .expect("server");
+        let clock = FixedClock::at("2026-03-28T15:30:00+09:00");
+        let reader = adapter_with(&server, clock, crate::support::time(), default_master());
+        let account = AccountId::new(413);
+        let window = day_window("2026-03-28T09:00:00+09:00", "2026-03-28T15:00:00+09:00");
+        let id = BrokerOrderId::try_new("synthetic-order-kr-001").expect("id");
+
         assert_eq!(
-            run(reader.closed_orders(&account, future))
-                .expect_err("future")
+            run(reader.closed_orders(&account, window))
+                .expect_err("empty p1")
                 .kind(),
-            PortErrorKind::InvalidRequest(RequestRejection::UnsupportedQuery)
+            PortErrorKind::InvalidResponse(ResponseMismatch::Validation)
         );
+        let mid_empty = run(reader.closed_orders(&account, window)).expect("empty p2");
+        assert_eq!(
+            mid_empty.completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::RequestFailed)
+        );
+        for _case in 0_u8..4 {
+            assert_eq!(
+                run(reader.order(&account, &id))
+                    .expect_err("bad detail")
+                    .kind(),
+                PortErrorKind::InvalidResponse(ResponseMismatch::Validation)
+            );
+        }
+        let open_future = run(reader.open_orders(&account)).expect("future open");
+        assert_eq!(open_future.coverage(), OpenOrderCoverage::Incomplete);
+        assert!(open_future.orders().is_empty());
         let _wire = server.finish().expect("finish");
     }
 

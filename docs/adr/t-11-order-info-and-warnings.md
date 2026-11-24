@@ -30,7 +30,7 @@
 | `commission_rate` 미지 `marketCountry`, 중복 시장, 요청 시장 누락, `rate > 1`, 음수, `endDate < startDate` | `Err(InvalidResponse(Validation))` |
 | `stock_warnings` 빈 배열 / 알려진 경고 8종 / 미지 경고 코드 / 256건 상한 이내 | `Ok(StockWarnings)` (`Unknown(MasterCode)` 보존, `check_stock_warnings` 매수 차단·매도 허용, `X-Tossinvest-Account` 미전송) |
 | `stock_warnings` 비유효 `exchange`·날짜 형식·`endDate < startDate`·257건 초과 | `Err(InvalidResponse(Validation))` |
-| `account-not-found` (HTTP 404 또는 400) | `Err(AccessDenied(AccessDenial::AccountNotFound))` |
+| `account-not-found` (`buying-power` HTTP 404; `sellable-quantity`·`commissions` HTTP 400 또는 404) | `Err(AccessDenied(AccessDenial::AccountNotFound))` |
 | `stock-not-found` (HTTP 404) | `Err(NotFound(MissingData::Stock))` |
 | `401 token-revoked` / `429 rate-limit-exceeded` / `500 internal-error` | 기존 `error_mapping`·토큰 재발급·레이트 리밋 재시도·대기 계약 그대로 적용 |
 
@@ -49,7 +49,7 @@
 
 실제 키가 필요한 사용자 실측(T-13)에서 아래 항목을 확인한다.
 
-- `account-not-found` 오류의 실제 HTTP 상태 코드가 엔드포인트마다 404(`/api/v1/buying-power`)와 400(`/api/v1/sellable-quantity`, `/api/v1/commissions`)으로 다르게 내려오는지, 아니면 하나로 통일되는지? (현재 어댑터는 기존 `error_mapping`으로 `AccessDenied(AccountNotFound)`에 매핑)
+- `account-not-found` 오류의 실제 HTTP 상태 코드가 엔드포인트마다 404(`/api/v1/buying-power`)와 400(`/api/v1/sellable-quantity`, `/api/v1/commissions`)으로 다르게 내려오는지, 아니면 하나로 통일되는지? (현재 어댑터는 스펙에 맞춰 `sellable-quantity`·`commissions`에서 400·404 모두 `AccessDenied(AccountNotFound)`로 매핑하고 타 엔드포인트는 기존 404 계약을 유지)
 - 실제 계좌에서 `cashBuyingPower`가 음수(미수금 발생 등)로 반환되는 경우가 있는지, KRW 금액에 소수점(`.00` 또는 원 미만)이 포함되는지?
 - `/api/v1/commissions`가 실제 계좌에서 현재 유효 수수료 1건만 시장별로 내려주는지, 아니면 과거 만료 이력이나 복수 행을 같은 `marketCountry`로 함께 내려주는지?
 - `/api/v1/stocks/{symbol}/warnings`가 같은 `warningType`을 거래소(`exchange`)나 적용 기간이 다른 복수 행으로 반환하는 경우가 있는지?

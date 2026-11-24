@@ -205,11 +205,21 @@ fn parse_execution(
         None => BrokerOrderMoney::Absent,
         Some(raw) => BrokerOrderMoney::Known(money(raw, currency)?),
     };
-    if let Some(raw_commission) = execution.commission.as_deref() {
-        let _commission = money(raw_commission, currency)?;
+    if let Some(raw_commission) = execution.commission.as_deref()
+        && money(raw_commission, currency)?
+            .amount()
+            .as_decimal()
+            .is_sign_negative()
+    {
+        return Err(RowFailure::Unidentifiable);
     }
-    if let Some(raw_tax) = execution.tax.as_deref() {
-        let _tax = money(raw_tax, currency)?;
+    if let Some(raw_tax) = execution.tax.as_deref()
+        && money(raw_tax, currency)?
+            .amount()
+            .as_decimal()
+            .is_sign_negative()
+    {
+        return Err(RowFailure::Unidentifiable);
     }
     let filled_at = execution.filled_at.as_deref().map(timestamp).transpose()?;
     if filled_at.is_some_and(|at| at < ordered_at) {
@@ -221,6 +231,7 @@ fn parse_execution(
     }
     if filled_quantity.as_decimal().is_zero()
         && (filled_at.is_some()
+            || average_filled_price.is_some()
             || match filled_amount {
                 BrokerOrderMoney::Known(amount) => !amount.amount().as_decimal().is_zero(),
                 BrokerOrderMoney::Absent => false,

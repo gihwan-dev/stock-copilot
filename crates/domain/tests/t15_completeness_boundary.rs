@@ -10,12 +10,17 @@ mod tests {
 
     type CompileCase = (&'static str, &'static str, Option<&'static str>);
 
-    fn proof_boundary_cases() -> [CompileCase; 6] {
+    fn proof_boundary_cases() -> [CompileCase; 7] {
         [
             (
-                "control_valid_collector_flow",
-                "use domain::*; fn check(account: AccountId, window: TimeInterval, observed: Timestamp) -> Result<ClosedOrderSet, NetPurchaseInputError> { let scope = ClosedOrderQueryScope::unfiltered(account.clone(), window); let mut collector = ClosedOrderPageCollector::start(scope); collector.record_page_boundary(OrderPageBoundary::LastPage); let proven = collector.finish(observed)?; let closed = proven.into_closed_order_set(); let _ = net_purchase_amount(&closed, window, NetPurchaseScope::Currency(Currency::Krw)); let mut open = OpenOrderCollector::start(OpenOrderQueryScope::unfiltered(account)); open.record_all_pages_received(); let _ = open.finish(observed); Ok(closed) } fn main() { let _ = check; }",
+                "control_adapter_collector_and_proven_d38",
+                "use domain::*; fn check(account: AccountId, window: TimeInterval, observed: Timestamp) -> Result<ClosedOrderSet, NetPurchaseInputError> { let scope = ClosedOrderQueryScope::unfiltered(account.clone(), window); let mut collector = ClosedOrderPageCollector::start(scope); collector.record_page_boundary(OrderPageBoundary::LastPage); let proven = collector.finish(observed)?; let _ = proven_net_purchases(&proven, window); let _ = proven_net_purchase_amount(&proven, window, NetPurchaseScope::Currency(Currency::Krw)); let closed = proven.into_closed_order_set(); let mut open = OpenOrderCollector::start(OpenOrderQueryScope::unfiltered(account)); open.record_all_pages_received(); let _ = open.finish(observed); Ok(closed) } fn main() { let _ = check; }",
                 None,
+            ),
+            (
+                "unproven_closed_order_set_rejected_by_proven_d38",
+                "use domain::*; fn bypass(orders: ClosedOrderSet, window: TimeInterval) { let _ = proven_net_purchase_amount(&orders, window, NetPurchaseScope::Currency(Currency::Krw)); } fn main() { let _ = bypass; }",
+                Some("error[E0308]"),
             ),
             (
                 "forged_completeness_proof_struct_rejected",
@@ -29,7 +34,7 @@ mod tests {
             ),
             (
                 "private_from_verified_proof_rejected",
-                "use domain::*; fn forge(account: AccountId, covered: TimeInterval, observed: Timestamp, proof: ClosedOrderCompletenessProof) { let _ = ClosedOrderSet::from_verified_proof(account, Vec::new(), covered, observed, proof); } fn main() { let _ = forge; }",
+                "use domain::*; fn forge(account: AccountId, covered: TimeInterval, observed: Timestamp, proof: ClosedOrderCompletenessProof) { let _ = ClosedOrderSet::from_verified_proof(account, std::collections::BTreeMap::new(), covered, observed, proof); } fn main() { let _ = forge; }",
                 Some("error[E0624]"),
             ),
             (
@@ -46,7 +51,7 @@ mod tests {
     }
 
     #[test]
-    fn closed_and_open_completeness_proofs_cannot_be_forged_externally() {
+    fn completeness_proof_types_seal_direct_construction_and_proven_d38_rejects_unproven_sets() {
         let root = std::env::current_dir().expect("도메인 경로");
         let directory = root
             .join("../../target/T-15")

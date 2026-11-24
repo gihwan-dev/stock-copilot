@@ -847,6 +847,47 @@ mod tests {
     }
 
     #[test]
+    fn sellable_quantity_and_commission_rate_map_400_and_404_account_not_found() {
+        let account_missing = json!({
+            "error": {
+                "requestId": "synthetic-acct-missing",
+                "code": "account-not-found",
+                "message": "account missing"
+            }
+        });
+        let server = ScriptedHttpServer::start(vec![
+            issued(),
+            reply("400 Bad Request", &account_missing),
+            reply("404 Not Found", &account_missing),
+            reply("400 Bad Request", &account_missing),
+            reply("404 Not Found", &account_missing),
+            reply("400 Bad Request", &account_missing),
+        ])
+        .expect("server");
+        let (reader, _) = adapter(&server);
+        let account = AccountId::new(413);
+        let kr = kr_instrument("005930");
+
+        for err in [
+            run(reader.sellable_quantity(&account, &kr)).expect_err("sellable 400"),
+            run(reader.sellable_quantity(&account, &kr)).expect_err("sellable 404"),
+            run(reader.commission_rate(&account, KnownMarket::Kr)).expect_err("comm 400"),
+            run(reader.commission_rate(&account, KnownMarket::Kr)).expect_err("comm 404"),
+        ] {
+            assert_eq!(
+                err.kind(),
+                PortErrorKind::AccessDenied(AccessDenial::AccountNotFound)
+            );
+        }
+        let bp_400 = run(reader.buying_power(&account, Currency::Krw)).expect_err("bp 400");
+        assert_eq!(
+            bp_400.kind(),
+            PortErrorKind::InvalidResponse(ResponseMismatch::Validation)
+        );
+        let _wire = server.finish().expect("finish");
+    }
+
+    #[test]
     fn stock_warnings_enforces_256_item_limit_boundary() {
         let entry = json!({
             "warningType": "VI_STATIC",

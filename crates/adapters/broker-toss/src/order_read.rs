@@ -103,6 +103,16 @@ pub(crate) async fn order<S: SecretStore, T: Clock, R: TokenRenewal>(
         }
     };
     let observed = reader.market_now();
+    let canceled_in_future = match parsed.canceled_at {
+        domain::BrokerOrderTime::Absent => false,
+        domain::BrokerOrderTime::Known(at) => at > observed,
+    };
+    if parsed.ordered_at > observed
+        || parsed.filled_at.is_some_and(|at| at > observed)
+        || canceled_in_future
+    {
+        return Err(invalid(ReadEndpoint::Order, ResponseMismatch::Validation));
+    }
     BrokerOrder::from_lookup_result(parsed.into_row(account, observed))
         .map_err(|_error| invalid(ReadEndpoint::Order, ResponseMismatch::Validation))
 }
@@ -307,6 +317,9 @@ impl ClosedPages {
             }
             _ => return AppendOutcome::EnvelopeError(ResponseMismatch::Validation),
         };
+        if page.orders.is_empty() && next_cursor.is_some() {
+            return AppendOutcome::EnvelopeError(ResponseMismatch::Validation);
+        }
         for raw in page.orders {
             if self.valid_rows.len() >= MAX_ORDER_ROWS {
                 self.terminal = ClosedTerminal::RowLimit;

@@ -174,6 +174,7 @@ impl std::error::Error for TossMappedError {}
 #[derive(Debug, Clone, Copy)]
 enum StatusRule {
     Exact(HttpStatus),
+    BadRequestOrNotFound,
     Edge,
     Failure,
 }
@@ -182,6 +183,9 @@ impl StatusRule {
     fn accepts(self, status: HttpStatus) -> bool {
         match self {
             Self::Exact(expected) => expected == status,
+            Self::BadRequestOrNotFound => {
+                [HttpStatus::BadRequest, HttpStatus::NotFound].contains(&status)
+            }
             Self::Edge => [
                 HttpStatus::Unauthorized,
                 HttpStatus::Forbidden,
@@ -269,6 +273,17 @@ fn edge_blocked() -> (StatusRule, PortErrorKind) {
     )
 }
 
+fn account_not_found_mapping(endpoint: ReadEndpoint) -> (StatusRule, PortErrorKind) {
+    if endpoint == ReadEndpoint::SellableQuantity || endpoint == ReadEndpoint::CommissionRate {
+        (
+            StatusRule::BadRequestOrNotFound,
+            PortErrorKind::AccessDenied(AccessDenial::AccountNotFound),
+        )
+    } else {
+        denied(HttpStatus::NotFound, AccessDenial::AccountNotFound)
+    }
+}
+
 fn order_not_found_mapping(endpoint: ReadEndpoint) -> (StatusRule, PortErrorKind) {
     if endpoint == ReadEndpoint::Order {
         missing(MissingData::Order)
@@ -296,7 +311,7 @@ fn api_mapping(
         LoginUserNotFound => denied(Unauthorized, AccessDenial::LoginUserNotFound),
         IpNotAllowed => denied(HttpStatus::Forbidden, AccessDenial::IpNotAllowed),
         Forbidden => denied(HttpStatus::Forbidden, AccessDenial::Forbidden),
-        AccountNotFound => denied(HttpStatus::NotFound, AccessDenial::AccountNotFound),
+        AccountNotFound => account_not_found_mapping(endpoint),
         StockNotFound => missing(MissingData::Stock),
         ExchangeRateNotFound => missing(MissingData::ExchangeRate),
         SectorNotFound => missing(MissingData::Sector),

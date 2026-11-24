@@ -1,6 +1,7 @@
 use crate::{
     BrokerOrder, BrokerOrderMoney, ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet,
-    Currency, Money, MoneyError, OrderSide, ResolvedOrderInstrument, SnapshotError, TimeInterval,
+    Currency, Money, MoneyError, OrderSide, ProvenClosedOrderSet, ResolvedOrderInstrument,
+    SnapshotError, TimeInterval,
 };
 use std::fmt;
 
@@ -83,6 +84,17 @@ enum Inclusion {
     Excluded,
 }
 #[must_use]
+pub fn proven_net_purchases(orders: &ProvenClosedOrderSet, period: TimeInterval) -> NetPurchases {
+    net_purchases(orders.orders(), period)
+}
+pub fn proven_net_purchase_amount(
+    orders: &ProvenClosedOrderSet,
+    period: TimeInterval,
+    scope: NetPurchaseScope<'_>,
+) -> Result<Money, NetPurchaseError> {
+    net_purchase_amount(orders.orders(), period, scope)
+}
+#[must_use]
 pub fn net_purchases(orders: &ClosedOrderSet, period: TimeInterval) -> NetPurchases {
     NetPurchases {
         kr: net_purchase_amount(orders, period, NetPurchaseScope::Currency(Currency::Krw)),
@@ -136,7 +148,9 @@ fn validate_query(
     if orders.observed_at() < period.end() {
         return Err(NetPurchaseIncomplete::ObservationTooEarly);
     }
-    if let ClosedOrderCompleteness::Incomplete(reason) = orders.completeness() {
+    if let Some(proof) = orders.completeness_proof() {
+        proof.verify_for_period(period)?;
+    } else if let ClosedOrderCompleteness::Incomplete(reason) = orders.completeness() {
         return Err(NetPurchaseIncomplete::Query(reason));
     }
     if orders.covered().start() > period.start() || orders.covered().end() < period.end() {

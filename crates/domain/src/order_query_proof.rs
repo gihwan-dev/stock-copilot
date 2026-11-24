@@ -185,6 +185,21 @@ impl ClosedOrderCompletenessProof {
     pub const fn completeness(&self) -> ClosedOrderCompleteness {
         self.completeness
     }
+
+    pub(crate) fn verify_for_period(
+        &self,
+        period: TimeInterval,
+    ) -> Result<(), crate::NetPurchaseIncomplete> {
+        if let ClosedOrderCompleteness::Incomplete(reason) = self.completeness {
+            return Err(crate::NetPurchaseIncomplete::Query(reason));
+        }
+        if self.scope.evaluation_window.start() > period.start()
+            || self.scope.evaluation_window.end() < period.end()
+        {
+            return Err(crate::NetPurchaseIncomplete::OutsideQueryRange);
+        }
+        Ok(())
+    }
 }
 
 impl fmt::Debug for ClosedOrderCompletenessProof {
@@ -277,6 +292,12 @@ impl ClosedOrderPageCollector {
     }
 
     pub fn accept_row(&mut self, row: BrokerOrderRow) -> OrderRowIntake {
+        if self.loop_state != PageLoopState::Reading {
+            self.loop_state = PageLoopState::Interrupted;
+            self.exhaustion = OrderPageExhaustion::MorePages;
+            self.missing_pages = FaultPresence::Present;
+            return OrderRowIntake::Rejected;
+        }
         if row.account_id != self.scope.account_id {
             self.rejected_rows = FaultPresence::Present;
             return OrderRowIntake::Rejected;
@@ -429,6 +450,7 @@ fn order_execution_consistent(order: &BrokerOrder) -> RowValidity {
     }
     if order.filled_quantity().as_decimal().is_zero()
         && (order.filled_at().is_some()
+            || order.average_filled_price().is_some()
             || match order.filled_amount() {
                 crate::BrokerOrderMoney::Known(amount) => !amount.amount().as_decimal().is_zero(),
                 crate::BrokerOrderMoney::Absent => false,
@@ -439,10 +461,19 @@ fn order_execution_consistent(order: &BrokerOrder) -> RowValidity {
     RowValidity::Valid
 }
 
+fn canceled_not_after(canceled: crate::BrokerOrderTime, observed_at: Timestamp) -> RowValidity {
+    match canceled {
+        crate::BrokerOrderTime::Absent => RowValidity::Valid,
+        crate::BrokerOrderTime::Known(at) if at <= observed_at => RowValidity::Valid,
+        crate::BrokerOrderTime::Known(_) => RowValidity::Invalid,
+    }
+}
+
 fn order_matches_observation(order: &BrokerOrder, observed_at: Timestamp) -> RowValidity {
     if order.observed_at() == observed_at
         && order.ordered_at() <= observed_at
         && order.filled_at().is_none_or(|at| at <= observed_at)
+        && canceled_not_after(order.canceled_at(), observed_at) == RowValidity::Valid
     {
         RowValidity::Valid
     } else {
@@ -541,6 +572,11 @@ impl OpenOrderCollector {
     }
 
     pub fn accept_row(&mut self, row: BrokerOrderRow) -> OrderRowIntake {
+        if self.exhaustion != OrderPageExhaustion::NotReached {
+            self.exhaustion = OrderPageExhaustion::MorePages;
+            self.rejected_rows = FaultPresence::Present;
+            return OrderRowIntake::Rejected;
+        }
         if row.account_id != self.scope.account_id {
             self.rejected_rows = FaultPresence::Present;
             return OrderRowIntake::Rejected;
@@ -584,7 +620,11 @@ impl OpenOrderCollector {
         let mut rejected_rows = self.rejected_rows;
         let mut aligned_rows = Vec::with_capacity(self.rows.len());
         for row in self.rows {
-            if row.observed_at == observed_at {
+            if row.observed_at == observed_at
+                && row.ordered_at <= observed_at
+                && row.filled_at.is_none_or(|at| at <= observed_at)
+                && canceled_not_after(row.canceled_at, observed_at) == RowValidity::Valid
+            {
                 aligned_rows.push(row);
             } else {
                 rejected_rows = FaultPresence::Present;
@@ -866,6 +906,7 @@ mod tests {
 
         let mut zero_with_time = row("zero-time", OrderSide::Buy, "0", 150);
         zero_with_time.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("0");
+        zero_with_time.average_filled_price = None;
         assert_eq!(
             collector.accept_row(zero_with_time),
             OrderRowIntake::Rejected
@@ -874,6 +915,7 @@ mod tests {
         let mut zero_with_amount = row("zero-amt", OrderSide::Buy, "1", 150);
         zero_with_amount.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("0");
         zero_with_amount.filled_at = None;
+        zero_with_amount.average_filled_price = None;
         assert_eq!(
             collector.accept_row(zero_with_amount),
             OrderRowIntake::Rejected
@@ -893,12 +935,14 @@ mod tests {
         let mut zero_clean = row("zero-ok", OrderSide::Buy, "0", 150);
         zero_clean.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("0");
         zero_clean.filled_at = None;
+        zero_clean.average_filled_price = None;
         zero_clean.filled_amount = BrokerOrderMoney::Absent;
         assert_eq!(collector.accept_row(zero_clean), OrderRowIntake::Accepted);
 
         let mut zero_zero_amt = row("zero-zero-amt", OrderSide::Buy, "0", 150);
         zero_zero_amt.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("0");
         zero_zero_amt.filled_at = None;
+        zero_zero_amt.average_filled_price = None;
         assert_eq!(
             collector.accept_row(zero_zero_amt),
             OrderRowIntake::Accepted
@@ -1065,6 +1109,122 @@ mod tests {
         double_done.record_all_pages_received();
         assert_eq!(
             double_done.finish(time(300)).expect("중복 완료").coverage(),
+            OpenOrderCoverage::Incomplete
+        );
+    }
+
+    #[test]
+    fn proven_d38_verifies_proof_period_and_rejects_post_completion_rows() {
+        let scope = ClosedOrderQueryScope::unfiltered(AccountId::new(7), interval(100, 200));
+        let mut ok_collector = ClosedOrderPageCollector::start(scope.clone());
+        let mut with_cancel = row("c-ok", OrderSide::Buy, "0", 120);
+        with_cancel.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("0");
+        with_cancel.filled_at = None;
+        with_cancel.average_filled_price = None;
+        with_cancel.filled_amount = BrokerOrderMoney::Absent;
+        with_cancel.canceled_at = crate::BrokerOrderTime::Known(time(150));
+        assert_eq!(
+            ok_collector.accept_row(with_cancel),
+            OrderRowIntake::Accepted
+        );
+        assert_eq!(
+            ok_collector.accept_row(row("b-ok", OrderSide::Buy, "5000", 140)),
+            OrderRowIntake::Accepted
+        );
+        ok_collector.record_page_boundary(OrderPageBoundary::LastPage);
+        let proven = ok_collector.finish(time(300)).expect("완전");
+        assert_eq!(
+            crate::proven_net_purchases(&proven, interval(100, 200)).currency(Currency::Krw),
+            Ok(money("5000", Currency::Krw))
+        );
+        assert_eq!(
+            crate::proven_net_purchase_amount(
+                &proven,
+                interval(50, 200),
+                NetPurchaseScope::Currency(Currency::Krw)
+            ),
+            Err(NetPurchaseError::Incomplete(
+                NetPurchaseIncomplete::OutsideQueryRange
+            ))
+        );
+        assert_eq!(
+            crate::proven_net_purchase_amount(
+                &proven,
+                interval(100, 250),
+                NetPurchaseScope::Currency(Currency::Krw)
+            ),
+            Err(NetPurchaseError::Incomplete(
+                NetPurchaseIncomplete::OutsideQueryRange
+            ))
+        );
+        let mut late_closed = ClosedOrderPageCollector::start(scope);
+        late_closed.record_page_boundary(OrderPageBoundary::LastPage);
+        assert_eq!(
+            late_closed.accept_row(row("late", OrderSide::Buy, "100", 140)),
+            OrderRowIntake::Rejected
+        );
+        let late_proven = late_closed.finish(time(300)).expect("완료 뒤 주입");
+        assert_eq!(
+            crate::proven_net_purchase_amount(
+                &late_proven,
+                interval(100, 200),
+                NetPurchaseScope::Currency(Currency::Krw)
+            ),
+            Err(NetPurchaseError::Incomplete(NetPurchaseIncomplete::Query(
+                ClosedOrderIncomplete::MissingPages
+            )))
+        );
+    }
+
+    #[test]
+    fn collectors_reject_zero_fill_avg_price_and_future_timestamps() {
+        let closed_scope = ClosedOrderQueryScope::unfiltered(AccountId::new(7), interval(0, 200));
+        let mut closed = ClosedOrderPageCollector::start(closed_scope);
+        let mut zero_avg = row("z-avg", OrderSide::Buy, "0", 120);
+        zero_avg.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("0");
+        zero_avg.filled_at = None;
+        zero_avg.filled_amount = BrokerOrderMoney::Absent;
+        zero_avg.average_filled_price =
+            Some(crate::Price::try_new(money("100", Currency::Krw)).expect("p"));
+        assert_eq!(closed.accept_row(zero_avg), OrderRowIntake::Rejected);
+        let mut future_cancel = row("f-cancel", OrderSide::Buy, "0", 120);
+        future_cancel.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("0");
+        future_cancel.filled_at = None;
+        future_cancel.average_filled_price = None;
+        future_cancel.filled_amount = BrokerOrderMoney::Absent;
+        future_cancel.canceled_at = crate::BrokerOrderTime::Known(time(301));
+        assert_eq!(closed.accept_row(future_cancel), OrderRowIntake::Accepted);
+        closed.record_page_boundary(OrderPageBoundary::LastPage);
+        assert_eq!(
+            closed
+                .finish(time(300))
+                .expect("미래 취소")
+                .proof()
+                .completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::RejectedRows)
+        );
+
+        let open_scope = OpenOrderQueryScope::unfiltered(AccountId::new(7));
+        let mut open = OpenOrderCollector::start(open_scope.clone());
+        let mut future_open = pending_open_row();
+        future_open.ordered_at = time(301);
+        assert_eq!(open.accept_row(future_open), OrderRowIntake::Accepted);
+        open.record_all_pages_received();
+        let set = open.finish(time(300)).expect("미래 미체결");
+        assert_eq!(set.coverage(), OpenOrderCoverage::Incomplete);
+        assert!(set.orders().is_empty());
+
+        let mut late_open = OpenOrderCollector::start(open_scope);
+        late_open.record_all_pages_received();
+        assert_eq!(
+            late_open.accept_row(pending_open_row()),
+            OrderRowIntake::Rejected
+        );
+        assert_eq!(
+            late_open
+                .finish(time(300))
+                .expect("종료 뒤 미체결")
+                .coverage(),
             OpenOrderCoverage::Incomplete
         );
     }
