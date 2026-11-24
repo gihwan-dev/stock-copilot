@@ -54,6 +54,7 @@ export const responses = {
     { kind: "no-data" },
   ],
   openExternal: { status: "opened" },
+  requestOrderApproval: { reason: "presence-denied", status: "rejected" },
   resubscribeChatTurn: {
     replayed_count: 2,
     state: "Finished",
