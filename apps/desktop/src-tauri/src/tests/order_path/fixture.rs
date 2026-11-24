@@ -485,6 +485,7 @@ impl ApprovalServiceTypes for PathTypes {
 pub(crate) type ApprovalServiceOf = ApprovalService<PathTypes>;
 
 pub(crate) struct PathFixture {
+    pub(crate) clock: Arc<SteppedClock>,
     pub(crate) service: Arc<ApprovalService<PathTypes>>,
     pub(crate) trade: Arc<RecordingBroker>,
     pub(crate) tx: Arc<LedgerTx>,
@@ -533,6 +534,8 @@ impl OrderSize {
 pub(crate) enum ReplyKind {
     Accept,
     RejectHighValue,
+    TransportThenAccept,
+    Maintenance,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -638,11 +641,15 @@ pub(crate) fn fixture_with(
         options.size,
     );
     let (consumption, reports, audit) = storage(options.audit);
-    let reply = match options.reply {
-        ReplyKind::Accept => BrokerReply::Accept(BrokerOrderId::try_new(accept).expect("주문번호")),
-        ReplyKind::RejectHighValue => BrokerReply::high_value_confirmation_required(),
+    let clock = Arc::new(SteppedClock::new(now()));
+    let accepted = BrokerReply::Accept(BrokerOrderId::try_new(accept).expect("주문번호"));
+    let replies = match options.reply {
+        ReplyKind::Accept => vec![accepted],
+        ReplyKind::RejectHighValue => vec![BrokerReply::high_value_confirmation_required()],
+        ReplyKind::TransportThenAccept => vec![BrokerReply::transport_unknown(), accepted],
+        ReplyKind::Maintenance => vec![BrokerReply::maintenance_unknown(), accepted],
     };
-    let trade = Arc::new(RecordingBroker::with_replies([reply]));
+    let trade = Arc::new(RecordingBroker::with_replies(replies));
     let tx = Arc::new(LedgerTx {
         mode: options.ledger,
         consumption: Arc::clone(&consumption),
@@ -664,11 +671,16 @@ pub(crate) fn fixture_with(
         }),
         redrafter: Arc::new(NoRedraft),
         freeze: Arc::new(NeverFrozen),
-        clock: Arc::new(SteppedClock::new(now())),
+        clock: Arc::clone(&clock),
         presence,
         tx_port: Arc::clone(&tx),
         trade: Arc::clone(&trade),
         events: EventBusBuilder::default().build(),
     }));
-    PathFixture { service, trade, tx }
+    PathFixture {
+        clock,
+        service,
+        trade,
+        tx,
+    }
 }
