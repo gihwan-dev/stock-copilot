@@ -215,3 +215,8 @@ mod backup;
 pub use backup::{BackupDirectory, BackupOutcome, create_backup, restore_latest_backup};
 #[cfg(test)]
 mod backup_tests;
+
+mod order_rate;
+pub use order_rate::OrderRateStore;
+#[cfg(test)]
+mod order_rate_tests;

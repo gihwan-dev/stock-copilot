@@ -68,3 +68,7 @@ pub(crate) mod chat_tests;
 pub(crate) mod settings;
 #[cfg(test)]
 pub(crate) mod settings_tests;
+
+pub(crate) mod order_rate;
+#[cfg(test)]
+pub(crate) mod order_rate_tests;
