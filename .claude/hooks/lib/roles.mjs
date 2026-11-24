@@ -17,7 +17,7 @@ export const roleOf = (input) => {
   if (absent(input.agent_type) && absent(input.agent_id)) {
     return ROLE.main;
   }
-  return SUBAGENT_ROLES.get(input.agent_type) ?? ROLE.unknown;
+  return SUBAGENT_ROLES.get(input.agent_type) ?? ROLE.main;
 };
 
 export const isSubagent = (role) => role !== ROLE.main;
