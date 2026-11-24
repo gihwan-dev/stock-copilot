@@ -9,6 +9,8 @@ pub use money_display::{
 };
 
 mod account_id;
+mod briefing_id;
+pub use briefing_id::{BriefingId, BriefingKind};
 mod client_order_id;
 mod instrument_id;
 mod instrument_issuer;
@@ -53,8 +55,10 @@ pub use ai_read_policy::{
     SourceAiBodyReadSettings, prepare_news_for_ai,
 };
 pub use ai_wake::{
-    DisclosureAction, DisclosureGrade, DisclosureRevision, HoldingStatus, TriggerJudgement,
-    WakeTrigger, daily_move_trigger, disclosure_action, grade_disclosure, news_burst_trigger,
+    DisclosureAction, DisclosureGrade, DisclosureRevision, HoldingStatus, MovePercent,
+    NewsBurstCount, TriggerJudgement, WakeThresholdError, WakeThresholds, WakeTrigger,
+    daily_move_trigger, daily_move_trigger_with, disclosure_action, grade_disclosure,
+    news_burst_trigger, news_burst_trigger_with,
 };
 pub use cluster::{Cluster, ClusterError};
 pub use collected_item::{CollectedItem, InformationSource, UntrustedText, UntrustedTextError};
