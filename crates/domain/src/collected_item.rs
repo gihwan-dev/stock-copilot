@@ -11,6 +11,11 @@ pub enum UntrustedTextError {
 }
 
 impl UntrustedText {
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self(String::new())
+    }
+
     pub fn try_new(value: &str) -> Result<Self, UntrustedTextError> {
         if value.len() > 65536 {
             return Err(UntrustedTextError::TooLong);

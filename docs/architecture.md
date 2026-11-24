@@ -428,7 +428,7 @@ v0.1의 `Idea`, `ProposalOutcome`은 없앤다. 장이 닫혀 있을 때의 신�
 | `DisclosureTriggerRecorded` | `DisclosureKey` | N-12가 보유 종목의 긴급·높음 공시 기준 충족을 판정해 기록했을 때 | 스케줄러, UI 갱신, 알림(기록된 긴급만) | design 5.3의 보유 종목 긴급·높음 공시 즉시, 정정 한 단계 낮춤; UX-3 긴급 공시 알림 | 아니오 | - | - |
 | `AiJobFinished` | 미정(AI 작업 ID) | AI 실행기가 작업 종료 결과를 저장했을 때 | 스케줄러, UI 갱신 | architecture 2.3의 실행 ID, AI-7 동시 채팅·예약 실행 | 정의 대기 | AI-17 | 동시 실행이 둘이므로 단일 현재 작업 키가 없고, 어느 실행의 후속 단계를 이어갈지 구별할 실행 ID·조회 계약이 필요함 |
 | `BriefingFinished` | 미정(브리핑 ID) | J-03이 브리핑 결과를 저장했을 때 | UI 갱신, 알림 | UX-3, J-07의 현재·지난 브리핑 카드 | 정의 대기 | J-03 | 현재·지난 브리핑이 함께 남아 최신 카드 조회만으로 알릴 완료 기록을 특정할 수 없음; 브리핑 ID와 완료 조회 계약 필요 |
-| `SourceStatusChanged` | 미정(통합 소스 종류) | 수집기가 소스별 성공·실패·마지막 성공을 저장했을 때 | UI 갱신(고급 상태) | REL-5, N-01 소스 레지스트리 | 정의 대기 | N-01 | InformationSource는 웹·뉴스·공시만 구분해 재무·미 재무부·FRED 등 전체 소스를 식별하지 못함; 통합 소스 종류와 상태 조회 계약 필요 |
+| `SourceStatusChanged` | `DataSource` | 수집기와 상태 기록 유스케이스가 소스별 상태(정상·데이터 없음·미설정·실패·마지막 성공 시각)를 저장했을 때 | UI 갱신(고급 상태) | REL-5, N-01 소스 레지스트리 | 아니오 | - | - |
 
 토스 연결의 한 상태 변경에는 `BrokerConnectionChanged` 하나만 낸다. 차단·만료·사용자 조치 필요뿐 아니라 차단 해제·재발급 성공도 같은 이벤트다. 토스 연결 상태가 바뀌었다는 이유로 `SelfCheckChanged`를 함께 내지 않는다. `SelfCheckChanged`는 토스 연결 밖의 자체 점검 항목에만 쓴다. 동기화 결과 저장과 연결 상태 변경이 각각 실제 발생하면 각각의 사건이며, 오류를 관측한 모든 호출마다 연결 이벤트를 중복 발행하지 않는다.
 
@@ -519,7 +519,7 @@ UI 이벤트 DTO에는 종류와 **계좌 키가 아닌 ID의 문자열 표현**
 | `src-tauri` | 직접 의존하지 않는다. `broker-toss-trade`의 구현체를 만들어 `approval-command`에 넘기고, 승인 서비스를 IPC 명령에 연결만 한다 |
 | 그 밖 전부 | 전이 그래프에도 나타나지 않는다 |
 
-`TossEndpoint::production()`은 `broker-toss`의 인자 없는 공개 생성자다. 실제 주소 상수는 `crates/adapters/broker-toss/src/endpoint.rs`의 `PRODUCTION_ORIGIN` 하나다. 호출·별칭·함수 참조는 `apps/desktop/src-tauri/src/main.rs`에서만 허용하고 `xtask arch-check`가 강제한다. Rust에는 다른 crate의 특정 파일만 허용하는 가시성이 없으므로 컴파일 차단이 아닌 구조 검사다. endpoint의 필드는 모듈 밖에서 조립할 수 없고, 실제 상수와 Production 참조도 정식 생성자 안으로 제한한다. TossHttpClient 필드도 모듈 비공개다. 구조 검사는 endpoint/http의 자식 모듈과 추가 생성·필드 변경 경로를 거부하고 클라이언트 직접 조립을 정식 new로 제한한다. 토큰 고정 POST는 http 내부 메서드에서만 전송한다. 원시 응답 본문과 수신 조각은 SecretValue로 보관한다. 문자열 URL 생성자는 없다. 테스트는 `TossEndpoint::local(port)`로 IPv4 루프백만 만든다. 제품 HTTP는 reqwest 0.13.5의 rustls·플랫폼 인증서 검증을 사용하며 HTTPS 전용, 리다이렉트·프록시 금지, 연결 5초·전체 30초다. 기본 기능을 끄고 rustls만 켜며 HTTP/1만 사용한다. JSON·쿠키·압축·시스템 프록시 기능은 켜지 않는다.
+`TossEndpoint::production()`은 `broker-toss`의 인자 없는 공개 생성자다. 실제 주소 상수는 `crates/adapters/broker-toss/src/endpoint.rs`의 `PRODUCTION_ORIGIN` 하나다. 호출·별칭·함수 참조는 `apps/desktop/src-tauri/src/main.rs`와 `crates/toss-smoke/src/main.rs` 두 진입 파일에서만 허용하고 `xtask arch-check`가 강제한다. Rust에는 다른 crate의 특정 파일만 허용하는 가시성이 없으므로 컴파일 차단이 아닌 구조 검사다. endpoint의 필드는 모듈 밖에서 조립할 수 없고, 실제 상수와 Production 참조도 정식 생성자 안으로 제한한다. TossHttpClient 필드도 모듈 비공개다. 구조 검사는 endpoint/http의 자식 모듈과 추가 생성·필드 변경 경로를 거부하고 클라이언트 직접 조립을 정식 new로 제한한다. 토큰 고정 POST는 http 내부 메서드에서만 전송한다. 원시 응답 본문과 수신 조각은 SecretValue로 보관한다. 문자열 URL 생성자는 없다. 테스트는 `TossEndpoint::local(port)`로 IPv4 루프백만 만든다. 제품 HTTP는 reqwest 0.13.5의 rustls·플랫폼 인증서 검증을 사용하며 HTTPS 전용, 리다이렉트·프록시 금지, 연결 5초·전체 30초다. 기본 기능을 끄고 rustls만 켜며 HTTP/1만 사용한다. JSON·쿠키·압축·시스템 프록시 기능은 켜지 않는다.
 
 `broker-toss`(읽기)는 공개 API에 GET과 토큰 발급만 둔다. 주문 경로 요청은 `broker-toss-trade`에만 있다. 그래서 `toss-smoke`나 읽기 어댑터를 손에 넣어도 주문을 만들 수 없다(R-01).
 

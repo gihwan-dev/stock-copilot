@@ -272,7 +272,10 @@ pub use identity_confirmation_prompt::{
 mod confirm_instrument_identity;
 pub use confirm_instrument_identity::{ConfirmInstrumentIdentity, IdentityConfirmationOutcome};
 mod audit_log;
-pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
+pub use audit_log::{
+    AuditEntry, AuditIntegrity, AuditKind, AuditLog, WebSearchAuditError, WebSearchAuditOutcome,
+    WebSearchAuditRecord, WebSearchQueryMode,
+};
 mod instrument_mapping;
 pub use instrument_mapping::{
     InstrumentIdIssuer, InstrumentMappingCorrectionRepository, InstrumentMappingHistoryRepository,
@@ -429,10 +432,46 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
+mod open_external;
+pub use open_external::{
+    CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
+    OpenExternalError, OpenExternalOutcome, OpenExternalUrl,
+};
+
+mod source_status;
+pub use source_status::{
+    GetSourceStatuses, RecordSourceStatus, SourceAttemptOutcome, SourceState, SourceStatus,
+    SourceStatusError, SourceStatusReport, SourceStatusRepository,
+};
+
+mod web_search_guard;
+pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 mod order_gate;
 pub use order_gate::{
     OrderGateCollectedFacts, OrderGateError, OrderGateOutcome, OrderGatePolicyContext,
     ValidateOrderProposal,
+
+mod chat_types;
+pub use chat_types::{
+    BackgroundPreemption, ChatCard, ChatCardId, ChatCardKind, ChatChunk, ChatExecutionMode,
+    ChatFailureReason, ChatQueueAcquisition, ChatRunLedgerEntry, ChatRunModelSpec, ChatRunProfile,
+    ChatRunTiming, ChatScreenContext, ChatSequence, ChatSessionId, ChatSessionRecord,
+    ChatSessionSummary, ChatSignalState, ChatSinkClosed, ChatSource, ChatSourceKind, ChatTurnId,
+    ChatTurnIdentity, ChatTurnMetrics, ChatTurnStatus, ChatTurnSummary, StoredAssistantAttachments,
+    StoredAssistantReply, StoredChatContent, StoredChatEntry,
+};
+
+mod chat_ports;
+pub use chat_ports::{ChatChunkSink, ChatQueuePort, ChatRepository, ChatRunLedger, ChatStopSignal};
+
+mod send_chat_message;
+pub use send_chat_message::{
+    AnalysisToolAllowance, ChatModelConfig, SendChatMessage, SendChatOutcome, SendChatRequest,
+    build_chat_prompt, check_analysis_tool,
+mod peer_process;
+pub use peer_process::{
+    ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
+    PeerProcessLookupError, ProcessId,
 };
 mod order_rate_limit;
 pub use order_rate_limit::{CheckOrderRateLimit, OrderRateRepository};

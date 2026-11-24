@@ -72,24 +72,6 @@ check-audited: check-node require-base check-ts
     "{{just_executable()}}" disable-report-since {{quote(base)}}
     "{{just_executable()}}" hooks-installed
 
-[env("STOCK_COPILOT_PROPTEST_CASES", "256")]
-check-lite: check-node check-pnpm
-    pnpm install --frozen-lockfile --ignore-scripts
-    pnpm -C apps/desktop exec tsc -p .
-    pnpm -C apps/desktop exec eslint --max-warnings 0 src
-    pnpm -C apps/desktop exec vite build
-    node harness/vitest-check/check.mjs
-    node --test 'apps/desktop/tests/*.test.mjs'
-    cargo fmt --all --check
-    "{{just_executable()}}" clippy Cargo.toml
-    "{{just_executable()}}" arch-check
-    "{{just_executable()}}" source-check
-    "{{just_executable()}}" sql-check
-    "{{just_executable()}}" migration-check
-    "{{just_executable()}}" capability-check
-    node harness/generated-files/check.mjs
-    cargo nextest run --workspace --locked --exclude xtask
-
 check-full: advisory-db-fetch check
     "{{just_executable()}}" visual-check
     node harness/ds-overflow/examples.mjs
@@ -347,3 +329,20 @@ visual-measure:
 
 visual-check:
     node harness/visual/launch.mjs compare
+
+check-lite: check-node check-pnpm
+    pnpm install --frozen-lockfile --ignore-scripts
+    pnpm -C apps/desktop exec tsc -p .
+    pnpm -C apps/desktop exec eslint --max-warnings 0 src
+    pnpm -C apps/desktop exec vite build
+    node harness/vitest-check/check.mjs
+    node --test 'apps/desktop/tests/*.test.mjs'
+    cargo fmt --all --check
+    "{{just_executable()}}" clippy Cargo.toml
+    "{{just_executable()}}" arch-check
+    "{{just_executable()}}" source-check
+    "{{just_executable()}}" sql-check
+    "{{just_executable()}}" migration-check
+    "{{just_executable()}}" capability-check
+    node harness/generated-files/check.mjs
+    env -u STOCK_COPILOT_PROPTEST_CASES cargo nextest run --workspace --locked --exclude xtask

@@ -1,5 +1,6 @@
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { vi, type VitestUtils } from "vitest";
+import type { ExternalUrl } from "../../lib";
 import { mockCommands } from "./mockBindings";
 import { responses } from "./responses";
 
@@ -56,7 +57,54 @@ export const rejectWithUndefined = (): void => {
   });
 };
 
+export const hangAppVersion = (): void => {
+  mockCommands({
+    appVersion: () => new Promise(() => undefined),
+  });
+};
+
+export const enableFakeCommandTimers = (): void => {
+  const timers = vi.useFakeTimers();
+  return timers === timers ? undefined : undefined;
+};
+
+export const advanceCommandTimers = (): Promise<void> =>
+  vi.advanceTimersByTimeAsync(10_000).then((): void => undefined);
+
 export const resetCommands = (): VitestUtils => {
   clearMocks();
-  return vi.unstubAllGlobals();
+  return vi.useRealTimers().unstubAllGlobals();
+};
+
+export const answerOpenExternalForExpectedUrl = (
+  expectedUrl: ExternalUrl,
+): void => {
+  mockCommands({
+    openExternal: ({ request }) => {
+      if (request.url !== expectedUrl) {
+        throw new Error(`unexpected url: ${request.url}`);
+      }
+      return responses.openExternal;
+    },
+  });
+};
+
+export const returnRecordedOpenExternalError = (): void => {
+  mockCommands({
+    openExternal: () => {
+      throw responses.ipcErrors[2];
+    },
+  });
+};
+
+export const answerOpenExternalWithMalformedResponse = (): void => {
+  mockIPC(() => ({ status: "unexpected" }), { shouldMockEvents: true });
+};
+
+export const rejectOpenExternalWithErrorObject = (): void => {
+  mockCommands({
+    openExternal: () => {
+      throw new Error("denied");
+    },
+  });
 };
