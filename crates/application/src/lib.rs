@@ -390,8 +390,8 @@ pub use transaction_schedule::{
 
 mod submit_estimate;
 pub use submit_estimate::{
-    EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository, SubmitEstimate,
-    SubmitEstimateError,
+    EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository,
+    EstimateTaskRepository, SubmitEstimate, SubmitEstimateError,
 };
 
 mod transaction_observation;
@@ -453,8 +453,8 @@ mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 mod order_gate;
 pub use order_gate::{
-    OrderGateCollectedFacts, OrderGateError, OrderGateOutcome, OrderGatePolicyContext,
-    ValidateOrderProposal,
+    IntentRecheckOutcome, OrderGateCollectedFacts, OrderGateError, OrderGateOutcome,
+    OrderGatePolicyContext, ValidateOrderProposal,
 };
 
 mod chat_types;
@@ -486,6 +486,9 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod order_rate_limit;
+pub use order_rate_limit::{CheckOrderRateLimit, OrderRateRepository};
+
 mod tool_call_ledger;
 pub use tool_call_ledger::{
     ToolCallLedger, ToolCallOutcome, ToolCallRecord, ToolCallRecordInput, ToolLedgerError,

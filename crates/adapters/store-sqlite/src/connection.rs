@@ -49,7 +49,7 @@ fn validate_key(key: &SecretValue) -> Result<(), SystemPortError> {
     Ok(())
 }
 
-fn apply_key(connection: &Connection, key: &SecretValue) -> Result<(), SystemPortError> {
+pub(crate) fn apply_key(connection: &Connection, key: &SecretValue) -> Result<(), SystemPortError> {
     validate_key(key)?;
     let mut statement = Zeroizing::new(String::with_capacity(67));
     statement.push_str(RAW_KEY_PREFIX);
@@ -76,7 +76,7 @@ pub(crate) fn open(
         Access::Write => OpenFlags::SQLITE_OPEN_READ_WRITE.union(OpenFlags::SQLITE_OPEN_CREATE),
     }
     .union(OpenFlags::SQLITE_OPEN_NO_MUTEX);
-    let connection = Connection::open_with_flags(path.as_path(), flags)
+    let mut connection = Connection::open_with_flags(path.as_path(), flags)
         .map_err(|error| failure::sqlite(&error))?;
     verify_access(&connection, access)?;
     connection
@@ -85,6 +85,7 @@ pub(crate) fn open(
     verify_text(&connection, sql::CIPHER_MEMORY, "1")?;
     apply_key(&connection, key)?;
     configure(&connection)?;
+    install_audit_guard(&mut connection).map_err(|error| failure::sqlite(&error))?;
     let _: i64 = connection
         .query_row(sql::SCHEMA, [], |row| row.get(0))
         .map_err(|error| failure::sqlite(&error))?;
@@ -98,6 +99,81 @@ pub(crate) fn open(
         Access::Write => {}
     }
     Ok(connection)
+}
+
+const AUDIT_TABLE: &str = "audit_log";
+
+fn names_audit_table(table_name: &str) -> bool {
+    table_name.eq_ignore_ascii_case(AUDIT_TABLE)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AuditTouch {
+    Mutation,
+    SchemaChange,
+    Other,
+    Unrecognized,
+}
+
+fn audit_touch(action: &rusqlite::hooks::AuthAction<'_>) -> AuditTouch {
+    use rusqlite::hooks::AuthAction;
+    let (touch, table_name) = match action {
+        AuthAction::Update { table_name, .. }
+        | AuthAction::Delete { table_name }
+        | AuthAction::DropTable { table_name }
+        | AuthAction::DropTempTable { table_name }
+        | AuthAction::DropIndex { table_name, .. }
+        | AuthAction::DropTempIndex { table_name, .. }
+        | AuthAction::DropTrigger { table_name, .. }
+        | AuthAction::DropTempTrigger { table_name, .. }
+        | AuthAction::AlterTable { table_name, .. } => (AuditTouch::Mutation, *table_name),
+        AuthAction::CreateTrigger { table_name, .. }
+        | AuthAction::CreateTempTrigger { table_name, .. }
+        | AuthAction::CreateIndex { table_name, .. }
+        | AuthAction::CreateTempIndex { table_name, .. }
+        | AuthAction::CreateTable { table_name }
+        | AuthAction::CreateTempTable { table_name } => (AuditTouch::SchemaChange, *table_name),
+        AuthAction::Unknown { .. }
+        | AuthAction::CreateTempView { .. }
+        | AuthAction::CreateView { .. }
+        | AuthAction::DropTempView { .. }
+        | AuthAction::DropView { .. }
+        | AuthAction::Insert { .. }
+        | AuthAction::Pragma { .. }
+        | AuthAction::Read { .. }
+        | AuthAction::Select
+        | AuthAction::Transaction { .. }
+        | AuthAction::Attach { .. }
+        | AuthAction::Detach { .. }
+        | AuthAction::Reindex { .. }
+        | AuthAction::Analyze { .. }
+        | AuthAction::CreateVtable { .. }
+        | AuthAction::DropVtable { .. }
+        | AuthAction::Function { .. }
+        | AuthAction::Savepoint { .. }
+        | AuthAction::Recursive => return AuditTouch::Other,
+        _ => return AuditTouch::Unrecognized,
+    };
+    if names_audit_table(table_name) {
+        touch
+    } else {
+        AuditTouch::Other
+    }
+}
+
+pub(crate) fn audit_protected(action: &rusqlite::hooks::AuthAction<'_>) -> bool {
+    audit_touch(action) == AuditTouch::Mutation
+}
+
+fn audit_guard(context: rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Authorization {
+    if audit_touch(&context.action) == AuditTouch::Other {
+        rusqlite::hooks::Authorization::Allow
+    } else {
+        rusqlite::hooks::Authorization::Deny
+    }
+}
+pub(crate) fn install_audit_guard(connection: &mut Connection) -> Result<(), rusqlite::Error> {
+    connection.authorizer(Some(audit_guard))
 }
 
 fn verify_parent(path: &DatabasePath) -> Result<(), SystemPortError> {
