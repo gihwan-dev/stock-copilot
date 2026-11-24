@@ -14,16 +14,17 @@ use application::{
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
-    CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
-    CommissionRateFact, CreditTrade, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate,
-    FxRateKind, IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
+    CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, CommissionRateFact,
+    CreditTrade, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate, FxRateKind,
+    IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
     InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
     MarketIndicatorQuote, NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment,
-    PriceLimits, ProgramTrade, Quote, QuoteInstrument, RaisedSignal, RankingLimit,
-    ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
-    SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact, SettledRowSet,
-    SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking, StockWarnings,
-    Symbol, SyncRecord, Thesis, TimeInterval, Timestamp, TransactionFilter, ValuationSnapshot,
+    PriceLimits, ProgramTrade, ProvenClosedOrderSet, Quote, QuoteInstrument, RaisedSignal,
+    RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition,
+    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
+    SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking,
+    StockWarnings, Symbol, SyncRecord, Thesis, TimeInterval, Timestamp, TransactionFilter,
+    ValuationSnapshot,
 };
 pub async fn broker_read_accounts<P: BrokerRead>(
     port: &P,
@@ -122,7 +123,7 @@ pub async fn broker_read_closed_orders<P: BrokerRead>(
     port: &P,
     account: &AccountId,
     evaluation_window: TimeInterval,
-    expected: Result<ClosedOrderSet, PortError>,
+    expected: Result<ProvenClosedOrderSet, PortError>,
 ) {
     assert_eq!(
         port.closed_orders(account, evaluation_window).await,
