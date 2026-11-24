@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::process::CommandExt;
-use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -341,11 +340,4 @@ impl ActiveRunRegistry {
             None => false,
         }
     }
-}
-
-pub(crate) fn ensure_dir_exists(path: &Path) -> io::Result<()> {
-    if path.is_dir() {
-        return Ok(());
-    }
-    std::fs::create_dir_all(path)
 }

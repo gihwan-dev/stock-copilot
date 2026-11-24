@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use ai_claude_code::{ClaudeCodeConfig, ClaudeCodeProvider, decode_stream_text};
+    use ai_claude_code::{
+        ClaudeCodeConfig, ClaudeCodeProvider, HostEnvironment, McpBridgeConfig, decode_stream_text,
+    };
     use application::{
         AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, AnalysisPrompt, CollectionQuery,
         CollectionTopic, InformationError, IsolationCheck, IsolationFailure, ModelSelection,
@@ -96,7 +98,23 @@ mod tests {
         }
     }
 
+    fn clean_host_env() -> HostEnvironment {
+        HostEnvironment::new_clean(
+            String::from("/tmp/fake-home"),
+            String::from("/usr/bin:/bin"),
+            String::from("testuser"),
+            Some(String::from("testuser")),
+            String::from("/tmp"),
+        )
+    }
+
     fn make_provider(executable: PathBuf, work_dir: PathBuf) -> ClaudeCodeProvider {
+        let bridge = McpBridgeConfig::try_new(
+            String::from("app"),
+            PathBuf::from("/usr/bin/true"),
+            Vec::new(),
+        )
+        .expect("bridge");
         let config = ClaudeCodeConfig::new(
             executable,
             work_dir,
@@ -105,7 +123,9 @@ mod tests {
             BTreeSet::from([String::from("cc-plugin-privacy")]),
         )
         .expect("config")
-        .with_allowed_cli_versions(BTreeSet::from([String::from("2.1.322")]));
+        .with_allowed_cli_versions(BTreeSet::from([String::from("2.1.322")]))
+        .with_host_environment(clean_host_env())
+        .with_mcp_bridge(bridge, SecretValue::new(b"test-token-value".to_vec()));
         ClaudeCodeProvider::new(config)
     }
 
@@ -543,6 +563,12 @@ mod tests {
                     .expect("prepare");
             let secret_token = "SUPER_SECRET_MCP_TOKEN_99999";
             let secret_prompt = "CONFIDENTIAL_HOLDING_12345678";
+            let bridge = McpBridgeConfig::try_new(
+                String::from("app"),
+                PathBuf::from("/usr/bin/true"),
+                Vec::new(),
+            )
+            .expect("bridge");
             let config = ClaudeCodeConfig::new(
                 prepared.executable_path().to_path_buf(),
                 dir.path().join("work-drop"),
@@ -551,10 +577,8 @@ mod tests {
                 BTreeSet::from([String::from("cc-plugin-privacy")]),
             )
             .expect("config")
-            .with_mcp_config(
-                dir.path().join("mcp.json"),
-                SecretValue::new(secret_token.as_bytes().to_vec()),
-            );
+            .with_host_environment(clean_host_env())
+            .with_mcp_bridge(bridge, SecretValue::new(secret_token.as_bytes().to_vec()));
             assert!(
                 !format!("{config:?}").contains(secret_token),
                 "config Debug must not leak token"

@@ -1,8 +1,12 @@
+use crate::command::{
+    CommandBuildError, CommandPlan, CommandPlanInput, HostEnvironment, McpBridgeConfig,
+    McpConfigSource, RunWorkspace, build_command_plan, prepare_run_workspace,
+};
 use crate::decoder::ClaudeEventDecoder;
 use crate::isolation::IsolationExpectation;
 use crate::process::{
-    ActiveRunRegistry, ChildCancelGuard, ForceKill, SharedChild, SpawnSpec, ensure_dir_exists,
-    map_line_read_failure, read_bounded_line, spawn_isolated_child, write_user_message_line,
+    ActiveRunRegistry, ChildCancelGuard, ForceKill, SharedChild, SpawnSpec, map_line_read_failure,
+    read_bounded_line, spawn_isolated_child, write_user_message_line,
 };
 use application::{
     AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, ChatHistory, ChatRole, CollectionQuery,
@@ -48,8 +52,11 @@ pub struct ClaudeCodeConfig {
     analysis_tools: BTreeSet<String>,
     allowed_builtin_plugins: BTreeSet<String>,
     allowed_cli_versions: Option<BTreeSet<String>>,
+    host_env: Option<HostEnvironment>,
+    mcp_bridge: Option<McpBridgeConfig>,
     mcp_config_path: Option<PathBuf>,
     mcp_token: Option<SecretValue>,
+    collection_json_schema: Option<String>,
     model_defaults: ModelDefaults,
 }
 
@@ -61,8 +68,14 @@ impl fmt::Debug for ClaudeCodeConfig {
             .field("expected_mcp_server", &self.expected_mcp_server)
             .field("analysis_tool_count", &self.analysis_tools.len())
             .field("plugin_count", &self.allowed_builtin_plugins.len())
+            .field("has_host_env", &self.host_env.is_some())
+            .field("has_mcp_bridge", &self.mcp_bridge.is_some())
             .field("has_mcp_config", &self.mcp_config_path.is_some())
             .field("has_mcp_token", &self.mcp_token.is_some())
+            .field(
+                "has_collection_schema",
+                &self.collection_json_schema.is_some(),
+            )
             .field("model_defaults", &self.model_defaults)
             .finish_non_exhaustive()
     }
@@ -86,8 +99,11 @@ impl ClaudeCodeConfig {
             analysis_tools,
             allowed_builtin_plugins,
             allowed_cli_versions: None,
+            host_env: None,
+            mcp_bridge: None,
             mcp_config_path: None,
             mcp_token: None,
+            collection_json_schema: None,
             model_defaults: ModelDefaults::new(highest, fast),
         })
     }
@@ -99,9 +115,30 @@ impl ClaudeCodeConfig {
     }
 
     #[must_use]
+    pub fn with_host_environment(mut self, host_env: HostEnvironment) -> Self {
+        self.host_env = Some(host_env);
+        self
+    }
+
+    #[must_use]
+    pub fn with_mcp_bridge(mut self, bridge: McpBridgeConfig, token: SecretValue) -> Self {
+        self.mcp_bridge = Some(bridge);
+        self.mcp_config_path = None;
+        self.mcp_token = Some(token);
+        self
+    }
+
+    #[must_use]
     pub fn with_mcp_config(mut self, config_path: PathBuf, token: SecretValue) -> Self {
         self.mcp_config_path = Some(config_path);
+        self.mcp_bridge = None;
         self.mcp_token = Some(token);
+        self
+    }
+
+    #[must_use]
+    pub fn with_collection_json_schema(mut self, schema: String) -> Self {
+        self.collection_json_schema = Some(schema);
         self
     }
 
@@ -135,6 +172,45 @@ impl ClaudeCodeConfig {
             ),
         }
     }
+
+    pub fn preview_command_plan(
+        &self,
+        spec: &RunSpec,
+        work_dir: &Path,
+        mcp_config_path: &Path,
+    ) -> Result<CommandPlan, CommandBuildError> {
+        let model = self.model_defaults.resolve(spec.model());
+        let input = CommandPlanInput {
+            executable: &self.executable_path,
+            work_dir,
+            mcp_config_path,
+            kind: spec.kind(),
+            model: &model,
+            effort: spec.effort(),
+            expected_mcp_server: &self.expected_mcp_server,
+            analysis_tools: &self.analysis_tools,
+            collection_json_schema: self.collection_json_schema.as_deref(),
+            host_env: self.host_env.as_ref(),
+            mcp_token: self.mcp_token.as_ref(),
+        };
+        build_command_plan(&input)
+    }
+
+    fn mcp_source_for(&self, kind: RunKind) -> Result<McpConfigSource<'_>, CommandBuildError> {
+        if kind == RunKind::Collection {
+            return Ok(McpConfigSource::Empty);
+        }
+        if let Some(bridge) = self.mcp_bridge.as_ref() {
+            if bridge.server_name() != self.expected_mcp_server {
+                return Err(CommandBuildError::InvalidMcpServerName);
+            }
+            return Ok(McpConfigSource::Bridge(bridge));
+        }
+        if let Some(path) = self.mcp_config_path.as_deref() {
+            return Ok(McpConfigSource::ExistingFile(path));
+        }
+        Err(CommandBuildError::MissingMcpConfigForAnalysis)
+    }
 }
 
 pub struct ClaudeCodeProvider {
@@ -166,43 +242,34 @@ impl ClaudeCodeProvider {
         &self.config
     }
 
-    fn build_spawn_spec(&self, spec: &RunSpec) -> Result<SpawnSpec, InformationError> {
-        let model = self.config.model_defaults.resolve(spec.model());
-        let mut args = base_cli_args(&model, spec.effort());
-        let mut env = vec![(
-            String::from("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"),
-            String::from("1"),
-        )];
-        match spec.kind() {
-            RunKind::Analysis => {
-                args.push(String::from("--tools"));
-                args.push(String::new());
-                if !self.config.analysis_tools.is_empty() {
-                    args.push(String::from("--allowedTools"));
-                    args.extend(self.config.analysis_tools.iter().cloned());
-                }
-                if let Some(mcp_path) = &self.config.mcp_config_path {
-                    args.push(String::from("--mcp-config"));
-                    args.push(mcp_path.to_string_lossy().into_owned());
-                }
-                if let Some(secret) = &self.config.mcp_token {
-                    let token_text = expose_utf8_token(secret)?;
-                    env.push((String::from("STOCK_MCP_TOKEN"), token_text));
-                }
-            }
-            RunKind::Collection => {
-                args.push(String::from("--tools"));
-                args.push(String::from("WebSearch"));
-                args.push(String::from("--allowedTools"));
-                args.push(String::from("WebSearch"));
-            }
-        }
-        Ok(SpawnSpec {
-            executable: self.config.executable_path.clone(),
+    fn prepare_spawn(
+        &self,
+        spec: &RunSpec,
+    ) -> Result<(RunWorkspace, SpawnSpec), CommandBuildError> {
+        let mcp_source = self.config.mcp_source_for(spec.kind())?;
+        let token_for_workspace = match spec.kind() {
+            RunKind::Analysis => self.config.mcp_token.as_ref(),
+            RunKind::Collection => None,
+        };
+        let workspace = prepare_run_workspace(
+            &self.config.work_dir,
+            spec.id(),
+            mcp_source,
+            token_for_workspace,
+        )?;
+        let plan = self.config.preview_command_plan(
+            spec,
+            workspace.work_dir(),
+            workspace.mcp_config_path(),
+        )?;
+        let (executable, args, work_dir, env) = plan.into_parts();
+        let spawn_spec = SpawnSpec {
+            executable,
             args,
-            work_dir: self.config.work_dir.clone(),
+            work_dir,
             env,
-        })
+        };
+        Ok((workspace, spawn_spec))
     }
 
     async fn spawn_stream(
@@ -210,9 +277,9 @@ impl ClaudeCodeProvider {
         spec: &RunSpec,
         prompt_text: String,
     ) -> Result<ClaudeEventStream, InformationError> {
-        ensure_dir_exists(&self.config.work_dir)
-            .map_err(|_error| InformationError::Unavailable(ResetTime::NotProvided))?;
-        let spawn_spec = self.build_spawn_spec(spec)?;
+        let (workspace, spawn_spec) = self
+            .prepare_spawn(spec)
+            .map_err(CommandBuildError::to_information_error)?;
         let spawned = spawn_isolated_child(&spawn_spec)
             .map_err(|_error| InformationError::Unavailable(ResetTime::NotProvided))?;
         let run_id_key = String::from(spec.id().as_str());
@@ -232,6 +299,7 @@ impl ClaudeCodeProvider {
             active_runs: Arc::clone(&self.active_runs),
             last_usage: Arc::clone(&self.last_usage),
             tx,
+            workspace,
         };
         let spawned_thread = std::thread::Builder::new()
             .name(String::from("claude-stream-reader"))
@@ -390,6 +458,7 @@ struct ReaderContext {
     active_runs: Arc<ActiveRunRegistry>,
     last_usage: Arc<Mutex<AiUsage>>,
     tx: mpsc::Sender<ChannelMessage>,
+    workspace: RunWorkspace,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -417,6 +486,7 @@ fn run_reader_loop(ctx: ReaderContext) {
         active_runs,
         last_usage,
         tx,
+        workspace,
     } = ctx;
     let write_outcome = write_user_message_line(&mut stdin, &prompt_text);
     let stdin_failed = match write_outcome {
@@ -451,6 +521,7 @@ fn run_reader_loop(ctx: ReaderContext) {
     };
     let exit_status = shared.reap_blocking(force_kill);
     active_runs.unregister_blocking(&run_id);
+    workspace.cleanup();
     finalize_stream(stop, decoder, exit_status, rate_limit_seen, &tx);
 }
 
@@ -529,12 +600,6 @@ fn record_usage_observation(
     }
 }
 
-fn expose_utf8_token(secret: &SecretValue) -> Result<String, InformationError> {
-    std::str::from_utf8(secret.as_exposed_secret())
-        .map(String::from)
-        .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))
-}
-
 fn finalize_stream(
     stop: StopReason,
     decoder: ClaudeEventDecoder,
@@ -568,44 +633,6 @@ fn finalize_natural_eof(
         ChannelMessage::Control(StreamItem::Error(InformationError::Unavailable(
             ResetTime::NotProvided,
         )))
-    }
-}
-
-fn base_cli_args(model: &ModelName, effort: ReasoningEffort) -> Vec<String> {
-    let mut args = vec![
-        String::from("-p"),
-        String::from("--verbose"),
-        String::from("--input-format"),
-        String::from("stream-json"),
-        String::from("--output-format"),
-        String::from("stream-json"),
-        String::from("--include-partial-messages"),
-        String::from("--restricted"),
-        String::from("--disable-slash-commands"),
-        String::from("--permission-mode"),
-        String::from("dontAsk"),
-        String::from("--permission-prompts"),
-        String::from("none"),
-        String::from("--strict-mcp-config"),
-        String::from("--no-session-persistence"),
-        String::from("--model"),
-        String::from(model.as_str()),
-    ];
-    if let Some(effort_arg) = effort_flag_value(effort) {
-        args.push(String::from("--effort"));
-        args.push(String::from(effort_arg));
-    }
-    args
-}
-
-const fn effort_flag_value(effort: ReasoningEffort) -> Option<&'static str> {
-    match effort {
-        ReasoningEffort::Default => None,
-        ReasoningEffort::Low => Some("low"),
-        ReasoningEffort::Medium => Some("medium"),
-        ReasoningEffort::High => Some("high"),
-        ReasoningEffort::XHigh => Some("xhigh"),
-        ReasoningEffort::Max => Some("max"),
     }
 }
 
