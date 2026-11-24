@@ -4,6 +4,7 @@ mod engine;
 mod market_hours;
 mod registry;
 mod schedule_time;
+mod sync_jobs;
 mod types;
 
 pub use ai_queue::{AiJobQueue, AiQueueAdmission, AiQueueError, DisabledAiJobQueue};
@@ -22,6 +23,12 @@ pub use registry::{JobFuture, JobRegistry, RegisteredJobMeta, RegistryError, Sch
 pub use schedule_time::{
     KST_OFFSET_SECONDS, ScheduleTimeError, is_within_skip_grace, kst_time_of_day, next_due_after,
 };
+pub use sync_jobs::{
+    PORTFOLIO_SYNC_INTERVAL_MINUTES, PortfolioSyncJob, PortfolioSyncPort, SyncDemand,
+    SyncPortfolioRunner, SyncTransactionsParts, SyncTransactionsRunner,
+    TRANSACTIONS_SYNC_INTERVAL_MINUTES, TransactionSyncPort, TransactionSyncTally,
+    TransactionsSyncJob,
+};
 pub use types::{
     JobConfig, JobEnablement, JobError, JobExecutionRecord, JobKind, JobRunDetail, JobRunOutcome,
     JobScheduleOverride, JobStatusSnapshot, KstTimeError, KstTimeOfDay, KstWeekday, LoopControl,
@@ -34,5 +41,7 @@ mod code_jobs_tests;
 mod engine_tests;
 #[cfg(test)]
 mod fixture_tests;
+#[cfg(test)]
+mod sync_jobs_tests;
 #[cfg(test)]
 mod tests;

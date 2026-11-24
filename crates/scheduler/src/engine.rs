@@ -2,6 +2,7 @@ use crate::ai_queue::{AiJobQueue, AiQueueAdmission};
 use crate::market_hours::{DueBound, MarketCalendarSource, NoMarketCalendar, market_due};
 use crate::registry::{JobRegistry, ScheduledJob};
 use crate::schedule_time::{ScheduleTimeError, initial_due, is_within_skip_grace, next_due_after};
+use crate::sync_jobs::SyncDemand;
 use crate::types::{
     JobConfig, JobEnablement, JobError, JobExecutionRecord, JobKind, JobRunOutcome,
     JobScheduleOverride, JobStatusSnapshot, LoopControl, MissedPolicy, ScheduleRule,
@@ -58,6 +59,7 @@ impl JobTriggers {
 pub struct SchedulerEventSubscriber {
     wake: Arc<SchedulerWakeSignal>,
     triggers: Option<Arc<JobTriggers>>,
+    order_sync: Option<Arc<SyncDemand>>,
 }
 
 impl SchedulerEventSubscriber {
@@ -66,6 +68,7 @@ impl SchedulerEventSubscriber {
         Self {
             wake,
             triggers: None,
+            order_sync: None,
         }
     }
 
@@ -74,7 +77,14 @@ impl SchedulerEventSubscriber {
         Self {
             wake,
             triggers: Some(triggers),
+            order_sync: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_order_sync(mut self, demand: Arc<SyncDemand>) -> Self {
+        self.order_sync = Some(demand);
+        self
     }
 }
 
@@ -82,6 +92,9 @@ impl EventSubscriber for SchedulerEventSubscriber {
     fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
         match event {
             DomainEvent::OrderSubmitted(_) => {
+                if let Some(demand) = &self.order_sync {
+                    demand.request();
+                }
                 if let Some(triggers) = &self.triggers {
                     triggers.trigger(ScheduledJobId::PortfolioSync);
                 }
