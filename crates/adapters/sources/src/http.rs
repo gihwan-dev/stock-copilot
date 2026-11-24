@@ -279,6 +279,11 @@ impl SourceHttpClient {
         })
     }
 
+    #[must_use]
+    pub fn now(&self) -> domain::Timestamp {
+        self.limiter.current_timestamp()
+    }
+
     pub async fn fetch(&self, target: &SourceFetch) -> Result<SourceFetchOutcome, SourceHttpError> {
         let spec = SourceRegistry::spec(target.source);
         let headers = resolve_headers(spec, self.contact.as_ref(), target.validators.as_ref())?;
@@ -330,6 +335,52 @@ impl SourceHttpClient {
         };
         self.limiter.mark_finished(&mut budget);
         outcome
+    }
+}
+
+#[must_use]
+pub fn http_status_to_error(source: HttpDataSource, status: u16) -> InformationError {
+    match status {
+        401 | 403 => match SourceRegistry::spec(source).credential() {
+            crate::CredentialRequirement::Optional(cred) => {
+                InformationError::InvalidCredential(cred)
+            }
+            crate::CredentialRequirement::None => {
+                InformationError::Unavailable(ResetTime::NotProvided)
+            }
+        },
+        429 | 500..=599 => InformationError::Unavailable(ResetTime::NotProvided),
+        _ => InformationError::InvalidResponse(ResponseMismatch::Schema),
+    }
+}
+
+#[must_use]
+pub fn http_error_to_information(
+    source: HttpDataSource,
+    error: SourceHttpError,
+) -> InformationError {
+    match error {
+        SourceHttpError::InvalidCredential => match SourceRegistry::spec(source).credential() {
+            crate::CredentialRequirement::Optional(cred) => {
+                InformationError::InvalidCredential(cred)
+            }
+            crate::CredentialRequirement::None => {
+                InformationError::InvalidResponse(ResponseMismatch::Schema)
+            }
+        },
+        SourceHttpError::Transport | SourceHttpError::RateLimited => {
+            InformationError::Unavailable(ResetTime::NotProvided)
+        }
+        SourceHttpError::InvalidEndpoint
+        | SourceHttpError::DisallowedUrl
+        | SourceHttpError::InvalidHeader
+        | SourceHttpError::MissingContactUserAgent
+        | SourceHttpError::Configuration
+        | SourceHttpError::RedirectBlocked
+        | SourceHttpError::UnexpectedNotModified
+        | SourceHttpError::ResponseTooLarge => {
+            InformationError::InvalidResponse(ResponseMismatch::Schema)
+        }
     }
 }
 

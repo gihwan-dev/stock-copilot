@@ -3508,9 +3508,11 @@ version = "0.1.0"
 dependencies = [
  "application",
  "domain",
+ "quick-xml",
  "reqwest",
  "testkit",
  "testkit-ports",
+ "time",
  "tokio",
 ]
 

@@ -71,6 +71,10 @@ impl SourceRateLimiter {
         }
     }
 
+    pub(crate) fn current_timestamp(&self) -> domain::Timestamp {
+        self.clock.now()
+    }
+
     fn now(&self) -> i128 {
         let current = self.clock.now();
         i128::from(*current.utc_seconds().as_i64())

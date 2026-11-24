@@ -10,7 +10,9 @@ workspace = true
 [dependencies]
 application = { path = "../../application" }
 domain = { path = "../../domain" }
+quick-xml = { version = "=0.42.0" }
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls"] }
+time = { version = "=0.3.55", default-features = false, features = ["parsing", "formatting"] }
 tokio = { version = "=1.54.1", default-features = false, features = ["rt", "time", "sync"] }
 
 [dev-dependencies]
