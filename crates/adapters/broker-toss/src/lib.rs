@@ -11,7 +11,7 @@ mod endpoint;
 mod http;
 mod request;
 mod token;
-pub use endpoint::{TossEndpoint, TossWsEndpoint};
+pub use endpoint::{EndpointMode, TossEndpoint, TossWsEndpoint};
 pub use http::{
     PublicDocsRoute, RawResponse, ResponseHeaders, TossHttpClient, TossHttpError, TossWsConnector,
 };

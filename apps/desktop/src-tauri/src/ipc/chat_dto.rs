@@ -411,8 +411,8 @@ pub fn chunk_to_dto(chunk: &ChatChunk) -> ChatChunkDto {
             kind: card_kind_to_dto(card.kind()),
             id: card.id().as_str().to_owned(),
         },
-        ChatChunk::Sources(sources) => ChatChunkDto::Sources {
-            items: sources.iter().map(source_to_dto).collect(),
+        ChatChunk::Sources(listed) => ChatChunkDto::Sources {
+            items: listed.iter().map(source_to_dto).collect(),
         },
         ChatChunk::Done(summary) => done_chunk_to_dto(summary),
         ChatChunk::Cancelled => ChatChunkDto::Cancelled,
