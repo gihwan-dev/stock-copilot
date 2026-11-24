@@ -1,8 +1,3 @@
 export type { IpcFailure } from "./call";
-export { appVersion } from "./call";
-export type {
-  AppVersion,
-  AppVersionText,
-  CommandError,
-  CommandErrorKind,
-} from "./schema";
+export { appVersion, openExternal } from "./call";
+export type { AppVersion, CommandError, OpenExternalResult } from "./schema";

@@ -15,6 +15,7 @@ unmaintained = "all"
 unsound = "all"
 ignore = [
   { id = "RUSTSEC-2024-0436", reason = "paste는 tauri-specta =2.0.0-rc.28의 고정 의존성이다. 유지 중단 권고일 뿐 취약점이 아니고, 빌드 시점 매크로로만 쓰인다 (ADR 0016)" },
+  { id = "RUSTSEC-2026-0543", reason = "chrono는 rmcp =3.9.0과 schemars =1.2.3의 무조건 의존성이다. 유지 중단 권고일 뿐 취약점이 아니고, mcp-server는 chrono를 직접 쓰지 않는다 (M-01 ADR 초안)" },
 ]
 
 [licenses]
@@ -363,6 +364,21 @@ allow = [
   { crate = "zerovec", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "zerovec-derive", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "zmij", reason = "cargo_metadata, tauri, tauri-build 전이 의존성" },
+  { crate = "rmcp@3.9.0", reason = "M-01: ADR 0002 확정 MCP 서버 SDK(=3.9.0, server + transport-async-rw만 활성); build.rs(sha256 31b905abf91292bab290271e993e347e06a1944e6305f742f69dbd01e6b89349)는 저장소 상위 .githooks와 .git이 함께 있을 때만 실행되어 레지스트리 의존 빌드에서는 무동작" },
+  { crate = "chrono@0.4.45", reason = "M-01: rmcp =3.9.0 및 schemars =1.2.3의 무조건 전이 의존성(mcp-server 직접 사용 금지)" },
+  { crate = "const-oid@0.10.3", reason = "M-01: rmcp =3.9.0 → sha2 =0.11.1 → digest =0.11.3 전이 의존성" },
+  { crate = "futures@0.3.34", reason = "M-01: rmcp =3.9.0의 비동기 스트림 전이 의존성" },
+  { crate = "futures-executor@0.3.34", reason = "M-01: rmcp =3.9.0 → futures =0.3.34 전이 의존성" },
+  { crate = "futures-io@0.3.34", reason = "M-01: rmcp =3.9.0 → futures =0.3.34 전이 의존성" },
+  { crate = "futures-macro@0.3.34", reason = "M-01: rmcp =3.9.0 → futures =0.3.34 → futures-util 전이 절차 매크로" },
+  { crate = "futures-sink@0.3.34", reason = "M-01: rmcp =3.9.0 → futures =0.3.34 / tokio-util =0.7.20 전이 의존성" },
+  { crate = "hybrid-array@0.4.15", reason = "M-01: rmcp =3.9.0 → sha2 =0.11.1 → digest =0.11.3 전이 의존성" },
+  { crate = "pastey@0.2.3", reason = "M-01: rmcp =3.9.0 server 기능의 전이 절차 매크로(mcp-server 직접 사용 금지, 전용 잠금은 H-70 인계)" },
+  { crate = "ref-cast@1.0.27", reason = "M-01: rmcp =3.9.0 → schemars =1.2.3 전이 의존성; build.rs(sha256 095bc1870b75dd5c80a68bddaae03d2de9f817e134b026ebf3f63e0ff81cf5ca)는 OUT_DIR/private.rs 생성과 rustc 버전 cfg 설정만 수행" },
+  { crate = "ref-cast-impl@1.0.27", reason = "M-01: rmcp =3.9.0 → schemars =1.2.3 → ref-cast =1.0.27 전이 절차 매크로" },
+  { crate = "tokio-macros@2.7.2", reason = "M-01: mcp-server의 tokio macros 기능 전이 절차 매크로" },
+  { crate = "tokio-util@0.7.20", reason = "M-01: rmcp =3.9.0 transport-async-rw 기능의 codec 전이 의존성" },
+  { crate = "tracing-attributes@0.1.31", reason = "M-01: rmcp =3.9.0 → tracing 전이 절차 매크로" },
 ]
 deny = [
   { crate = "openssl", use-instead = "rustls" },
@@ -417,6 +433,8 @@ allow-build-scripts = [
   { crate = "web_atoms" },
   { crate = "wry" },
   { crate = "zmij" },
+  { crate = "rmcp@3.9.0" },
+  { crate = "ref-cast@1.0.27" },
 ]
 executables = "deny"
 interpreted = "deny"

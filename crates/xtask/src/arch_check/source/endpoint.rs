@@ -6,8 +6,13 @@ use syn::visit::{self, Visit};
 use syn::{LitByteStr, LitCStr, LitStr, Path};
 
 const ROOT: &str = "apps/desktop/src-tauri/src/main.rs";
+const SMOKE_ROOT: &str = "crates/toss-smoke/src/main.rs";
 const ENDPOINT: &str = "crates/adapters/broker-toss/src/endpoint.rs";
 const HTTP: &str = "crates/adapters/broker-toss/src/http.rs";
+
+fn is_root(relative: &str) -> bool {
+    relative == ROOT || relative == SMOKE_ROOT
+}
 
 fn production_reference(tokens: TokenStream) -> bool {
     tokens.into_iter().any(|token| match token {
@@ -66,7 +71,7 @@ impl EndpointCheck<'_> {
                 TokenTree::Group(group) => self.macro_tokens(group.stream()),
                 TokenTree::Literal(literal) => self.literal(&literal.to_string()),
                 TokenTree::Ident(ident)
-                    if self.relative != ROOT && ident.unraw() == "production" =>
+                    if !is_root(self.relative) && ident.unraw() == "production" =>
                 {
                     self.findings.insert(Rule::TossProduction);
                 }
@@ -301,7 +306,7 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
         self.macro_tokens(i.tokens.clone());
     }
     fn visit_path(&mut self, i: &'ast Path) {
-        if self.relative != ROOT
+        if !is_root(self.relative)
             && i.segments
                 .iter()
                 .any(|segment| segment.ident.unraw() == "production")
@@ -422,7 +427,7 @@ pub(super) fn check(
             scan.visit_item(item);
         }
     }
-    if relative != ROOT && relative != ENDPOINT && production_reference(tokens.clone()) {
+    if !is_root(relative) && relative != ENDPOINT && production_reference(tokens.clone()) {
         scan.findings.insert(Rule::TossProduction);
     }
     scan.findings
@@ -656,6 +661,36 @@ mod tests {
                 "impl TossHttpClient { pub fn new(endpoint: &TossEndpoint) -> Result<Self, TossHttpError> { Ok(Self { client: client(), origin: url() }) } }"
             ),
             BTreeSet::from([Rule::TossProduction])
+        );
+    }
+    #[test]
+    fn toss_smoke_main_allows_production_while_other_toss_smoke_files_and_host_literals_fail() {
+        for source in [
+            "fn f() { let endpoint = broker_toss::TossEndpoint::production(); }",
+            "use broker_toss::TossEndpoint as E; fn f() { let endpoint = E::production(); }",
+            "fn f() { let factory = broker_toss::TossEndpoint::production; }",
+            "use broker_toss as b; fn f() { let factory = b::TossEndpoint::r#production; }",
+            "type E = broker_toss::TossEndpoint; fn f() { let factory = E::production; }",
+            "fn f() { check!(broker_toss::TossEndpoint::production()); }",
+        ] {
+            assert!(findings("crates/toss-smoke/src/main.rs", source).is_empty());
+            for forbidden in [
+                "crates/toss-smoke/src/lib.rs",
+                "crates/toss-smoke/src/cli.rs",
+                "crates/toss-smoke/tests/smoke.rs",
+            ] {
+                assert_eq!(
+                    findings(forbidden, source),
+                    BTreeSet::from([Rule::TossProduction])
+                );
+            }
+        }
+        assert_eq!(
+            findings(
+                "crates/toss-smoke/src/main.rs",
+                "const PRODUCTION_ORIGIN: &str = \"https://openapi.HOST\";"
+            ),
+            BTreeSet::from([Rule::TossHost])
         );
     }
 }

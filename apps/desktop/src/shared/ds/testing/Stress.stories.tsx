@@ -20,9 +20,20 @@ import { Badge } from "../Badge";
 import { StatusBar } from "../StatusBar";
 import { Money } from "../Numbers";
 import { contentStressStories } from "./StressContent.stories";
+import { layoutStressStories } from "./StressLayout.stories";
 import { stressFixtures } from "./stress";
 
 type Component =
+  | "AppShell"
+  | "Page"
+  | "Section"
+  | "Grid"
+  | "GridItem"
+  | "Stack"
+  | "Inline"
+  | "Split"
+  | "Toolbar"
+  | "Divider"
   | "Text"
   | "Heading"
   | "Button"
@@ -212,6 +223,7 @@ const stories: readonly Omit<Story, "state" | "themes">[] = [
     render: (): ReactElement => <StatusBar action={action}>{label}</StatusBar>,
   },
   ...contentStressStories,
+  ...layoutStressStories,
 ];
 
 export const stressComponentStories: readonly Story[] = stories.map(

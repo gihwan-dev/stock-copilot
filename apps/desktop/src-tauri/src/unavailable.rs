@@ -882,3 +882,26 @@ impl AiEventStream for UnavailableStream {
         std::future::ready(Err(InformationError::Unavailable(ResetTime::NotProvided)))
     }
 }
+impl application::CollectedUrlCatalog for Unavailable {
+    fn find_collected(
+        &self,
+        _url: &domain::ParsedExternalUrl,
+    ) -> impl Future<Output = Result<Option<domain::NormalizedUrl>, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+}
+impl application::ExternalUrlOpener for Unavailable {
+    fn open(
+        &self,
+        _url: &domain::AuthorizedExternalUrl,
+    ) -> impl Future<
+        Output = Result<application::ExternalUrlOpened, application::ExternalUrlOpenerError>,
+    > + Send {
+        std::future::ready(Err(application::ExternalUrlOpenerError::Unavailable(
+            RetryDelay::Unknown,
+        )))
+    }
+}

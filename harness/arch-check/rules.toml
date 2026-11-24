@@ -421,10 +421,10 @@ through = "serde"
 reason = "T-01 생성 타입 및 왕복 테스트의 serde derive 절차 매크로"
 
 [[external-location-exception]]
-crates = ["broker-toss-schema", "broker-toss"]
+crates = ["broker-toss-schema", "broker-toss", "toss-smoke"]
 externals = ["syn", "proc-macro2"]
 through = "serde_json"
-reason = "T-01 생성 타입 및 왕복 테스트 serde_json의 작업 공간 기능 통합"
+reason = "T-01/T-12: 생성 타입·응답 형태 검증·선택적 녹화용 serde_json의 작업 공간 serde derive 기능 통합 경로"
 
 [[external-location-exception]]
 crates = ["broker-toss"]
@@ -461,10 +461,40 @@ through = "rusqlite"
 reason = "S-01: rusqlite → bitflags → serde_core의 작업 공간 serde derive 기능 통합으로 보이는 절차 매크로 경로"
 
 [[external-location-exception]]
-crates = ["broker-toss"]
+crates = ["broker-toss", "toss-smoke"]
 externals = ["socket2", "syn", "proc-macro2"]
 through = "tokio"
-reason = "T-18: tokio 런타임의 socket2 및 작업 공간 tokio-macros 기능 통합으로 생기는 syn/proc-macro2 경로"
+reason = "T-18/T-12: tokio 런타임의 socket2 및 작업 공간 tokio-macros 기능 통합으로 생기는 syn/proc-macro2 경로"
+
+[[external-location-exception]]
+crates = ["toss-smoke"]
+externals = ["syn", "proc-macro2"]
+through = "dirs"
+reason = "T-12: 앱 데이터 기본 경로 조회용 dirs → dirs-sys → redox_users → thiserror-impl의 전체 대상 metadata 절차 매크로 경로"
+
+[[external-location-exception]]
+crates = ["sources"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "tokio"
+reason = "N-01: rt·time·sync만 켠 tokio의 작업 공간 기능 통합으로 생기는 socket2·syn·proc-macro2 경로. 소켓 직접 사용은 source.http-socket으로 차단한다"
+
+[[external-location-exception]]
+crates = ["sources"]
+externals = ["syn", "proc-macro2"]
+through = "time"
+reason = "N-02: RSS·Atom 발행 시각 파싱을 위한 time과 작업 공간 serde derive 기능 통합 절차 매크로 경로"
+
+[[external-location-exception]]
+crates = ["sources"]
+externals = ["syn", "proc-macro2"]
+through = "serde"
+reason = "N-03: DART·SEC·FRED JSON 응답 역직렬화의 serde derive 절차 매크로 경로"
+
+[[external-location-exception]]
+crates = ["sources"]
+externals = ["syn", "proc-macro2"]
+through = "serde_json"
+reason = "N-03: DART·SEC·FRED JSON 응답 파싱의 serde_json 작업 공간 기능 통합 절차 매크로 경로"
 
 [[external-location-exception]]
 crates = ["ai-claude-code", "ai-codex"]
@@ -479,6 +509,12 @@ through = "proptest"
 reason = "AI-01: 개발 의존 proptest의 작업 공간 기능 통합 절차 매크로 경로"
 
 [[external-location-exception]]
+crates = ["ai-claude-code"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "tokio"
+reason = "AI-02: tokio 런타임·동기화·타이머 기능의 작업 공간 통합으로 보이는 socket2 및 절차 매크로 경로. 네트워크 소켓은 직접 열지 않는다"
+
+[[external-location-exception]]
 crates = ["testkit"]
 externals = ["syn", "proc-macro2"]
 through = "serde"
@@ -489,3 +525,27 @@ crates = ["testkit"]
 externals = ["syn", "proc-macro2"]
 through = "serde_json"
 reason = "A-11: 가짜 AI CLI의 MCP JSON-RPC 2.0 및 stream-json 직렬화 serde_json 작업 공간 기능 통합"
+
+[[external-location-exception]]
+crates = ["scheduler"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "tokio"
+reason = "J-01: rt·sync·time만 켠 tokio에 Tauri의 net 및 작업 공간 기능 통합으로 보이는 전이 의존. 스케줄러는 네트워크 기능을 호출하지 않는다"
+
+[[external-location-exception]]
+crates = ["mcp-server"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "tokio"
+reason = "M-01: mcp-server의 Unix 도메인 소켓(tokio net) 및 tokio-macros로 연결되는 socket2·syn·proc-macro2 전이 경로. TCP·HTTP 리스너는 열지 않는다"
+
+[[external-location-exception]]
+crates = ["mcp-server"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "rmcp"
+reason = "M-01: rmcp =3.9.0(server, transport-async-rw)이 tokio·schemars·serde·thiserror·futures·tracing을 경유해 연결하는 socket2·syn·proc-macro2 전이 경로"
+
+[[external-location-exception]]
+crates = ["mcp-server"]
+externals = ["syn", "proc-macro2"]
+through = "serde_json"
+reason = "M-01: 개발 의존 serde_json이 작업 공간 serde derive 기능 통합으로 연결하는 syn·proc-macro2 절차 매크로 경로"
