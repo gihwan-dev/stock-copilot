@@ -39,20 +39,32 @@ pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentM
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
 
 mod ai_read_policy;
+mod ai_wake;
 mod cluster;
 mod collected_item;
 mod data_source;
 mod disclosure;
+mod news_clustering;
 mod news_item;
 
 pub use ai_read_policy::{
     AiBodyReadPolicy, AiBodyReadSettingError, AiBodyReadToggle, AiNewsInput,
     SourceAiBodyReadSettings, prepare_news_for_ai,
 };
+pub use ai_wake::{
+    DisclosureAction, DisclosureGrade, DisclosureRevision, HoldingStatus, MovePercent,
+    NewsBurstCount, TriggerJudgement, WakeThresholdError, WakeThresholds, WakeTrigger,
+    daily_move_trigger, daily_move_trigger_with, disclosure_action, grade_disclosure,
+    news_burst_trigger, news_burst_trigger_with,
+};
 pub use cluster::{Cluster, ClusterError};
 pub use collected_item::{CollectedItem, InformationSource, UntrustedText, UntrustedTextError};
 pub use data_source::{DataSource, DataSourceCategory};
 pub use disclosure::{Disclosure, DisclosureKey, DisclosureSource, ReceiptNo, ReceiptNoError};
+pub use news_clustering::{
+    ClusterDecision, NewsClusterBook, StockNewsCluster, TimedNews, TitleBigrams, TitleSimilarity,
+    dedupe_by_url,
+};
 pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
 
 pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};
@@ -560,7 +572,7 @@ mod net_purchase_closed;
 mod net_purchase_daily;
 pub use net_purchase::{
     NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope, NetPurchases,
-    net_purchase_amount, net_purchases, proven_net_purchase_amount, proven_net_purchases,
+    proven_net_purchase_amount, proven_net_purchases,
 };
 pub use net_purchase_closed::{ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet};
 pub use net_purchase_daily::{
@@ -662,6 +674,9 @@ pub use valuation_price_evidence::{
 };
 
 mod valuation_recompute_contract;
+
+mod valuation_day_inputs;
+pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
 
 mod valuation_recompute;
 pub use valuation_recompute::{

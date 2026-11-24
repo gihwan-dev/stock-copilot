@@ -10,8 +10,8 @@ use application::{
 };
 use domain::{
     AccountId, BrokerOrder, BrokerOrderId, BrokerOrderSet, ClosedOrderPageCollector,
-    ClosedOrderQueryScope, ClosedOrderSet, MasterInstrumentFacts, OpenOrderCollector,
-    OpenOrderQueryScope, OrderOpenState, OrderPageBoundary, TimeInterval, Timestamp,
+    ClosedOrderQueryScope, MasterInstrumentFacts, OpenOrderCollector, OpenOrderQueryScope,
+    OrderOpenState, OrderPageBoundary, ProvenClosedOrderSet, TimeInterval, Timestamp,
 };
 use row::{ParsedOrder, RowFailure};
 use serde_json::{Value, value::RawValue};
@@ -343,7 +343,7 @@ impl ClosedPages {
         account: &AccountId,
         evaluation_window: TimeInterval,
         observed: Timestamp,
-    ) -> Result<ClosedOrderSet, PortError> {
+    ) -> Result<ProvenClosedOrderSet, PortError> {
         let mut collector = ClosedOrderPageCollector::start(ClosedOrderQueryScope::unfiltered(
             account.clone(),
             evaluation_window,
@@ -370,7 +370,7 @@ impl ClosedPages {
                 PortErrorKind::InvalidRequest(RequestRejection::UnsupportedQuery),
             )
         })?;
-        Ok(proven.into_closed_order_set())
+        Ok(proven)
     }
 }
 
@@ -414,7 +414,7 @@ pub(crate) async fn closed_orders<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     account: &AccountId,
     evaluation_window: TimeInterval,
-) -> Result<ClosedOrderSet, PortError> {
+) -> Result<ProvenClosedOrderSet, PortError> {
     if evaluation_window.start() >= reader.market_now() {
         return Err(PortError::new(
             ReadEndpoint::ClosedOrders,
