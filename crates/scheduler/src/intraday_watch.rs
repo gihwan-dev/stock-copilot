@@ -164,7 +164,8 @@ impl EventSubscriber for IntradayWatchSubscriber {
             | DomainEvent::StoredDataChanged
             | DomainEvent::FxRateUpdated(_)
             | DomainEvent::SourceStatusChanged(_)
-            | DomainEvent::BriefingFinished(_) => Ok(()),
+            | DomainEvent::BriefingFinished(_)
+            | DomainEvent::AiJobFinished(_) => Ok(()),
         }
     }
 }
