@@ -1998,6 +1998,9 @@ dependencies = [
 [[package]]
 name = "mcp-bridge"
 version = "0.1.0"
+dependencies = [
+ "zeroize",
+]
 
 [[package]]
 name = "mcp-server"

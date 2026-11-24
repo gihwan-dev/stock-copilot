@@ -119,6 +119,16 @@ names = ["clock-env:temp_dir"]
 reason = "M-01: Unix 도메인 소켓 테스트가 macOS sun_path 104바이트 한도 안의 짧은 임시 경로를 쓰기 위해 temp_dir을 읽는다. 제품 코드에는 허용하지 않는다"
 
 [[clock-environment]]
+path = "crates/mcp-bridge/src/main.rs"
+names = ["test-awareness:env::args_os", "clock-env:var:STOCK_MCP_TOKEN"]
+reason = "M-07: stdio 브리지 진입점이 --socket 인자와 STOCK_MCP_TOKEN 환경 변수 하나만 읽는다. 전체 환경 열람이나 argv 토큰 전달을 허용하지 않는다"
+
+[[clock-environment]]
+path = "crates/mcp-bridge/tests/bridge_socket.rs"
+names = ["clock-env:temp_dir"]
+reason = "M-07: 브리지 Unix 도메인 소켓 테스트가 macOS sun_path 104바이트 한도 안의 짧은 임시 경로를 쓰기 위해 temp_dir을 읽는다"
+
+[[clock-environment]]
 path = "crates/testkit/src/bin/fake_ai_cli.rs"
 names = [
     "test-awareness:env::args_os",

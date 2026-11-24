@@ -361,6 +361,8 @@ fn allowlists_hold_only_the_documented_paths() {
             String::from("apps/desktop/src-tauri/src/main.rs"),
             String::from("crates/adapters/store-sqlite/src/tests.rs"),
             String::from("crates/adapters/platform-macos/src/system_clock.rs"),
+            String::from("crates/mcp-bridge/src/main.rs"),
+            String::from("crates/mcp-bridge/tests/bridge_socket.rs"),
             String::from("crates/mcp-server/tests/server_security.rs"),
             String::from("crates/xtask/src/main.rs"),
             String::from("crates/xtask/src/mutants_check/environment.rs"),
