@@ -8,6 +8,7 @@ export const HASHES_FILE = "harness/claude-hooks/hashes.json";
 
 const NAMED = [
   "crates/testkit-ports/src/scripted_presence.rs",
+  "crates/testkit-ports/src/scripted_identity_confirmation.rs",
   "crates/testkit-ports/src/script.rs",
   "crates/testkit-ports/src/lib.rs",
   "harness/claude-hooks/rules.json",

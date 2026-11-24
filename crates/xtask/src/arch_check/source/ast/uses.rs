@@ -4,25 +4,25 @@ use syn::{Ident, PatType, PathSegment, UseTree};
 
 pub(super) const SELF_PATH: &str = "self";
 
-pub(super) fn unraw(ident: &Ident) -> String {
+pub(crate) fn unraw(ident: &Ident) -> String {
     ident.unraw().to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum UseKind {
+pub(crate) enum UseKind {
     Name,
     Rename(String),
     Glob,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct UseEntry {
-    pub(super) path: Vec<String>,
-    pub(super) kind: UseKind,
+pub(crate) struct UseEntry {
+    pub(crate) path: Vec<String>,
+    pub(crate) kind: UseKind,
 }
 
 impl UseEntry {
-    pub(super) fn imported(&self) -> &str {
+    pub(crate) fn imported(&self) -> &str {
         self.path.last().map_or("", String::as_str)
     }
 }
@@ -62,7 +62,7 @@ fn collect(tree: &UseTree, prefix: &mut Vec<String>, entries: &mut Vec<UseEntry>
     }
 }
 
-pub(super) fn use_entries(tree: &UseTree) -> Vec<UseEntry> {
+pub(crate) fn use_entries(tree: &UseTree) -> Vec<UseEntry> {
     let mut entries = Vec::new();
     collect(tree, &mut Vec::new(), &mut entries);
     entries
@@ -92,7 +92,7 @@ pub(super) fn starts_with(path: &[String], prefix: &[String]) -> Option<()> {
     (!prefix.is_empty() && path.starts_with(prefix)).then_some(())
 }
 
-pub(super) fn has_pair(path: &[String], first: &str, second: &str) -> Option<()> {
+pub(crate) fn has_pair(path: &[String], first: &str, second: &str) -> Option<()> {
     path.iter()
         .zip(path.iter().skip(1))
         .any(|(left, right)| left == first && right == second)
