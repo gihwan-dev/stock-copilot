@@ -573,21 +573,3 @@ crates = ["scheduler"]
 externals = ["socket2", "syn", "proc-macro2"]
 through = "tokio"
 reason = "J-01: rt·sync·time만 켠 tokio에 Tauri의 net 및 작업 공간 기능 통합으로 보이는 전이 의존. 스케줄러는 네트워크 기능을 호출하지 않는다"
-
-[[external-location-exception]]
-crates = ["mcp-server"]
-externals = ["socket2", "syn", "proc-macro2"]
-through = "tokio"
-reason = "M-01: mcp-server의 Unix 도메인 소켓(tokio net) 및 tokio-macros로 연결되는 socket2·syn·proc-macro2 전이 경로. TCP·HTTP 리스너는 열지 않는다"
-
-[[external-location-exception]]
-crates = ["mcp-server"]
-externals = ["socket2", "syn", "proc-macro2"]
-through = "rmcp"
-reason = "M-01: rmcp =3.9.0(server, transport-async-rw)이 tokio·schemars·serde·thiserror·futures·tracing을 경유해 연결하는 socket2·syn·proc-macro2 전이 경로"
-
-[[external-location-exception]]
-crates = ["mcp-server"]
-externals = ["syn", "proc-macro2"]
-through = "serde_json"
-reason = "M-01: 개발 의존 serde_json이 작업 공간 serde derive 기능 통합으로 연결하는 syn·proc-macro2 절차 매크로 경로"
