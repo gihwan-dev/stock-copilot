@@ -138,6 +138,7 @@ export const noDomValues = {
               "inputCommit",
               "focusDialogInput",
               "chartNavigation",
+              "shellDismiss",
             ].includes(symbol?.name) &&
             (symbol?.declarations ?? []).some(
               (d) =>

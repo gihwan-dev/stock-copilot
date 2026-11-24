@@ -12,7 +12,9 @@
         "label": "main",
         "create": false,
         "visible": false,
-        "title": "Stock Copilot"
+        "title": "Stock Copilot",
+        "minWidth": 960,
+        "minHeight": 640
       }
     ],
     "security": {

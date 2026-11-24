@@ -59,6 +59,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(shared_clock)),
     };
+    run_app(
+        build_app(
+            tauri::Builder::default().manage(
+                src_tauri::ipc::open_external::ExternalLinkRuntime::new(
+                    Arc::new(Unavailable),
+                    Arc::new(Unavailable),
+                ),
+            ),
+            ports,
+            context,
+        )?,
+        |handle, code| handle.exit(code.as_i32()),
+    );
+    Ok(())
     let app = build_app(tauri::Builder::default(), ports, context)?;
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
@@ -251,5 +265,58 @@ mod tests {
             }
         });
         std::fs::remove_dir_all(directory).expect("테스트 정리");
+    }
+
+    #[test]
+    fn product_acl_allows_open_external_only_from_main_local_origin() {
+        let mut context = super::product_context();
+        let authority = context.runtime_authority_mut();
+        let local = tauri::ipc::Origin::Local;
+        let remote = tauri::ipc::Origin::Remote {
+            url: "https://example.com".parse().expect("원격 출처"),
+        };
+        assert!(
+            authority
+                .resolve_access("open_external", "main", "main", &local)
+                .is_some(),
+            "main 로컬 출처 허용"
+        );
+        assert!(
+            authority
+                .resolve_access("open_external", "other", "other", &local)
+                .is_none(),
+            "다른 창 거부"
+        );
+        assert!(
+            authority
+                .resolve_access("open_external", "main", "main", &remote)
+                .is_none(),
+            "원격 출처 거부"
+        );
+    fn composition_root_constructs_sources_client_without_broker_credentials_or_hosts() {
+        let clock = std::sync::Arc::new(testkit_ports::SteppedClock::new(
+            broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
+                .expect("clock")
+                .into_domain(),
+        ));
+        let client = sources::SourceHttpClient::new(
+            sources::SourceEndpoint::live(),
+            clock,
+            std::sync::Arc::new(sources::TokioSourceWait),
+            None,
+        )
+        .expect("live sources client");
+        assert_eq!(format!("{client:?}"), "SourceHttpClient(<redacted>)");
+        for spec in sources::SourceRegistry::all() {
+            for host in spec.allowed_hosts() {
+                assert!(!host.to_ascii_lowercase().contains("toss"), "{host}");
+            }
+            match spec.credential() {
+                sources::CredentialRequirement::None
+                | sources::CredentialRequirement::Optional(
+                    application::CredentialSource::Dart | application::CredentialSource::Fred,
+                ) => {}
+            }
+        }
     }
 }

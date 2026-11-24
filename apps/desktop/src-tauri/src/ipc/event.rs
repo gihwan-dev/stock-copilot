@@ -114,6 +114,51 @@ impl From<domain::DisclosureKey> for UiDisclosureKey {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub enum UiDataSource {
+    KindDisclosure,
+    DartDisclosureApi,
+    DartDisclosureRss,
+    DartFundamentals,
+    KindCorpList,
+    Hankyung,
+    Maekyung,
+    Yonhap,
+    Edaily,
+    GoogleNews,
+    WebSearch,
+    YahooFinance,
+    SecEdgar,
+    BankOfKorea,
+    FederalReserve,
+    UsTreasury,
+    Fred,
+}
+
+impl From<domain::DataSource> for UiDataSource {
+    fn from(value: domain::DataSource) -> Self {
+        match value {
+            domain::DataSource::KindDisclosure => Self::KindDisclosure,
+            domain::DataSource::DartDisclosureApi => Self::DartDisclosureApi,
+            domain::DataSource::DartDisclosureRss => Self::DartDisclosureRss,
+            domain::DataSource::DartFundamentals => Self::DartFundamentals,
+            domain::DataSource::KindCorpList => Self::KindCorpList,
+            domain::DataSource::Hankyung => Self::Hankyung,
+            domain::DataSource::Maekyung => Self::Maekyung,
+            domain::DataSource::Yonhap => Self::Yonhap,
+            domain::DataSource::Edaily => Self::Edaily,
+            domain::DataSource::GoogleNews => Self::GoogleNews,
+            domain::DataSource::WebSearch => Self::WebSearch,
+            domain::DataSource::YahooFinance => Self::YahooFinance,
+            domain::DataSource::SecEdgar => Self::SecEdgar,
+            domain::DataSource::BankOfKorea => Self::BankOfKorea,
+            domain::DataSource::FederalReserve => Self::FederalReserve,
+            domain::DataSource::UsTreasury => Self::UsTreasury,
+            domain::DataSource::Fred => Self::Fred,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type, tauri_specta::Event)]
 pub enum UiEvent {
     PortfolioSyncRecorded,
@@ -154,6 +199,7 @@ pub enum UiEvent {
     StoredDataChanged,
     FxRateUpdated(UiFxPair),
     DisclosureTriggerRecorded(UiDisclosureKey),
+    SourceStatusChanged(UiDataSource),
 }
 
 impl From<DomainEvent> for UiEvent {
@@ -215,6 +261,7 @@ impl From<DomainEvent> for UiEvent {
             DomainEvent::DisclosureTriggerRecorded(id) => {
                 Self::DisclosureTriggerRecorded(id.into())
             }
+            DomainEvent::SourceStatusChanged(source) => Self::SourceStatusChanged(source.into()),
         }
     }
 }

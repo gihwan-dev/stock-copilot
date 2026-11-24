@@ -17,6 +17,7 @@ pub mod scripted;
 pub use draft_record::DraftRecord;
 mod thesis_record;
 pub use thesis_record::ThesisRecord;
+pub mod chat_fakes;
 pub mod memory;
 pub mod proposal_memory;
 pub mod system_fakes;
