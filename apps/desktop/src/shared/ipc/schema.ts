@@ -3,11 +3,11 @@ import { err, ok, type Result } from "../lib";
 
 type Brand<N extends string> = Readonly<z.core.$brand<N>>;
 
-type AppVersionText = string & Brand<"AppVersionText">;
+export type AppVersionText = string & Brand<"AppVersionText">;
 
 export type AppVersion = { readonly version: AppVersionText };
 
-type CommandErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
+export type CommandErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
 
 export type CommandError = { readonly kind: CommandErrorKind };
 
@@ -70,3 +70,8 @@ export const settleAppVersion = (
   outcome: CommandOutcome,
 ): Result<AppVersion, IpcFailure> =>
   settleWithSchema(outcome, appVersionSchema);
+
+export const settleOpenExternal = (
+  outcome: CommandOutcome,
+): Result<OpenExternalResult, IpcFailure> =>
+  settleWithSchema(outcome, openExternalResultSchema);

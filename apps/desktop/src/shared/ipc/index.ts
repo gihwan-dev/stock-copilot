@@ -8,5 +8,3 @@ export type {
   OpenExternalResult,
   OpenExternalStatus,
 } from "./schema";
-export { appVersion } from "./call";
-export type { AppVersion, CommandError } from "./schema";
