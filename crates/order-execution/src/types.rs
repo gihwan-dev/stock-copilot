@@ -102,6 +102,13 @@ impl fmt::Debug for UserApproval {
 }
 
 impl UserApproval {
+    pub(crate) fn from_confirmed(
+        confirmation: PendingOrderConfirmation,
+        signature: ApprovalSignatureSlot,
+    ) -> Self {
+        Self::new_internal(confirmation, signature)
+    }
+
     fn new_internal(
         confirmation: PendingOrderConfirmation,
         signature: ApprovalSignatureSlot,
@@ -300,6 +307,17 @@ impl UnknownOrderRetry {
     pub fn first_sent_at(&self) -> Timestamp {
         self.first_sent_at
     }
+
+    pub(crate) fn into_parts(self) -> (ApprovedOrder, Timestamp) {
+        (self.order, self.first_sent_at)
+    }
+
+    pub(crate) fn with_first_sent_at(self, first_sent_at: Timestamp) -> Self {
+        Self {
+            order: self.order,
+            first_sent_at,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -332,6 +350,16 @@ impl UnknownOrderOutcome {
     pub fn into_retry(self) -> Option<UnknownOrderRetry> {
         self.retry.map(|permit| *permit)
     }
+
+    pub(crate) fn with_first_sent_at(self, first_sent_at: Timestamp) -> Self {
+        Self {
+            client_order_id: self.client_order_id,
+            cause: self.cause,
+            retry: self
+                .retry
+                .map(|permit| Box::new(permit.with_first_sent_at(first_sent_at))),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -348,6 +376,14 @@ impl OrderOutcome {
             Self::Accepted(submitted) => submitted.client_order_id(),
             Self::Rejected(rejection) => rejection.client_order_id(),
             Self::Unknown(unknown) => unknown.client_order_id(),
+        }
+    }
+
+    pub(crate) fn stamp_first_sent_at(self, first_sent_at: Timestamp) -> Self {
+        match self {
+            Self::Accepted(submitted) => Self::Accepted(submitted),
+            Self::Rejected(rejection) => Self::Rejected(rejection),
+            Self::Unknown(unknown) => Self::Unknown(unknown.with_first_sent_at(first_sent_at)),
         }
     }
 }
