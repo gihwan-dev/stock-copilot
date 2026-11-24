@@ -24,3 +24,4 @@
 | AI-16 | `EnsureVerifiedCliVersion`가 분석 사전 점검 → 관측 버전(`CliVersionSource`, Claude는 사전 점검 init의 `claude_code_version`) → 확인한 버전 목록(`VerifiedCliVersions`)에 있으면 바로 사용, 없으면 수집 사전 점검까지 통과하고 그 사이 버전이 그대로일 때만 목록에 기록한다. 결과가 앞 결과와 다르면 `SelfCheckChanged` 하나를 낸다 | 버전마다 사용자 확인 |
 | AI-16 | 실패·버전 모름·저장 실패는 AI만 끈다(`AiGate::Disabled`). 자체 점검에는 4·5번(설치·로그인)이나 6번(`ai_environment`)으로만 남겨 주 화면 띠가 생기지 않는다(로그인 실패는 기존 5번 규칙대로 띠가 생긴다). 점검 호출 자체의 오류는 6번 `CliVersion`으로 본다 | 오류를 4번으로 |
 | AI-16 | 목록 저장은 S-09 전까지 포트와 가짜만 둔다. 조립 루트는 앱 시작과 관측 버전이 바뀔 때 부른다 | 매 실행마다 |
+| AI-07 | 형식 검증·도구 이름 거부·모든 파일 테스트는 E-04의 `PromptFile`을 그대로 쓰고, `LoadedPrompt::load(작업 폴더, 버전 파일, 본문, 해시)`가 폴더 이름=`task`, 파일 이름=`version`을 더 확인한다. 해시는 `application`에 해시 crate가 없어 로더(어댑터)가 계산한 64자리 소문자 hex `PromptDigest`로 받는다. `PromptRef`(ID·버전·해시)는 `AiJobFinishRecord::with_prompt`로 작업 기록에 남긴다 | `application`에 sha2 추가 |

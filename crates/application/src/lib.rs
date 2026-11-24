@@ -339,7 +339,7 @@ pub use ai_job_record::{
 mod cli_version_gate;
 pub use cli_version_gate::{
     AiGate, CliVersion, CliVersionGateOutcome, CliVersionGateReport, CliVersionSource,
-    EnsureVerifiedCliVersion, VerifiedCliVersions,
+    EnsureVerifiedCliVersion, LoginRecheck, VerifiedCliVersions,
 };
 mod ai_provider;
 pub use ai_provider::{
@@ -446,7 +446,9 @@ pub use prompt_replay::{
 };
 
 mod prompt_file;
-pub use prompt_file::{PromptFile, PromptFileError};
+pub use prompt_file::{
+    LoadedPrompt, PromptDigest, PromptFile, PromptFileError, PromptLocationError, PromptRef,
+};
 
 mod submit_estimate_tool;
 pub use submit_estimate_tool::{

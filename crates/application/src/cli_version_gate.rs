@@ -1,6 +1,6 @@
 use crate::{
     AiCheckObservation, AiEnvironmentProblem, AiProvider, CheckState, DeliveryReport, EventBus,
-    IdentifierError, IsolationCheck, IsolationFailure, RunKind, SelfCheckInput, SystemPortError,
+    IdentifierError, IsolationCheck, RunKind, SelfCheckInput, SystemPortError,
     isolation_check_observation,
 };
 use domain::DomainEvent;
@@ -43,6 +43,7 @@ pub enum CliVersionGateOutcome {
     AlreadyVerified(CliVersion),
     NewlyVerified(CliVersion),
     Disabled(AiCheckObservation),
+    ProbeFailed,
     VersionUnknown,
     Storage(SystemPortError),
 }
@@ -52,7 +53,21 @@ impl CliVersionGateOutcome {
     pub const fn ai_enabled(&self) -> AiGate {
         match self {
             Self::AlreadyVerified(_) | Self::NewlyVerified(_) => AiGate::Enabled,
-            Self::Disabled(_) | Self::VersionUnknown | Self::Storage(_) => AiGate::Disabled,
+            Self::Disabled(_) | Self::ProbeFailed | Self::VersionUnknown | Self::Storage(_) => {
+                AiGate::Disabled
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn login_recheck(&self) -> LoginRecheck {
+        match self {
+            Self::ProbeFailed => LoginRecheck::Needed,
+            Self::AlreadyVerified(_)
+            | Self::NewlyVerified(_)
+            | Self::Disabled(_)
+            | Self::VersionUnknown
+            | Self::Storage(_) => LoginRecheck::NotNeeded,
         }
     }
 
@@ -73,9 +88,30 @@ impl CliVersionGateOutcome {
             Self::Disabled(AiCheckObservation::Environment(problem)) => {
                 input.ai_environment = CheckState::Problem(*problem);
             }
-            Self::VersionUnknown | Self::Storage(_) => {
+            Self::ProbeFailed | Self::VersionUnknown | Self::Storage(_) => {
                 input.ai_environment = CheckState::Problem(AiEnvironmentProblem::CliVersion);
             }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginRecheck {
+    Needed,
+    NotNeeded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProbeFailure {
+    Rejected(AiCheckObservation),
+    CouldNotRun,
+}
+
+impl ProbeFailure {
+    const fn into_outcome(self) -> CliVersionGateOutcome {
+        match self {
+            Self::Rejected(observation) => CliVersionGateOutcome::Disabled(observation),
+            Self::CouldNotRun => CliVersionGateOutcome::ProbeFailed,
         }
     }
 }
@@ -115,7 +151,7 @@ impl<Provider: AiProvider, Source: CliVersionSource, Ledger: VerifiedCliVersions
 
     async fn decide(&self) -> CliVersionGateOutcome {
         if let Err(failure) = self.probe(RunKind::Analysis).await {
-            return CliVersionGateOutcome::Disabled(failure);
+            return failure.into_outcome();
         }
         let Some(version) = self.source.observed_version().await else {
             return CliVersionGateOutcome::VersionUnknown;
@@ -128,7 +164,7 @@ impl<Provider: AiProvider, Source: CliVersionSource, Ledger: VerifiedCliVersions
             return CliVersionGateOutcome::AlreadyVerified(version);
         }
         if let Err(failure) = self.probe(RunKind::Collection).await {
-            return CliVersionGateOutcome::Disabled(failure);
+            return failure.into_outcome();
         }
         if self.source.observed_version().await.as_ref() != Some(&version) {
             return CliVersionGateOutcome::VersionUnknown;
@@ -139,11 +175,13 @@ impl<Provider: AiProvider, Source: CliVersionSource, Ledger: VerifiedCliVersions
         }
     }
 
-    async fn probe(&self, kind: RunKind) -> Result<(), AiCheckObservation> {
+    async fn probe(&self, kind: RunKind) -> Result<(), ProbeFailure> {
         match self.provider.verify_isolation(kind).await {
             Ok(IsolationCheck::Passed) => Ok(()),
-            Ok(IsolationCheck::Rejected(failure)) => Err(isolation_check_observation(failure)),
-            Err(_error) => Err(isolation_check_observation(IsolationFailure::CliVersion)),
+            Ok(IsolationCheck::Rejected(failure)) => {
+                Err(ProbeFailure::Rejected(isolation_check_observation(failure)))
+            }
+            Err(_error) => Err(ProbeFailure::CouldNotRun),
         }
     }
 }

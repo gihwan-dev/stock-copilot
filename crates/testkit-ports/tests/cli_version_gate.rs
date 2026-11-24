@@ -189,7 +189,17 @@ mod tests {
             .script_verify_isolation()
             .push(Err(InformationError::Unavailable(ResetTime::NotProvided)));
         let errored = gate(&fixture, &login.outcome);
+        assert_eq!(errored.outcome, CliVersionGateOutcome::ProbeFailed);
         assert_eq!(errored.outcome.ai_enabled(), AiGate::Disabled);
+        assert_eq!(
+            errored.outcome.login_recheck(),
+            application::LoginRecheck::Needed,
+            "점검을 못 돌리면 AI-13 로그인 점검을 다시 돌려 5번을 정한다"
+        );
+        assert_eq!(
+            login.outcome.login_recheck(),
+            application::LoginRecheck::NotNeeded
+        );
         assert_eq!(fixture.ledger.versions(), Vec::<CliVersion>::new());
     }
 
