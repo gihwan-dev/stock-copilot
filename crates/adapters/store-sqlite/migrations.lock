@@ -77,3 +77,13 @@ sha256 = "c60f5c315721cf06d14f7eea7236f43258d6ec3a5e4dc405087b5db30104f95d"
 number = 16
 file = "0016_source_and_spec_status.sql"
 sha256 = "503e4da9ffd360ed8c23721ea4f616157cd2e9022c7dcc792d0e764f08abce73"
+
+[[migration]]
+number = 17
+file = "0017_wake_triggers_and_web_collection.sql"
+sha256 = "c02aa43573f0afd27d29fecbd7f7022caff44e9824d304237af2caa916afc182"
+
+[[migration]]
+number = 18
+file = "0018_watchlist_and_signal_skips.sql"
+sha256 = "a1e452df05ddd2495bc6732b163d2f424c8032b4a82896b85e32ff8bea90f9d4"

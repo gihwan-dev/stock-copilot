@@ -565,8 +565,13 @@ pub use news_data_settings::{
 
 mod deep_research;
 pub use deep_research::{
-    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchEvidenceSource,
-    ResearchWebCollector, ResearchWebOutcome, ResearchWebStore,
+    AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
+    DeepResearchRun, DeepResearchStages, DraftResearchCases, FinishResearch, FinishResearchError,
+    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchAnalyst,
+    ResearchCaseError, ResearchCases, ResearchCheckpoint, ResearchCheckpointStore,
+    ResearchConcluder, ResearchConclusion, ResearchEvidenceSource, ResearchModels, ResearchOutcome,
+    ResearchPrincipleCheck, ResearchStage, ResearchWebCollector, ResearchWebOutcome,
+    ResearchWebStore, RunDeepResearch, VerifyResearchClaims,
 };
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};

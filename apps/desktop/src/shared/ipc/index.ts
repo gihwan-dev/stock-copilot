@@ -1,6 +1,44 @@
 export type { IpcFailure } from "./call";
-export { appVersion, openExternal } from "./call";
-export type { AppVersion, CommandError, OpenExternalResult } from "./schema";
+export {
+  appVersion,
+  getSettings,
+  listenUiEvent,
+  openExternal,
+  setOrderPermission,
+} from "./call";
+export type {
+  AppVersion,
+  CommandError,
+  CoreUiEvent,
+  OpenExternalResult,
+} from "./schema";
+export type {
+  HorizonOption,
+  OrderPermissionState,
+  OrderSwitchOutcome,
+  RiskAppetiteOption,
+  SettingsView,
+  ToggleState,
+} from "./settings-schema";
+export { pendingScreenSources } from "./screen-sources";
+export type {
+  AiUsageRow,
+  AllocationRow,
+  AllocationView,
+  CheckRecord,
+  CurrencyValue,
+  HoldingRow,
+  PortfolioView,
+  ScreenSources,
+  SelfCheckProblem,
+  SelfCheckView,
+  SourceStatus,
+  StatusView,
+  TransactionKind,
+  TransactionRow,
+  TransactionsView,
+} from "./screen-sources";
+export { toScreenState, type ScreenState } from "./screen-state";
 export type { ChatListener, ChatTurnHandle } from "./call";
 export {
   cancelChatTurn,

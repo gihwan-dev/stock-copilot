@@ -44,6 +44,8 @@ export default {
             "Probability",
             "PriceChange",
             "DirectionBadge",
+            "DataText",
+            "TimestampText",
           ],
           "차트",
           ["LineChart", "AreaChart", "DonutChart", "Treemap", "CandleChart"],

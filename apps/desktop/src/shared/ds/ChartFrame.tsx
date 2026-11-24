@@ -4,7 +4,7 @@ import type { ChartProps, ChartGeometry, ChartMark } from "./chart-types";
 import { chartNavigation } from "../platform/input";
 import { EmptyState } from "./EmptyState";
 import { ChartTable, ChartAxes, ChartStatusBody } from "./ChartTable";
-import { chartNumberText } from "./Numbers";
+import { chartLabelText, chartNumberText } from "./Numbers";
 type Props = ChartProps & { readonly geometry: ChartGeometry };
 type Ready = ChartProps & {
   readonly geometry: Extract<ChartGeometry, { readonly kind: "ready" }>;
@@ -215,7 +215,7 @@ const ChartMarks = (props: {
         }}
       >
         <title>
-          {mark.label}
+          {chartLabelText(mark.label)}
           {text("ds.chartSeparator", "ko")}
           {chartNumberText(mark.value)}
         </title>

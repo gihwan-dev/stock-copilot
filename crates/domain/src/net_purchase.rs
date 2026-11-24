@@ -166,6 +166,7 @@ pub(crate) mod tests {
         NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope,
         net_purchase_amount, net_purchases,
     };
+    use crate::net_purchase_closed::tests::closed_order_set;
     use crate::{
         AccountId, BrokerOrder, BrokerOrderMoney, ClosedOrderCompleteness, ClosedOrderIncomplete,
         ClosedOrderSet, TimeInterval,
@@ -261,7 +262,7 @@ pub(crate) mod tests {
         TimeInterval::try_new(time(start), time(end)).expect("구간")
     }
     pub(crate) fn facts(rows: Vec<BrokerOrderRow>) -> ClosedOrderSet {
-        ClosedOrderSet::new(
+        closed_order_set(
             AccountId::new(7),
             rows.into_iter()
                 .map(|input| BrokerOrder::from_lookup_result(input).expect("사실"))
@@ -385,7 +386,7 @@ pub(crate) mod tests {
             ClosedOrderIncomplete::RejectedRows,
             ClosedOrderIncomplete::RequestFailed,
         ] {
-            orders = ClosedOrderSet::new(
+            orders = closed_order_set(
                 AccountId::new(7),
                 vec![],
                 interval(0, 300),
@@ -426,7 +427,7 @@ pub(crate) mod tests {
                 incomplete(NetPurchaseIncomplete::ObservationTooEarly),
             ),
         ] {
-            let orders = ClosedOrderSet::new(
+            let orders = closed_order_set(
                 AccountId::new(7),
                 vec![],
                 interval(start, end),
@@ -515,7 +516,7 @@ pub(crate) mod tests {
         let mut input = row("matrix", OrderSide::Buy, "41", filled);
         input.ordered_at = time(ordered);
         input.observed_at = time(observed);
-        let sealed = ClosedOrderSet::new(
+        let sealed = closed_order_set(
             AccountId::new(7),
             vec![BrokerOrder::from_lookup_result(input).expect("행")],
             interval(0, observed),
@@ -563,7 +564,7 @@ pub(crate) mod tests {
         input.filled_quantity = Quantity::try_new(Decimal::from(quantity)).expect("수량");
         input.filled_at = None;
         input.filled_amount = BrokerOrderMoney::Absent;
-        let sealed = ClosedOrderSet::new(
+        let sealed = closed_order_set(
             AccountId::new(7),
             vec![BrokerOrder::from_lookup_result(input).expect("행")],
             interval(0, observed),
