@@ -11,9 +11,9 @@ import type {
   SourceSetting,
   WakeCriteria,
 } from "../../../shared/ipc";
-import type { Result } from "../../../shared/lib";
+import { settingsKeys, type Result } from "../../../shared/lib";
 
-const newsKey = ["news-settings"] as const;
+const newsKey = settingsKeys.news;
 
 type NewsReply = Result<NewsSettings, IpcFailure>;
 

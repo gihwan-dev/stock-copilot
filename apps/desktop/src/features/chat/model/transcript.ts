@@ -5,9 +5,11 @@ import type {
   ChatFailureReason,
   ChatHistory,
   ChatHistoryEntry,
+  ChatNumberCheck,
   ChatSource,
   ChatStreamChunk,
   ChatStreamEvent,
+  ChatToolStatus,
   ChatToolTopic,
   ChatTurnStatus,
 } from "../../../shared/ipc";
@@ -36,6 +38,7 @@ export type AssistantReply = {
   readonly sources: readonly ChatSource[];
   readonly seen: Count | undefined;
   readonly researched: "researched" | "none";
+  readonly numbers: ChatNumberCheck | "unchecked";
 };
 
 export type ChatExchange = {
@@ -60,6 +63,7 @@ const freshReply: AssistantReply = {
   sources: [],
   seen: undefined,
   researched: "none",
+  numbers: "unchecked",
 };
 
 const phaseOf = (status: ChatTurnStatus | undefined): ReplyPhase => {
@@ -135,6 +139,19 @@ export const beginExchange = (
   exchanges: [...transcript.exchanges, { turn, question, reply: freshReply }],
 });
 
+const finishTool = (
+  reply: AssistantReply,
+  topic: ChatToolTopic,
+  status: ChatToolStatus,
+): AssistantReply => ({
+  ...reply,
+  tool: undefined,
+  researched:
+    topic === "web-research" && status === "succeeded"
+      ? "researched"
+      : reply.researched,
+});
+
 const applyContent = (
   reply: AssistantReply,
   chunk: ChatContentChunk,
@@ -145,18 +162,13 @@ const applyContent = (
     case "tool-started":
       return { ...reply, tool: chunk.topic };
     case "tool-finished":
-      return {
-        ...reply,
-        tool: undefined,
-        researched:
-          chunk.topic === "web-research" && chunk.status === "succeeded"
-            ? "researched"
-            : reply.researched,
-      };
+      return finishTool(reply, chunk.topic, chunk.status);
     case "card":
       return { ...reply, cards: [...reply.cards, chunk.card] };
     case "sources":
       return { ...reply, sources: [...reply.sources, ...chunk.items] };
+    case "number-check":
+      return { ...reply, numbers: chunk.check };
   }
 };
 

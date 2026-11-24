@@ -327,9 +327,21 @@ pub struct ChatTurnSummary {
     usage: Option<TokenUsage>,
     first_token_latency: Option<TimeSpan>,
     completed_at: Timestamp,
+    number_check: Option<crate::ChatNumberCheck>,
 }
 
 impl ChatTurnSummary {
+    #[must_use]
+    pub const fn with_number_check(mut self, check: crate::ChatNumberCheck) -> Self {
+        self.number_check = Some(check);
+        self
+    }
+
+    #[must_use]
+    pub const fn number_check(&self) -> Option<crate::ChatNumberCheck> {
+        self.number_check
+    }
+
     #[must_use]
     pub fn new(
         ids: ChatTurnIdentity,
@@ -346,6 +358,7 @@ impl ChatTurnSummary {
             usage: metrics.usage,
             first_token_latency: metrics.first_token_latency,
             completed_at,
+            number_check: None,
         }
     }
 
