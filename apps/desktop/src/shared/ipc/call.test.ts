@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { appVersion } from "./call";
+import { parseUiEvent } from "./schema";
 import {
   advanceCommandTimers,
   answerWithMalformedResponse,
@@ -82,5 +83,52 @@ test("a hanging IPC command resolves to a timeout failure", async () => {
   await expect(pending).resolves.toStrictEqual({
     kind: "err",
     error: { kind: "timeout" },
+  });
+});
+
+test("parseUiEvent validates unit and keyed core event wire payloads and rejects malformed inputs", () => {
+  expect(parseUiEvent("SettingsChanged")).toStrictEqual({
+    kind: "ok",
+    value: { category: "settings", kind: "SettingsChanged" },
+  });
+  expect(parseUiEvent("StoredDataChanged")).toStrictEqual({
+    kind: "ok",
+    value: { category: "all", kind: "StoredDataChanged" },
+  });
+  expect(parseUiEvent({ FxRateUpdated: "UsdKrw" })).toStrictEqual({
+    kind: "ok",
+    value: { category: "portfolio", kind: "FxRateUpdated" },
+  });
+  expect(
+    parseUiEvent({ CollectionFinished: { News: "Yonhap" } }),
+  ).toStrictEqual({
+    kind: "ok",
+    value: { category: "status", kind: "CollectionFinished" },
+  });
+  expect(
+    parseUiEvent({
+      DisclosureArrived: { source: "Dart", receipt_no: "20261124000001" },
+    }),
+  ).toStrictEqual({
+    kind: "ok",
+    value: { category: "activity", kind: "DisclosureArrived" },
+  });
+  expect(parseUiEvent("UnknownEvent")).toStrictEqual({
+    kind: "err",
+    error: { kind: "invalid-response" },
+  });
+  expect(parseUiEvent({ PriceUpdated: "" })).toStrictEqual({
+    kind: "err",
+    error: { kind: "invalid-response" },
+  });
+  expect(
+    parseUiEvent({ PriceUpdated: "inst-1", PriceMoved: "inst-2" }),
+  ).toStrictEqual({
+    kind: "err",
+    error: { kind: "invalid-response" },
+  });
+  expect(parseUiEvent(null)).toStrictEqual({
+    kind: "err",
+    error: { kind: "invalid-response" },
   });
 });

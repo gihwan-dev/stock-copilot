@@ -1,15 +1,22 @@
 import type { ReactElement } from "react";
 import { text } from "../lib";
-import type { ChartDecimal } from "../lib";
 import type {
+  ChartDecimal,
+  EntityId,
+  FreeText,
   Money as MoneyValue,
+  PercentDisplay,
   Price,
   Quantity as QuantityValue,
-  PercentDisplay,
+  Ticker,
+  Timestamp,
+  UiText,
 } from "../lib";
 import {
   formatNumber,
   formatPriceChange,
+  formatDataValue,
+  formatTimestampValue,
   directionStatus,
   type Display,
 } from "../lib/format";
@@ -109,6 +116,34 @@ export const ChartNumber = (props: {
 );
 export const chartNumberText = (value: ChartDecimal): Display["text"] =>
   formatNumber({ kind: "decimal", value }).text;
+export const chartLabelText: (value: UiText | FreeText) => Display["text"] =
+  formatDataValue;
+const dataClasses = {
+  body: "status-sentence text-body text-ink",
+  "body-sm": "status-sentence text-body-sm text-ink-muted",
+  caption: "status-sentence text-caption text-ink-subtle",
+  code: "status-sentence text-code text-ink-muted",
+} as const;
+export const DataText = (props: {
+  readonly value: FreeText | Ticker | EntityId | ChartDecimal;
+  readonly variant?: "body" | "body-sm" | "caption" | "code";
+}): ReactElement => {
+  const variant = props.variant ?? "body";
+  return (
+    <span className={dataClasses[variant]}>{formatDataValue(props.value)}</span>
+  );
+};
+export const TimestampText = (props: {
+  readonly value: Timestamp;
+  readonly variant?: "body-sm" | "caption" | "code";
+}): ReactElement => {
+  const variant = props.variant ?? "caption";
+  return (
+    <span className={dataClasses[variant]}>
+      {formatTimestampValue(props.value)}
+    </span>
+  );
+};
 export const Probability = (props: {
   readonly value: PercentDisplay;
 }): ReactElement => (

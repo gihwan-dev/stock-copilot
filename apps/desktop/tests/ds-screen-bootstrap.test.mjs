@@ -71,10 +71,17 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       join(folder, "src/shared/lib"),
       { recursive: true },
     );
+    cpSync(
+      join(desktopRoot, "src/shared/ipc"),
+      join(folder, "src/shared/ipc"),
+      { recursive: true },
+    );
     for (const path of [
       "app/main.tsx",
       "shared/platform/index.ts",
       "shared/platform/input.ts",
+      "shared/platform/detach.ts",
+      "shared/platform/useCoreEvent.ts",
       "shared/platform/canvasTheme.ts",
     ])
       writeFileSync(
@@ -87,31 +94,53 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     );
     compile();
     const input = join(folder, "src/shared/platform/input.ts");
+    const detachFile = join(folder, "src/shared/platform/detach.ts");
+    const coreEventFile = join(folder, "src/shared/platform/useCoreEvent.ts");
     const canvasTheme = join(folder, "src/shared/platform/canvasTheme.ts");
     for (const result of await make().lintFiles([
       main,
       platform,
       input,
+      detachFile,
+      coreEventFile,
       canvasTheme,
     ]))
       assert.deepEqual(result.messages, []);
-    const program = ts.createProgram([platform, input, canvasTheme], {
-      noEmit: true,
-      strict: true,
-    });
+    const program = ts.createProgram(
+      [platform, input, detachFile, coreEventFile, canvasTheme],
+      {
+        noEmit: true,
+        strict: true,
+      },
+    );
     const checker = program.getTypeChecker();
     const symbol = checker.getSymbolAtLocation(program.getSourceFile(platform));
     assert.deepEqual(
       checker.getExportsOfModule(symbol).map((s) => s.name),
-      ["mountApp", "readCanvasTheme", "useCanvasChartTheme"],
+      [
+        "detach",
+        "useCoreEvent",
+        "mountApp",
+        "readCanvasTheme",
+        "useCanvasChartTheme",
+      ],
     );
-    const exported = checker.getExportsOfModule(symbol)[0];
+    const platformFunctions = checker.getExportsOfModule(symbol);
     assert.deepEqual(
-      checker
-        .getTypeOfSymbolAtLocation(exported, program.getSourceFile(platform))
-        .getCallSignatures()
-        .map((signature) => signature.getReturnType().flags),
-      [ts.TypeFlags.Void],
+      platformFunctions.map((entry) => [
+        entry.name,
+        checker
+          .getTypeOfSymbolAtLocation(entry, program.getSourceFile(platform))
+          .getCallSignatures()
+          .map((signature) => checker.typeToString(signature.getReturnType())),
+      ]),
+      [
+        ["detach", ["void"]],
+        ["useCoreEvent", ["void"]],
+        ["mountApp", ["void"]],
+        ["readCanvasTheme", ["CandleThemePalette | undefined"]],
+        ["useCanvasChartTheme", ["CandleThemePalette | undefined"]],
+      ],
     );
     assert.deepEqual(DOM_ACCESS_FILES, [
       "src/shared/platform/index.ts",
@@ -156,7 +185,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId,parseFreeText,parseCanvasColor} from "./brand"; export type {InputValue,BrandError,FreeText,CanvasColor} from "./brand"; export type {CandleCanvasScene,CandleThemePalette,CanvasCandleMark} from "./canvas-chart"; export {err} from "./result"; export type {Result} from "./result";',
+      'export * from "./brand"; export * from "./money"; export * from "./result"; export * from "./query-keys"; export * from "./canvas-chart";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(

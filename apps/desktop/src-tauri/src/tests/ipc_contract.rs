@@ -7,6 +7,9 @@ use tauri_specta::Event;
 use testkit_ports::memory::MemoryReply;
 
 use crate::ipc::event::UiEvent;
+use crate::ipc::event_bridge::UiEventBridge;
+use application::EventSubscriber;
+use domain::{AccountId, DomainEvent};
 
 fn assembled_app() -> tauri::App<MockRuntime> {
     let ports = super::support::ports();
@@ -51,6 +54,27 @@ fn assert_wire_event(handle: &tauri::AppHandle<MockRuntime>) {
             .expect("이벤트 수신"),
         r#""AccountSelectionChanged""#,
         "제품 조립이 이벤트를 등록하고 종류만 전달한다"
+    );
+    let bridge = UiEventBridge::new(handle.clone());
+    bridge
+        .on_event(&DomainEvent::SettingsChanged)
+        .expect("설정 변경 다리 발행");
+    assert_eq!(
+        receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("설정 변경 수신"),
+        r#""SettingsChanged""#,
+        "UiEventBridge가 설정 변경 도메인 이벤트를 전달한다"
+    );
+    bridge
+        .on_event(&DomainEvent::PortfolioSyncRecorded(AccountId::new(17)))
+        .expect("계좌 동기화 다리 발행");
+    assert_eq!(
+        receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("계좌 동기화 수신"),
+        r#""PortfolioSyncRecorded""#,
+        "UiEventBridge가 계좌 키 없이 포트폴리오 동기화 이벤트를 전달한다"
     );
     handle.unlisten(listener);
 }

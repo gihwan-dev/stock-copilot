@@ -6,7 +6,7 @@ import type {
   ChartAxisLabels,
   ChartMark,
 } from "./chart-types";
-import { ChartNumber } from "./Numbers";
+import { chartLabelText, ChartNumber } from "./Numbers";
 import { ScrollArea } from "./ScrollArea";
 import { text, type UiText } from "../lib";
 type Props = ChartProps & {
@@ -28,7 +28,7 @@ const ChartTableContent = (props: Props): ReactElement => (
           }}
         >
           <th scope="row" className="text-left status-sentence">
-            {point.label}
+            {chartLabelText(point.label)}
           </th>
           <td className="text-right status-sentence">
             <ChartNumber value={point.value} />
@@ -67,10 +67,10 @@ export const ChartAxes = (props: {
   <div className="flex flex-col gap-space-1">
     <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
       <span className="text-caption text-ink-muted status-sentence">
-        {props.axes.first}
+        {chartLabelText(props.axes.first)}
       </span>
       <span className="text-caption text-ink-muted status-sentence">
-        {props.axes.last}
+        {chartLabelText(props.axes.last)}
       </span>
     </div>
     <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
@@ -101,7 +101,7 @@ export const ChartStatusBody = (props: {
   <>
     {props.selected === undefined ? null : (
       <span className="status-sentence">
-        {props.selected.label}
+        {chartLabelText(props.selected.label)}
         {text("ds.chartSeparator", "ko")}
       </span>
     )}

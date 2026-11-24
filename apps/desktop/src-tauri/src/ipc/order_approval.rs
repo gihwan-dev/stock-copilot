@@ -200,5 +200,27 @@ pub async fn request_order_approval<R: Runtime>(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct RequestOrderApprovalArgs {
+    pub proposal_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderApprovalArgsError {
+    Malformed,
+    InvalidProposalId,
+}
+
+pub fn parse_order_approval_args(
+    raw: serde_json::Value,
+) -> Result<ProposalId, OrderApprovalArgsError> {
+    let args: RequestOrderApprovalArgs =
+        serde_json::from_value(raw).map_err(|_error| OrderApprovalArgsError::Malformed)?;
+    ClientOrderId::try_new(&args.proposal_id)
+        .map(ProposalId::new)
+        .map_err(|_error| OrderApprovalArgsError::InvalidProposalId)
+}
+
 #[cfg(test)]
 mod tests;
