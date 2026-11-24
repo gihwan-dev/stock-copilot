@@ -25,10 +25,10 @@ D-55([ADR 0157](0157-instrument-identity-history.md))는 확인된 종목 식별
 |---|---|---|---|
 | `crates/domain/src/instrument_mapping_change.rs` | 유일한 정의(`UserIdentityConfirmation::issue_after_user_confirmation`) | 불가 | `arch-check` `identity-confirmation-issuance`가 단일 `const fn` 시그니처·비공개 봉인 필드·허용 derive(`Debug`/`PartialEq`/`Eq`)·보조 생성자/trait impl/형제 모듈 부재를 검사 |
 | `crates/domain/src/instrument_mapping_change/history_cases.rs` | 내부 단위 테스트 전용(`#[cfg(test)] mod tests`, 비공개 항목만) | 불가 | `defining-test-file` 규칙으로 공개 항목·`issue_after_user_confirmation` 호출 금지 유지 |
-| `crates/application/src/confirm_instrument_identity.rs` | 가능(`ConfirmInstrumentIdentity`의 `Prompt: IdentityConfirmationPrompt` 구속 `async fn` 안에서 `match self.prompt.confirm_*().await`의 `Confirmed` 분기당 1회 직접 호출만) | 불가 | `issuance-allowed-files` + `use-case-file` AST 검사: 비공개 `prompt` 필드, 원천 모듈(`crate::identity_confirmation_prompt`) 구속, 루프·클로저·이중 호출·래퍼·원시 확인 값 반환·비공개/공개 재수출 금지 |
-| `crates/testkit-ports/src/scripted_identity_confirmation.rs` | 가능(`ScriptedIdentityConfirmationIssuer::issue`의 `IdentityConfirmationDecision::Confirmed` 분기만, 항상 성공 생성자 없음) | 가능(`ScriptedIdentityConfirmation`) | `issuance-allowed-files` + `prompt-impl-files` + `agent-writable.txt` 보호 등록 + 샌드박스 `denyWrite` + Codex `read` + Claude 해시 검증 + `testkit-ports` 제품 바이너리(`src-tauri`) 및 `domain`/`application` 의존 금지 |
+| `crates/application/src/confirm_instrument_identity.rs` | 가능(로컬 단일 세그먼트 `ConfirmInstrumentIdentity`의 `Prompt: IdentityConfirmationPrompt`·`Time: Clock` 구속 `async fn` 안에서 3개 표준 연산의 `match self.prompt.confirm_*(&request).await` `Confirmed` 분기당 1회 직접 호출만) | 불가 | `issuance-allowed-files` + `use_case.rs` 화이트리스트 AST 검사: `ConfirmInstrumentIdentity`(비공개 `prompt`·`clock` 2필드)와 `IdentityConfirmationOutcome<T>`(`Clone`·`Copy`·`Default` 금지) 외 항목 전면 금지, 허용 `use` 원천(`crate::Clock`·`crate::identity_confirmation_prompt`·`domain`) 고정, 단일 세그먼트 `Self`·필드·`where` 구속, 입력 1개·반환 `IdentityConfirmationOutcome<Confirmed*>` 화이트리스트·프롬프트 메서드와 `request.into_parts()` 1:1 순서 결합 강제 |
+| `crates/testkit-ports/src/scripted_identity_confirmation.rs` | 가능(`ScriptedIdentityConfirmationIssuer::issue`의 `IdentityConfirmationDecision::Confirmed` 분기만, 항상 성공 생성자 없음) | 가능(`ScriptedIdentityConfirmation`) | `issuance-allowed-files` + `prompt-impl-files` + `agent-writable.txt` 보호 등록 + 샌드박스 `denyWrite` + Codex `read` + Claude 해시 검증(`hashes.json` 대조) + `testkit-ports` 제품 바이너리(`src-tauri`) 및 `domain`/`application` 의존 금지 (`arch-check`의 직접 리터럴·단일 블록 `Confirmed` 매치 차단은 실수 방지 보조 가드이며 변조 방어의 주 경계는 보호 파일·해시·서명 커밋) |
 | `crates/adapters/platform-macos` | 불가 | 가능(향후 확인 화면/OS 확인 구현 위치) | `prompt-impl-crates = ["platform-macos"]`; 발급 함수 호출은 `identity-confirmation-issuance`로 거부 |
-| `store-sqlite`, `broker-toss`, `broker-toss-trade`, `sources`, `ai-claude-code`, `ai-codex`, `secrets-keychain`, `mcp-server`, `scheduler`, `src-tauri`, `order-execution`, `approval-command`, `trade-fakes`, `domain` 타 파일, `application` 타 파일, `testkit-ports` 타 파일 | 불가(직접·별칭·raw ident `r#`·함수 포인터·제네릭 콜백·매크로 토큰·Cargo 의존 이름 바꾸기 모두 거부) | 불가(직접·raw ident·매크로 impl, `as` 별칭, `pub use`/글롭/모듈 별칭/Cargo 이름 바꾸기 재수출 모두 거부) | `arch-check` 4규칙 + Rust 비공개 봉인 필드 + `source-check`(금지 매크로·`#[path]`·`#[allow]`) |
+| `store-sqlite`, `broker-toss`, `broker-toss-trade`, `sources`, `ai-claude-code`, `ai-codex`, `secrets-keychain`, `mcp-server`, `scheduler`, `src-tauri`, `order-execution`, `approval-command`, `trade-fakes`, `domain` 타 파일, `application` 타 파일, `testkit-ports` 타 파일 | 불가(직접·별칭·raw ident `r#`·함수 포인터·제네릭 콜백·매크로 원문 토큰·Cargo 의존 이름 바꾸기·`paste` 직접 의존 모두 거부) | 불가(직접·raw ident·매크로 원문 impl, `as` 별칭, `pub use`/글롭/모듈 별칭/Cargo 이름 바꾸기 재수출, `paste` 직접 의존 모두 거부) | `arch-check` 4규칙 + `external-location`(`paste` `allowed-in = []`, `src-tauri`는 `tauri`·`tauri-specta`·`specta`·`specta-typescript` 경유 전이만 예외) + Rust 비공개 봉인 필드 + `source-check`(금지 매크로·`#[path]`·`#[allow]`·워크스페이스 proc-macro) — 단, 향후 식별자 합성 절차 매크로 크레이트를 새로 허용 목록에 들일 때는 별도 `external-location` 제한이 필요하다 |
 
 ## 결정
 
@@ -47,20 +47,23 @@ D-55([ADR 0157](0157-instrument-identity-history.md))는 확인된 종목 식별
 
 | 규칙 이름 | 검사 내용 |
 |---|---|
-| `identity-confirmation-issuance` | `issue_after_user_confirmation`과 `UserIdentityConfirmationSeal`의 사용을 정의 파일(`instrument_mapping_change.rs`), 허용 파일(`confirm_instrument_identity.rs`, `scripted_identity_confirmation.rs`)로 제한. 비허용 크레이트·파일의 모든 토큰(직접·별칭·`r#`·함수 포인터·제네릭·매크로), `domain` 형제 파일의 `impl`/`type`/별칭, 정의 파일의 `Clone`/`Default`/공개 필드/보조 메서드/trait impl/하위 파일, 유스케이스 파일의 원시 확인 값 반환·래퍼·비구속 impl·비`Confirmed` 분기·루프·클로저·이중 호출·위조 trait 임포트·하위 파일, 보호 가짜의 상수 `Confirmed` 매치·재수출을 거부 |
-| `identity-confirmation-prompt-impl` | `impl ... IdentityConfirmationPrompt for ...`(raw ident 및 매크로 포함)를 `prompt-impl-crates`(`platform-macos`)와 `prompt-impl-files`(`crates/testkit-ports/src/scripted_identity_confirmation.rs`)로 제한 |
-| `identity-confirmation-prompt-alias` | `IdentityConfirmationPrompt`의 `as` 별칭(`use ... as`, `self as`, `r#`, 매크로 토큰 포함)을 전 크레이트에서 거부 |
-| `identity-confirmation-prompt-reexport` | `IdentityConfirmationPrompt`, `identity_confirmation_prompt`(및 모듈 별칭), Cargo 의존 이름을 바꾼 `application` 별칭의 공개 재수출(`pub use`, `pub(...) use`, 글롭 재수출, 매크로 포함)을 거부 |
+| `identity-confirmation-issuance` | `issue_after_user_confirmation`과 `UserIdentityConfirmationSeal`의 사용을 정의 파일(`instrument_mapping_change.rs`), 허용 파일(`confirm_instrument_identity.rs`, `scripted_identity_confirmation.rs`)로 제한. 비허용 크레이트·파일의 모든 토큰(직접·별칭·`r#`·함수 포인터·제네릭·매크로 원문), `domain` 형제 파일의 `impl`/`type`/별칭, 정의 파일의 `Clone`/`Default`/공개 필드/보조 메서드/trait impl/하위 파일, 유스케이스 파일의 화이트리스트 밖 항목·임포트·비단일 세그먼트 `Self`/필드/`where`·`Confirmed*` 외 반환(`UserIdentityConfirmation`·`IdentityConfirmationOrigin`·`IdentityChangeConfirmation`·`MappingCorrectionConfirmation`·사용자 래퍼)·요청 치환/필드 순서 변경/프롬프트-반환 불일치/조기 시계 조회·하위 파일, 보호 가짜의 직접 리터럴·단일 블록 상수 `Confirmed` 매치·재수출을 거부 |
+| `identity-confirmation-prompt-impl` | `impl ... IdentityConfirmationPrompt for ...`(raw ident 및 매크로 원문 포함)를 `prompt-impl-crates`(`platform-macos`)와 `prompt-impl-files`(`crates/testkit-ports/src/scripted_identity_confirmation.rs`)로 제한 |
+| `identity-confirmation-prompt-alias` | `IdentityConfirmationPrompt`의 `as` 별칭(`use ... as`, `self as`, `r#`, 매크로 원문 포함)을 전 크레이트에서 거부 |
+| `identity-confirmation-prompt-reexport` | `IdentityConfirmationPrompt`, `identity_confirmation_prompt`(및 모듈 별칭), Cargo 의존 이름을 바꾼 `application` 별칭의 공개 재수출(`pub use`, `pub(...) use`, 글롭 재수출, 매크로 원문 포함)을 거부 (`pub use application::*;` 자체는 기존 `user-presence-reexport` 및 `source-check` `glob-import`가 전 크레이트에서 차단) |
+| `external-location` (`paste`) | `crates = ["paste"]`, `allowed-in = []`로 식별자 합성 절차 매크로 `paste`의 직접 의존을 전 크레이트에서 차단(`src-tauri`는 `tauri`·`tauri-specta`·`specta`·`specta-typescript` 경유 전이만 예외) |
 
 ### 신규 예제 (`harness/arch-check/cases.toml`)
 
-1. `identity-confirmation-allowed-pass` — 정의 파일, 내부 테스트 파일, `confirm_instrument_identity.rs`, `platform-macos` 포트 구현, `scripted_identity_confirmation.rs` 보호 가짜가 모두 위반 0건으로 통과하는 양성 대조.
+1. `identity-confirmation-allowed-pass` — 정의 파일, 내부 테스트 파일, 완전 표준 형태의 `confirm_instrument_identity.rs`, `platform-macos` 포트 구현, `scripted_identity_confirmation.rs` 보호 가짜가 모두 위반 0건으로 통과하는 양성 대조.
 2. `identity-confirmation-issuance-in-adapters-fail` — 11개 어댑터·호스트 크레이트(`store-sqlite`, `broker-toss`, `broker-toss-trade`, `sources`, `ai-claude-code`, `ai-codex`, `secrets-keychain`, `platform-macos`, `mcp-server`, `scheduler`, `src-tauri`)에서 발급 호출 거부.
 3. `identity-confirmation-issuance-outside-allowed-files-fail` — 허용 크레이트 안의 비허용 파일(`application/src/sync_portfolio.rs`, `domain/src/instrument_mapping.rs`, `testkit-ports/src/lib.rs`, `testkit-ports/src/memory.rs`)에서 발급 호출 거부.
 4. `identity-confirmation-indirect-calls-fail` — raw ident(`r#`), 제네릭 함수 포인터, 매크로(`vec![]`), 타입 별칭+UFCS, Cargo 의존 이름 바꾸기(`dom`)를 통한 간접 호출 거부.
 5. `identity-confirmation-defining-and-use-case-tampering-fail` — 정의 파일의 보조 생성자·`Clone`·하위 파일 `sneak.rs`, 유스케이스 파일의 무검증 래퍼·하위 파일 `sneak.rs` 거부.
 6. `identity-confirmation-prompt-impl-outside-allowed-fail` — 8개 비허용 크레이트·파일(`store-sqlite`, `broker-toss`, `ai-claude-code`, `sources` 매크로, `application`, `mcp-server`, `scheduler`, `testkit-ports/src/lib.rs`)에서 `IdentityConfirmationPrompt` 구현 거부.
 7. `identity-confirmation-prompt-alias-and-reexport-fail` — `as` 별칭(`store-sqlite`), `r#`+`self as`(`mcp-server`), 직접 `pub use`(`broker-toss`), 모듈 별칭 글롭(`ai-claude-code`), bare 모듈 글롭(`scheduler`), 모듈 재수출(`sources`), Cargo 이름 바꾸기 글롭(`secrets-keychain`) 거부.
+8. `identity-confirmation-use-case-bypass-fail` — `confirm_instrument_identity.rs` 내부에서 `IdentityConfirmationOutcome<IdentityConfirmationOrigin>` 반환, `(shown, actual)` 요청 치환, 외부 모듈 `crate::fake_confirm::ConfirmInstrumentIdentity` `impl`을 모두 거부.
+9. `paste-direct-dependency-fail` — `store-sqlite`와 `src-tauri`에서 `paste` 직접 의존을 `external-location`으로 거부(`src-tauri`는 `tauri` 전이 예외가 있어도 직접 의존은 거부).
 
 ## 정의 대기
 
@@ -93,14 +96,14 @@ D-55([ADR 0157](0157-instrument-identity-history.md))는 확인된 종목 식별
 
 ## 실측 및 손 변형
 
-### 커버리지·정적·변이 검사 (1차 구현)
+### 커버리지·정적·변이 검사
 
 - `just coverage-check`: 위반 없음 — `crates/domain/src/instrument_mapping_change.rs` 줄 232/232(100.00%)·영역 206/206(100.00%), `crates/application/src/identity_confirmation_prompt.rs` 줄 174/174(100.00%)·영역 236/236(100.00%).
 - `cargo llvm-cov nextest --locked -p application -p testkit-ports -E 'binary(identity_confirmation_boundary) | test(identity_confirmation)' --summary-only`: `confirm_instrument_identity.rs` 줄 68/68(100.00%)·영역 79/79(100.00%)·함수 7/7(100.00%), `identity_confirmation_prompt.rs` 줄 174/174(100.00%)·영역 236/236(100.00%), `scripted_identity_confirmation.rs` 줄 87/87(100.00%)·영역 77/77(100.00%)·함수 15/15(100.00%).
-- `just mutants-daily 4c13d306ed6190f2fbd970822a92ddf88f1a7529 0/1`: 위반 없음 — 대상 4개 파일(`confirm_instrument_identity.rs`, `identity_confirmation_prompt.rs`, `application/src/lib.rs`, `instrument_mapping_change.rs`)에서 선택된 27개 변이 전부 unviable(생존 0, 타임아웃 0; 봉인·프롬프트·결과 타입이 의도적으로 `Default`·`From`·무검증 생성자를 두지 않아 `Default::default()` 치환이 컴파일 단계에서 차단됨). 실제 논리 회귀는 아래 격리 복사본 손 변형 26건으로 보완했다.
-- `arch_check_cases_tests::every_case_reports_exactly_its_findings` 및 `removing_any_rule_element_breaks_some_case`: 모두 통과(41.45초, 253.56초). `just test-diff 4c13d306ed6190f2fbd970822a92ddf88f1a7529` 위반 없음, `just disable-report-since 4c13d306ed6190f2fbd970822a92ddf88f1a7529` 새 끄기 0건.
+- `just mutants-daily 4c13d306ed6190f2fbd970822a92ddf88f1a7529 0/1`: 위반 없음 — 대상 4개 파일(`confirm_instrument_identity.rs`, `identity_confirmation_prompt.rs`, `application/src/lib.rs`, `instrument_mapping_change.rs`)에서 선택된 27개 변이 전부 unviable(생존 0, 타임아웃 0; 봉인·프롬프트·결과 타입이 의도적으로 `Default`·`From`·무검증 생성자를 두지 않아 `Default::default()` 치환이 컴파일 단계에서 차단됨). 실제 논리 회귀는 아래 격리 복사본 손 변형 29건으로 보완했다.
+- 1차 수정(회차 2 대상) 검증: `just arch-check` 0건, `just source-check`·`raw-types`·`disable-check` 위반 없음, `identity_confirmation::tests` 11건 통과, `arch_check_cases_tests::every_case_reports_exactly_its_findings`(31.16초) 및 `removing_any_rule_element_breaks_some_case`(406.85초, `paste` 규칙·예외 4건 및 신규 예제 2건 포함) 통과, Node 415건·Prettier·ESLint·`hashes.mjs`·`fragment.mjs`·`config.mjs`·`test-diff`·`disable-report-since` 모두 통과.
 
-### 격리 복사본 손 변형 26건 (26/26 검출, 생존 0, 컴파일 불가 0)
+### 격리 복사본 손 변형 29건 (29/29 검출, 생존 0, 컴파일 불가 0)
 
 | 번호 | 대상 파일 | 무력화한 조건 | 검출 테스트 |
 |---|---|---|---|
@@ -114,13 +117,13 @@ D-55([ADR 0157](0157-instrument-identity-history.md))는 확인된 종목 식별
 | M08 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `DefiningFileCheck::visit_item_impl`: 단일 메서드(`i.items.len()==1`) 검사 제거 | `defining_file_accepts_canonical_issuer_and_rejects_backdoors` |
 | M09 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `DefiningFileCheck::visit_expr_path`: 정의 파일 내 비표준 경로의 봉인 생성 차단 제거 | `defining_file_accepts_canonical_issuer_and_rejects_backdoors` |
 | M10 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `check_defining_test_file`: `history_cases.rs` 내 비공개 아닌 항목 차단 제거 | `test_module_impl_async_block_and_local_trait_are_rejected` |
-| M11 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `UseCaseFileCheck::check_signature_leaks`: 유스케이스 시그니처의 원시 `UserIdentityConfirmation` 노출 차단 제거 | `test_module_impl_async_block_and_local_trait_are_rejected` |
-| M12 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `UseCaseFileCheck::visit_item_impl`: `Prompt` 제네릭의 `IdentityConfirmationPrompt` 구속 검사 제거 | `spoofed_prompt_imports_nested_structs_literal_matches_and_parens_are_rejected`, `use_case_file_requires_prompt_gated_confirmed_arm_and_blocks_wrappers` |
-| M13 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `UseCaseFileCheck::check_prompt_import_source`: 위조 모듈에서 `IdentityConfirmationPrompt` 임포트 차단 제거 | `spoofed_prompt_imports_nested_structs_literal_matches_and_parens_are_rejected` |
-| M14 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `UseCaseFileCheck::visit_expr_call`: 유스케이스 `Confirmed` 분기 외부 발급 차단 제거 | `spoofed_prompt_imports_nested_structs_literal_matches_and_parens_are_rejected`, `use_case_file_requires_prompt_gated_confirmed_arm_and_blocks_wrappers` |
-| M15 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `UseCaseFileCheck::visit_expr_call`: `Confirmed` 분기당 1회 호출 상한 검사 제거 | `use_case_file_requires_prompt_gated_confirmed_arm_and_blocks_wrappers` |
-| M16 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `UseCaseFileCheck::visit_expr_call`: 루프·클로저·`async` 블록 내부 발급 차단 제거 | `use_case_file_requires_prompt_gated_confirmed_arm_and_blocks_wrappers`, `test_module_impl_async_block_and_local_trait_are_rejected` |
-| M17 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `ProtectedFakeCheck::visit_expr_match`: 상수 `Confirmed` 매치 차단 제거 | `spoofed_prompt_imports_nested_structs_literal_matches_and_parens_are_rejected` |
+| M11 | `crates/xtask/src/arch_check/source/identity_confirmation/use_case.rs` | `return_matches_confirmed_outcome`: `Confirmed*` 반환 화이트리스트 검사 제거 | `use_case_isolates_return_type_and_import_source_guards` |
+| M12 | `crates/xtask/src/arch_check/source/identity_confirmation/use_case.rs` | `impl_binds_canonical_traits`: `Prompt`/`Clock` 트레잇 구속 검사 제거 | `use_case_blocks_sealed_wrapper_leaks_and_external_struct_impl` |
+| M13 | `crates/xtask/src/arch_check/source/identity_confirmation/use_case.rs` | `check_use_entry_allowed`: 위조 모듈 임포트 화이트리스트 검사 제거 | `use_case_isolates_return_type_and_import_source_guards` |
+| M14 | `crates/xtask/src/arch_check/source/identity_confirmation/use_case.rs` | `local_use_case_type_args`: 단일 세그먼트 `Self` 타입 강제 제거 | `use_case_blocks_sealed_wrapper_leaks_and_external_struct_impl` |
+| M15 | `crates/xtask/src/arch_check/source/identity_confirmation/use_case.rs` | `is_canonical_confirmed_tail`: 요청 인자 순서(`previous`/`next`) 대조 제거 | `use_case_blocks_request_swaps_mismatched_ops_and_early_clock` |
+| M16 | `crates/xtask/src/arch_check/source/identity_confirmation/use_case.rs` | `is_canonical_prompt_await`: 프롬프트 메서드와 반환 연산의 1:1 일치 검사 제거 | `use_case_blocks_request_swaps_mismatched_ops_and_early_clock` |
+| M17 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `ProtectedFakeCheck::visit_expr_match`: 상수 `Confirmed` 매치 차단 제거 | `spoofed_prompt_imports_nested_structs_literal_matches_and_parens_are_rejected`, `use_case_blocks_request_swaps_mismatched_ops_and_early_clock` |
 | M18 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `PromptCheck::visit_item_impl`: 비허용 크레이트의 `IdentityConfirmationPrompt` 구현 차단 제거 | `prompt_trait_impl_alias_and_reexport_are_enforced_across_crates` |
 | M19 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `PromptCheck::check_use_entry`: `IdentityConfirmationPrompt as` 별칭 차단 제거 | `prompt_trait_impl_alias_and_reexport_are_enforced_across_crates` |
 | M20 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `PromptCheck::check_glob_reexport`: 모듈·Cargo 별칭 글롭 재수출 차단 제거 | `prompt_trait_impl_alias_and_reexport_are_enforced_across_crates` |
@@ -130,6 +133,9 @@ D-55([ADR 0157](0157-instrument-identity-history.md))는 확인된 종목 식별
 | M24 | `crates/application/src/confirm_instrument_identity.rs` | `confirm_link_correction`: `Confirmed` 판정을 `Unavailable`로 폐기 | `confirmed_link_correction_succeeds_through_use_case_and_memory_repository` |
 | M25 | `crates/testkit-ports/src/scripted_identity_confirmation.rs` | `ScriptedIdentityConfirmation::confirm_retirement_correction`: 전체 호출 기록 누락 | `confirmed_retirement_correction_succeeds_through_use_case_and_memory_repository` |
 | M26 | `crates/testkit-ports/src/scripted_identity_confirmation.rs` | `ScriptedIdentityConfirmationIssuer::issue`: `Unavailable`을 `Denied`로 오매핑 | `protected_scripted_issuer_enforces_decisions_and_opens_all_three_memory_write_paths` |
+| M27 | `crates/xtask/src/arch_check/source/identity_confirmation/use_case.rs` | `single_segment_ident`: 필드·`where` 구속의 단일 세그먼트 강제 제거 | `use_case_blocks_sealed_wrapper_leaks_and_external_struct_impl` |
+| M28 | `crates/xtask/src/arch_check/source/identity_confirmation/use_case.rs` | `is_canonical_outcome_enum`: `IdentityConfirmationOutcome`의 비허용 derive(`Clone`) 차단 제거 | `use_case_blocks_sealed_wrapper_leaks_and_external_struct_impl` |
+| M29 | `crates/xtask/src/arch_check/source/identity_confirmation.rs` | `ProtectedFakeCheck::is_confirmed_decision_expr`: 블록 래핑 상수 `Confirmed` 매치 차단 제거 | `use_case_blocks_request_swaps_mismatched_ops_and_early_clock` |
 
 ## 결과
 

@@ -1,19 +1,54 @@
+use crate::Clock;
 use crate::identity_confirmation_prompt::{
-    IdentityConfirmationDecision, IdentityConfirmationPrompt,
+    IdentifierChangePrompt, IdentityConfirmationDecision, IdentityConfirmationPrompt,
 };
-use domain::UserIdentityConfirmation;
+use domain::{
+    ConfirmedIdentifierChange, IdentityChangeConfirmation, IdentityConfirmationOrigin,
+    UserIdentityConfirmation,
+};
 
-pub struct ConfirmInstrumentIdentity<'a, Prompt> {
-    prompt: &'a Prompt,
+#[derive(Debug, PartialEq, Eq)]
+pub enum IdentityConfirmationOutcome<T> {
+    Confirmed(T),
+    Denied,
+    Unavailable,
 }
 
-impl<'a, Prompt: IdentityConfirmationPrompt> ConfirmInstrumentIdentity<'a, Prompt> {
-    pub async fn confirm_identifier_change(&self) {
-        match self.prompt.confirm_identifier_change().await {
+#[derive(Debug)]
+pub struct ConfirmInstrumentIdentity<'a, Prompt, Time> {
+    prompt: &'a Prompt,
+    clock: &'a Time,
+}
+
+impl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock>
+    ConfirmInstrumentIdentity<'a, Prompt, Time>
+{
+    pub const fn new(prompt: &'a Prompt, clock: &'a Time) -> Self {
+        Self { prompt, clock }
+    }
+
+    pub async fn confirm_identifier_change(
+        &self,
+        request: IdentifierChangePrompt,
+    ) -> IdentityConfirmationOutcome<ConfirmedIdentifierChange> {
+        match self.prompt.confirm_identifier_change(&request).await {
             IdentityConfirmationDecision::Confirmed => {
-                let _seal = UserIdentityConfirmation::issue_after_user_confirmation();
+                let confirmed_at = self.clock.now();
+                let seal = UserIdentityConfirmation::issue_after_user_confirmation();
+                let (instrument_id, previous, next, evidence) = request.into_parts();
+                IdentityConfirmationOutcome::Confirmed(ConfirmedIdentifierChange::new(
+                    instrument_id,
+                    previous,
+                    next,
+                    IdentityChangeConfirmation::new(
+                        IdentityConfirmationOrigin::UserConfirmed(seal),
+                        evidence,
+                        confirmed_at,
+                    ),
+                ))
             }
-            IdentityConfirmationDecision::Denied | IdentityConfirmationDecision::Unavailable => {}
+            IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied,
+            IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable,
         }
     }
 }

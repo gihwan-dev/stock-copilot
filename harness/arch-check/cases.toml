@@ -859,3 +859,16 @@ findings = [
     { rule = "identity-confirmation-prompt-reexport", subject = "crates/adapters/sources/src/lib.rs" },
     { rule = "identity-confirmation-prompt-reexport", subject = "crates/scheduler/src/lib.rs" },
 ]
+
+[[case]]
+name = "identity-confirmation-use-case-bypass-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "crates/application/src/confirm_instrument_identity.rs" },
+]
+
+[[case]]
+name = "paste-direct-dependency-fail"
+findings = [
+    { rule = "external-location", subject = "src-tauri => paste" },
+    { rule = "external-location", subject = "store-sqlite => paste" },
+]

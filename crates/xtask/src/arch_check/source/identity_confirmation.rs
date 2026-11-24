@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests;
+mod use_case;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -10,11 +11,9 @@ use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
 use syn::{
-    Attribute, Expr, ExprAsync, ExprCall, ExprClosure, ExprField, ExprForLoop, ExprLoop, ExprMatch,
-    ExprPath, ExprStruct, ExprWhile, GenericArgument, GenericParam, Generics, ImplItem, ImplItemFn,
-    Item, ItemConst, ItemEnum, ItemExternCrate, ItemFn, ItemImpl, ItemMod, ItemStatic, ItemStruct,
-    ItemTrait, ItemType, ItemUse, Macro, Member, Pat, Path, PathArguments, Token, Type,
-    TypeParamBound, UseGlob, UseRename, Visibility, WherePredicate,
+    Attribute, Expr, ExprAsync, ExprCall, ExprClosure, ExprForLoop, ExprLoop, ExprMatch, ExprPath,
+    ExprStruct, ExprWhile, ImplItem, ImplItemFn, Item, ItemExternCrate, ItemImpl, ItemMod,
+    ItemStruct, ItemType, ItemUse, Macro, Pat, Path, Stmt, Token, Type, UseRename, Visibility,
 };
 
 use super::super::rules::IdentityConfirmationRules;
@@ -22,11 +21,6 @@ use super::super::{CrateName, Rule};
 use super::ast::uses::{UseKind, has_pair, unraw, use_entries};
 
 const ALLOWED_DERIVES: [&str; 3] = ["Debug", "PartialEq", "Eq"];
-const PROMPT_METHODS: [&str; 3] = [
-    "confirm_identifier_change",
-    "confirm_retirement_correction",
-    "confirm_link_correction",
-];
 const DEFINING_MACRO_BANNED: [&str; 8] = [
     "impl", "struct", "mod", "fn", "const", "static", "type", "use",
 ];
@@ -647,176 +641,6 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
     }
 }
 
-fn find_prompt_generic_position(file: &syn::File) -> Result<Option<usize>, ()> {
-    let mut found = None;
-    for item in &file.items {
-        let Item::Struct(structure) = item else {
-            continue;
-        };
-        if unraw(&structure.ident) != USE_CASE_STRUCT {
-            continue;
-        }
-        if found.is_some() {
-            return Err(());
-        }
-        let type_params: Vec<String> = structure
-            .generics
-            .params
-            .iter()
-            .filter_map(|param| match param {
-                GenericParam::Type(ty) => Some(unraw(&ty.ident)),
-                GenericParam::Lifetime(_) | GenericParam::Const(_) => None,
-            })
-            .collect();
-        let prompt_field = structure.fields.iter().find(|field| {
-            field
-                .ident
-                .as_ref()
-                .is_some_and(|name| unraw(name) == "prompt")
-        });
-        let Some(field) = prompt_field else {
-            return Err(());
-        };
-        if !private(&field.vis) {
-            return Err(());
-        }
-        let inner_name = match &field.ty {
-            Type::Reference(reference) => type_last_name(&reference.elem),
-            Type::Path(_) => type_last_name(&field.ty),
-            Type::Array(_)
-            | Type::BareFn(_)
-            | Type::Group(_)
-            | Type::ImplTrait(_)
-            | Type::Infer(_)
-            | Type::Macro(_)
-            | Type::Never(_)
-            | Type::Paren(_)
-            | Type::Ptr(_)
-            | Type::Slice(_)
-            | Type::TraitObject(_)
-            | Type::Tuple(_)
-            | Type::Verbatim(_)
-            | _ => None,
-        };
-        let Some(param_name) = inner_name else {
-            return Err(());
-        };
-        let Some(index) = type_params.iter().position(|param| param == &param_name) else {
-            return Err(());
-        };
-        found = Some(index);
-    }
-    Ok(found)
-}
-
-fn type_arg_at_position(self_ty: &Type, position: usize) -> Option<String> {
-    let Type::Path(path) = self_ty else {
-        return None;
-    };
-    let last = path.path.segments.last()?;
-    if unraw(&last.ident) != USE_CASE_STRUCT {
-        return None;
-    }
-    let PathArguments::AngleBracketed(arguments) = &last.arguments else {
-        return None;
-    };
-    let type_args: Vec<&Type> = arguments
-        .args
-        .iter()
-        .filter_map(|arg| match arg {
-            GenericArgument::Type(ty) => Some(ty),
-            GenericArgument::Lifetime(_)
-            | GenericArgument::Const(_)
-            | GenericArgument::AssocType(_)
-            | GenericArgument::AssocConst(_)
-            | GenericArgument::Constraint(_)
-            | _ => None,
-        })
-        .collect();
-    let ty = type_args.get(position)?;
-    type_last_name(ty)
-}
-
-fn bounds_require_trait(
-    bounds: &Punctuated<TypeParamBound, Token![+]>,
-    module_name: &str,
-    trait_name: &str,
-) -> bool {
-    bounds.iter().any(|bound| match bound {
-        TypeParamBound::Trait(trait_bound) => {
-            let names = segment_names(&trait_bound.path);
-            match names.as_slice() {
-                [single] => single == trait_name,
-                [root, module, name] => {
-                    root == "crate" && module == module_name && name == trait_name
-                }
-                _ => false,
-            }
-        }
-        TypeParamBound::Lifetime(_)
-        | TypeParamBound::PreciseCapture(_)
-        | TypeParamBound::Verbatim(_)
-        | _ => false,
-    })
-}
-
-fn generics_bind_param_to_trait(
-    generics: &Generics,
-    param_name: &str,
-    module_name: &str,
-    trait_name: &str,
-) -> bool {
-    let direct = generics.params.iter().any(|param| match param {
-        GenericParam::Type(ty) if unraw(&ty.ident) == param_name => {
-            bounds_require_trait(&ty.bounds, module_name, trait_name)
-        }
-        GenericParam::Type(_) | GenericParam::Lifetime(_) | GenericParam::Const(_) => false,
-    });
-    if direct {
-        return true;
-    }
-    generics.where_clause.as_ref().is_some_and(|clause| {
-        clause.predicates.iter().any(|predicate| match predicate {
-            WherePredicate::Type(ty)
-                if type_last_name(&ty.bounded_ty).as_deref() == Some(param_name) =>
-            {
-                bounds_require_trait(&ty.bounds, module_name, trait_name)
-            }
-            WherePredicate::Type(_) | WherePredicate::Lifetime(_) | _ => false,
-        })
-    })
-}
-
-fn is_self_prompt_await(expr: &Expr) -> bool {
-    let Expr::Await(awaited) = expr else {
-        return false;
-    };
-    let Expr::MethodCall(call) = awaited.base.as_ref() else {
-        return false;
-    };
-    if !PROMPT_METHODS.contains(&unraw(&call.method).as_str()) {
-        return false;
-    }
-    let Expr::Field(ExprField { base, member, .. }) = call.receiver.as_ref() else {
-        return false;
-    };
-    let Expr::Path(receiver_path) = base.as_ref() else {
-        return false;
-    };
-    let is_self = receiver_path.qself.is_none()
-        && receiver_path.path.segments.len() == 1
-        && receiver_path
-            .path
-            .segments
-            .first()
-            .is_some_and(|seg| unraw(&seg.ident) == "self");
-    let is_prompt = match member {
-        Member::Named(ident) => unraw(ident) == "prompt",
-        Member::Unnamed(_) => false,
-    };
-    is_self && is_prompt
-}
-
 fn is_confirmed_decision_pat(pat: &Pat) -> bool {
     match pat {
         Pat::Path(path) if path.qself.is_none() => {
@@ -863,325 +687,6 @@ fn is_direct_canonical_issuer_path(rules: &IdentityConfirmationRules, expr: &Exp
     }
 }
 
-struct UseCaseFileCheck<'a> {
-    rules: &'a IdentityConfirmationRules,
-    prompt_param_pos: Option<usize>,
-    seen_use_case_struct: usize,
-    scope: Scope,
-    in_prompt_gated_impl: bool,
-    in_async_method: bool,
-    in_confirmed_arm: bool,
-    calls_in_arm: usize,
-    loop_depth: usize,
-    closure_depth: usize,
-    approved_call_ptr: Option<*const ExprPath>,
-    findings: &'a mut BTreeSet<Rule>,
-}
-
-impl UseCaseFileCheck<'_> {
-    fn check_signature_leaks(&mut self, value: &impl ToTokens) {
-        if self.scope == Scope::Product
-            && (tokens_contain(value, &self.rules.confirmation_type)
-                || tokens_contain(value, &self.rules.seal_type))
-        {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-    }
-
-    fn check_prompt_import_source(&mut self, entry: &super::ast::uses::UseEntry) {
-        let imported = entry.imported();
-        let is_prompt_symbol = imported == self.rules.prompt_trait || imported == DECISION_ENUM;
-        if is_prompt_symbol
-            && entry.path.as_slice() != ["crate", self.rules.prompt_module.as_str(), imported]
-        {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-    }
-}
-
-impl<'ast> Visit<'ast> for UseCaseFileCheck<'_> {
-    fn visit_item(&mut self, i: &'ast Item) {
-        let saved = (
-            self.in_prompt_gated_impl,
-            self.in_async_method,
-            self.in_confirmed_arm,
-            self.calls_in_arm,
-        );
-        self.in_prompt_gated_impl = false;
-        self.in_async_method = false;
-        self.in_confirmed_arm = false;
-        self.calls_in_arm = 0;
-        visit::visit_item(self, i);
-        (
-            self.in_prompt_gated_impl,
-            self.in_async_method,
-            self.in_confirmed_arm,
-            self.calls_in_arm,
-        ) = saved;
-    }
-
-    fn visit_item_use(&mut self, i: &'ast ItemUse) {
-        if self.scope == Scope::Product {
-            if !private(&i.vis) {
-                self.findings.insert(Rule::IdentityConfirmationIssuance);
-            }
-            for entry in use_entries(&i.tree) {
-                self.check_prompt_import_source(&entry);
-            }
-        }
-        visit::visit_item_use(self, i);
-    }
-
-    fn visit_use_rename(&mut self, i: &'ast UseRename) {
-        if self.scope == Scope::Product {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        visit::visit_use_rename(self, i);
-    }
-
-    fn visit_use_glob(&mut self, i: &'ast UseGlob) {
-        if self.scope == Scope::Product {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        visit::visit_use_glob(self, i);
-    }
-
-    fn visit_item_type(&mut self, i: &'ast ItemType) {
-        if self.scope == Scope::Product {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        visit::visit_item_type(self, i);
-    }
-
-    fn visit_item_mod(&mut self, i: &'ast ItemMod) {
-        let outer = self.scope;
-        if outer == Scope::Product && is_cfg_test_mod(i) {
-            if let Some((_, nested)) = &i.content
-                && has_non_private_item(nested)
-            {
-                self.findings.insert(Rule::IdentityConfirmationIssuance);
-            }
-            if stream_contains_ident(i.to_token_stream(), &self.rules.issuer_function)
-                || stream_contains_ident(i.to_token_stream(), &self.rules.seal_type)
-            {
-                self.findings.insert(Rule::IdentityConfirmationIssuance);
-            }
-            self.scope = Scope::Test;
-            visit::visit_item_mod(self, i);
-            self.scope = outer;
-            return;
-        }
-        self.findings.insert(Rule::IdentityConfirmationIssuance);
-        visit::visit_item_mod(self, i);
-        self.scope = outer;
-    }
-
-    fn visit_item_trait(&mut self, i: &'ast ItemTrait) {
-        if self.scope == Scope::Product {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        visit::visit_item_trait(self, i);
-    }
-
-    fn visit_item_enum(&mut self, i: &'ast ItemEnum) {
-        self.check_signature_leaks(i);
-        let name = unraw(&i.ident);
-        if name == DECISION_ENUM || name == self.rules.confirmation_type {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        visit::visit_item_enum(self, i);
-    }
-
-    fn visit_item_struct(&mut self, i: &'ast ItemStruct) {
-        self.check_signature_leaks(i);
-        let name = unraw(&i.ident);
-        if name == USE_CASE_STRUCT {
-            self.seen_use_case_struct = self.seen_use_case_struct.saturating_add(1);
-            if self.seen_use_case_struct > 1 {
-                self.findings.insert(Rule::IdentityConfirmationIssuance);
-            }
-        }
-        if name == DECISION_ENUM
-            || name == self.rules.confirmation_type
-            || name == self.rules.seal_type
-        {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        visit::visit_item_struct(self, i);
-    }
-
-    fn visit_item_fn(&mut self, i: &'ast ItemFn) {
-        self.check_signature_leaks(&i.sig);
-        visit::visit_item_fn(self, i);
-    }
-
-    fn visit_item_const(&mut self, i: &'ast ItemConst) {
-        self.check_signature_leaks(&i.ty);
-        if unraw(&i.ident) == CONFIRMED_VARIANT {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        visit::visit_item_const(self, i);
-    }
-
-    fn visit_item_static(&mut self, i: &'ast ItemStatic) {
-        self.check_signature_leaks(&i.ty);
-        visit::visit_item_static(self, i);
-    }
-
-    fn visit_item_impl(&mut self, i: &'ast ItemImpl) {
-        let outer = self.in_prompt_gated_impl;
-        let is_use_case_inherent = self.scope == Scope::Product
-            && i.trait_.is_none()
-            && self
-                .prompt_param_pos
-                .and_then(|pos| type_arg_at_position(&i.self_ty, pos))
-                .is_some_and(|param_name| {
-                    generics_bind_param_to_trait(
-                        &i.generics,
-                        &param_name,
-                        &self.rules.prompt_module,
-                        &self.rules.prompt_trait,
-                    )
-                });
-        self.in_prompt_gated_impl = is_use_case_inherent;
-        if !is_use_case_inherent {
-            let shadows_prompt_method = i.items.iter().any(|item| match item {
-                ImplItem::Fn(method) => PROMPT_METHODS.contains(&unraw(&method.sig.ident).as_str()),
-                ImplItem::Const(_)
-                | ImplItem::Type(_)
-                | ImplItem::Macro(_)
-                | ImplItem::Verbatim(_)
-                | _ => false,
-            });
-            if shadows_prompt_method {
-                self.findings.insert(Rule::IdentityConfirmationIssuance);
-            }
-        }
-        visit::visit_item_impl(self, i);
-        self.in_prompt_gated_impl = outer;
-    }
-
-    fn visit_impl_item_fn(&mut self, i: &'ast ImplItemFn) {
-        self.check_signature_leaks(&i.sig);
-        let outer_async = self.in_async_method;
-        let outer_arm = self.in_confirmed_arm;
-        let outer_calls = self.calls_in_arm;
-        let has_receiver = i.sig.receiver().is_some();
-        self.in_async_method =
-            self.in_prompt_gated_impl && i.sig.asyncness.is_some() && has_receiver;
-        self.in_confirmed_arm = false;
-        self.calls_in_arm = 0;
-        visit::visit_impl_item_fn(self, i);
-        self.in_async_method = outer_async;
-        self.in_confirmed_arm = outer_arm;
-        self.calls_in_arm = outer_calls;
-    }
-
-    fn visit_expr_match(&mut self, i: &'ast ExprMatch) {
-        let prompt_match = self.in_async_method
-            && self.loop_depth == 0
-            && self.closure_depth == 0
-            && is_self_prompt_await(&i.expr);
-        let outer_arm = self.in_confirmed_arm;
-        let outer_calls = self.calls_in_arm;
-        self.in_confirmed_arm = false;
-        self.calls_in_arm = 0;
-        self.visit_expr(&i.expr);
-        for arm in &i.arms {
-            let confirmed_arm =
-                prompt_match && arm.guard.is_none() && is_confirmed_decision_pat(&arm.pat);
-            if let Some((_, guard)) = &arm.guard {
-                self.in_confirmed_arm = false;
-                self.visit_expr(guard);
-            }
-            self.in_confirmed_arm = confirmed_arm;
-            self.calls_in_arm = 0;
-            self.visit_expr(&arm.body);
-        }
-        self.in_confirmed_arm = outer_arm;
-        self.calls_in_arm = outer_calls;
-    }
-
-    fn visit_expr_for_loop(&mut self, i: &'ast ExprForLoop) {
-        self.loop_depth = self.loop_depth.saturating_add(1);
-        visit::visit_expr_for_loop(self, i);
-        self.loop_depth = self.loop_depth.saturating_sub(1);
-    }
-
-    fn visit_expr_while(&mut self, i: &'ast ExprWhile) {
-        self.loop_depth = self.loop_depth.saturating_add(1);
-        visit::visit_expr_while(self, i);
-        self.loop_depth = self.loop_depth.saturating_sub(1);
-    }
-
-    fn visit_expr_loop(&mut self, i: &'ast ExprLoop) {
-        self.loop_depth = self.loop_depth.saturating_add(1);
-        visit::visit_expr_loop(self, i);
-        self.loop_depth = self.loop_depth.saturating_sub(1);
-    }
-
-    fn visit_expr_closure(&mut self, i: &'ast ExprClosure) {
-        self.closure_depth = self.closure_depth.saturating_add(1);
-        visit::visit_expr_closure(self, i);
-        self.closure_depth = self.closure_depth.saturating_sub(1);
-    }
-
-    fn visit_expr_async(&mut self, i: &'ast ExprAsync) {
-        self.closure_depth = self.closure_depth.saturating_add(1);
-        visit::visit_expr_async(self, i);
-        self.closure_depth = self.closure_depth.saturating_sub(1);
-    }
-
-    fn visit_expr_call(&mut self, i: &'ast ExprCall) {
-        let outer_ptr = self.approved_call_ptr;
-        if let Expr::Path(callee) = i.func.as_ref()
-            && segment_names(&callee.path)
-                .iter()
-                .any(|seg| seg == &self.rules.issuer_function)
-        {
-            let allowed = self.scope == Scope::Product
-                && self.in_confirmed_arm
-                && self.loop_depth == 0
-                && self.closure_depth == 0
-                && self.calls_in_arm == 0
-                && i.args.is_empty()
-                && is_direct_canonical_issuer_path(self.rules, callee);
-            if allowed {
-                self.calls_in_arm = self.calls_in_arm.saturating_add(1);
-                self.approved_call_ptr = Some(std::ptr::from_ref(callee));
-            } else {
-                self.findings.insert(Rule::IdentityConfirmationIssuance);
-            }
-        }
-        visit::visit_expr_call(self, i);
-        self.approved_call_ptr = outer_ptr;
-    }
-
-    fn visit_expr_path(&mut self, i: &'ast ExprPath) {
-        let is_approved = self
-            .approved_call_ptr
-            .is_some_and(|ptr| std::ptr::eq(ptr, std::ptr::from_ref(i)));
-        if !is_approved {
-            let mentions_forbidden = segment_names(&i.path)
-                .iter()
-                .any(|seg| seg == &self.rules.issuer_function || seg == &self.rules.seal_type);
-            if mentions_forbidden {
-                self.findings.insert(Rule::IdentityConfirmationIssuance);
-            }
-        }
-        visit::visit_expr_path(self, i);
-    }
-
-    fn visit_macro(&mut self, i: &'ast Macro) {
-        if stream_contains_ident(i.tokens.clone(), &self.rules.issuer_function)
-            || stream_contains_ident(i.tokens.clone(), &self.rules.seal_type)
-        {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        visit::visit_macro(self, i);
-    }
-}
-
 fn is_confirmed_decision_expr(expr: &Expr) -> bool {
     match expr {
         Expr::Path(path) if path.qself.is_none() => {
@@ -1190,12 +695,18 @@ fn is_confirmed_decision_expr(expr: &Expr) -> bool {
         }
         Expr::Group(group) => is_confirmed_decision_expr(&group.expr),
         Expr::Paren(paren) => is_confirmed_decision_expr(&paren.expr),
+        Expr::Block(block) => {
+            if let [Stmt::Expr(inner, None)] = block.block.stmts.as_slice() {
+                is_confirmed_decision_expr(inner)
+            } else {
+                false
+            }
+        }
         Expr::Array(_)
         | Expr::Assign(_)
         | Expr::Async(_)
         | Expr::Await(_)
         | Expr::Binary(_)
-        | Expr::Block(_)
         | Expr::Break(_)
         | Expr::Call(_)
         | Expr::Cast(_)
@@ -1416,40 +927,6 @@ fn may_touch_identity_confirmation(
     })
 }
 
-fn check_use_case_file(
-    rules: &IdentityConfirmationRules,
-    ctx: &CheckContext<'_>,
-    findings: &mut BTreeSet<Rule>,
-) {
-    if rules.issuance_allowed_files.contains(ctx.relative) {
-        let prompt_param_pos = if let Ok(position) = find_prompt_generic_position(ctx.file) {
-            position
-        } else {
-            findings.insert(Rule::IdentityConfirmationIssuance);
-            None
-        };
-        let mut scan = UseCaseFileCheck {
-            rules,
-            prompt_param_pos,
-            seen_use_case_struct: 0,
-            scope: Scope::Product,
-            in_prompt_gated_impl: false,
-            in_async_method: false,
-            in_confirmed_arm: false,
-            calls_in_arm: 0,
-            loop_depth: 0,
-            closure_depth: 0,
-            approved_call_ptr: None,
-            findings,
-        };
-        scan.visit_file(ctx.file);
-    } else if stream_contains_ident(ctx.tokens.clone(), &rules.issuer_function)
-        || stream_contains_ident(ctx.tokens.clone(), &rules.seal_type)
-    {
-        findings.insert(Rule::IdentityConfirmationIssuance);
-    }
-}
-
 fn check_protected_fake_file(
     rules: &IdentityConfirmationRules,
     ctx: &CheckContext<'_>,
@@ -1529,7 +1006,7 @@ pub(super) fn check(rules: &IdentityConfirmationRules, ctx: &CheckContext<'_>) -
     } else if ctx.relative == rules.defining_test_file {
         check_defining_test_file(rules, ctx.file, ctx.tokens, &mut findings);
     } else if ctx.relative == rules.use_case_file {
-        check_use_case_file(rules, ctx, &mut findings);
+        use_case::check_use_case_file(rules, ctx, &mut findings);
     } else if rules.issuance_allowed_files.contains(ctx.relative) {
         check_protected_fake_file(rules, ctx, &mut findings);
     } else {

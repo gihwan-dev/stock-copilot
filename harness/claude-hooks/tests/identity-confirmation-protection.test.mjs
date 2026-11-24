@@ -33,5 +33,9 @@ test("ScriptedIdentityConfirmation is protected in allowlist, sandbox fragment, 
   const expected = createHash("sha256")
     .update(readFileSync(join(repoRoot, PROTECTED_FAKE)))
     .digest("hex");
+  const recorded = JSON.parse(
+    readFileSync(join(repoRoot, "harness/claude-hooks/hashes.json"), "utf8"),
+  );
+  assert.equal(recorded[PROTECTED_FAKE], expected);
   assert.equal(currentHashes(repoRoot)[PROTECTED_FAKE], expected);
 });

@@ -419,3 +419,121 @@ impl<'a, P: IdentityConfirmationPrompt> ConfirmInstrumentIdentity<'a, P> {
         BTreeSet::from([Rule::IdentityConfirmationIssuance])
     );
 }
+
+#[test]
+fn use_case_blocks_sealed_wrapper_leaks_and_external_struct_impl() {
+    let use_case = "crates/application/src/confirm_instrument_identity.rs";
+    let header = "use crate::Clock;
+use crate::identity_confirmation_prompt::{IdentifierChangePrompt, IdentityConfirmationDecision, IdentityConfirmationPrompt};
+use domain::{ConfirmedIdentifierChange, IdentityChangeConfirmation, IdentityConfirmationOrigin, MappingCorrectionConfirmation, UserIdentityConfirmation};
+pub enum IdentityConfirmationOutcome<T> { Confirmed(T), Denied, Unavailable }
+pub struct ConfirmInstrumentIdentity<'a, Prompt, Time> { prompt: &'a Prompt, clock: &'a Time }";
+    let good_body = "let t = self.clock.now(); let seal = UserIdentityConfirmation::issue_after_user_confirmation(); let (id, prev, next, ev) = request.into_parts(); IdentityConfirmationOutcome::Confirmed(ConfirmedIdentifierChange::new(id, prev, next, IdentityChangeConfirmation::new(IdentityConfirmationOrigin::UserConfirmed(seal), ev, t)))";
+    for bad in [
+        format!(
+            "{header}\nimpl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock> ConfirmInstrumentIdentity<'a, Prompt, Time> {{ pub async fn confirm_any(&self, request: IdentifierChangePrompt) -> IdentityConfirmationOutcome<IdentityConfirmationOrigin> {{ match self.prompt.confirm_identifier_change(&request).await {{ IdentityConfirmationDecision::Confirmed => {{ let seal = UserIdentityConfirmation::issue_after_user_confirmation(); IdentityConfirmationOutcome::Confirmed(IdentityConfirmationOrigin::UserConfirmed(seal)) }} IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied, IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable }} }} }}"
+        ),
+        format!(
+            "{header}\nimpl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock> ConfirmInstrumentIdentity<'a, Prompt, Time> {{ pub async fn leak_confirmation(&self, request: IdentifierChangePrompt) -> IdentityConfirmationOutcome<IdentityChangeConfirmation> {{ match self.prompt.confirm_identifier_change(&request).await {{ IdentityConfirmationDecision::Confirmed => {{ let t = self.clock.now(); let seal = UserIdentityConfirmation::issue_after_user_confirmation(); let (_, _, _, ev) = request.into_parts(); IdentityConfirmationOutcome::Confirmed(IdentityChangeConfirmation::new(IdentityConfirmationOrigin::UserConfirmed(seal), ev, t)) }} IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied, IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable }} }} }}"
+        ),
+        format!("{header}\npub struct Leaked(pub IdentityConfirmationOrigin);"),
+        format!(
+            "{header}\nimpl<Prompt: IdentityConfirmationPrompt, Time: Clock> crate::fake_confirm::ConfirmInstrumentIdentity<Prompt, Time> {{ pub async fn forge(&self, request: IdentifierChangePrompt) -> IdentityConfirmationOutcome<ConfirmedIdentifierChange> {{ match self.prompt.confirm_identifier_change(&request).await {{ IdentityConfirmationDecision::Confirmed => {{ {good_body} }} IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied, IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable }} }} }}"
+        ),
+        String::from(
+            "use crate::Clock;\nuse crate::identity_confirmation_prompt::{IdentifierChangePrompt, IdentityConfirmationDecision, IdentityConfirmationPrompt};\nuse domain::{ConfirmedIdentifierChange, IdentityChangeConfirmation, IdentityConfirmationOrigin, UserIdentityConfirmation};\npub enum IdentityConfirmationOutcome<T> { Confirmed(T), Denied, Unavailable }\npub struct ConfirmInstrumentIdentity<'a, Prompt, Time> { prompt: &'a crate::other::Prompt, clock: &'a Time }",
+        ),
+        format!(
+            "{header}\nimpl<'a, Prompt, Time: Clock> ConfirmInstrumentIdentity<'a, Prompt, Time> where crate::other::Prompt: IdentityConfirmationPrompt {{ pub async fn confirm_identifier_change(&self, request: IdentifierChangePrompt) -> IdentityConfirmationOutcome<ConfirmedIdentifierChange> {{ match self.prompt.confirm_identifier_change(&request).await {{ IdentityConfirmationDecision::Confirmed => {{ {good_body} }} IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied, IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable }} }} }}"
+        ),
+        String::from(
+            "#[derive(Clone)] pub enum IdentityConfirmationOutcome<T> { Confirmed(T), Denied, Unavailable }\npub struct ConfirmInstrumentIdentity<'a, Prompt, Time> { prompt: &'a Prompt, clock: &'a Time }",
+        ),
+    ] {
+        assert_eq!(
+            scan("application", use_case, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn use_case_blocks_request_swaps_mismatched_ops_and_early_clock() {
+    let use_case = "crates/application/src/confirm_instrument_identity.rs";
+    let header = "use crate::Clock;
+use crate::identity_confirmation_prompt::{IdentifierChangePrompt, IdentityConfirmationDecision, IdentityConfirmationPrompt, RetirementCorrectionPrompt};
+use domain::{ConfirmedIdentifierChange, ConfirmedRetirementCorrection, IdentityChangeConfirmation, IdentityConfirmationOrigin, MappingCorrectionConfirmation, UserIdentityConfirmation};
+pub enum IdentityConfirmationOutcome<T> { Confirmed(T), Denied, Unavailable }
+pub struct ConfirmInstrumentIdentity<'a, Prompt, Time> { prompt: &'a Prompt, clock: &'a Time }";
+    for bad in [
+        format!(
+            "{header}\nimpl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock> ConfirmInstrumentIdentity<'a, Prompt, Time> {{ pub async fn confirm_swapped(&self, shown: IdentifierChangePrompt, actual: IdentifierChangePrompt) -> IdentityConfirmationOutcome<ConfirmedIdentifierChange> {{ match self.prompt.confirm_identifier_change(&shown).await {{ IdentityConfirmationDecision::Confirmed => {{ let t = self.clock.now(); let seal = UserIdentityConfirmation::issue_after_user_confirmation(); let (id, prev, next, ev) = actual.into_parts(); IdentityConfirmationOutcome::Confirmed(ConfirmedIdentifierChange::new(id, prev, next, IdentityChangeConfirmation::new(IdentityConfirmationOrigin::UserConfirmed(seal), ev, t))) }} IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied, IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable }} }} }}"
+        ),
+        format!(
+            "{header}\nimpl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock> ConfirmInstrumentIdentity<'a, Prompt, Time> {{ pub async fn confirm_flipped(&self, request: IdentifierChangePrompt) -> IdentityConfirmationOutcome<ConfirmedIdentifierChange> {{ match self.prompt.confirm_identifier_change(&request).await {{ IdentityConfirmationDecision::Confirmed => {{ let t = self.clock.now(); let seal = UserIdentityConfirmation::issue_after_user_confirmation(); let (id, prev, next, ev) = request.into_parts(); IdentityConfirmationOutcome::Confirmed(ConfirmedIdentifierChange::new(id, next, prev, IdentityChangeConfirmation::new(IdentityConfirmationOrigin::UserConfirmed(seal), ev, t))) }} IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied, IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable }} }} }}"
+        ),
+        format!(
+            "{header}\nimpl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock> ConfirmInstrumentIdentity<'a, Prompt, Time> {{ pub async fn confirm_mismatch(&self, request: RetirementCorrectionPrompt) -> IdentityConfirmationOutcome<ConfirmedRetirementCorrection> {{ match self.prompt.confirm_identifier_change(&request).await {{ IdentityConfirmationDecision::Confirmed => {{ let t = self.clock.now(); let seal = UserIdentityConfirmation::issue_after_user_confirmation(); let (id, src, ev) = request.into_parts(); IdentityConfirmationOutcome::Confirmed(ConfirmedRetirementCorrection::new(id, src, MappingCorrectionConfirmation::new(IdentityConfirmationOrigin::UserConfirmed(seal), ev, t))) }} IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied, IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable }} }} }}"
+        ),
+        format!(
+            "{header}\nimpl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock> ConfirmInstrumentIdentity<'a, Prompt, Time> {{ pub async fn early_clock(&self, request: IdentifierChangePrompt) -> IdentityConfirmationOutcome<ConfirmedIdentifierChange> {{ let t = self.clock.now(); match self.prompt.confirm_identifier_change(&request).await {{ IdentityConfirmationDecision::Confirmed => {{ let seal = UserIdentityConfirmation::issue_after_user_confirmation(); let (id, prev, next, ev) = request.into_parts(); IdentityConfirmationOutcome::Confirmed(ConfirmedIdentifierChange::new(id, prev, next, IdentityChangeConfirmation::new(IdentityConfirmationOrigin::UserConfirmed(seal), ev, t))) }} IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied, IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable }} }} }}"
+        ),
+    ] {
+        assert_eq!(
+            scan("application", use_case, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+    assert_eq!(
+        scan(
+            "testkit-ports",
+            "crates/testkit-ports/src/scripted_identity_confirmation.rs",
+            "fn forge() { match { IdentityConfirmationDecision::Confirmed } { IdentityConfirmationDecision::Confirmed => { let _ = UserIdentityConfirmation::issue_after_user_confirmation(); } _ => {} } }",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationIssuance])
+    );
+}
+
+#[test]
+fn use_case_isolates_return_type_and_import_source_guards() {
+    let use_case = "crates/application/src/confirm_instrument_identity.rs";
+    let body = "pub enum IdentityConfirmationOutcome<T> { Confirmed(T), Denied, Unavailable }
+pub struct ConfirmInstrumentIdentity<'a, Prompt, Time> { prompt: &'a Prompt, clock: &'a Time }
+impl<'a, Prompt: IdentityConfirmationPrompt, Time: Clock> ConfirmInstrumentIdentity<'a, Prompt, Time> {
+    pub async fn confirm_identifier_change(&self, request: IdentifierChangePrompt) -> RET {
+        match self.prompt.confirm_identifier_change(&request).await {
+            IdentityConfirmationDecision::Confirmed => {
+                let t = self.clock.now();
+                let seal = UserIdentityConfirmation::issue_after_user_confirmation();
+                let (id, prev, next, ev) = request.into_parts();
+                IdentityConfirmationOutcome::Confirmed(ConfirmedIdentifierChange::new(id, prev, next, IdentityChangeConfirmation::new(IdentityConfirmationOrigin::UserConfirmed(seal), ev, t)))
+            }
+            IdentityConfirmationDecision::Denied => IdentityConfirmationOutcome::Denied,
+            IdentityConfirmationDecision::Unavailable => IdentityConfirmationOutcome::Unavailable,
+        }
+    }
+}";
+    let wrong_ret = format!(
+        "use crate::Clock;\nuse crate::identity_confirmation_prompt::{{IdentifierChangePrompt, IdentityConfirmationDecision, IdentityConfirmationPrompt}};\nuse domain::{{ConfirmedIdentifierChange, IdentityChangeConfirmation, IdentityConfirmationOrigin, UserIdentityConfirmation}};\n{}",
+        body.replace(
+            "RET",
+            "IdentityConfirmationOutcome<IdentityConfirmationOrigin>"
+        )
+    );
+    let spoofed_import = format!(
+        "use crate::Clock;\nuse crate::fake_prompt::{{IdentifierChangePrompt, IdentityConfirmationDecision, IdentityConfirmationPrompt}};\nuse domain::{{ConfirmedIdentifierChange, IdentityChangeConfirmation, IdentityConfirmationOrigin, UserIdentityConfirmation}};\n{}",
+        body.replace(
+            "RET",
+            "IdentityConfirmationOutcome<ConfirmedIdentifierChange>"
+        )
+    );
+    for bad in [wrong_ret, spoofed_import] {
+        assert_eq!(
+            scan("application", use_case, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}
