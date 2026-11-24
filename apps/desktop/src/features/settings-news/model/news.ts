@@ -87,7 +87,7 @@ export const useNewsSaver = (client: SettingsClient): NewsSaver => {
   };
 };
 
-export type KeyEntry = {
+type KeyEntry = {
   readonly key: OptionalKey;
   readonly secret: SecretText;
 };

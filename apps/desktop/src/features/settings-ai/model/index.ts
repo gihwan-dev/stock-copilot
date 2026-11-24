@@ -1,4 +1,4 @@
-export type { AiChange, Loaded, SaveState } from "./ai";
+export type { AiChange, SaveState } from "./ai";
 export {
   useAiSaver,
   useAiSettings,
