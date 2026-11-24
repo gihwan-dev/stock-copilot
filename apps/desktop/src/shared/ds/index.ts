@@ -45,6 +45,8 @@ export {
   Probability,
   PriceChange,
   DirectionBadge,
+  DataText,
+  TimestampText,
 } from "./Numbers";
 export { Markdown } from "./Markdown";
 export { ChatInput } from "./ChatInput";

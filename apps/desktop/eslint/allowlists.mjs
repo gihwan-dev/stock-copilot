@@ -35,6 +35,8 @@ export const RAW_TYPE_ALLOWLIST = [
   "src/shared/lib/money.ts",
   "src/shared/lib/format.ts",
   "src/shared/ipc/schema.ts",
+  "src/shared/ipc/event-schema.ts",
+  "src/shared/ipc/settings-schema.ts",
   "src/shared/ipc/bindings.ts",
 ];
 
