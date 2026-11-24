@@ -457,6 +457,11 @@ pub use collection_schedule::{
     PlannedCollection, StartupCatchUp, collection_cadence, collection_phase, startup_catch_up,
 };
 
+mod record_wake_trigger;
+pub use record_wake_trigger::{
+    RecordWakeTriggers, TriggerWrite, WakeTriggerOutcome, WakeTriggerRepository,
+};
+
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
