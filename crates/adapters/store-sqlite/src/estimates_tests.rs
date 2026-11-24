@@ -224,7 +224,7 @@ fn outcome_for(task: &CostEligibleTask, high: &str, low: &str) -> EstimateOutcom
         local(day(70)),
     )
 }
-fn cal_key(model_name: &str) -> CalibrationKey {
+pub(crate) fn cal_key(model_name: &str) -> CalibrationKey {
     CalibrationKey::new(
         CalibrationModel::new(
             ModelIdentityPart::try_new("claude").expect("provider"),
@@ -532,7 +532,7 @@ fn sample_submission_input(
     }
 }
 
-fn seed_resolved_and_append_only_rows(
+pub(crate) fn seed_resolved_and_append_only_rows(
     rt: &tokio::runtime::Runtime,
     database: &Database,
     task_id: &CalibrationEstimateId,
