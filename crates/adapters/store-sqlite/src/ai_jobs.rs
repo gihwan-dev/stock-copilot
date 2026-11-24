@@ -2,8 +2,8 @@ use crate::estimates::codec::{Decoder, Encoder, invalid, put_timestamp, take_tim
 use crate::{Database, sql::ai_jobs as sql};
 use application::{
     AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
-    PrinciplesRepository, RunKind, RunPurpose, SystemPortError, TokenCount, TokenUsage,
-    WriteCompleted,
+    PrinciplesRepository, PromptDigest, PromptHasher, PromptId, PromptRef, PromptSource,
+    PromptVersion, RunKind, RunPurpose, SystemPortError, TokenCount, TokenUsage, WriteCompleted,
 };
 use domain::{
     AiJobId, CashFloor, ConcentrationFloor, InvestmentPrinciples, PolicyText, PrincipleNote,
@@ -94,7 +94,39 @@ fn encode_job(record: &AiJobFinishRecord) -> String {
     ] {
         out.push_u64(*count.as_u64());
     }
+    match record.prompt() {
+        Some(prompt) => {
+            out.push("prompt");
+            out.push(prompt.id().as_str());
+            out.push(prompt.version().as_str());
+            out.push(prompt.digest().as_str());
+        }
+        None => out.push("no_prompt"),
+    }
     out.finish()
+}
+
+fn decode_prompt(input: &mut Decoder<'_>) -> rusqlite::Result<Option<PromptRef>> {
+    match input.next()? {
+        "no_prompt" => Ok(None),
+        "prompt" => {
+            let id = PromptId::new(input.next()?);
+            let version = PromptVersion::new(input.next()?);
+            let digest = PromptDigest::try_from_hex(input.next()?).map_err(invalid)?;
+            Ok(Some(PromptRef::restore(id, version, digest)))
+        }
+        _ => Err(invalid(())),
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Sha256PromptHasher;
+
+impl PromptHasher for Sha256PromptHasher {
+    fn digest(&self, source: &PromptSource) -> PromptDigest {
+        use sha2::{Digest, Sha256};
+        PromptDigest::from_sha256(Sha256::digest(source.as_str().as_bytes()).into())
+    }
 }
 
 fn decode_job(payload: &str) -> rusqlite::Result<AiJobFinishRecord> {
@@ -112,13 +144,13 @@ fn decode_job(payload: &str) -> rusqlite::Result<AiJobFinishRecord> {
         TokenCount::new(input.next_u64()?),
         TokenCount::new(input.next_u64()?),
     );
+    let prompt = decode_prompt(&mut input)?;
     input.finish()?;
-    Ok(AiJobFinishRecord::new(
-        AiJobRun::new(job, kind, purpose),
-        outcome,
-        timing,
-        tokens,
-    ))
+    let record = AiJobFinishRecord::new(AiJobRun::new(job, kind, purpose), outcome, timing, tokens);
+    Ok(match prompt {
+        Some(reference) => record.with_prompt(reference),
+        None => record,
+    })
 }
 
 fn time_key(at: Timestamp) -> (i64, i64) {

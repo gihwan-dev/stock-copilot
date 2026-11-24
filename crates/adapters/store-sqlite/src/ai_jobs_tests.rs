@@ -209,3 +209,49 @@ fn ai_job_sql_constants_match_the_migration_and_prepare() {
         connection.prepare(statement).expect(statement);
     }
 }
+
+#[test]
+fn prompt_reference_round_trips_and_hash_comes_from_the_text() {
+    use application::{LoadedPrompt, PromptHasher, PromptSource, PromptTask, PromptVersion};
+    let hasher = crate::Sha256PromptHasher;
+    assert_eq!(
+        hasher.digest(&PromptSource::new("abc")).as_str(),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+    let source = PromptSource::new(
+        &std::fs::read_to_string("../../../prompts/estimate/v1.md").expect("추정 프롬프트"),
+    );
+    let loaded = LoadedPrompt::load(
+        &PromptTask::new("estimate"),
+        &PromptVersion::new("v1"),
+        &source,
+        &hasher,
+    )
+    .expect("로드");
+    let changed = PromptSource::new(&format!("{}\n", source.as_str()));
+    assert_ne!(
+        hasher.digest(&changed),
+        loaded.prompt_ref().digest().clone()
+    );
+    let with_prompt = record(
+        "job-p",
+        RunPurpose::Estimate,
+        AiJobOutcome::Completed,
+        at(500, 0),
+    )
+    .with_prompt(loaded.prompt_ref());
+    let fixture = Fixture::new();
+    let path = DatabasePath::new(fixture.path());
+    let rt = runtime();
+    let db = Database::open(&path, &key(), &clock()).expect("open");
+    let store = AiJobStore::new(&db);
+    rt.block_on(store.store_finished(&with_prompt))
+        .expect("store");
+    let found = rt
+        .block_on(store.finished(with_prompt.job()))
+        .expect("find")
+        .expect("record");
+    assert_eq!(found.prompt(), Some(&loaded.prompt_ref()));
+    assert_eq!(found, with_prompt);
+    rt.block_on(db.close()).expect("close");
+}

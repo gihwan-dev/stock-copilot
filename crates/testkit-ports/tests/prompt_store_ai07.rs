@@ -2,7 +2,7 @@
 mod tests {
     use application::{
         AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRun, AiJobTiming, LoadedPrompt,
-        PromptDigest, PromptFileError, PromptLocationError, PromptSource, PromptTask,
+        PromptDigest, PromptFileError, PromptHasher, PromptLocationError, PromptSource, PromptTask,
         PromptVersion, RunKind, RunPurpose, TokenUsage,
     };
     use domain::{AiJobId, Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
@@ -33,8 +33,14 @@ mod tests {
             &std::fs::read_to_string("../../prompts/estimate/v1.md").expect("추정 프롬프트"),
         )
     }
-    fn digest() -> PromptDigest {
-        PromptDigest::try_from_hex(DIGEST).expect("해시")
+    struct FixedHasher;
+    impl PromptHasher for FixedHasher {
+        fn digest(&self, _source: &PromptSource) -> PromptDigest {
+            PromptDigest::try_from_hex(DIGEST).expect("해시")
+        }
+    }
+    const fn digest() -> &'static FixedHasher {
+        &FixedHasher
     }
 
     #[test]

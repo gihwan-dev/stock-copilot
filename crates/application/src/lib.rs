@@ -463,7 +463,7 @@ pub use prompt_replay::{
 
 mod prompt_file;
 pub use prompt_file::{
-    LoadedPrompt, PromptBody, PromptDigest, PromptFile, PromptFileError, PromptId,
+    LoadedPrompt, PromptBody, PromptDigest, PromptFile, PromptFileError, PromptHasher, PromptId,
     PromptLocationError, PromptRef, PromptSource, PromptTask, PromptVersion,
 };
 

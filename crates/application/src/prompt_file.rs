@@ -194,6 +194,10 @@ impl PromptDigest {
         Ok(Self(value.to_owned()))
     }
     #[must_use]
+    pub fn from_sha256(bytes: [u8; 32]) -> Self {
+        Self(bytes.into_iter().fold(String::with_capacity(64), push_hex))
+    }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -206,7 +210,19 @@ pub struct PromptRef {
     digest: PromptDigest,
 }
 
+pub trait PromptHasher {
+    fn digest(&self, source: &PromptSource) -> PromptDigest;
+}
+
 impl PromptRef {
+    #[must_use]
+    pub const fn restore(id: PromptId, version: PromptVersion, digest: PromptDigest) -> Self {
+        Self {
+            id,
+            version,
+            digest,
+        }
+    }
     #[must_use]
     pub const fn id(&self) -> &PromptId {
         &self.id
@@ -228,11 +244,11 @@ pub struct LoadedPrompt {
 }
 
 impl LoadedPrompt {
-    pub fn load(
+    pub fn load<Hasher: PromptHasher>(
         task_folder: &PromptTask,
         version_file: &PromptVersion,
         source: &PromptSource,
-        digest: PromptDigest,
+        hasher: &Hasher,
     ) -> Result<Self, PromptLocationError> {
         let file = PromptFile::parse(source).map_err(PromptLocationError::Format)?;
         if file.task() != task_folder {
@@ -241,7 +257,10 @@ impl LoadedPrompt {
         if file.version() != version_file {
             return Err(PromptLocationError::VersionFileMismatch);
         }
-        Ok(Self { file, digest })
+        Ok(Self {
+            file,
+            digest: hasher.digest(source),
+        })
     }
     #[must_use]
     pub const fn file(&self) -> &PromptFile {
@@ -255,4 +274,12 @@ impl LoadedPrompt {
             digest: self.digest.clone(),
         }
     }
+}
+
+fn push_hex(mut text: String, byte: u8) -> String {
+    use std::fmt::Write;
+    match write!(text, "{byte:02x}") {
+        Ok(()) | Err(_) => {}
+    }
+    text
 }
