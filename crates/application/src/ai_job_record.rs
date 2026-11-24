@@ -19,7 +19,7 @@ pub enum AiJobTimingError {
 pub struct AiJobTiming {
     started_at: Timestamp,
     finished_at: Timestamp,
-    elapsed: TimeSpan,
+    span: TimeSpan,
 }
 
 impl AiJobTiming {
@@ -27,13 +27,13 @@ impl AiJobTiming {
         started_at: Timestamp,
         finished_at: Timestamp,
     ) -> Result<Self, AiJobTimingError> {
-        let elapsed = started_at
+        let span = started_at
             .elapsed_until(finished_at)
             .map_err(|_error| AiJobTimingError::EndsBeforeStart)?;
         Ok(Self {
             started_at,
             finished_at,
-            elapsed,
+            span,
         })
     }
     #[must_use]
@@ -45,8 +45,8 @@ impl AiJobTiming {
         self.finished_at
     }
     #[must_use]
-    pub const fn elapsed(self) -> TimeSpan {
-        self.elapsed
+    pub const fn span(self) -> TimeSpan {
+        self.span
     }
 }
 
@@ -62,9 +62,8 @@ impl AiJobRun {
     pub const fn new(job: AiJobId, kind: RunKind, purpose: RunPurpose) -> Self {
         Self { job, kind, purpose }
     }
-    #[must_use]
-    pub fn of_spec(spec: &crate::RunSpec) -> Self {
-        Self::new(spec.id().job_id().clone(), spec.kind(), spec.purpose())
+    pub fn of_spec(spec: &crate::RunSpec) -> Result<Self, crate::IdentifierError> {
+        Ok(Self::new(spec.id().job_id()?, spec.kind(), spec.purpose()))
     }
 }
 
@@ -76,6 +75,7 @@ pub struct AiJobFinishRecord {
     outcome: AiJobOutcome,
     timing: AiJobTiming,
     tokens: TokenUsage,
+    prompt: Option<crate::PromptRef>,
 }
 
 impl AiJobFinishRecord {
@@ -93,7 +93,17 @@ impl AiJobFinishRecord {
             outcome,
             timing,
             tokens,
+            prompt: None,
         }
+    }
+    #[must_use]
+    pub fn with_prompt(mut self, prompt: crate::PromptRef) -> Self {
+        self.prompt = Some(prompt);
+        self
+    }
+    #[must_use]
+    pub const fn prompt(&self) -> Option<&crate::PromptRef> {
+        self.prompt.as_ref()
     }
     #[must_use]
     pub const fn job(&self) -> &AiJobId {

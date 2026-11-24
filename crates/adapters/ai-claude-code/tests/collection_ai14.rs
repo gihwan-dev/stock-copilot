@@ -376,4 +376,29 @@ mod tests {
             );
         });
     }
+
+    #[test]
+    fn error_result_structured_output_is_not_accepted() {
+        run_async(async {
+            let dir = TempDirGuard::new("error-result");
+            let error_result = json!({
+                "type": "result",
+                "subtype": "error_max_turns",
+                "is_error": true,
+                "num_turns": 3_i32,
+                "structured_output": good_output()
+            })
+            .to_string();
+            let prepared = PreparedFakeAiCli::prepare(
+                dir.path(),
+                "fake-error",
+                &scenario(init_line(&json!([])), vec![error_result]),
+            )
+            .expect("prepare");
+            assert_eq!(
+                runner(&prepared, dir.path()).collect(&query()).await,
+                Err(WebCollectionFailure::Unavailable)
+            );
+        });
+    }
 }

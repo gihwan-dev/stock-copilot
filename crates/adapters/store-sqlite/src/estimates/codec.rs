@@ -711,7 +711,7 @@ pub(super) fn encode_outcome(outcome: &EstimateOutcome) -> String {
     }
     out.finish()
 }
-pub(super) fn decode_outcome(payload: &str) -> rusqlite::Result<EstimateOutcome> {
+pub(crate) fn decode_outcome(payload: &str) -> rusqlite::Result<EstimateOutcome> {
     let mut input = Decoder::new(payload);
     if input.next()? != "outcome-v1" {
         return Err(invalid(()));
