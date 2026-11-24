@@ -22,13 +22,13 @@ mod tests {
         read_input,
     };
     use toss_smoke::lock::{
-        DESKTOP_RUNNING_CONTENT, DESKTOP_STOPPED_CONTENT, LOCK_FILE_NAME, LockError, LockMode,
-        SMOKE_RUNNING_CONTENT, SMOKE_STOPPED_CONTENT, acquire_token_lock,
+        APP_DATA_DIR_NAME, DESKTOP_RUNNING_CONTENT, DESKTOP_STOPPED_CONTENT, LOCK_FILE_NAME,
+        LockError, LockMode, SMOKE_RUNNING_CONTENT, SMOKE_STOPPED_CONTENT, acquire_token_lock,
     };
     use toss_smoke::record::{RecordError, detect_repo_roots, prepare_recording};
     use toss_smoke::{RuntimeContext, execute};
 
-    const EXPECTED_NO_ECHO_COMMAND: &str = "( trap 'unset id sec confirm' EXIT INT TERM; printf 'Client ID: ' >&2 && IFS= read -rs id && printf '\\nClient Secret: ' >&2 && IFS= read -rs sec && printf '\\n앱 종료 확인(앱을 껐습니다): ' >&2 && IFS= read -r confirm && printf '%s\\n%s\\n%s\\n' \"$id\" \"$sec\" \"$confirm\" | cargo run --locked -p toss-smoke -- check )";
+    const EXPECTED_NO_ECHO_COMMAND: &str = "( trap 'unset id sec confirm' EXIT; printf 'Client ID: ' >&2 && IFS= read -rs id && printf '\\nClient Secret: ' >&2 && IFS= read -rs sec && printf '\\n앱 종료 확인(앱을 껐습니다): ' >&2 && IFS= read -r confirm && printf '%s\\n%s\\n%s\\n' \"$id\" \"$sec\" \"$confirm\" | cargo run --locked -p toss-smoke -- check )";
 
     static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -425,6 +425,8 @@ mod tests {
         let err_text = String::from_utf8(stderr).expect("utf8");
         assert!(err_text.contains(EXPECTED_NO_ECHO_COMMAND), "{err_text}");
         assert!(!EXPECTED_NO_ECHO_COMMAND.contains('\n'));
+        assert!(!EXPECTED_NO_ECHO_COMMAND.contains("INT"));
+        assert!(!EXPECTED_NO_ECHO_COMMAND.contains("TERM"));
         assert!(!err_text.contains("'앱을 껐습니다' |"), "{err_text}");
         let guide = no_echo_guide();
         assert!(guide.contains(EXPECTED_NO_ECHO_COMMAND), "{guide}");
@@ -1098,6 +1100,96 @@ mod tests {
         assert_eq!(
             fs::metadata(&target).expect("meta").permissions().mode() & 0o777,
             0o644
+        );
+    }
+
+    #[test]
+    fn lock_contract_constants_match_adr_literals_and_tauri_identifier() {
+        assert_eq!(APP_DATA_DIR_NAME, "dev.stockcopilot.desktop");
+        assert_eq!(LOCK_FILE_NAME, "toss-token.lock");
+        assert_eq!(
+            DESKTOP_RUNNING_CONTENT,
+            "version=1\nowner=desktop-app\nstate=running\n"
+        );
+        assert_eq!(
+            DESKTOP_STOPPED_CONTENT,
+            "version=1\nowner=desktop-app\nstate=stopped\n"
+        );
+        assert_eq!(
+            SMOKE_RUNNING_CONTENT,
+            "version=1\nowner=toss-smoke\nstate=running\n"
+        );
+        assert_eq!(
+            SMOKE_STOPPED_CONTENT,
+            "version=1\nowner=toss-smoke\nstate=stopped\n"
+        );
+
+        let tauri_conf_text =
+            fs::read_to_string("../../apps/desktop/src-tauri/tauri.conf.json").expect("tauri conf");
+        let tauri_conf: Value = serde_json::from_str(&tauri_conf_text).expect("tauri json");
+        assert_eq!(
+            tauri_conf.get("identifier").and_then(Value::as_str),
+            Some(APP_DATA_DIR_NAME)
+        );
+    }
+
+    #[test]
+    fn lock_tightens_existing_parent_permissions_and_rejects_empty_lock_file() {
+        let dir = TempDirGuard::new("lock-parent-mode");
+        let existing_desktop_parent = dir.path().join("desktop-dir");
+        fs::create_dir_all(&existing_desktop_parent).expect("create desktop dir");
+        fs::set_permissions(&existing_desktop_parent, Permissions::from_mode(0o755))
+            .expect("chmod 755");
+        let desktop_lock = existing_desktop_parent.join("toss-token.lock");
+        fs::write(
+            &desktop_lock,
+            "version=1\nowner=desktop-app\nstate=stopped\n",
+        )
+        .expect("write desktop stopped");
+        let _desktop_guard =
+            acquire_token_lock(&desktop_lock, AppStopConfirmation::NotProvided).expect("desktop");
+        assert_eq!(
+            fs::metadata(&existing_desktop_parent)
+                .expect("meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+
+        let existing_new_parent = dir.path().join("new-dir");
+        fs::create_dir_all(&existing_new_parent).expect("create new dir");
+        fs::set_permissions(&existing_new_parent, Permissions::from_mode(0o755))
+            .expect("chmod 755");
+        let new_lock = existing_new_parent.join("toss-token.lock");
+        let _smoke_guard =
+            acquire_token_lock(&new_lock, AppStopConfirmation::Confirmed).expect("smoke");
+        assert_eq!(
+            fs::metadata(&existing_new_parent)
+                .expect("meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+
+        let empty_parent = dir.path().join("empty-dir");
+        fs::create_dir_all(&empty_parent).expect("create empty dir");
+        fs::set_permissions(&empty_parent, Permissions::from_mode(0o755)).expect("chmod 755");
+        let empty_lock = empty_parent.join("toss-token.lock");
+        fs::write(&empty_lock, "").expect("write empty");
+        assert_eq!(
+            acquire_token_lock(&empty_lock, AppStopConfirmation::Confirmed).expect_err("empty"),
+            LockError::UnsafePath
+        );
+        assert!(LockError::UnsafePath.message().contains("0바이트"));
+        assert_eq!(
+            fs::metadata(&empty_parent)
+                .expect("meta")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o755
         );
     }
 

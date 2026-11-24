@@ -8,7 +8,7 @@
 1. **키 입력 방식 (A-2)**:
    - 새 외부 패키지·`unsafe`·자식 프로세스 실행 예외를 추가하지 않는다.
    - 키는 표준 입력(파이프·리다이렉트)으로만 받는다. 명령행 인자·환경 변수·설정 파일로 키를 받는 경로를 두지 않는다.
-   - 표준 입력이 터미널(TTY)이면 바이트를 한 글자도 읽지 않고 닫힌 실패(종료 코드 `3`)로 중단하며, macOS 기본 `/bin/bash 3.2`(bracketed paste 미지원)와 `zsh 5.9` 어디에 붙여넣어도 키가 화면·셸 기록에 남지 않고 Ctrl-C 중간 중단 시에도 현재 셸에 변수가 남지 않는 **한 줄 서브셸 + `trap` + `IFS= read -rs`** 안내를 출력한다. 앱 종료 확인 문구(`앱을 껐습니다`)는 안내 명령에 미리 넣지 않고 사용자가 프롬프트에 직접 입력하도록 분리한다. 안내 명령은 단일 상수(`NO_ECHO_GUIDE_COMMANDS`)에서 사용법·오류 안내 모두를 생성하고, 통합 테스트에서 독립 고정 문자열 리터럴로 검증한다.
+   - 표준 입력이 터미널(TTY)이면 바이트를 한 글자도 읽지 않고 닫힌 실패(종료 코드 `3`)로 중단하며, macOS 기본 `/bin/bash 3.2`(bracketed paste 미지원)와 `zsh 5.9` 어디에 붙여넣어도 키가 화면·셸 기록에 남지 않고 Ctrl-C 중간 중단 시 서브셸이 즉시 종료되고 터미널 되비침(`stty echo`)이 복구되며 현재 셸에 변수가 남지 않는 **한 줄 서브셸 + `trap '...' EXIT` + `IFS= read -rs`** 안내를 출력한다(`INT`/`TERM`을 트랩에 넣으면 macOS bash 3.2·zsh 5.9에서 `SIGINT`를 삼켜 중단되지 않거나 `stty -echo`가 남으므로 `EXIT`만 트랩한다). 앱 종료 확인 문구(`앱을 껐습니다`)는 안내 명령에 미리 넣지 않고 사용자가 프롬프트에 직접 입력하도록 분리한다. 안내 명령은 단일 상수(`NO_ECHO_GUIDE_COMMANDS`)에서 사용법·오류 안내 모두를 생성하고, 통합 테스트에서 독립 고정 문자열 리터럴로 검증한다.
    - 명령행 인자 오류와 표준 입력 오류는 사용자가 넘긴 원문을 절대 되돌려 출력하지 않는다.
    - 제품 CLI(`toss-smoke check`)에는 테스트용 선택지(`--local-port`, `--lock-file`)를 두지 않고 `--record <저장소_밖_파일_경로>`만 허용한다. 테스트는 `RuntimeContext` 의존성 주입으로만 루프백 서버와 임시 잠금 경로를 연결한다.
 
@@ -35,7 +35,7 @@
 6. **앱 실행 중 판별과 토큰 잠금 계약**:
    - 데스크톱 앱(`apps/desktop/src-tauri`)에는 아직 단일 실행 잠금이 없다(U-18 미구현). 이 작업에서는 앱을 고치지 않고 잠금 계약의 `toss-smoke` 쪽 절반을 구현한다.
    - 경로: `<app_data_dir>/dev.stockcopilot.desktop/toss-token.lock` (macOS `~/Library/Application Support/dev.stockcopilot.desktop/toss-token.lock`, Linux `$XDG_DATA_HOME/dev.stockcopilot.desktop/toss-token.lock`). 제품 CLI에는 잠금 경로 재정의 선택지를 두지 않는다(기본 경로는 `dirs::data_dir()`에서 도출하며, macOS에서는 데스크톱 앱 U-18과 동일하게 `HOME` 기준 앱 데이터 디렉터리를 사용한다. 테스트는 `RuntimeContext.lock_path` 주입으로 임시 디렉터리만 쓴다).
-   - 권한 및 안전성: 상위 폴더 `0700`, 잠금 파일 `0600`. 잠금 파일 또는 직전 상위 폴더가 심볼릭 링크이거나 하드 링크(`nlink != 1`)이면 거부(종료 코드 `8`)한다. 기존 파일 열기 후 `dev`/`ino`/`nlink` 일치로 치환 여부를 재확인하며, 파일 내용이 이 계약의 알려진 마커 4종(`desktop-app`/`toss-smoke` × `running`/`stopped`) 중 하나가 아니면 권한·내용을 변경하지 않고 `UnsafePath`(종료 코드 `8`)로 거부해 기존 파일 손상을 막는다.
+   - 권한 및 안전성: 상위 폴더 `0700`(신규 생성 시뿐 아니라 유효한 잠금을 잡거나 확정 생성할 때 이미 존재하는 상위 폴더도 `0700`으로 조임, 단 미인식 파일 거부 시에는 건드리지 않음), 잠금 파일 `0600`. 잠금 파일 또는 직전 상위 폴더가 심볼릭 링크이거나 하드 링크(`nlink != 1`)이면 거부(종료 코드 `8`)한다. 기존 파일 열기 후 `dev`/`ino`/`nlink` 일치로 치환 여부를 재확인하며, 파일 내용이 이 계약의 알려진 마커 4종(`desktop-app`/`toss-smoke` × `running`/`stopped`) 중 하나가 아니면(비정상 종료로 남은 0바이트·손상 잠금 파일 포함) 권한·내용을 변경하지 않고 `UnsafePath`(종료 코드 `8`)로 거부해 기존 파일 손상을 막고 빈 잠금 파일 확인 후 수동 삭제 절차를 안내한다. 잠금 경로·마커 6개 상수는 통합 테스트에서 독립 리터럴 및 `tauri.conf.json`의 `identifier`와 직접 대조한다.
    - 동시성: `std::fs::File::try_lock()` 배타 권고 잠금을 사용한다.
    - 내용 형식 (ASCII `key=value`, 최대 256바이트):
      - 데스크톱 앱 실행 중(U-18): 배타 잠금 보유 + `version=1\nowner=desktop-app\nstate=running\n`
@@ -45,7 +45,7 @@
      - `try_lock()`이 `WouldBlock`이면 앱(또는 다른 `toss-smoke`)이 실행 중으로 보고 확인 문구가 있더라도 **무조건 거부**(종료 코드 `5`)한다.
      - 잠금을 획득했고 기존 파일 내용이 정확히 `version=1\nowner=desktop-app\nstate=stopped\n`이면 앱 정상 종료가 증명된 것으로 보고(파일 내용을 유지한 채 배타 잠금만 보유) 확인 문구 없이 진행한다.
      - 파일이 없거나 내용이 알려진 나머지 3종 마커(`owner=toss-smoke` 또는 비정상 종료 `desktop-app/running`)이면 판별 불가로 보고 닫힌 실패(종료 코드 `6`)한다. 표준 입력 3번째 줄에 `앱을 껐습니다`가 정확히 있을 때만 `owner=toss-smoke`로 잠금을 잡고 진행한다. `toss-smoke`는 `owner=desktop-app`을 쓰지 않으므로 U-18 구현 전에는 매 실행마다 확인이 필요하다.
-     - 표준 출력(`stdout`) 쓰기가 실패(`EPIPE` 등)하면 오류를 삼키지 않고 실행 환경 오류(종료 코드 `9`)로 끝낸다(단계 실패 코드가 이미 있으면 그 코드를 유지한다).
+     - 표준 출력(`stdout`) 쓰기가 실패(`EPIPE` 등)하면 오류를 삼키지 않고 실행 환경 오류(종료 코드 `9`)로 끝낸다(단계 실패 코드가 이미 있으면 그 코드를 유지한다. 단, `>&-`처럼 닫힌 fd 1은 Rust Unix 런타임의 `sanitize_standard_fds`가 `main()` 전에 `/dev/null`로 열고 `std::io::Stdout`이 `EBADF`를 성공으로 반환하는 표준 라이브러리 제약이 있어 `unsafe_code = "forbid"` 하에서는 대상 밖이다).
 
 7. **출력·녹화 및 토큰 수명**:
    - 토큰은 메모리(`application::SecretValue`)에서만 사용하고 종료 시 버린다. 키체인·파일에 토큰을 쓰지 않는다.
@@ -126,3 +126,15 @@
 | M-30 | `crates/toss-smoke/src/lib.rs`   | `Command::Usage` 표준 출력 오류를 성공(`0`)으로 삼킴                | 검출 |
 | M-31 | `crates/toss-smoke/src/lib.rs`   | `write_reports` 표준 출력 오류를 성공(`0`)으로 삼킴                 | 검출 |
 | M-32 | `crates/toss-smoke/src/cli.rs`   | 제거된 `--lock-file` 우회 선택지 재허용                             | 검출 |
+
+## 손 변형 검증 (2차 리뷰 수정)
+
+2차 리뷰·비판 지적 수정분에 대해 별도 임시 복사본(`target/T-12/manual-mutants`)에서 5개 변형을 추가 실행했고 5개 전부 컴파일 후 테스트 실패로 검출했다(생존 0건, 누적 36/36 검출).
+
+| 번호 | 파일                             | 바꾼 것                                  | 결과 |
+| ---- | -------------------------------- | ---------------------------------------- | ---- |
+| M-33 | `crates/toss-smoke/src/lock.rs`  | `APP_DATA_DIR_NAME` 계약 상수 변조       | 검출 |
+| M-34 | `crates/toss-smoke/src/lock.rs`  | `LOCK_FILE_NAME` 계약 상수 변조          | 검출 |
+| M-35 | `crates/toss-smoke/src/lock.rs`  | `DESKTOP_STOPPED_CONTENT` 마커 상수 변조 | 검출 |
+| M-36 | `crates/toss-smoke/src/lock.rs`  | 기존 상위 폴더 `0700` 권한 조임 생략     | 검출 |
+| M-37 | `crates/toss-smoke/src/input.rs` | 안내 명령에 `INT TERM` 트랩 재삽입       | 검출 |

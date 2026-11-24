@@ -40,7 +40,7 @@ impl LockError {
                 "기본 앱 데이터 경로를 찾을 수 없어 잠금 파일 위치를 확정할 수 없습니다."
             }
             Self::UnsafePath => {
-                "잠금 파일 또는 상위 폴더가 심볼릭 링크·하드 링크이거나 이 앱의 잠금 파일 형식이 아닙니다. 기존 파일을 보호하기 위해 중단했습니다."
+                "잠금 파일 또는 상위 폴더가 심볼릭 링크·하드 링크이거나 이 앱의 잠금 파일 형식이 아닙니다(비정상 종료로 남은 0바이트·손상 잠금 파일 포함). 기존 파일을 보호하기 위해 중단했습니다. 앱이 완전히 꺼져 있고 해당 경로가 이 앱의 빈 잠금 파일임을 확인한 경우에만 파일을 지우고 다시 실행하세요."
             }
             Self::AppRunning => {
                 "앱 또는 다른 연결 확인 프로세스가 토큰 잠금을 보유 중입니다. 토스 계정은 토큰이 하나뿐이므로 앱을 완전히 종료한 뒤 다시 실행하세요."
@@ -220,11 +220,28 @@ fn open_and_verify_existing(path: &Path) -> Result<File, LockError> {
     Ok(file)
 }
 
-fn lock_existing(path: &Path, confirmation: AppStopConfirmation) -> Result<LockGuard, LockError> {
+fn tighten_parent_permissions(parent: &Path) -> Result<(), LockError> {
+    let metadata = fs::symlink_metadata(parent).map_err(|_error| LockError::IoError)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(LockError::UnsafePath);
+    }
+    if metadata.permissions().mode() & 0o777 != DIR_MODE {
+        fs::set_permissions(parent, Permissions::from_mode(DIR_MODE))
+            .map_err(|_error| LockError::IoError)?;
+    }
+    Ok(())
+}
+
+fn lock_existing(
+    parent: &Path,
+    path: &Path,
+    confirmation: AppStopConfirmation,
+) -> Result<LockGuard, LockError> {
     let mut file = open_and_verify_existing(path)?;
     try_exclusive_lock(&file)?;
     match classify_lock_content(&mut file)? {
         LockContent::DesktopStopped => {
+            tighten_parent_permissions(parent)?;
             return Ok(LockGuard {
                 file,
                 mode: LockMode::DesktopVerifiedStopped,
@@ -237,6 +254,7 @@ fn lock_existing(path: &Path, confirmation: AppStopConfirmation) -> Result<LockG
         AppStopConfirmation::NotProvided => return Err(LockError::UnconfirmedIndeterminate),
         AppStopConfirmation::Confirmed => {}
     }
+    tighten_parent_permissions(parent)?;
     file.set_permissions(Permissions::from_mode(FILE_MODE))
         .map_err(|_error| LockError::IoError)?;
     rewrite_marker(&mut file, SMOKE_RUNNING_CONTENT).map_err(|_error| LockError::IoError)?;
@@ -247,6 +265,7 @@ fn lock_existing(path: &Path, confirmation: AppStopConfirmation) -> Result<LockG
 }
 
 fn create_and_lock_new(
+    parent: &Path,
     path: &Path,
     confirmation: AppStopConfirmation,
 ) -> Result<LockGuard, LockError> {
@@ -263,6 +282,7 @@ fn create_and_lock_new(
     {
         Ok(mut file) => {
             try_exclusive_lock(&file)?;
+            tighten_parent_permissions(parent)?;
             file.set_permissions(Permissions::from_mode(FILE_MODE))
                 .map_err(|_error| LockError::IoError)?;
             rewrite_marker(&mut file, SMOKE_RUNNING_CONTENT)
@@ -273,7 +293,7 @@ fn create_and_lock_new(
             })
         }
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            lock_existing(path, confirmation)
+            lock_existing(parent, path, confirmation)
         }
         Err(_) => Err(LockError::IoError),
     }
@@ -293,12 +313,12 @@ pub fn acquire_token_lock(
                 AppStopConfirmation::Confirmed => {}
             }
             ensure_private_parent(parent)?;
-            create_and_lock_new(path, confirmation)
+            create_and_lock_new(parent, path, confirmation)
         }
         ParentStatus::Exists => match fs::symlink_metadata(path) {
-            Ok(_) => lock_existing(path, confirmation),
+            Ok(_) => lock_existing(parent, path, confirmation),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                create_and_lock_new(path, confirmation)
+                create_and_lock_new(parent, path, confirmation)
             }
             Err(_) => Err(LockError::IoError),
         },

@@ -5,7 +5,7 @@ use application::SecretValue;
 
 pub const CONFIRM_APP_STOPPED_PHRASE: &str = "앱을 껐습니다";
 
-pub const NO_ECHO_GUIDE_COMMANDS: &str = "( trap 'unset id sec confirm' EXIT INT TERM; printf 'Client ID: ' >&2 && IFS= read -rs id && printf '\\nClient Secret: ' >&2 && IFS= read -rs sec && printf '\\n앱 종료 확인(앱을 껐습니다): ' >&2 && IFS= read -r confirm && printf '%s\\n%s\\n%s\\n' \"$id\" \"$sec\" \"$confirm\" | cargo run --locked -p toss-smoke -- check )";
+pub const NO_ECHO_GUIDE_COMMANDS: &str = "( trap 'unset id sec confirm' EXIT; printf 'Client ID: ' >&2 && IFS= read -rs id && printf '\\nClient Secret: ' >&2 && IFS= read -rs sec && printf '\\n앱 종료 확인(앱을 껐습니다): ' >&2 && IFS= read -r confirm && printf '%s\\n%s\\n%s\\n' \"$id\" \"$sec\" \"$confirm\" | cargo run --locked -p toss-smoke -- check )";
 
 #[must_use]
 pub fn no_echo_guide() -> String {
@@ -18,7 +18,7 @@ pub fn no_echo_guide() -> String {
 
 안내:
   - 한 줄 서브셸로 실행되어 macOS bash/zsh 어디에 붙여넣어도 키가 셸 기록·화면에 남지 않습니다.
-  - Ctrl-C로 중간 중단해도 서브셸과 trap이 변수를 지워 현재 셸에 키가 남지 않습니다.
+  - Ctrl-C로 중간 중단하면 서브셸이 즉시 종료되고 터미널 되비침이 복구되며 현재 셸에 키가 남지 않습니다.
   - 앱이 꺼진 것을 직접 확인한 뒤 프롬프트에 `앱을 껐습니다`를 입력하세요(잠금 파일로 종료가 증명되면 빈 줄 Enter 가능).
   - 응답 녹화가 필요하면 `check` 뒤에 `--record <저장소_밖_파일_경로>`를 붙이세요.
 "
