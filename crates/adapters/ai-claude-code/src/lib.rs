@@ -1,5 +1,6 @@
 mod command;
 mod decoder;
+mod discovery;
 mod error;
 mod isolation;
 mod parse;
@@ -13,6 +14,11 @@ pub use command::{
     build_command_plan, prepare_run_workspace,
 };
 pub use decoder::{ClaudeEventDecoder, decode_stream_lines, decode_stream_text};
+pub use discovery::{
+    ClaudeStartupReport, DiscoveryConfig, DiscoveryOutcome, DiscoverySource, LoginCheckOutcome,
+    LoginShellPathResolver, StaticPathResolver, SystemLoginShellPathResolver, check_login_status,
+    default_known_locations, find_claude_executable, run_claude_startup_check,
+};
 pub use error::{FieldName, SchemaFailure, StreamDecodeError, StreamOrderError, ValidationFailure};
 pub use isolation::IsolationExpectation;
 pub use process::{MAX_STREAM_LINE_BYTES, ProcessSignal, send_signal_to_process_group};
