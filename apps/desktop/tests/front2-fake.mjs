@@ -136,3 +136,18 @@ export const fakeSource = `
       ...overrides,
     });
 `;
+
+export const selectByLabel = (w, label) => {
+  const tag = Array.from(w.document.body.querySelectorAll("label")).find(
+    (node) => node.textContent === label && node.htmlFor !== "",
+  );
+  return tag === undefined ? null : w.document.getElementById(tag.htmlFor);
+};
+
+export const choose = (w, label, value) => {
+  const select = selectByLabel(w, label);
+  if (select === null) throw new Error(`no select ${label}`);
+  w.fireEvent.change(select, { target: { value } });
+};
+
+export const okReply = (w, value) => w.Promise.resolve({ kind: "ok", value });

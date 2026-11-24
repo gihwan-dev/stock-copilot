@@ -7,6 +7,7 @@ import { unavailableSettingsClient, type SettingsClient } from "../shared/ipc";
 import { text, type AppRoutePath } from "../shared/lib";
 import { createAppQueryClient } from "./query";
 import { AppRouter } from "./router";
+import { SettingsClients } from "./settings";
 
 type AppProps = {
   readonly initialPath?: AppRoutePath | undefined;
@@ -39,9 +40,13 @@ export const App = (props: AppProps): ReactElement => {
         <OnboardingClientProvider
           client={props.settingsClient ?? unavailableSettingsClient}
         >
-          <FirstRunGate>
-            <AppRouter initialPath={props.initialPath} />
-          </FirstRunGate>
+          <SettingsClients
+            client={props.settingsClient ?? unavailableSettingsClient}
+          >
+            <FirstRunGate>
+              <AppRouter initialPath={props.initialPath} />
+            </FirstRunGate>
+          </SettingsClients>
         </OnboardingClientProvider>
       </QueryClientProvider>
     </ErrorBoundary>
