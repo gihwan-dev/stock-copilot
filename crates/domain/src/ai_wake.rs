@@ -1,8 +1,8 @@
 use rust_decimal::Decimal;
 
 use crate::{
-    DisclosureKey, DomainEvent, InstrumentId, Nanosecond, Price, SpanSeconds, TimeSpan, Timestamp,
-    UntrustedText,
+    Amount, DisclosureKey, DomainEvent, InstrumentId, Nanosecond, Price, SpanSeconds, TimeSpan,
+    Timestamp, UntrustedText,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -167,11 +167,19 @@ pub fn daily_move_trigger_with(
     }
     let scaled_change = now
         .checked_sub(base)
-        .map(|change| change.abs())
-        .and_then(|change| change.checked_mul(Decimal::ONE_HUNDRED));
-    let threshold = base.checked_mul(Decimal::from(thresholds.daily_move.0));
+        .map(|change| Amount::new(change.abs()))
+        .and_then(|change| {
+            crate::exact_arithmetic::multiply(change, Amount::new(Decimal::ONE_HUNDRED)).ok()
+        });
+    let threshold = crate::exact_arithmetic::multiply(
+        Amount::new(base),
+        Amount::new(Decimal::from(thresholds.daily_move.0)),
+    )
+    .ok();
     match (scaled_change, threshold) {
-        (Some(change), Some(limit)) if change >= limit => TriggerJudgement::Triggered,
+        (Some(change), Some(limit)) if change.as_decimal() >= limit.as_decimal() => {
+            TriggerJudgement::Triggered
+        }
         (Some(_), Some(_)) => TriggerJudgement::Quiet,
         (None, Some(_) | None) | (Some(_), None) => TriggerJudgement::Undetermined,
     }

@@ -149,11 +149,12 @@ mod tests {
     };
     use crate::ProvenClosedOrderSet;
     use crate::net_purchase::tests::{instrument, money, row};
-    use crate::order_query_proof::assume_proven;
+    use crate::net_purchase_closed::tests::closed_order_set;
+    use crate::order_query_proof::tests::assume_proven;
     use crate::valuation_snapshot::tests::{at as day_at, reported};
     use crate::{
         AccountId, BrokerOrder, BrokerOrderId, BrokerOrderMoney, ClosedOrderCompleteness,
-        ClosedOrderIncomplete, ClosedOrderSet, Comparison, Currency, KnownMarket, NetPurchaseError,
+        ClosedOrderIncomplete, Comparison, Currency, KnownMarket, NetPurchaseError,
         NetPurchaseIncomplete, NetPurchaseInputError, OrderSide, SettledRowSet, SnapshotError,
         ValuationSnapshot,
     };
@@ -206,7 +207,7 @@ mod tests {
         sell.side = OrderSide::Sell;
         sell.filled_at = Some(day_at(3, 6));
         sell.filled_amount = BrokerOrderMoney::Known(money("31", Currency::Krw));
-        let orders = ClosedOrderSet::new(
+        let orders = closed_order_set(
             AccountId::new(7),
             vec![
                 BrokerOrder::from_lookup_result(buy).expect("매수"),
@@ -267,7 +268,7 @@ mod tests {
         let rows = SettledRowSet::new(AccountId::new(7));
         let base = orders.orders();
         let incomplete = assume_proven(
-            ClosedOrderSet::new(
+            closed_order_set(
                 base.account_id().clone(),
                 base.orders().values().cloned().collect(),
                 base.covered(),
@@ -390,7 +391,7 @@ mod tests {
             .cloned()
             .collect();
         let sold = assume_proven(
-            ClosedOrderSet::new(
+            closed_order_set(
                 base.account_id().clone(),
                 sells,
                 base.covered(),
