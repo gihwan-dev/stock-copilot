@@ -66,10 +66,24 @@ pub(crate) fn plan(
     }
 }
 
-fn execute(root: &Path, executable: &str, args: &[String]) -> Result<(), String> {
-    let status = Command::new(executable)
-        .current_dir(root)
-        .args(args)
+const WORKING_PROPTEST_ENV: [&str; 2] = ["STOCK_COPILOT_PROPTEST_CASES", "PROPTEST_CASES"];
+
+fn build_command(root: &Path, executable: &str, args: &[String], removed_env: &[&str]) -> Command {
+    let mut command = Command::new(executable);
+    command.current_dir(root).args(args);
+    for name in removed_env {
+        command.env_remove(name);
+    }
+    command
+}
+
+fn execute_with_removed_env(
+    root: &Path,
+    executable: &str,
+    args: &[String],
+    removed_env: &[&str],
+) -> Result<(), String> {
+    let status = build_command(root, executable, args, removed_env)
         .status()
         .map_err(|error| error.to_string())?;
     if status.success() {
@@ -77,6 +91,10 @@ fn execute(root: &Path, executable: &str, args: &[String]) -> Result<(), String>
     } else {
         Err(format!("{executable}: {status}"))
     }
+}
+
+fn execute(root: &Path, executable: &str, args: &[String]) -> Result<(), String> {
+    execute_with_removed_env(root, executable, args, &[])
 }
 
 type Members = BTreeMap<String, String>;
@@ -140,7 +158,7 @@ fn check_rust(root: &Path, crates: &BTreeSet<String>) -> Result<(), String> {
             String::from("--locked"),
         ];
         tests.extend(packages);
-        execute(root, "cargo", &tests)?;
+        execute_with_removed_env(root, "cargo", &tests, &WORKING_PROPTEST_ENV)?;
     }
     Ok(())
 }
@@ -535,5 +553,28 @@ mod review_tests {
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn h68_fast_rust_test_command_removes_proptest_overrides_and_keeps_seed() {
+        let root = crate::check_support::workspace_root().expect("root");
+        let args = [
+            String::from("nextest"),
+            String::from("run"),
+            String::from("--locked"),
+            String::from("-p"),
+            String::from("domain"),
+        ];
+        let command = super::build_command(&root, "cargo", &args, &super::WORKING_PROPTEST_ENV);
+        let envs: std::collections::BTreeMap<_, _> = command.get_envs().collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("STOCK_COPILOT_PROPTEST_CASES")),
+            Some(&None)
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("PROPTEST_CASES")),
+            Some(&None)
+        );
+        assert!(!envs.contains_key(std::ffi::OsStr::new("PROPTEST_RNG_SEED")));
     }
 }

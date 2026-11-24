@@ -16,15 +16,19 @@ pub(super) fn prepare(
         std::fs::remove_file(&receipt).map_err(|error| error.to_string())?;
     }
     let mut command = Command::new("cargo");
-    command.current_dir(root).args([
-        "mutants",
-        "--no-config",
-        "--cap-lints=true",
-        "--test-tool=nextest",
-        "--no-shuffle",
-        "--list",
-        "--json",
-    ]);
+    command
+        .current_dir(root)
+        .env("STOCK_COPILOT_BUILD_CACHE", "off")
+        .env("RUSTC_WRAPPER", "")
+        .args([
+            "mutants",
+            "--no-config",
+            "--cap-lints=true",
+            "--test-tool=nextest",
+            "--no-shuffle",
+            "--list",
+            "--json",
+        ]);
     for glob in globs {
         command.arg("--file").arg(glob);
     }

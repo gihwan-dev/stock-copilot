@@ -1,0 +1,854 @@
+[[target]]
+path = "crates/domain/src/allocation.rs"
+category = "money_quantity_fx"
+reason = "보유 종목·통화별 자산 배분 비중 계산"
+
+[[target]]
+path = "crates/domain/src/cash_ledger.rs"
+category = "money_quantity_fx"
+reason = "거래 원장 기반 현금 잔액·현금흐름 계산"
+
+[[target]]
+path = "crates/domain/src/cash_ledger_evidence.rs"
+category = "money_quantity_fx"
+reason = "현금 원장 계산의 근거와 일관성 검증"
+
+[[target]]
+path = "crates/domain/src/cash_observation.rs"
+category = "money_quantity_fx"
+reason = "증권사 현금 관측값과 통화 정합성 검증"
+
+[[target]]
+path = "crates/domain/src/cash_observation_failure.rs"
+category = "money_quantity_fx"
+reason = "현금 관측 불일치·실패 분류 경계"
+
+[[target]]
+path = "crates/domain/src/concentration.rs"
+category = "money_quantity_fx"
+reason = "단일 종목·섹터 집중도 비율 계산"
+
+[[target]]
+path = "crates/domain/src/concentration_arithmetic.rs"
+category = "money_quantity_fx"
+reason = "보유 구성비·집중도 checked 산술 계산"
+
+[[target]]
+path = "crates/domain/src/concentration_policy.rs"
+category = "money_quantity_fx"
+reason = "집중도 상한 판정과 매수 비중 제약"
+
+[[target]]
+path = "crates/domain/src/corporate_action.rs"
+category = "money_quantity_fx"
+reason = "액면분할·병합·배당의 주식 수량·단가 비율 계산"
+
+[[target]]
+path = "crates/domain/src/cost_basis.rs"
+category = "money_quantity_fx"
+reason = "매수 로트 기반 취득원가·실현손익 계산"
+
+[[target]]
+path = "crates/domain/src/cost_basis_arithmetic.rs"
+category = "money_quantity_fx"
+reason = "취득원가·단가 checked 산술 계산"
+
+[[target]]
+path = "crates/domain/src/daily_profit.rs"
+category = "money_quantity_fx"
+reason = "일별 실현·평가 손익 금액 계산"
+
+[[target]]
+path = "crates/domain/src/daily_profit_account.rs"
+category = "money_quantity_fx"
+reason = "계좌 단위 일별 손익 합산과 통화 변환"
+
+[[target]]
+path = "crates/domain/src/domain_time.rs"
+category = "money_quantity_fx"
+reason = "거래일·정산일·평가 기준 시각 산술 경계"
+
+[[target]]
+path = "crates/domain/src/estimate_outcome.rs"
+category = "money_quantity_fx"
+reason = "추정 기간 만료 수익률·실현 결과 판정"
+
+[[target]]
+path = "crates/domain/src/estimate_outcome_arithmetic.rs"
+category = "money_quantity_fx"
+reason = "추정 결과 수익률 checked 산술 계산"
+
+[[target]]
+path = "crates/domain/src/estimate_return.rs"
+category = "money_quantity_fx"
+reason = "거래비용 반영 확정 수익률 계산"
+
+[[target]]
+path = "crates/domain/src/exact_arithmetic.rs"
+category = "money_quantity_fx"
+reason = "넓은 정수 정확 곱셈·비율 몫 계산"
+
+[[target]]
+path = "crates/domain/src/external_flow.rs"
+category = "money_quantity_fx"
+reason = "입출금 외부 자금흐름 금액 집계"
+
+[[target]]
+path = "crates/domain/src/external_flow_classification.rs"
+category = "money_quantity_fx"
+reason = "입출금·배당·수수료 외부 자금흐름 분류"
+
+[[target]]
+path = "crates/domain/src/fx_conversion.rs"
+category = "money_quantity_fx"
+reason = "통화 간 환율 변환 금액 계산"
+
+[[target]]
+path = "crates/domain/src/fx_rate.rs"
+category = "money_quantity_fx"
+reason = "환율 값·유효기간·통화쌍 검증"
+
+[[target]]
+path = "crates/domain/src/holding.rs"
+category = "money_quantity_fx"
+reason = "보유 수량·매도가능 수량·평균단가 모델"
+
+[[target]]
+path = "crates/domain/src/holding_valuation.rs"
+category = "money_quantity_fx"
+reason = "종목별 평가금액·평가손익 계산"
+
+[[target]]
+path = "crates/domain/src/lot.rs"
+category = "money_quantity_fx"
+reason = "체결 로트 분할·소진 수량 계산"
+
+[[target]]
+path = "crates/domain/src/money.rs"
+category = "money_quantity_fx"
+reason = "금액·통화 정규 생성과 checked 연산"
+
+[[target]]
+path = "crates/domain/src/money_display.rs"
+category = "money_quantity_fx"
+reason = "금액 표시 전용 반올림과 부호 경계"
+
+[[target]]
+path = "crates/domain/src/net_purchase.rs"
+category = "money_quantity_fx"
+reason = "순매수 금액·수량 집계 계산"
+
+[[target]]
+path = "crates/domain/src/net_purchase_closed.rs"
+category = "money_quantity_fx"
+reason = "청산 포지션 순매수 금액 계산"
+
+[[target]]
+path = "crates/domain/src/net_purchase_daily.rs"
+category = "money_quantity_fx"
+reason = "일별 순매수 금액 계산"
+
+[[target]]
+path = "crates/domain/src/numeric_input.rs"
+category = "money_quantity_fx"
+reason = "외부 숫자 문자열 정규 파싱 검증"
+
+[[target]]
+path = "crates/domain/src/performance.rs"
+category = "money_quantity_fx"
+reason = "포트폴리오 시간가중 수익률 계산"
+
+[[target]]
+path = "crates/domain/src/performance_arithmetic.rs"
+category = "money_quantity_fx"
+reason = "수익률·연율화 checked 십진 산술"
+
+[[target]]
+path = "crates/domain/src/performance_risk.rs"
+category = "money_quantity_fx"
+reason = "최대낙폭·변동성 기반 위험 지표 계산"
+
+[[target]]
+path = "crates/domain/src/portfolio.rs"
+category = "money_quantity_fx"
+reason = "계좌 보유·현금 포트폴리오 불변 집계"
+
+[[target]]
+path = "crates/domain/src/portfolio_valuation.rs"
+category = "money_quantity_fx"
+reason = "환율 반영 전체 포트폴리오 평가금액 계산"
+
+[[target]]
+path = "crates/domain/src/price.rs"
+category = "money_quantity_fx"
+reason = "가격 newtype 검증과 통화 정합성"
+
+[[target]]
+path = "crates/domain/src/price_limits.rs"
+category = "money_quantity_fx"
+reason = "국내 상·하한가 가격제한폭 계산"
+
+[[target]]
+path = "crates/domain/src/price_limits/history.rs"
+category = "money_quantity_fx"
+reason = "일자별 가격제한폭 규칙 구간 조회"
+
+[[target]]
+path = "crates/domain/src/quantity.rs"
+category = "money_quantity_fx"
+reason = "수량 newtype 생성과 checked 연산"
+
+[[target]]
+path = "crates/domain/src/ratio.rs"
+category = "money_quantity_fx"
+reason = "비율·비중 newtype 생성과 연산"
+
+[[target]]
+path = "crates/domain/src/sector_assignment.rs"
+category = "money_quantity_fx"
+reason = "종목별 섹터 귀속과 비중 집계 입력"
+
+[[target]]
+path = "crates/domain/src/sector_composition.rs"
+category = "money_quantity_fx"
+reason = "섹터별 보유 금액·비중 합산"
+
+[[target]]
+path = "crates/domain/src/sector_selection.rs"
+category = "money_quantity_fx"
+reason = "섹터 비중 상한 비교 대상 선택"
+
+[[target]]
+path = "crates/domain/src/settled_row_set.rs"
+category = "money_quantity_fx"
+reason = "정산 완료 거래 행 집합과 중복 제거"
+
+[[target]]
+path = "crates/domain/src/settled_row_set/full_inspection.rs"
+category = "money_quantity_fx"
+reason = "전체 대조 기반 거래 원장 완전성 검증"
+
+[[target]]
+path = "crates/domain/src/signal_return.rs"
+category = "money_quantity_fx"
+reason = "거래비용 포함 신호 수익률 계산"
+
+[[target]]
+path = "crates/domain/src/tick_size.rs"
+category = "money_quantity_fx"
+reason = "호가 단위 반올림·정렬 검증"
+
+[[target]]
+path = "crates/domain/src/tick_size_table.rs"
+category = "money_quantity_fx"
+reason = "시장·가격대별 호가 단위 표"
+
+[[target]]
+path = "crates/domain/src/trade_cost.rs"
+category = "money_quantity_fx"
+reason = "매수·매도 수수료·거래세 비용 모델"
+
+[[target]]
+path = "crates/domain/src/trade_cost_arithmetic.rs"
+category = "money_quantity_fx"
+reason = "보수적 올림 적용 거래비용 checked 계산"
+
+[[target]]
+path = "crates/domain/src/trade_cost_period.rs"
+category = "money_quantity_fx"
+reason = "일자별 거래세·수수료율 기간 판별"
+
+[[target]]
+path = "crates/domain/src/transaction.rs"
+category = "money_quantity_fx"
+reason = "거래 내역 금액·수량·통화 불변 모델"
+
+[[target]]
+path = "crates/domain/src/transaction_kind.rs"
+category = "money_quantity_fx"
+reason = "매수·매도·배당·입출금 거래 유형 분류"
+
+[[target]]
+path = "crates/domain/src/transaction_order.rs"
+category = "money_quantity_fx"
+reason = "거래 원장 결정적 정렬 순서"
+
+[[target]]
+path = "crates/domain/src/transaction_response.rs"
+category = "money_quantity_fx"
+reason = "증권사 거래 응답 완전성·중복 검증"
+
+[[target]]
+path = "crates/domain/src/transaction_sync.rs"
+category = "money_quantity_fx"
+reason = "거래 동기화 구간과 원장 정합성 계산"
+
+[[target]]
+path = "crates/domain/src/valuation_gap.rs"
+category = "money_quantity_fx"
+reason = "증권사 평가금액과 원장 평가금액 차이 계산"
+
+[[target]]
+path = "crates/domain/src/valuation_price_evidence.rs"
+category = "money_quantity_fx"
+reason = "평가 기준 가격·환율 증거 검증"
+
+[[target]]
+path = "crates/domain/src/valuation_recompute.rs"
+category = "money_quantity_fx"
+reason = "원장 기반 일자별 포트폴리오 평가 재계산"
+
+[[target]]
+path = "crates/domain/src/valuation_snapshot.rs"
+category = "money_quantity_fx"
+reason = "평가 스냅숏 생성과 금액 정합성"
+
+[[target]]
+path = "crates/domain/src/valuation_snapshot_calendar.rs"
+category = "money_quantity_fx"
+reason = "평가 스냅숏 영업일·기준일 산출"
+
+[[target]]
+path = "crates/domain/src/valuation_snapshot_cash.rs"
+category = "money_quantity_fx"
+reason = "평가 스냅숏 통화별 현금 잔액 산출"
+
+[[target]]
+path = "crates/domain/src/virtual_exit.rs"
+category = "money_quantity_fx"
+reason = "가상 청산 가격·비용 반영 수익률 계산"
+
+[[target]]
+path = "crates/domain/src/volatility.rs"
+category = "money_quantity_fx"
+reason = "임계값 산출 입력이 되는 종목 변동성 계산"
+
+[[target]]
+path = "crates/domain/src/volatility_arithmetic.rs"
+category = "money_quantity_fx"
+reason = "표본 변동성·제곱근 checked 십진 계산"
+
+[[target]]
+path = "crates/domain/src/volatility_display.rs"
+category = "money_quantity_fx"
+reason = "변동성 표시 반올림 경계"
+
+[[target]]
+path = "crates/domain/src/volatility_reference.rs"
+category = "money_quantity_fx"
+reason = "변동성 기준값·정수 유리수 대조 검증"
+
+[[target]]
+path = "crates/domain/src/base_probability.rs"
+category = "order_decision_execution"
+reason = "임계값 기준 확률 p0·급수 근사 계산"
+
+[[target]]
+path = "crates/domain/src/broker_account.rs"
+category = "order_decision_execution"
+reason = "주문 대상 증권사 계좌·매수가능금액 경계"
+
+[[target]]
+path = "crates/domain/src/broker_order.rs"
+category = "order_decision_execution"
+reason = "증권사 주문 상태·체결 수량 모델"
+
+[[target]]
+path = "crates/domain/src/broker_order_fields.rs"
+category = "order_decision_execution"
+reason = "주문 식별자·가격·수량 필드 검증"
+
+[[target]]
+path = "crates/domain/src/broker_order_set.rs"
+category = "order_decision_execution"
+reason = "미체결 주문 집합 대조와 중복 주문 차단"
+
+[[target]]
+path = "crates/domain/src/broker_order_status.rs"
+category = "order_decision_execution"
+reason = "주문 상태 전이와 결과 모름 판정"
+
+[[target]]
+path = "crates/domain/src/buy_minimum_unit.rs"
+category = "order_decision_execution"
+reason = "최소 매수 주문 수량·단위 경계"
+
+[[target]]
+path = "crates/domain/src/buy_plan_price.rs"
+category = "order_decision_execution"
+reason = "매수 계획 기준가와 상한가 검증"
+
+[[target]]
+path = "crates/domain/src/buy_quantity.rs"
+category = "order_decision_execution"
+reason = "비중 상한·현금·비용 기반 매수 수량 계산"
+
+[[target]]
+path = "crates/domain/src/buy_quantity_arithmetic.rs"
+category = "order_decision_execution"
+reason = "매수 수량 내림·한도 checked 산술"
+
+[[target]]
+path = "crates/domain/src/buy_signal_history.rs"
+category = "order_decision_execution"
+reason = "현재 매수 신호와 과거 이력 분리 검증"
+
+[[target]]
+path = "crates/domain/src/calibration.rs"
+category = "order_decision_execution"
+reason = "판정 30건 미만 보수 운용·보정 규칙(ORD-8)"
+
+[[target]]
+path = "crates/domain/src/client_order_id.rs"
+category = "order_decision_execution"
+reason = "결정적 clientOrderId 생성과 중복 전송 방지(ORD-2)"
+
+[[target]]
+path = "crates/domain/src/draft_order_intent.rs"
+category = "order_decision_execution"
+reason = "승인 전 주문 초안 의도 생성과 불변 조건"
+
+[[target]]
+path = "crates/domain/src/draft_restore.rs"
+category = "order_decision_execution"
+reason = "저장된 주문 초안 복원 시 재검증 경계"
+
+[[target]]
+path = "crates/domain/src/estimate_record.rs"
+category = "order_decision_execution"
+reason = "확률 추정 기록 불변성과 출처 필수 검증(ACC-5)"
+
+[[target]]
+path = "crates/domain/src/estimate_restore.rs"
+category = "order_decision_execution"
+reason = "추정 기록 복원 시 상태 무결성 검증"
+
+[[target]]
+path = "crates/domain/src/estimate_task.rs"
+category = "order_decision_execution"
+reason = "확률 추정 과제 대상·기간 불변 조건"
+
+[[target]]
+path = "crates/domain/src/exclusions.rs"
+category = "order_decision_execution"
+reason = "주문 금지·제외 종목 판정 규칙"
+
+[[target]]
+path = "crates/domain/src/historical_signal_context.rs"
+category = "order_decision_execution"
+reason = "과거 신호 맥락과 실시간 주문 수량 경계 분리"
+
+[[target]]
+path = "crates/domain/src/instrument_id.rs"
+category = "order_decision_execution"
+reason = "종목 내부 식별자 형식 검증"
+
+[[target]]
+path = "crates/domain/src/instrument_master.rs"
+category = "order_decision_execution"
+reason = "주문 가능 종목 마스터 팩트 완전성 검증"
+
+[[target]]
+path = "crates/domain/src/known_market.rs"
+category = "order_decision_execution"
+reason = "지원 시장 판별과 주문 규칙 분기"
+
+[[target]]
+path = "crates/domain/src/limit_price.rs"
+category = "order_decision_execution"
+reason = "호가·가격제한폭 반영 지정가 산출"
+
+[[target]]
+path = "crates/domain/src/limit_price_order.rs"
+category = "order_decision_execution"
+reason = "지정가 주문 가격 유효성 검증"
+
+[[target]]
+path = "crates/domain/src/limit_price_policy.rs"
+category = "order_decision_execution"
+reason = "지정가 산출 정책과 슬리피지 한도"
+
+[[target]]
+path = "crates/domain/src/limit_price_revision.rs"
+category = "order_decision_execution"
+reason = "지정가 정정 범위와 호가 정렬 검증"
+
+[[target]]
+path = "crates/domain/src/market_session.rs"
+category = "order_decision_execution"
+reason = "정규장·시간외 주문 허용 세션 판정"
+
+[[target]]
+path = "crates/domain/src/master_instrument.rs"
+category = "order_decision_execution"
+reason = "종목 마스터 상태와 거래정지·상장폐지 판별"
+
+[[target]]
+path = "crates/domain/src/master_order_gate.rs"
+category = "order_decision_execution"
+reason = "마스터 상태 기반 주문 차단 게이트"
+
+[[target]]
+path = "crates/domain/src/order_amount.rs"
+category = "order_decision_execution"
+reason = "주문 총액·1회 한도 검증(ORD-6)"
+
+[[target]]
+path = "crates/domain/src/order_intent.rs"
+category = "order_decision_execution"
+reason = "매수·매도 주문 의도 모델과 불변 검증"
+
+[[target]]
+path = "crates/domain/src/order_price.rs"
+category = "order_decision_execution"
+reason = "주문 가격 호가·제한폭 검증"
+
+[[target]]
+path = "crates/domain/src/order_quantity.rs"
+category = "order_decision_execution"
+reason = "주문 수량 상한·양수 검증"
+
+[[target]]
+path = "crates/domain/src/order_summary.rs"
+category = "order_decision_execution"
+reason = "사람 승인 화면용 주문 요약 불변 계산"
+
+[[target]]
+path = "crates/domain/src/order_summary_facts.rs"
+category = "order_decision_execution"
+reason = "주문 승인 요약의 금액·수량·가격 팩트"
+
+[[target]]
+path = "crates/domain/src/orderbook.rs"
+category = "order_decision_execution"
+reason = "호가창 최우선 호가·스프레드 검증"
+
+[[target]]
+path = "crates/domain/src/policy.rs"
+category = "order_decision_execution"
+reason = "신호 임계값·비중 상한 운용 정책 판정"
+
+[[target]]
+path = "crates/domain/src/policy_settings.rs"
+category = "order_decision_execution"
+reason = "운용 정책 설정값 경계 검증"
+
+[[target]]
+path = "crates/domain/src/probability.rs"
+category = "order_decision_execution"
+reason = "AI 확률 범위 검증과 신호 입력 경계"
+
+[[target]]
+path = "crates/domain/src/proposal.rs"
+category = "order_decision_execution"
+reason = "주문 제안 상태 전이와 12개 사전 검증(C-01~C-12)"
+
+[[target]]
+path = "crates/domain/src/proposal_facts.rs"
+category = "order_decision_execution"
+reason = "주문 제안 검증 입력 팩트 정합성"
+
+[[target]]
+path = "crates/domain/src/proposal_id.rs"
+category = "order_decision_execution"
+reason = "주문 제안 고유 식별자 검증"
+
+[[target]]
+path = "crates/domain/src/proposal_range.rs"
+category = "order_decision_execution"
+reason = "주문 제안 허용 가격·수량 범위 검증"
+
+[[target]]
+path = "crates/domain/src/quote.rs"
+category = "order_decision_execution"
+reason = "현재가·기준가 시세 유효성 검증"
+
+[[target]]
+path = "crates/domain/src/sell_draft_quantity.rs"
+category = "order_decision_execution"
+reason = "매도 초안 수량과 보유 상한 검증"
+
+[[target]]
+path = "crates/domain/src/sell_quantity.rs"
+category = "order_decision_execution"
+reason = "보유·매도가능 수량 기반 매도 수량 산출"
+
+[[target]]
+path = "crates/domain/src/sellable_quantity.rs"
+category = "order_decision_execution"
+reason = "미체결 매도 반영 매도가능 수량 계산"
+
+[[target]]
+path = "crates/domain/src/signal_decision.rs"
+category = "order_decision_execution"
+reason = "확률·임계값 비교 기반 매수·매도 신호 판정(ORD-4)"
+
+[[target]]
+path = "crates/domain/src/signal_restore.rs"
+category = "order_decision_execution"
+reason = "저장된 신호 복원 시 판정 무결성 검증"
+
+[[target]]
+path = "crates/domain/src/signal_submission.rs"
+category = "order_decision_execution"
+reason = "추정 제출과 보정 키 연결 검증"
+
+[[target]]
+path = "crates/domain/src/signal_timing.rs"
+category = "order_decision_execution"
+reason = "신호 유효 시각·보유 기간 경계 판정"
+
+[[target]]
+path = "crates/domain/src/stock_warnings.rs"
+category = "order_decision_execution"
+reason = "투자경고·관리종목 주문 차단 규칙"
+
+[[target]]
+path = "crates/domain/src/symbol.rs"
+category = "order_decision_execution"
+reason = "종목 티커·시장 코드 정규화 검증"
+
+[[target]]
+path = "crates/domain/src/thresholds.rs"
+category = "order_decision_execution"
+reason = "여유분·변동성 기반 매수·매도 임계값 산출"
+
+[[target]]
+path = "crates/domain/src/thresholds_arithmetic.rs"
+category = "order_decision_execution"
+reason = "임계값 checked 십진 산술 계산"
+
+[[target]]
+path = "crates/domain/src/weight_caps.rs"
+category = "order_decision_execution"
+reason = "종목·섹터·보수 운용 비중 상한 규칙"
+
+[[target]]
+path = "crates/domain/src/account_id.rs"
+category = "secret_auth_boundary"
+reason = "계좌 식별자 정규화·마스킹 경계(SEC-11)"
+
+[[target]]
+path = "crates/domain/src/collected_item.rs"
+category = "secret_auth_boundary"
+reason = "비신뢰 외부 텍스트 정규화 경계(SEC-4)"
+
+[[target]]
+path = "crates/domain/src/estimate_assignment.rs"
+category = "secret_auth_boundary"
+reason = "코드 발급 추정 과제 ID 검증 경계(SEC-4)"
+
+[[target]]
+path = "crates/domain/src/horizon.rs"
+category = "secret_auth_boundary"
+reason = "시간외 거래 허용 확인 상태 경계"
+
+[[target]]
+path = "crates/domain/src/instrument_issuer.rs"
+category = "secret_auth_boundary"
+reason = "종목 식별자 발급 권한 경계"
+
+[[target]]
+path = "crates/domain/src/instrument_mapping.rs"
+category = "secret_auth_boundary"
+reason = "외부 종목 코드·내부 ID 매핑 무결성 경계"
+
+[[target]]
+path = "crates/domain/src/instrument_mapping_change.rs"
+category = "secret_auth_boundary"
+reason = "종목 식별자 변경·확인 상태 전이 경계"
+
+[[target]]
+path = "crates/domain/src/investor_profile.rs"
+category = "secret_auth_boundary"
+reason = "투자자 위험 성향·권한 설정 복원 경계"
+
+[[target]]
+path = "crates/domain/src/news_item.rs"
+category = "secret_auth_boundary"
+reason = "허용 URL 정규화와 비신뢰 뉴스 경계(SEC-4)"
+
+[[target]]
+path = "crates/domain/src/risk_settings.rs"
+category = "secret_auth_boundary"
+reason = "위험 한도·주문 스위치 변경 경계(SEC-12)"
+
+[[target]]
+path = "crates/domain/src/storage_records.rs"
+category = "secret_auth_boundary"
+reason = "위험 설정 변경·동기화 감사 레코드 경계"
+
+[[target]]
+path = "crates/order-execution/src/**/*.rs"
+category = "order_decision_execution"
+reason = "주문 승인 토큰 봉인과 전송 실행 핵심 경계"
+
+[[target]]
+path = "crates/approval-command/src/**/*.rs"
+category = "order_decision_execution"
+reason = "사용자 본인 확인과 단일 주문 승인 명령 경계"
+
+[[target]]
+path = "crates/application/src/portfolio_views.rs"
+category = "money_quantity_fx"
+reason = "환율 조회·포트폴리오 평가 금액 계산 유스케이스"
+
+[[target]]
+path = "crates/application/src/resolve_estimates.rs"
+category = "money_quantity_fx"
+reason = "추정 만료 결과·수익률 확정 유스케이스"
+
+[[target]]
+path = "crates/application/src/run_full_inspection.rs"
+category = "money_quantity_fx"
+reason = "거래 원장 전체 대조 실행 유스케이스"
+
+[[target]]
+path = "crates/application/src/store_fx_rate.rs"
+category = "money_quantity_fx"
+reason = "환율 저장·유효성 검증 유스케이스"
+
+[[target]]
+path = "crates/application/src/sync_portfolio.rs"
+category = "money_quantity_fx"
+reason = "계좌 보유·현금 동기화 유스케이스"
+
+[[target]]
+path = "crates/application/src/sync_transactions.rs"
+category = "money_quantity_fx"
+reason = "거래 내역 동기화·원장 대조 유스케이스"
+
+[[target]]
+path = "crates/application/src/transaction_observation.rs"
+category = "money_quantity_fx"
+reason = "원본 거래 행 마스킹과 거래 배치 검증"
+
+[[target]]
+path = "crates/application/src/transaction_schedule.rs"
+category = "money_quantity_fx"
+reason = "거래 동기화·일일 전체 대조 일정 판정"
+
+[[target]]
+path = "crates/application/src/valuation_gap.rs"
+category = "money_quantity_fx"
+reason = "증권사·원장 평가 금액 차이 점검 유스케이스"
+
+[[target]]
+path = "crates/application/src/valuation_snapshot.rs"
+category = "money_quantity_fx"
+reason = "일자별 평가 스냅숏 산출·저장 유스케이스"
+
+[[target]]
+path = "crates/application/src/buy_limit_intent.rs"
+category = "order_decision_execution"
+reason = "매수 지정가 주문 의도 생성 유스케이스"
+
+[[target]]
+path = "crates/application/src/draft_proposal.rs"
+category = "order_decision_execution"
+reason = "주문 제안 초안 조립과 사전 검증 유스케이스"
+
+[[target]]
+path = "crates/application/src/evaluate_signals.rs"
+category = "order_decision_execution"
+reason = "확률·임계값 기반 신호 판정 유스케이스"
+
+[[target]]
+path = "crates/application/src/proposal_storage.rs"
+category = "order_decision_execution"
+reason = "주문 제안 소비·검증 보고 저장 포트"
+
+[[target]]
+path = "crates/application/src/sell_limit_intent.rs"
+category = "order_decision_execution"
+reason = "매도 지정가 주문 의도 생성 유스케이스"
+
+[[target]]
+path = "crates/application/src/submit_estimate.rs"
+category = "order_decision_execution"
+reason = "AI 확률 추정 제출 검증 유스케이스(ORD-4)"
+
+[[target]]
+path = "crates/application/src/ai_request.rs"
+category = "secret_auth_boundary"
+reason = "AI 요청 주제 허용 목록과 프롬프트 마스킹 경계(SEC-9)"
+
+[[target]]
+path = "crates/application/src/audit_log.rs"
+category = "secret_auth_boundary"
+reason = "감사 로그 항목 구조와 기록 경계(ORD-3)"
+
+[[target]]
+path = "crates/application/src/change_risk_settings.rs"
+category = "secret_auth_boundary"
+reason = "네이티브 확인 필수 위험 설정 변경 유스케이스(SEC-12)"
+
+[[target]]
+path = "crates/application/src/confirm_instrument_identity.rs"
+category = "secret_auth_boundary"
+reason = "사용자 확인 기반 종목 식별자 변경 확정 경계"
+
+[[target]]
+path = "crates/application/src/identity_confirmation_prompt.rs"
+category = "secret_auth_boundary"
+reason = "종목 식별자 확인 프롬프트 무결성 모델"
+
+[[target]]
+path = "crates/application/src/secret_port.rs"
+category = "secret_auth_boundary"
+reason = "비밀 저장소 포트 계약 경계(SEC-11)"
+
+[[target]]
+path = "crates/application/src/secret_store.rs"
+category = "secret_auth_boundary"
+reason = "비밀 값 노출 제어 래퍼 경계(SEC-11)"
+
+[[target]]
+path = "crates/application/src/self_check.rs"
+category = "secret_auth_boundary"
+reason = "토스 연결·격리·권한 사전 점검 판정 경계"
+
+[[target]]
+path = "crates/application/src/user_presence.rs"
+category = "secret_auth_boundary"
+reason = "macOS 본인 확인(Touch ID) 포트 계약 경계(SEC-12)"
+
+[[target]]
+path = "crates/adapters/store-sqlite/src/connection.rs"
+category = "secret_auth_boundary"
+reason = "SQLCipher CommonCrypto 암호화 연결·권한 설정(S-01)"
+
+[[target]]
+path = "crates/adapters/store-sqlite/src/worker.rs"
+category = "secret_auth_boundary"
+reason = "암호화 DB 단일 쓰기 직렬화·세션 격리 경계(S-01)"
+
+[[target]]
+path = "crates/adapters/store-sqlite/src/proposal_consumption.rs"
+category = "order_decision_execution"
+reason = "주문 제안 1회 소비 불변 저장소(RV-5)"
+
+[[target]]
+path = "crates/adapters/store-sqlite/src/validation_report.rs"
+category = "order_decision_execution"
+reason = "주문 사전 검증 C-01~C-12 결과 영속화 경계"
+
+[[target]]
+path = "crates/adapters/broker-toss/src/endpoint.rs"
+category = "secret_auth_boundary"
+reason = "토스 운영 호스트 봉인과 임의 URL 차단 경계(SEC-1)"
+
+[[target]]
+path = "crates/adapters/broker-toss-trade/src/**/*.rs"
+category = "order_decision_execution"
+reason = "토스 실제 주문 전송 어댑터 경계"
+
+[[target]]
+path = "crates/adapters/secrets-keychain/src/**/*.rs"
+category = "secret_auth_boundary"
+reason = "macOS 데이터 보호 키체인 비밀 저장소 경계(SEC-11)"
+
+[[target]]
+path = "crates/adapters/platform-macos/src/unavailable_presence.rs"
+category = "secret_auth_boundary"
+reason = "본인 확인 미가용 시 닫힌 실패 거부 구현(SEC-12)"

@@ -255,6 +255,9 @@ git --no-replace-objects diff --quiet --no-ext-diff --no-textconv master <branch
 
 T3 도구는 전체 matcher에서 기본 거부한다. 허용된 launch·send·read·wait와 project_list·orchestrator_capabilities·background_wait만 쓴다. configure·queue 편집으로 모델이나 브리프를 바꾸지 않는다. 하네스 프로필 삭제와 잠금 전 prelock 절차는 ADR 0021 B를 따른다.
 
-## H-51 로컬 전체 정리
+## H-51·H-68 로컬 빌드 공유와 정리, 변이 대상 한정
 
-`fresh-cargo`와 `fresh-build`는 workspace 산출물을 정리한다. 외부 의존성까지 지운 전체 빌드를 수동으로 확인하려면 `just fresh-all` 다음에 `just base=HEAD check`를 실행한다. 전체 정리는 `target/` 아래 기록도 지우므로 중요한 로컬 자료는 밖에 둔다. 메인 빌드 산출물 복제는 실측 개선 기준을 충족하지 못해 사용하지 않는다.
+- `fresh-cargo`와 `fresh-build`는 workspace 산출물을 정리한다. 외부 의존성까지 지운 전체 빌드를 수동으로 확인하려면 `just fresh-all` 다음에 `STOCK_COPILOT_BUILD_CACHE=off just base=HEAD check`를 실행한다. 전체 정리는 `target/` 아래 기록도 지우므로 중요한 로컬 자료는 밖에 둔다. 메인 빌드 산출물 복제(H-51)는 채택하지 않았고, 대신 H-68에서 저장소 안 외부 의존성 전용 내용-주소 `rustc` 래퍼(`harness/build-cache/`)로 작업 사본 사이 외부 의존성 산출물만 공유한다.
+- 작업 중 범위 테스트는 `just test-fast -p <crate>`(속성 256회, 씨앗 고정 유지)와 `just base=<40자리 SHA> check-fast`(빠른 경로 256회, 하네스·문서·설정 변경 승격 시 전체 4,096회)를 사용한다.
+- 작업 사본·리뷰 사본을 마칠 때는 기존 `cargo clean` 대신 `just clean-worktree`를 실행해 사본별 `target/`을 지우고 공유 캐시 디스크 상한(`just cache-prune`, 기본 4 GiB)을 유지한다. 공유 캐시 상태 확인과 비우기는 `just cache-stats`·`just cache-clear`를 쓴다.
+- 자동 변이 검사는 `harness/mutants/targets.toml`에 등록된 금액·수량·환율 계산, 주문 판정·실행, 비밀·권한 경계 모듈에만 실행한다(변경분·일간·주간 공통). 이 목록 밖의 코드는 자동 변이 대신 작업별 손 변형(20건 이상)과 단위·계약·리뷰 검증으로 갈음한다.

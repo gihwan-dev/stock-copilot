@@ -12,7 +12,43 @@
       "export": true,
       "name": "RUSTC_WRAPPER",
       "private": false,
-      "value": ""
+      "value": [
+        "if",
+        ["!=", ["call", "env", "CI", ""], ""],
+        "",
+        [
+          "if",
+          ["!=", ["call", "env", "GITHUB_ACTIONS", ""], ""],
+          "",
+          [
+            "if",
+            ["==", ["call", "env", "STOCK_COPILOT_BUILD_CACHE", ""], "off"],
+            "",
+            [
+              "if",
+              [
+                "==",
+                [
+                  "call",
+                  "path_exists",
+                  [
+                    "join",
+                    ["call", "justfile_directory"],
+                    "harness/build-cache/rustc-wrapper.sh"
+                  ]
+                ],
+                "true"
+              ],
+              [
+                "join",
+                ["call", "justfile_directory"],
+                "harness/build-cache/rustc-wrapper.sh"
+              ],
+              ""
+            ]
+          ]
+        ]
+      ]
     },
     "RUSTFLAGS": {
       "eager": false,
@@ -72,6 +108,45 @@
       "private": false,
       "quiet": false,
       "namepath": "arch-check",
+      "shebang": false
+    },
+    "cache-clear": {
+      "attributes": [],
+      "body": [["node harness/build-cache/prune.mjs --clear"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "cache-clear",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "cache-clear",
+      "shebang": false
+    },
+    "cache-prune": {
+      "attributes": [],
+      "body": [["node harness/build-cache/prune.mjs"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "cache-prune",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "cache-prune",
+      "shebang": false
+    },
+    "cache-stats": {
+      "attributes": [],
+      "body": [["node harness/build-cache/prune.mjs --stats"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "cache-stats",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "cache-stats",
       "shebang": false
     },
     "capability-check": {
@@ -252,7 +327,10 @@
         ["node harness/claude-hooks/hashes.mjs"],
         ["node harness/codex-hooks/config.mjs"],
         ["node harness/ci/workflow-policy/check.mjs"],
-        ["node harness/ci/review-records/check.mjs"]
+        ["node harness/ci/review-records/check.mjs"],
+        ["node harness/proptest/check.mjs"],
+        ["node harness/build-cache/check.mjs"],
+        ["node harness/mutants/check-targets.mjs"]
       ],
       "dependencies": [],
       "doc": null,
@@ -370,6 +448,9 @@
         ["node harness/codex-hooks/config.mjs"],
         ["node harness/ci/workflow-policy/check.mjs"],
         ["node harness/ci/review-records/check.mjs"],
+        ["node harness/proptest/check.mjs"],
+        ["node harness/build-cache/check.mjs"],
+        ["node harness/mutants/check-targets.mjs"],
         ["node harness/ci/linux/exclusions.mjs verify"],
         ["node --test 'harness/ci/tests/*.test.mjs'"]
       ],
@@ -405,6 +486,23 @@
       "private": false,
       "quiet": false,
       "namepath": "claude-regression",
+      "shebang": false
+    },
+    "clean-worktree": {
+      "attributes": [],
+      "body": [
+        ["cargo clean --locked"],
+        ["cargo llvm-cov clean --locked"],
+        ["node harness/build-cache/prune.mjs"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "clean-worktree",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "clean-worktree",
       "shebang": false
     },
     "clippy": {
@@ -928,7 +1026,10 @@
         ["\"", [["call", "just_executable"]], "\" raw-types"],
         ["\"", [["call", "just_executable"]], "\" disable-check"],
         ["node harness/ci/workflow-policy/check.mjs"],
-        ["node harness/ci/review-records/check.mjs"]
+        ["node harness/ci/review-records/check.mjs"],
+        ["node harness/proptest/check.mjs"],
+        ["node harness/build-cache/check.mjs"],
+        ["node harness/mutants/check-targets.mjs"]
       ],
       "dependencies": [
         {
@@ -1699,6 +1800,35 @@
       "namepath": "test-diff-fast",
       "shebang": false
     },
+    "test-fast": {
+      "attributes": [],
+      "body": [["cargo nextest run --locked \"$@\""]],
+      "dependencies": [],
+      "doc": null,
+      "name": "test-fast",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "plus",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "args",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "test-fast",
+      "shebang": false
+    },
     "tokens-contrast": {
       "attributes": [],
       "body": [["node harness/ds-tokens/contrast.mjs"]],
@@ -1818,10 +1948,12 @@
     "NEXTEST_USER_CONFIG_FILE",
     "NODE_OPTIONS",
     "NODE_PATH",
+    "PROPTEST_CASES",
     "RUSTC",
     "RUSTC_BOOTSTRAP",
     "RUSTDOCFLAGS",
     "RUSTUP_TOOLCHAIN",
+    "STOCK_COPILOT_PROPTEST_CASES",
     "TAURI_CONFIG"
   ],
   "warnings": []

@@ -20,7 +20,12 @@ const SOURCE_PACKAGES = [
   ["crates/domain/src/", "domain"],
   ["crates/application/src/", "application"],
   ["crates/order-execution/src/", "order-execution"],
+  ["crates/approval-command/src/", "approval-command"],
   ["crates/adapters/store-sqlite/src/", "store-sqlite"],
+  ["crates/adapters/broker-toss/src/", "broker-toss"],
+  ["crates/adapters/broker-toss-trade/src/", "broker-toss-trade"],
+  ["crates/adapters/secrets-keychain/src/", "secrets-keychain"],
+  ["crates/adapters/platform-macos/src/", "platform-macos"],
 ];
 
 export const validCatalog = (catalog) =>

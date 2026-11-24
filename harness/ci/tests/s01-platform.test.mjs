@@ -18,7 +18,14 @@ test("S01 mutation jobs execute the complete CommonCrypto catalog on macOS", () 
   }
   const settings = readFileSync(".cargo/mutants.toml", "utf8");
   assert.match(settings, /test_tool = "nextest"/u);
-  assert.match(settings, /crates\/adapters\/store-sqlite\/src\/\*\*\/\*\.rs/u);
+  for (const required of [
+    "crates/adapters/store-sqlite/src/connection.rs",
+    "crates/adapters/store-sqlite/src/worker.rs",
+    "crates/adapters/store-sqlite/src/proposal_consumption.rs",
+    "crates/adapters/store-sqlite/src/validation_report.rs",
+  ]) {
+    assert.ok(settings.includes(`"${required}"`), required);
+  }
   const nextest = readFileSync(".config/nextest.toml", "utf8");
   assert.match(nextest, /platform = "cfg\(target_os = \\"macos\\"\)"/u);
   assert.match(nextest, /run-wrapper = "network-sandbox"/u);

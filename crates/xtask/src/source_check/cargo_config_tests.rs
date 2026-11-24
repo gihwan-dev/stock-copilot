@@ -26,13 +26,6 @@ const DOCUMENTED_FORBIDDEN_MUTANTS_KEYS: [&str; 6] = [
     "additional_cargo_args",
 ];
 
-const MUTATION_TARGET_GLOBS: [&str; 4] = [
-    "crates/domain/src/**/*.rs",
-    "crates/order-execution/src/**/*.rs",
-    "crates/application/src/**/*.rs",
-    "crates/adapters/store-sqlite/src/**/*.rs",
-];
-
 #[derive(Debug)]
 struct Case {
     name: String,
@@ -212,12 +205,13 @@ fn mutation_targets_are_the_documented_modules() {
         .expect("read mutants settings")
         .parse()
         .expect("parse mutants settings");
-    let globs: Vec<&str> = table
+    let globs: Vec<String> = table
         .get("examine_globs")
         .and_then(toml::Value::as_array)
         .expect("examine_globs")
         .iter()
-        .map(|glob| glob.as_str().expect("glob text"))
+        .map(|glob| String::from(glob.as_str().expect("glob text")))
         .collect();
-    assert_eq!(globs, MUTATION_TARGET_GLOBS);
+    let expected = crate::mutants_check::load_targets(&root).expect("targets list");
+    assert_eq!(globs, expected);
 }

@@ -7,6 +7,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { workflowFindings, readPolicy } from "../workflow-policy/check.mjs";
 import { installActionSpec, readTools } from "../tools.mjs";
+import {
+  TARGETS_FILE,
+  parseTargetsToml,
+} from "../../mutants/check-targets.mjs";
 
 const root = resolve(".");
 const workflow = () =>
@@ -197,6 +201,10 @@ test("H47 successful empty slices have an explicit empty result without baseline
 });
 
 test("H47 cargo-mutants partitions cover the exact full set without overlap", () => {
+  const targetFiles = parseTargetsToml(readFileSync(TARGETS_FILE, "utf8")).map(
+    (entry) => entry.path,
+  );
+  const fileArgs = targetFiles.flatMap((file) => ["--file", file]);
   const list = (shard) => {
     const args =
       shard === undefined
@@ -209,14 +217,7 @@ test("H47 cargo-mutants partitions cover the exact full set without overlap", ()
             "--list",
             "--json",
             "--no-shuffle",
-            "--file",
-            "crates/domain/src/**/*.rs",
-            "--file",
-            "crates/order-execution/src/**/*.rs",
-            "--file",
-            "crates/application/src/**/*.rs",
-            "--file",
-            "crates/adapters/store-sqlite/src/**/*.rs",
+            ...fileArgs,
           ];
     if (shard !== undefined) args.push("--shard", shard);
     const result = spawnSync("cargo", args, {

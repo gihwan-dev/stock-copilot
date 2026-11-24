@@ -272,6 +272,36 @@
     },
     {
       "recipe": "check-ts",
+      "command": "node harness/proptest/check.mjs",
+      "kind": "check",
+      "cases": "harness/proptest/policy.toml",
+      "test": {
+        "file": "harness/ci/tests/h68-proptest-policy.test.mjs",
+        "name": "H68 proptest policy enforces 256 working cases 4096 full cases and seed pinning"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/build-cache/check.mjs",
+      "kind": "check",
+      "cases": "harness/build-cache/policy.json",
+      "test": {
+        "file": "harness/ci/tests/h68-build-cache.test.mjs",
+        "name": "H68 build cache policy and wrapper isolate workspace coverage mutants and CI"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/mutants/check-targets.mjs",
+      "kind": "check",
+      "cases": "harness/mutants/targets.toml",
+      "test": {
+        "file": "harness/ci/tests/h68-mutants-targets.test.mjs",
+        "name": "H68 mutation targets list is valid synced and rejects missing or drifted paths"
+      }
+    },
+    {
+      "recipe": "check-ts",
       "command": "node harness/ci/linux/exclusions.mjs verify",
       "kind": "check",
       "cases": "harness/ci/linux/exclusions.json",

@@ -39,9 +39,11 @@ unexport GIT_DIFF_OPTS
 unexport GIT_ATTR_SOURCE
 unexport NODE_OPTIONS
 unexport NODE_PATH
+unexport STOCK_COPILOT_PROPTEST_CASES
+unexport PROPTEST_CASES
 export SANDBOX_RUNTIME := if env("CODEX_SANDBOX", "") == "seatbelt" { "1" } else { env("SANDBOX_RUNTIME", "") }
 export RUSTFLAGS := "-D warnings"
-export RUSTC_WRAPPER := ""
+export RUSTC_WRAPPER := if env("CI", "") != "" { "" } else if env("GITHUB_ACTIONS", "") != "" { "" } else if env("STOCK_COPILOT_BUILD_CACHE", "") == "off" { "" } else if path_exists(justfile_directory() / "harness/build-cache/rustc-wrapper.sh") == "true" { justfile_directory() / "harness/build-cache/rustc-wrapper.sh" } else { "" }
 export RUSTC_WORKSPACE_WRAPPER := ""
 
 base := ""
@@ -122,6 +124,9 @@ check-ts: check-node check-pnpm
     node harness/codex-hooks/config.mjs
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
+    node harness/proptest/check.mjs
+    node harness/build-cache/check.mjs
+    node harness/mutants/check-targets.mjs
     node harness/ci/linux/exclusions.mjs verify
     node --test 'harness/ci/tests/*.test.mjs'
 
@@ -177,6 +182,23 @@ fresh-all:
 
 fresh-node:
     pnpm install --frozen-lockfile --force --ignore-scripts
+
+test-fast +args:
+    cargo nextest run --locked "$@"
+
+clean-worktree:
+    cargo clean --locked
+    cargo llvm-cov clean --locked
+    node harness/build-cache/prune.mjs
+
+cache-prune:
+    node harness/build-cache/prune.mjs
+
+cache-clear:
+    node harness/build-cache/prune.mjs --clear
+
+cache-stats:
+    node harness/build-cache/prune.mjs --stats
 
 commit-base:
     cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-base
@@ -261,6 +283,9 @@ linux-check: check-node
     "{{just_executable()}}" disable-check
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
+    node harness/proptest/check.mjs
+    node harness/build-cache/check.mjs
+    node harness/mutants/check-targets.mjs
 
 [env("STOCK_COPILOT_PROPTEST_CASES", "4096")]
 linux-test:
@@ -302,6 +327,9 @@ check-fast-static:
     node harness/codex-hooks/config.mjs
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
+    node harness/proptest/check.mjs
+    node harness/build-cache/check.mjs
+    node harness/mutants/check-targets.mjs
 
 test-diff-fast *packages:
     cargo run --locked --quiet --package xtask -- test-diff-selected {{quote(base)}} "$@"

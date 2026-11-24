@@ -42,15 +42,17 @@
 | 명령 | 내용 | 누가 부르는가 |
 |---|---|---|
 | `just lint-file <경로>` | 바뀐 파일 하나의 형식과 린트 | `PostToolUse` 편집 훅 |
-| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | Codex Stop, master 커밋 훅(승인된 병합 예외는 workflow 2.8), `master`·`merge/**` 푸시와 밤의 macOS CI. `master`·`merge/**` Linux 푸시는 `just linux-check`·`just linux-test` |
-| `just check-fast` | 기준 대비 변경 crate와 역의존 crate의 clippy·nextest, 빠른 정적 검사, test-diff·끄기 보고·commit-guard·hooks-installed. 프런트 변경 때 TS 검사. 하네스·설정·미지 경로는 전체 승격. 커버리지는 전체 검사에서 유지 | 작업 브랜치 커밋, 구현 중 |
+| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함, 속성 테스트 4,096회), 커버리지(4,096회), 생성물 차이, 기존 테스트 변경 검사 | Codex Stop, master 커밋 훅(승인된 병합 예외는 workflow 2.8), `master`·`merge/**` 푸시와 밤의 macOS CI. `master`·`merge/**` Linux 푸시는 `just linux-check`·`just linux-test`(4,096회) |
+| `just check-fast` | 기준 대비 변경 crate와 역의존 crate의 clippy·nextest(속성 테스트 256회), 빠른 정적 검사, test-diff·끄기 보고·commit-guard·hooks-installed. 프런트 변경 때 TS 검사. 하네스·문서·설정·공유 테스트 지원·미지 경로는 전체 `just check`(4,096회)로 승격. 커버리지는 전체 검사에서 유지 | 작업 브랜치 커밋, 구현 중 |
+| `just test-fast <nextest 인자>` | 작업 중 범위 테스트(속성 테스트 256회 고정, 외부 의존성 공유 캐시 사용, `PROPTEST_RNG_SEED` 씨앗 고정 유지) | 구현 중 수동 실행 |
 | `just check-full` | `just check` + 변이 테스트(기준 브랜치 대비 변경분) + 컨테이너 시각 회귀 + 순환 의존 검사 | 푸시 훅, CI |
+| `just clean-worktree` | 사본별 `target/` 정리(`cargo clean --locked`, `cargo llvm-cov clean --locked`) 후 공유 외부 의존성 캐시의 디스크 상한 정리(`just cache-prune`) 실행 | 작업·리뷰 사본 정리 시 |
 
 `just check`의 공통 규칙:
 
 | 규칙 | 이유 |
 |---|---|
-| 첫 단계에서 `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS`, `RUSTDOCFLAGS`, `CLIPPY_CONF_DIR`, `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`, `CARGO_TARGET_DIR`를 지우고 `RUSTFLAGS="-D warnings"`로 고정한다 | 이 변수들로 `deny` 린트를 끄거나 설정을 바꿀 수 있다. `RUSTFLAGS`를 설정하면 `build.rustflags`와 상위 `.cargo/config.toml`의 rustflags도 무시된다 (R-09 Q2) |
+| 첫 단계에서 `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS`, `RUSTDOCFLAGS`, `CLIPPY_CONF_DIR`, `CARGO_BUILD_RUSTC_WRAPPER`, `CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`, `CARGO_TARGET_DIR`, `STOCK_COPILOT_PROPTEST_CASES`, `PROPTEST_CASES`를 지우고 `RUSTFLAGS="-D warnings"`로 고정한다. 로컬 작업 시에만 `RUSTC_WRAPPER`를 저장소 안 `harness/build-cache/rustc-wrapper.sh`(외부 레지스트리 의존성 전용 내용-주소 캐시, CI·커버리지·변이·`STOCK_COPILOT_BUILD_CACHE=off`에서는 `""`)로 고정한다 | 외부 호출자가 린트를 끄거나 속성 횟수를 낮추는 환경 변수를 차단하고, 동시에 같은 기기의 작업 사본들이 외부 의존성만 안전하게 재사용한다 (R-09 Q2, H-68) |
 | 모든 cargo 명령에 `--locked`를 붙인다 | 잠금 파일 밖의 의존성 변화 차단 |
 | Rust 테스트는 `cargo-nextest`로만 돈다 | 네트워크 차단과 테스트 필터를 한곳에서 건다 (R-09 Q9) |
 | ESLint에 `--cache`를 쓰지 않는다 | 파일 단위 캐시는 다른 파일의 타입 변경을 반영하지 못한다 (R-08 2.3) |
@@ -466,6 +468,8 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 하네스 자체 | 6.8 |
 
 - 버그를 고칠 때는 그 버그를 재현하는 테스트를 먼저 추가한다.
+- 속성 테스트 횟수는 보호 파일 `harness/proptest/policy.toml` 한곳에서 정한다(`working_cases = 256`, `full_cases = 4096`). 작업 중 검사(`just check-fast` 빠른 경로, `just test-fast`)는 256회, 병합 판정 전체 검사(`just check`, `just check-full`, `just coverage-check`, `just linux-test`)와 GitHub CI는 4,096회다. `check-fast`가 하네스·문서·설정·공유 지원 변경으로 전체 `just check`로 승격되면 4,096회로 돈다. 실패 재현 시 `PROPTEST_RNG_SEED` 씨앗 고정은 `justfile`이 지우지 않으므로 그대로 동작한다. 정책 검사(`node harness/proptest/check.mjs`)는 작업 중 횟수를 256 미만으로 낮추거나 전체·CI를 4,096 미만으로 낮추는 구성을 거부한다(H-68).
+- 같은 기기의 작업 사본 사이 컴파일 재사용은 저장소 안 `harness/build-cache/`(`rustc-wrapper.sh`·`rustc-wrapper.mjs`·`prune.mjs`·`policy.json`)가 맡는다. `$CARGO_HOME/registry/src` 아래 외부 레지스트리 의존성 산출물만 내용 주소 해시(`rustc -vV`, 소스·`--extern`·`OUT_DIR`·로컬 `-L native=` SHA-256, `dep-info`·`env-dep` 검증)로 공유하며, 작업 공간 crate(`CARGO_PRIMARY_PACKAGE` 또는 레지스트리 밖 소스)는 절대 공유하지 않고 사본별 `target/`을 유지한다. 잠금 없는 원자적 게시와 APFS `clonefile` 복원을 쓰며, CI·`cargo-llvm-cov`·`cargo-mutants`·`STOCK_COPILOT_BUILD_CACHE=off`에서는 비활성화된다. 디스크 상한은 `harness/build-cache/policy.json`(기본 4 GiB, 상한 초과 시 최근 5분 보호 후 오래된 항목부터 80%까지 정리)으로 관리하며, 작업·리뷰 사본 종료 시 `cargo clean` 대신 `just clean-worktree`로 사본 `target/` 정리와 공유 캐시 상한 정리를 함께 실행한다(`just cache-stats`, `just cache-prune`, `just cache-clear`, H-68).
 - tokio `start_paused`는 순수 가짜만 쓰는 테스트에서만 쓴다. 실제 자식 프로세스, 소켓, SQLite 파일 I/O를 기다리면 시계가 자동으로 앞당겨져 타임아웃이 거짓으로 터진다 (R-15 2.3).
 
 ### 6.2 네트워크 차단
@@ -500,7 +504,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 항목 | 규칙 |
 |---|---|
 | 도구 | `cargo-mutants` 27.1.0, `--test-tool nextest`, `--cap-lints=true` 필수 (없으면 엄격 린트 때문에 정상 변이체가 unviable로 분류된다) |
-| 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`, `adapters/store-sqlite`의 모든 `src/**/*.rs`. store-sqlite의 암호화 연결·쓰기 직렬화도 포함한다(S-01). application의 실제 포트·조회 결과·오류 타입·오류 분류와 앞으로 추가할 유스케이스를 일일 변경분·주간 전체 변이 양쪽에 포함한다 (ADR 0063) |
+| 대상 | 보호 파일 `harness/mutants/targets.toml` 한곳에 명시한 **금액·수량·환율 계산, 주문 판정·실행, 비밀·권한 경계** 모듈(분류와 1줄 근거 포함)만 대상으로 한다. `.cargo/mutants.toml`의 `examine_globs`는 이 파일과 1:1 일치해야 하며, 변경분 변이(H-63)·일간 변이·주간 128조각 변이가 모두 같은 목록을 읽는다. 목록의 모든 경로는 실제 디스크에 존재해야 하며(`node harness/mutants/check-targets.mjs`, `xtask mutants`), 이름 변경으로 조용히 누락되는 것을 거부한다. 목록 밖의 일반 코드(순수 시세·수급·뉴스·공시·논리 DTO, 사후 벤치마크·성적표 집계, 일반 SQLite CRUD/코덱/마이그레이션 등)는 자동 변이 대신 작업별 손 변형(최소 20건)과 단위·계약 테스트로 갈음한다 (H-68) |
 | 제외 | 진단 출력을 비교하는 `trybuild` 테스트는 nextest 필터로 뺀다 (`--cap-lints`가 기대 출력을 바꾼다) |
 | 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 바뀐 대상 src 파일의 diff 영역과 겹치는 변이만 고른다. CI 매일: 지난24시간 master 변경분을 선택량에 따라1~8작업으로. 일요일 밤: 전체를 독립된128조각으로. 수동 실행은 daily/full 선택 (H-47) |
 | 생존 허용 | 보호된 허용 목록에 있는 것만. 설정 파일(`.cargo/mutants.toml`)도 보호 파일 |

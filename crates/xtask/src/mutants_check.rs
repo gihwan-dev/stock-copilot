@@ -7,6 +7,8 @@ use scope::{TargetPlatform, diff_scope, filter_platform, jobs_for};
 #[cfg(test)]
 mod h63_tests;
 #[cfg(test)]
+mod h68_tests;
+#[cfg(test)]
 mod tests;
 use std::collections::BTreeSet;
 use std::fmt;
@@ -20,6 +22,12 @@ use crate::git_base::changed_paths;
 use crate::source_check::cargo_config::examine_globs;
 
 pub(crate) const SURVIVORS_FILE: &str = "harness/mutants/survivors.toml";
+pub(crate) const TARGETS_FILE: &str = "harness/mutants/targets.toml";
+const ALLOWED_TARGET_CATEGORIES: [&str; 3] = [
+    "money_quantity_fx",
+    "order_decision_execution",
+    "secret_auth_boundary",
+];
 const OUTPUT_DIRECTORY: &str = "target/mutants";
 const SETTINGS_FILE: &str = ".cargo/mutants.toml";
 const CRATE_DEPTH: usize = 2;
@@ -217,15 +225,123 @@ fn bounded_status(
 }
 
 pub(crate) fn crate_of(glob: &str) -> String {
-    glob.split('/')
-        .take(CRATE_DEPTH)
-        .collect::<Vec<_>>()
-        .join("/")
+    glob.split_once("/src/").map_or_else(
+        || {
+            glob.split('/')
+                .take(CRATE_DEPTH)
+                .collect::<Vec<_>>()
+                .join("/")
+        },
+        |(prefix, _)| String::from(prefix),
+    )
+}
+
+fn directory_has_rust_source(directory: &Path) -> Result<bool, String> {
+    for listed in fs::read_dir(directory).map_err(|error| error.to_string())? {
+        let entry = listed.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let kind = entry.file_type().map_err(|error| error.to_string())?;
+        if kind.is_dir() {
+            if directory_has_rust_source(&path)? {
+                return Ok(true);
+            }
+        } else if !kind.is_symlink() && path.extension().is_some_and(|ext| ext == "rs") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn verify_target_exists(workspace: &Path, target: &str) -> Result<(), String> {
+    if let Some(prefix) = target.strip_suffix("/**/*.rs") {
+        let directory = workspace.join(prefix);
+        if directory.is_dir() && directory_has_rust_source(&directory)? {
+            return Ok(());
+        }
+        return Err(format!(
+            "{TARGETS_FILE}: 대상 글롭에 해당하는 .rs 파일이 없다: {target}"
+        ));
+    }
+    let path = workspace.join(target);
+    if Path::new(target)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("rs"))
+        && path.is_file()
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "{TARGETS_FILE}: 대상 파일이 존재하지 않는다: {target}"
+        ))
+    }
+}
+
+pub(crate) fn load_targets(workspace: &Path) -> Result<Vec<String>, String> {
+    let table: toml::Table = read_text(&workspace.join(TARGETS_FILE))?
+        .parse()
+        .map_err(|error| format!("{TARGETS_FILE}: {error}"))?;
+    if table.keys().any(|key| key != "target") {
+        return Err(format!("{TARGETS_FILE}: 최상위 키는 target만 허용한다"));
+    }
+    let entries = table
+        .get("target")
+        .and_then(toml::Value::as_array)
+        .filter(|items| !items.is_empty())
+        .ok_or_else(|| format!("{TARGETS_FILE}: 비어 있지 않은 target 목록이 없다"))?;
+    let mut paths = Vec::with_capacity(entries.len());
+    let mut seen = BTreeSet::new();
+    for entry in entries {
+        let Some(fields) = entry.as_table() else {
+            return Err(format!("{TARGETS_FILE}: target 항목은 테이블이어야 한다"));
+        };
+        if fields
+            .keys()
+            .any(|key| !["path", "category", "reason"].contains(&key.as_str()))
+        {
+            return Err(format!(
+                "{TARGETS_FILE}: target 항목은 path, category, reason만 가진다"
+            ));
+        }
+        let field = |key: &str| {
+            fields
+                .get(key)
+                .and_then(toml::Value::as_str)
+                .filter(|text| !text.trim().is_empty())
+                .map(String::from)
+                .ok_or_else(|| format!("{TARGETS_FILE}: 항목마다 {key}가 있어야 한다"))
+        };
+        let path = field("path")?;
+        let category = field("category")?;
+        let _reason = field("reason")?;
+        if !ALLOWED_TARGET_CATEGORIES.contains(&category.as_str()) {
+            return Err(format!(
+                "{TARGETS_FILE}: 알 수 없는 분류 {category}: {path}"
+            ));
+        }
+        if !seen.insert(path.clone()) {
+            return Err(format!("{TARGETS_FILE}: 중복 대상 경로: {path}"));
+        }
+        verify_target_exists(workspace, &path)?;
+        paths.push(path);
+    }
+    let _owners = test_packages::selected(&paths)?;
+    let configured = examine_globs(&read_text(&workspace.join(SETTINGS_FILE))?)
+        .ok_or_else(|| format!("{SETTINGS_FILE}: examine_globs가 없다"))?;
+    if configured != paths {
+        return Err(format!(
+            "{SETTINGS_FILE}의 examine_globs가 {TARGETS_FILE}과 일치하지 않는다"
+        ));
+    }
+    Ok(paths)
 }
 
 pub(crate) fn target_globs(workspace: &Path) -> Result<Vec<String>, String> {
-    examine_globs(&read_text(&workspace.join(SETTINGS_FILE))?)
-        .ok_or_else(|| format!("{SETTINGS_FILE}: examine_globs가 없다"))
+    if workspace.join(TARGETS_FILE).is_file() {
+        load_targets(workspace)
+    } else {
+        examine_globs(&read_text(&workspace.join(SETTINGS_FILE))?)
+            .ok_or_else(|| format!("{SETTINGS_FILE}: examine_globs가 없다"))
+    }
 }
 
 pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
@@ -328,8 +444,9 @@ fn configure_parallelism(
     let jobs = jobs_for(cores, override_jobs.as_deref())?;
     let multiplier = 5_usize;
     let test_threads = cores.checked_div(jobs).unwrap_or(1).clamp(1, 4);
+    let directories: BTreeSet<String> = globs.iter().map(|glob| crate_of(glob)).collect();
     let mut files = BTreeSet::new();
-    for directory in globs.iter().map(|glob| crate_of(glob)) {
+    for directory in directories {
         let path = workspace.join(directory).join("src");
         if path.exists() {
             selected_files(workspace, &path, globs, &mut files)?;
@@ -364,6 +481,8 @@ pub(crate) fn run(
 fn configure_profile(command: &mut Command) {
     command
         .env_remove("STOCK_COPILOT_PROPTEST_CASES")
+        .env("STOCK_COPILOT_BUILD_CACHE", "off")
+        .env("RUSTC_WRAPPER", "")
         .env("CARGO_PROFILE_DEV_DEBUG", "0")
         .env("CARGO_PROFILE_TEST_DEBUG", "0")
         .env("CARGO_PROFILE_DEV_OPT_LEVEL", "1")
@@ -636,6 +755,8 @@ fn list_changed_mutants(
     let mut command = Command::new("cargo");
     command
         .current_dir(root)
+        .env("STOCK_COPILOT_BUILD_CACHE", "off")
+        .env("RUSTC_WRAPPER", "")
         .args([
             "mutants",
             "--no-config",
@@ -825,7 +946,10 @@ pub(crate) fn run_command(
 }
 
 pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) -> ExitCode {
-    let result = workspace_root().and_then(|root| run_command(&root, arguments, base_use));
+    let result = workspace_root().and_then(|root| {
+        let _targets = load_targets(&root)?;
+        run_command(&root, arguments, base_use)
+    });
     if result
         .as_ref()
         .is_err_and(|failure| failure == environment::DEADLINE)

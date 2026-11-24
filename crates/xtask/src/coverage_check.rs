@@ -293,6 +293,8 @@ fn run_llvm_cov(workspace: &Path, arguments: &[&str], packages: &[String]) -> Re
     let mut command = Command::new("cargo");
     command
         .current_dir(workspace)
+        .env("STOCK_COPILOT_BUILD_CACHE", "off")
+        .env("RUSTC_WRAPPER", "")
         .arg("llvm-cov")
         .args(arguments)
         .arg("--manifest-path")
