@@ -6,6 +6,11 @@ use tauri::test::{mock_builder, mock_context, noop_assets};
 
 use super::app_version::{AppVersionQuery, AppVersionRequest, app_version};
 use super::error::{IpcError, IpcErrorKind};
+use super::settings::{
+    GetSettingsRequest, SetOrderPermissionRequest, SettingsQueryScope, UiOrderPermission,
+    UiOrderSwitchOutcomeKind, apply_order_permission, load_settings_view,
+};
+use super::state::ScreenState;
 
 const RESPONSE_DIRECTORY: &str = "ipc/responses";
 
@@ -94,4 +99,72 @@ fn error_classification_exports_only_the_closed_kind() {
             "classification and redaction"
         );
     }
+}
+
+#[test]
+fn settings_responses_match_snapshots_and_order_switch_requires_confirmation() {
+    let ports = crate::tests::support::ports();
+    ports
+        .settings
+        .script_profile()
+        .push(testkit_ports::memory::MemoryReply::Return(Ok(None)));
+    ports
+        .settings
+        .script_risk_settings()
+        .push(testkit_ports::memory::MemoryReply::Return(Ok(None)));
+    for _ in 0..3 {
+        ports
+            .secrets
+            .script_load()
+            .push(testkit_ports::memory::MemoryReply::Return(Ok(None)));
+    }
+    let state = ScreenState::from_ports(&ports);
+    let view = tauri::async_runtime::block_on(load_settings_view(&state)).expect("기본 설정");
+    assert_response_snapshot("get_settings", &view);
+
+    let denied_ports = crate::tests::support::ports();
+    let denied_ports = crate::ports::Ports {
+        presence: std::sync::Arc::new(testkit_ports::ScriptedPresence::new(
+            [],
+            [application::RiskChangeConfirmation::Denied],
+        )),
+        ..denied_ports
+    };
+    for _ in 0..2 {
+        denied_ports
+            .settings
+            .script_profile()
+            .push(testkit_ports::memory::MemoryReply::Return(Ok(None)));
+        denied_ports
+            .settings
+            .script_risk_settings()
+            .push(testkit_ports::memory::MemoryReply::Return(Ok(None)));
+    }
+    for _ in 0..3 {
+        denied_ports
+            .secrets
+            .script_load()
+            .push(testkit_ports::memory::MemoryReply::Return(Ok(None)));
+    }
+    let denied_state = ScreenState::from_ports(&denied_ports);
+    let outcome = tauri::async_runtime::block_on(apply_order_permission(
+        &denied_state,
+        UiOrderPermission::On,
+    ))
+    .expect("거부 응답");
+    assert_eq!(outcome.kind, UiOrderSwitchOutcomeKind::Denied);
+    assert_eq!(outcome.order_enabled, UiOrderPermission::Off);
+    assert_response_snapshot("set_order_permission", &outcome);
+
+    assert_eq!(
+        serde_json::from_str::<GetSettingsRequest>(r#"{"scope":"all"}"#).expect("설정 요청"),
+        GetSettingsRequest {
+            scope: SettingsQueryScope::All,
+        }
+    );
+    assert!(serde_json::from_str::<GetSettingsRequest>(r#"{"scope":"all","extra":1}"#).is_err());
+    assert!(
+        serde_json::from_str::<SetOrderPermissionRequest>(r#"{"permission":"on","bypass":true}"#)
+            .is_err()
+    );
 }

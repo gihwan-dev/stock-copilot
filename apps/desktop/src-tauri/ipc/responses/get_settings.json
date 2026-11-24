@@ -1,0 +1,20 @@
+{
+  "toss_connection": "needs-key",
+  "horizon": "weeks-to-months",
+  "risk_appetite": "neutral",
+  "instrument_cap_percent": "20",
+  "instrument_warning_percent": "10",
+  "sector_cap_percent": "40",
+  "excluded_sector_count": 0,
+  "excluded_security_type_count": 0,
+  "order_enabled": "off",
+  "ai_budget_percent": "70",
+  "dart_key": "unconfigured",
+  "fred_key": "unconfigured",
+  "allow_market_orders": "off",
+  "allow_hours_horizon": "off",
+  "card_expiry_minutes": 10,
+  "concentration_warning_threshold": 5,
+  "auto_start_at_login": "on",
+  "account_count": 0
+}

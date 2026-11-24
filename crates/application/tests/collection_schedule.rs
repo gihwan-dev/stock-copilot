@@ -28,7 +28,10 @@ mod tests {
     #[test]
     fn cadence_matches_the_design_table_for_every_phase() {
         use CollectionPhase::{DomesticSession, OffHours, UsSession};
-        use CollectionTarget::*;
+        use CollectionTarget::{
+            CentralBankRss, DartList, GoogleNews, HankyungRss, KindDisclosure, PressRss, SecEdgar,
+            TreasuryAndFred, YahooFinance,
+        };
         let table: [(CollectionTarget, [u16; 3]); 8] = [
             (KindDisclosure, [2, 30, 30]),
             (DartList, [10, 30, 30]),
@@ -128,7 +131,7 @@ mod tests {
 
     #[test]
     fn phase_follows_toss_market_states_with_domestic_priority() {
-        use MarketState::*;
+        use MarketState::{AfterMarket, Closed, DayMarket, PreMarket, RegularMarket, Unknown};
         assert_eq!(
             collection_phase(RegularMarket, RegularMarket),
             CollectionPhase::DomesticSession
