@@ -6,10 +6,24 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VolatilitySamples(usize);
 impl VolatilitySamples {
+    pub fn try_new(value: usize) -> Result<Self, VolatilityError> {
+        if !(2..=10_000).contains(&value) {
+            return Err(VolatilityError::SampleCount);
+        }
+        Ok(Self(value))
+    }
     #[must_use]
     pub const fn as_usize(&self) -> &usize {
         &self.0
     }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedVolatility {
+    pub daily: DailyVolatility,
+    pub instrument: InstrumentId,
+    pub as_of: CalendarDate,
+    pub adjustment_basis: AdjustmentBasis,
+    pub samples: VolatilitySamples,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VolatilityError {
@@ -94,6 +108,27 @@ impl Volatility {
     #[must_use]
     pub const fn samples(&self) -> VolatilitySamples {
         self.samples
+    }
+    #[must_use]
+    pub fn saved_state(&self) -> SavedVolatility {
+        SavedVolatility {
+            daily: self.daily,
+            instrument: self.instrument.clone(),
+            as_of: self.as_of,
+            adjustment_basis: self.adjustment_basis,
+            samples: self.samples,
+        }
+    }
+    pub fn restore_from_saved_state(saved: SavedVolatility) -> Result<Self, VolatilityError> {
+        let _samples = VolatilitySamples::try_new(*saved.samples.as_usize())?;
+        let _daily = DailyVolatility::try_new(saved.daily.as_ratio())?;
+        Ok(Self {
+            daily: saved.daily,
+            instrument: saved.instrument,
+            as_of: saved.as_of,
+            adjustment_basis: saved.adjustment_basis,
+            samples: saved.samples,
+        })
     }
 }
 

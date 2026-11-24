@@ -76,7 +76,8 @@ pub struct SnapshotDates {
     usd: CalendarDate,
 }
 impl SnapshotDates {
-    pub(crate) const fn new(krw: CalendarDate, usd: CalendarDate) -> Self {
+    #[must_use]
+    pub const fn new(krw: CalendarDate, usd: CalendarDate) -> Self {
         Self { krw, usd }
     }
     #[must_use]

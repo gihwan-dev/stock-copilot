@@ -6,3 +6,6 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+zeroize = { version = "=1.9.1", default-features = false, features = ["alloc"] }

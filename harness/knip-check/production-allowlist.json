@@ -22,10 +22,6 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/Dialog.tsx Dialog",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/DonutChart.tsx DonutChart",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
@@ -58,15 +54,7 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/Select.tsx Select",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/Split.tsx Split",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
-      "issue": "exports src/shared/ds/TextField.tsx TextField",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -86,19 +74,11 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/index.ts Button",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/index.ts ChatInput",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
       "issue": "exports src/shared/ds/index.ts Checkbox",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
-      "issue": "exports src/shared/ds/index.ts Dialog",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -142,15 +122,7 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "exports src/shared/ds/index.ts Select",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
       "issue": "exports src/shared/ds/index.ts Split",
-      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
-    },
-    {
-      "issue": "exports src/shared/ds/index.ts TextField",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
@@ -171,10 +143,6 @@
     },
     {
       "issue": "exports src/shared/lib/brand.ts parseCount",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "exports src/shared/lib/brand.ts parseTicker",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
@@ -203,10 +171,6 @@
     },
     {
       "issue": "exports src/shared/lib/index.ts parseRatio",
-      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
-    },
-    {
-      "issue": "exports src/shared/lib/index.ts parseTicker",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {

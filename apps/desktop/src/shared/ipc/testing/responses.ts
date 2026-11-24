@@ -1,5 +1,32 @@
 export const responses = {
   appVersion: { version: "0.1.0" },
+  cancelChatTurn: { outcome: "NotRunning", turn_id: "turn-1" },
+  getChatHistory: {
+    active_turn: { last_sequence: 3, state: "Finished", turn_id: "turn-1" },
+    entries: [
+      {
+        at_unix_seconds: "91",
+        cards: [],
+        role: "User",
+        sequence: 1,
+        sources: [],
+        status: null,
+        text: "삼성전자 현황 알려 줘",
+        turn_id: "turn-1",
+      },
+      {
+        at_unix_seconds: "91",
+        cards: [],
+        role: "Assistant",
+        sequence: 2,
+        sources: [],
+        status: "Completed",
+        text: "보유 종목을 확인했습니다.",
+        turn_id: "turn-1",
+      },
+    ],
+    session_id: "session-ipc-1",
+  },
   getSettings: {
     account_count: 0,
     ai_budget_percent: "70",
@@ -27,5 +54,21 @@ export const responses = {
     { kind: "no-data" },
   ],
   openExternal: { status: "opened" },
+  resubscribeChatTurn: {
+    replayed_count: 2,
+    state: "Finished",
+    turn_id: "turn-1",
+  },
+  sendChatMessage: {
+    actual_model: "claude-sonnet-5-5",
+    failure_reason: null,
+    first_token_latency_ms: 420,
+    mode: "FreshAnalysis",
+    resets_at_unix_seconds: null,
+    run_id: "run-1",
+    session_id: "session-ipc-1",
+    status: "Completed",
+    turn_id: "turn-1",
+  },
   setOrderPermission: { kind: "denied", order_enabled: "off" },
 } as const;

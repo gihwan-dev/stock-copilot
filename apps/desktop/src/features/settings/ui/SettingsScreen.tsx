@@ -31,6 +31,7 @@ import { AdvancedSettings } from "./AdvancedSettings";
 type Props = {
   readonly onBack: () => void;
   readonly onOpenStatus: () => void;
+  readonly system: ReactElement | null;
 };
 
 const horizonKeys = {
@@ -232,11 +233,17 @@ export const SettingsScreen = (props: Props): ReactElement => {
         onPress: props.onBack,
       }}
     >
-      <SettingsContent
-        view={query.view}
-        retry={query.retry}
-        onOpenStatus={props.onOpenStatus}
-      />
+      <Stack gap="space-6">
+        {[
+          <SettingsContent
+            key="settings"
+            view={query.view}
+            retry={query.retry}
+            onOpenStatus={props.onOpenStatus}
+          />,
+          ...(props.system === null ? [] : [props.system]),
+        ]}
+      </Stack>
     </Page>
   );
 };

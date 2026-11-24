@@ -16,7 +16,8 @@ import {
 } from "../shared/ds";
 import { queryKeys, text } from "../shared/lib";
 import { detach } from "../shared/platform";
-import { useNavigate, useSources } from "./context";
+import { useNavigate, useSources, useSystemSettings } from "./context";
+import { SettingsSections } from "./settings";
 import { describeIpcFailure, useAppVersion } from "./query";
 
 const SidebarPlaceholder = (): ReactElement => (
@@ -129,6 +130,7 @@ export const TransactionsView = (): ReactElement => {
 
 export const SettingsRouteView = (): ReactElement => {
   const go = useNavigate();
+  const system = useSystemSettings();
   return (
     <SettingsScreen
       onBack={(): void => {
@@ -137,6 +139,7 @@ export const SettingsRouteView = (): ReactElement => {
       onOpenStatus={(): void => {
         go("/settings/status");
       }}
+      system={system === "shown" ? <SettingsSections key="system" /> : null}
     />
   );
 };

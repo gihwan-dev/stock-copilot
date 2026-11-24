@@ -56,6 +56,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             app.manage(ipc::state::ScreenState::from_ports(&ports));
             let shutdown_hook = prepare_process_shutdown_hook(app);
             app.manage(database.status());
+            app.manage(ipc::chat_hub::ChatIpcState::from_ports(&ports));
             app.manage(Lifecycle::with_shutdown_hook(
                 refresh,
                 database,

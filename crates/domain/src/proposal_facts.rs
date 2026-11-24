@@ -140,6 +140,10 @@ impl ProposalLifetime {
         }
         Ok(Self(value))
     }
+    #[must_use]
+    pub const fn as_seconds(self) -> SpanSeconds {
+        self.0
+    }
     pub(crate) fn seconds(self) -> SpanSeconds {
         self.0
     }

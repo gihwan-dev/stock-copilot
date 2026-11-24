@@ -10,7 +10,11 @@ import {
 import { useCallback, useState, type ReactElement } from "react";
 import type { ScreenSources } from "../shared/ipc";
 import type { AppRoutePath } from "../shared/lib";
-import { ScreenProviders, type NavigateFn } from "./context";
+import {
+  ScreenProviders,
+  type NavigateFn,
+  type SystemSettingsPresence,
+} from "./context";
 import {
   HomeView,
   SettingsRouteView,
@@ -62,6 +66,7 @@ const routeTree = rootRoute.addChildren([
 export const AppRouter = (props: {
   readonly initialPath?: AppRoutePath | undefined;
   readonly sources: ScreenSources;
+  readonly system: SystemSettingsPresence;
 }): ReactElement => {
   const [router] = useState(() =>
     createRouter({
@@ -79,7 +84,7 @@ export const AppRouter = (props: {
     [router],
   );
   return (
-    <ScreenProviders go={go} sources={props.sources}>
+    <ScreenProviders go={go} sources={props.sources} system={props.system}>
       <RouterProvider router={router} />
     </ScreenProviders>
   );
