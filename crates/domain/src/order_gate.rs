@@ -96,26 +96,41 @@ fn check_instrument(intent: &OrderIntent, master: &MasterInstrument) -> CheckRes
     }
 }
 
-fn requires_us_regular_cutoff(terms: &OrderTerms) -> bool {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum UsRegularCutoff {
+    Required,
+    NotRequired,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PriceKind {
+    Market,
+    Limit,
+}
+
+fn us_regular_cutoff(terms: &OrderTerms) -> UsRegularCutoff {
     match terms {
-        OrderTerms::UsMarketAmountBuy { .. } => true,
-        OrderTerms::UsMarketSell { quantity } => {
-            quantity.quantity().as_decimal().normalize().scale() > 0
+        OrderTerms::UsMarketAmountBuy { .. } => UsRegularCutoff::Required,
+        OrderTerms::UsMarketSell { quantity }
+            if quantity.quantity().as_decimal().normalize().scale() > 0 =>
+        {
+            UsRegularCutoff::Required
         }
-        OrderTerms::KrLimit { .. }
+        OrderTerms::UsMarketSell { .. }
+        | OrderTerms::KrLimit { .. }
         | OrderTerms::KrMarket { .. }
         | OrderTerms::UsLimit { .. }
-        | OrderTerms::UsMarketBuy { .. } => false,
+        | OrderTerms::UsMarketBuy { .. } => UsRegularCutoff::NotRequired,
     }
 }
 
-fn is_market_order(terms: &OrderTerms) -> bool {
+fn price_kind(terms: &OrderTerms) -> PriceKind {
     match terms {
-        OrderTerms::KrLimit { .. } | OrderTerms::UsLimit { .. } => false,
+        OrderTerms::KrLimit { .. } | OrderTerms::UsLimit { .. } => PriceKind::Limit,
         OrderTerms::KrMarket { .. }
         | OrderTerms::UsMarketBuy { .. }
         | OrderTerms::UsMarketSell { .. }
-        | OrderTerms::UsMarketAmountBuy { .. } => true,
+        | OrderTerms::UsMarketAmountBuy { .. } => PriceKind::Market,
     }
 }
 
@@ -161,13 +176,15 @@ fn check_market_hours(
         MarketTradingStatus::Unknown => CheckResult::Unknown,
         MarketTradingStatus::Closed => CheckResult::Failed,
         MarketTradingStatus::Open => {
-            if requires_us_regular_cutoff(intent.terms()) {
+            if us_regular_cutoff(intent.terms()) == UsRegularCutoff::Required {
                 if state != MarketState::RegularMarket {
                     return CheckResult::Failed;
                 }
                 return check_us_regular_cutoff(calendars, now);
             }
-            if is_market_order(intent.terms()) && state != MarketState::RegularMarket {
+            if price_kind(intent.terms()) == PriceKind::Market
+                && state != MarketState::RegularMarket
+            {
                 return CheckResult::Failed;
             }
             CheckResult::Passed
@@ -225,7 +242,7 @@ fn check_buy_funds(
     let Some(notional) = order_notional(intent, current) else {
         return CheckResult::Failed;
     };
-    let Ok(required) = required_buy_total(intent, notional, now, commission) else {
+    let Some(required) = required_buy_total(intent, notional, now, commission) else {
         return CheckResult::Failed;
     };
     if available.amount().as_decimal() >= required.amount().as_decimal() {
@@ -240,19 +257,19 @@ fn required_buy_total(
     notional: Money,
     now: Timestamp,
     commission: Option<&CommissionRateFact>,
-) -> Result<Money, ()> {
+) -> Option<Money> {
     let Some(rate_fact) = commission else {
-        return Ok(notional);
+        return Some(notional);
     };
     if rate_fact.market() != &intent.market()
         || rate_fact.validity().covers(now, now) != CheckResult::Passed
     {
-        return Ok(notional);
+        return Some(notional);
     }
     match rate_fact.estimate_amount(intent.client_order_id().clone(), notional) {
-        Ok(confirmed) => notional.checked_add(&confirmed.money()).map_err(|_err| ()),
-        Err(TradeCostError::Arithmetic(_)) => Err(()),
-        Err(_) => Ok(notional),
+        Ok(confirmed) => notional.checked_add(&confirmed.money()).ok(),
+        Err(TradeCostError::Arithmetic(_)) => None,
+        Err(_) => Some(notional),
     }
 }
 
@@ -455,7 +472,7 @@ fn check_order_price(
 }
 
 fn check_market_order_permission(intent: &OrderIntent, policy: &MarketOrderPolicy) -> CheckResult {
-    if !is_market_order(intent.terms()) {
+    if price_kind(intent.terms()) == PriceKind::Limit {
         return CheckResult::Passed;
     }
     match policy.setting() {
