@@ -2577,6 +2577,7 @@ version = "0.1.0"
 dependencies = [
  "application",
  "domain",
+ "testkit-ports",
 ]
 
 [[package]]
@@ -3748,6 +3749,7 @@ dependencies = [
  "broker-toss",
  "domain",
  "platform-macos",
+ "scheduler",
  "serde",
  "serde_json",
  "sources",
@@ -3758,6 +3760,7 @@ dependencies = [
  "tauri-build",
  "tauri-specta",
  "testkit-ports",
+ "tokio",
 ]
 
 [[package]]
