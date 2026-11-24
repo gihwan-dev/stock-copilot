@@ -394,6 +394,12 @@ pub use submit_estimate::{
     SubmitEstimateError,
 };
 
+mod submit_estimate_tool;
+pub use submit_estimate_tool::{
+    EstimateRunContext, EstimateToolArguments, SubmitEstimateTool, SubmitEstimateToolError,
+    ToolCallHistory,
+};
+
 mod transaction_observation;
 pub use transaction_observation::{
     CompleteTransactionObservation, ObservedTransaction, ObservedTransactionBatch,

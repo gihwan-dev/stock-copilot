@@ -1,3 +1,4 @@
+mod estimate_input;
 mod handler;
 mod pagination;
 mod peer;
@@ -7,6 +8,9 @@ mod token;
 mod tools;
 mod untrusted;
 
+pub use estimate_input::{
+    SUBMIT_ESTIMATE_TOOL, parse_submit_estimate_arguments, submit_estimate_schema,
+};
 pub use handler::{ConnectionEvent, ConnectionRejection};
 pub use pagination::{
     CursorStore, DEFAULT_CURSOR_TTL_SECS, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_STORED_CURSORS,
