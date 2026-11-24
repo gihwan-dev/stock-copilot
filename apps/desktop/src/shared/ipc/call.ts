@@ -1,6 +1,12 @@
-import { err, type Result } from "../lib";
-import { commands } from "./bindings";
-import { settleAppVersion, type AppVersion, type IpcFailure } from "./schema";
+import { err, ok, type Result } from "../lib";
+import { commands, events } from "./bindings";
+import {
+  parseUiEvent,
+  settleAppVersion,
+  type AppVersion,
+  type CoreUiEvent,
+  type IpcFailure,
+} from "./schema";
 import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
@@ -33,3 +39,13 @@ export const appVersion = (): Promise<Result<AppVersion, IpcFailure>> => {
     });
   return Promise.race([request, timer.promise]);
 };
+
+export const listenUiEvent = (
+  onEvent: (event: CoreUiEvent) => void,
+): Promise<Result<() => void, IpcFailure>> =>
+  events.uiEvent
+    .listen((message): void => {
+      const parsed = parseUiEvent(message.payload);
+      if (parsed.kind === "ok") onEvent(parsed.value);
+    })
+    .then(ok, (): Result<() => void, IpcFailure> => err(frameworkFailure));

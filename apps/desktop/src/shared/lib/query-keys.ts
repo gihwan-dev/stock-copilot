@@ -10,3 +10,5 @@ export const queryKeys = {
   selfCheck: ["self-check"] as const,
   status: ["status"] as const,
 } as const;
+
+export type AppQueryKey = (typeof queryKeys)[keyof typeof queryKeys];

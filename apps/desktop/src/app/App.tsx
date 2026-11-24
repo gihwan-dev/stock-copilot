@@ -3,12 +3,18 @@ import { useState, type ReactElement } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { EmptyState, Page } from "../shared/ds";
 import { text, type AppRoutePath } from "../shared/lib";
+import { useCoreEvent } from "../shared/platform";
 import { createAppQueryClient } from "./query";
 import { AppRouter } from "./router";
 
 type AppProps = {
   readonly initialPath?: AppRoutePath | undefined;
   readonly queryClient?: QueryClient | undefined;
+};
+
+const CoreEventBridge = (): null => {
+  useCoreEvent();
+  return null;
 };
 
 const AppErrorFallback = (props: Readonly<FallbackProps>): ReactElement => (
@@ -33,6 +39,7 @@ export const App = (props: AppProps): ReactElement => {
   return (
     <ErrorBoundary FallbackComponent={AppErrorFallback}>
       <QueryClientProvider client={client}>
+        <CoreEventBridge />
         <AppRouter initialPath={props.initialPath} />
       </QueryClientProvider>
     </ErrorBoundary>

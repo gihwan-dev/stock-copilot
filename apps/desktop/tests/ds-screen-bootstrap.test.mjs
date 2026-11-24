@@ -71,10 +71,17 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       join(folder, "src/shared/lib"),
       { recursive: true },
     );
+    cpSync(
+      join(desktopRoot, "src/shared/ipc"),
+      join(folder, "src/shared/ipc"),
+      { recursive: true },
+    );
     for (const path of [
       "app/main.tsx",
       "shared/platform/index.ts",
       "shared/platform/input.ts",
+      "shared/platform/detach.ts",
+      "shared/platform/useCoreEvent.ts",
     ])
       writeFileSync(
         join(folder, "src", path),
@@ -86,25 +93,43 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     );
     compile();
     const input = join(folder, "src/shared/platform/input.ts");
-    for (const result of await make().lintFiles([main, platform, input]))
+    const detachFile = join(folder, "src/shared/platform/detach.ts");
+    const coreEventFile = join(folder, "src/shared/platform/useCoreEvent.ts");
+    for (const result of await make().lintFiles([
+      main,
+      platform,
+      input,
+      detachFile,
+      coreEventFile,
+    ]))
       assert.deepEqual(result.messages, []);
-    const program = ts.createProgram([platform, input], {
-      noEmit: true,
-      strict: true,
-    });
+    const program = ts.createProgram(
+      [platform, input, detachFile, coreEventFile],
+      {
+        noEmit: true,
+        strict: true,
+      },
+    );
     const checker = program.getTypeChecker();
     const symbol = checker.getSymbolAtLocation(program.getSourceFile(platform));
     assert.deepEqual(
       checker.getExportsOfModule(symbol).map((s) => s.name),
-      ["mountApp"],
+      ["detach", "useCoreEvent", "mountApp"],
     );
-    const exported = checker.getExportsOfModule(symbol)[0];
+    const platformFunctions = checker.getExportsOfModule(symbol);
     assert.deepEqual(
-      checker
-        .getTypeOfSymbolAtLocation(exported, program.getSourceFile(platform))
-        .getCallSignatures()
-        .map((signature) => signature.getReturnType().flags),
-      [ts.TypeFlags.Void],
+      platformFunctions.map((entry) => [
+        entry.name,
+        checker
+          .getTypeOfSymbolAtLocation(entry, program.getSourceFile(platform))
+          .getCallSignatures()
+          .map((signature) => checker.typeToString(signature.getReturnType())),
+      ]),
+      [
+        ["detach", ["void"]],
+        ["useCoreEvent", ["void"]],
+        ["mountApp", ["void"]],
+      ],
     );
     assert.deepEqual(DOM_ACCESS_FILES, [
       "src/shared/platform/index.ts",
@@ -148,7 +173,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId,parseFreeText} from "./brand"; export type {InputValue,BrandError,FreeText} from "./brand"; export {err} from "./result"; export type {Result} from "./result";',
+      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId,parseFreeText} from "./brand"; export type {InputValue,BrandError,FreeText} from "./brand"; export {err,ok} from "./result"; export type {Result} from "./result"; export {queryKeys,type AppQueryKey} from "./query-keys";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(

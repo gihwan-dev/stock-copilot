@@ -26,6 +26,7 @@ import {
   Text,
 } from "../shared/ds";
 import { queryKeys, text, type AppRoutePath } from "../shared/lib";
+import { detach } from "../shared/platform";
 import { describeIpcFailure, useAppVersion } from "./query";
 
 type NavigateFn = (path: AppRoutePath) => void;
@@ -83,7 +84,11 @@ const HomeSkeletonView = (): ReactElement => {
     go("/settings");
   };
   const retry = (): void => {
-    queryClient.removeQueries({ queryKey: queryKeys.appVersion });
+    detach({
+      kind: "invalidate-queries",
+      client: queryClient,
+      keys: [queryKeys.appVersion],
+    });
   };
   return (
     <Page
