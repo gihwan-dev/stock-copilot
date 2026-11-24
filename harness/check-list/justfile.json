@@ -251,6 +251,7 @@
         ["node harness/config-files/check.mjs"],
         ["node harness/claude-hooks/hashes.mjs"],
         ["node harness/codex-hooks/config.mjs"],
+        ["node harness/antigravity-hooks/config.mjs"],
         ["node harness/ci/workflow-policy/check.mjs"],
         ["node harness/ci/review-records/check.mjs"]
       ],
@@ -368,6 +369,8 @@
         ["node --test 'harness/claude-hooks/tests/*.test.mjs'"],
         ["node --test 'harness/codex-hooks/tests/*.test.mjs'"],
         ["node harness/codex-hooks/config.mjs"],
+        ["node --test 'harness/antigravity-hooks/tests/*.test.mjs'"],
+        ["node harness/antigravity-hooks/config.mjs"],
         ["node harness/ci/workflow-policy/check.mjs"],
         ["node harness/ci/review-records/check.mjs"],
         ["node harness/ci/linux/exclusions.mjs verify"],
@@ -1157,6 +1160,117 @@
       "namepath": "mutants-diff-plan",
       "shebang": false
     },
+    "mutants-diff-plan-platform": {
+      "attributes": [],
+      "body": [
+        [
+          "if [ \"$2\" = \"macos\" ]; then cargo run --locked --quiet --package xtask -- mutants --in-diff-plan \"$1\" --platform \"$2\"; else cargo run --locked --quiet --package xtask -- mutants --in-diff-plan \"$1\" --platform \"$2\" --linux-exclusions; fi"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-diff-plan-platform",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "platform",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-diff-plan-platform",
+      "shebang": false
+    },
+    "mutants-diff-platform-shard": {
+      "attributes": [],
+      "body": [
+        [
+          "if [ \"$2\" = \"linux\" ]; then cargo run --locked --quiet --package xtask -- mutants --in-diff \"$1\" --platform \"$2\" --shard \"$3\" --linux-exclusions; else cargo run --locked --quiet --package xtask -- mutants --in-diff \"$1\" --platform \"$2\" --shard \"$3\"; fi"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-diff-platform-shard",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "platform",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "shard",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-diff-platform-shard",
+      "shebang": false
+    },
     "mutants-diff-shard": {
       "attributes": [],
       "body": [
@@ -1240,9 +1354,9 @@
       "attributes": [],
       "body": [
         [
-          "base=\"$(cargo run --locked --quiet --package xtask -- push-base)\"; \"",
+          "cargo run --locked --quiet --package xtask -- push-check \"",
           [["call", "just_executable"]],
-          "\" base=\"$base\" check-full"
+          "\""
         ]
       ],
       "dependencies": [],
@@ -1377,6 +1491,180 @@
       "private": false,
       "quiet": false,
       "namepath": "test-diff",
+      "shebang": false
+    },
+    "test-diff-bundle-check": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- test-diff-bundle check \"$1\" \"$2\" \"$3\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "test-diff-bundle-check",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "bundle",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "base",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "target",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "test-diff-bundle-check",
+      "shebang": false
+    },
+    "test-diff-bundle-draft": {
+      "attributes": [],
+      "body": [
+        [
+          "if [ -n \"$4\" ]; then cargo run --locked --quiet --package xtask -- test-diff-bundle draft \"$1\" \"$2\" \"$3\" --mode \"$4\"; else cargo run --locked --quiet --package xtask -- test-diff-bundle draft \"$1\" \"$2\" \"$3\"; fi"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "test-diff-bundle-draft",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "task",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "base",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "target",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": "",
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "mode",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "test-diff-bundle-draft",
+      "shebang": false
+    },
+    "test-diff-bundle-message": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- test-diff-bundle message \"$1\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "test-diff-bundle-message",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "bundle",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "test-diff-bundle-message",
       "shebang": false
     },
     "test-diff-fast": {

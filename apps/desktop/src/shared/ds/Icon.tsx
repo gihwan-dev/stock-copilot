@@ -84,3 +84,14 @@ export const Icon = (props: Props): ReactElement => {
   if (props.size === "icon-lg") return lg(props);
   return sm(props);
 };
+
+export const CheckMark = (): ReactElement => (
+  <svg
+    viewBox="0 0 24 24"
+    focusable="false"
+    aria-hidden="true"
+    className="inline-block flex-none size-space-3 fill-none stroke-current stroke-icon stroke-linecap-round stroke-linejoin-round"
+  >
+    <IconPaths name="check" />
+  </svg>
+);

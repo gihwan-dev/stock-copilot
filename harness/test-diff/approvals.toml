@@ -48,3 +48,13 @@ finding = "test-diff:modified:store-sqlite tests::raw_key_is_independently_reada
 decision = "approved"
 reason = "migration 0008 raises the fixed ledger and schema object counts; reviewed by the main agent"
 assertion_change = true
+
+[[approval]]
+task = "T-11"
+path = "crates/adapters/broker-toss/tests/fx_market.rs"
+before_sha256 = "ba96bbf37fb0a0d47ba0945b53e897308a26d2fe08a5282f5e7653f1bca7508b"
+after_sha256 = "70b433b55c68838fc67409fbd37a8434c84a786c60ddea1cedb6b8c4d2868630"
+finding = "test-diff:modified:broker-toss::fx_market tests::capabilities_match_implemented_market_endpoints"
+decision = "approved"
+reason = "T-11 implements the sellable-quantity read, so the capability moves from the unsupported list to the supported list; reviewed by the main agent"
+assertion_change = true

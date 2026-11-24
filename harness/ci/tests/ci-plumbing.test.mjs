@@ -324,11 +324,11 @@ test("the base is the previous master tip, origin/master for branches and the ta
   assert.equal(changedRecently(1000, 1001 + 86400), "no");
 });
 
-test("the workflows run Linux on every push, macOS on master pushes and nightly, and notify on failure", () => {
+test("the workflows run full CI on master and merge pushes, signatures on every push, macOS on master pushes and nightly, and notify on failure", () => {
   const ci = workflow("ci.yml");
   const nightly = workflow("nightly.yml");
   assert.deepEqual(ci.on, {
-    push: { branches: ["**"] },
+    push: { branches: ["master", "merge/**"] },
     pull_request: { branches: ["master"] },
   });
   assert.equal(ci.jobs.linux.if, undefined);
@@ -346,7 +346,10 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
   assert.ok(runs(ci.jobs.macos).includes("lefthook install"));
   assert.ok(runs(ci.jobs.macos).includes('just base="$BASE" check'));
   const signatures = workflow("signatures.yml");
-  assert.deepEqual(signatures.on, ci.on);
+  assert.deepEqual(signatures.on, {
+    push: { branches: ["**"] },
+    pull_request: { branches: ["master"] },
+  });
   assert.deepEqual(signatures.jobs.signatures.permissions, {
     contents: "read",
     actions: "read",

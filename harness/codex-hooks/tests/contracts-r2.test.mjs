@@ -113,8 +113,12 @@ test("R2 local unpublished and origin launch bases have distinct enforced modes"
   const launch = (baseRef, startFromOrigin, value) => ({
     tool_name: "mcp__t3_code__t3_thread_launch",
     tool_input: {
-      message: brief(value),
-      modelSelection: { provider: "codex", model: "gpt-6.1-sol" },
+      message: brief(value) + "\n- 역할: implementation",
+      modelSelection: {
+        provider: "antigravity",
+        model: "gemini-4-neon",
+        options: { thought_level: "xhigh" },
+      },
       workspaceStrategy: {
         type: "worktree",
         branch: "topic",

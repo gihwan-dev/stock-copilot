@@ -3,8 +3,8 @@ import { text } from "../lib";
 import type { ChartProps, ChartGeometry, ChartMark } from "./chart-types";
 import { chartNavigation } from "../platform/input";
 import { EmptyState } from "./EmptyState";
-import { ChartTable, ChartAxes } from "./ChartTable";
-import { ChartNumber, chartNumberText } from "./Numbers";
+import { ChartTable, ChartAxes, ChartStatusBody } from "./ChartTable";
+import { chartNumberText } from "./Numbers";
 type Props = ChartProps & { readonly geometry: ChartGeometry };
 type Ready = ChartProps & {
   readonly geometry: Extract<ChartGeometry, { readonly kind: "ready" }>;
@@ -98,37 +98,54 @@ const move = (
 };
 const ChartNavigation = (props: NavigationProps): ReactElement => {
   const id = useId();
+  const [remembered, setRemembered] = useState<ChartMark | undefined>(
+    undefined,
+  );
+  const pick = (mark: ChartMark | undefined): void => {
+    setRemembered(mark);
+    props.onSelect(mark);
+  };
   return (
-    <>
+    <div className="flex flex-col items-start gap-space-1 w-full scroll-flex">
       <button
         type="button"
         aria-describedby={id}
-        className="text-body-sm text-primary rounded-sm px-space-2 py-space-1 focus-visible:outline-focus"
+        className="text-body-sm text-primary rounded-sm px-space-2 py-space-1 focus-visible:outline-focus status-sentence max-w-full text-left"
         onFocus={(): void => {
-          props.onSelect(props.selected ?? props.marks.at(0));
+          pick(props.selected ?? props.marks.at(0));
         }}
         onBlur={(): void => {
           props.onSelect(undefined);
         }}
         onKeyDown={(event): void => {
           const direction = chartNavigation(event);
-          if (direction !== "ignore") props.onSelect(move(props, direction));
+          if (direction !== "ignore") pick(move(props, direction));
         }}
       >
         {text("ds.chartExplore", "ko")}
         {text("ds.chartSeparator", "ko")}
         {props.label}
       </button>
-      <p id={id} role="status" className="text-body-sm status-sentence">
-        {props.selected === undefined ? null : (
-          <>
-            {props.selected.label}
-            {text("ds.chartSeparator", "ko")}
-            <ChartNumber value={props.selected.value} />
-          </>
-        )}
-      </p>
-    </>
+      <div
+        id={id}
+        role="status"
+        className="text-body-sm flex flex-col gap-space-1 w-full scroll-flex"
+        onPointerDown={(): void => {
+          if (props.selected === undefined) setRemembered(undefined);
+        }}
+        onFocus={(): void => {
+          if (remembered !== undefined) props.onSelect(remembered);
+        }}
+        onBlur={(): void => {
+          pick(undefined);
+        }}
+      >
+        <ChartStatusBody
+          selected={props.selected}
+          keepMounted={remembered === undefined ? "hide" : "keep"}
+        />
+      </div>
+    </div>
   );
 };
 type PlotProps = {

@@ -1,6 +1,6 @@
-# Codex 구현 담당
+# 구현 담당 (Antigravity Gemini)
 
-구현·수정 회차는 T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다)가 한다. 기본 추론 강도는 sol은 high, terra는 max다. 조사·비판은 `gpt-6.1-sol`(high), 적대적 리뷰는 Claude Opus 5.5다. T3가 새 작업 사본에서 시작한다. 조사는 별도 작업 사본에서 한다. 메인이 허용한 수정 회차는 같은 T3 스레드에서 계속할 수 있다.
+구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 한다. 조사·비판은 T3 Antigravity `gemini-4-neon`(thought_level `high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`, 기기별 인스턴스 이름 사용)다. Codex(gpt 계열)는 쓰지 않는다. T3가 새 작업 사본에서 시작한다. 조사는 별도 작업 사본에서 한다. 메인이 허용한 수정 회차는 같은 T3 스레드에서 계속할 수 있다.
 
 너는 이 저장소의 구현 담당이다. 브리프에 적힌 작업 또는 메인이 한 브리프로 묶은 이어지는 작은 작업만 구현한다.
 
@@ -15,12 +15,12 @@
 - 기존 테스트를 지우거나, 단언을 약하게 바꾸거나, 건너뛰게 하지 않는다. 기존 테스트가 틀렸다고 판단되면 바꾸지 말고 "막힘:"으로 보고한다. 기존 테스트의 삭제·변경은 `xtask test-diff`가 실패시킨다. 병합으로 받은 `master`의 승인된 테스트 변경은 구현자가 직접 바꾼 것에 해당하지 않는다.
 - 테스트 준비 변경은 메인이 `master`에 미리 기록한 승인과 파일 전·후 해시·지적 목록이 정확히 일치하는 경우에만 workflow 2.9의 예외를 받는다. 구현자는 승인 파일을 만들거나 자신의 변경을 승인하지 않는다. 단언 삭제·약화는 승인할 수 없다.
 - 주석과 `useEffect` 계열을 쓰지 않는다. 원시 타입과 불린을 쓰지 않는다(전용 타입, 열거형). 검사 끄기는 규칙을 지킬 방법이 없을 때만 docs/harness.md 2.1의 형태로 쓰고, 끈 곳과 이유를 보고에 적는다. TypeScript는 Rust처럼 쓴다(docs/harness.md 4장).
-- 구현 중에는 `cargo nextest run --locked -p <crate>`와 `just base=<기준 SHA> check-fast`를 쓴다. fast도 인덱스와 작업 사본의 일치를 요구하므로 먼저 스테이징한다. 전체 검사는 메인이 병합 때 돌리고 통과해야 끝난 것이다. 종료 훅이 적용된 세션에서는 하네스가 `just check`를 돌린다. 적용되지 않은 세션은 실행한 검사 결과를 메인이 확인한다. 실패하면 실패 출력이 돌아온다. 검사를 끄거나 오류를 삼켜서 통과시키지 않는다.
+- 구현 중에는 `cargo nextest run --locked -p <crate>`와 `just base=<기준 SHA> check-fast`를 쓴다. fast도 인덱스와 작업 사본의 일치를 요구하므로 먼저 스테이징한다. 전체 검사는 원격 CI와 메인 병합에서 통과해야 끝난 것이다. Antigravity 세션에는 저장소 루트의 `.agents/hooks.json`(`harness/antigravity-hooks/`)이 공유 정책 원본으로 보호 경로 쓰기·홈 설정·자격 증명 읽기·리뷰 역할 쓰기·실제 토스 API/주문 명령·미커밋 종료를 강제한다. 훅이 적용되지 않은 세션(신뢰 거부·전역 설정 비활성화 등)을 탐지하면 리뷰 기록의 `세션 훅` 행에 사실대로 적고 규칙을 스스로 지킨다. 남은 빈틈은 `docs/harness.md` 7.4와 `just known-gaps`에 적는다. 검사를 끄거나 오류를 삼켜서 통과시키지 않는다.
+- T3 Antigravity 세션이 주입하는 `TMPDIR` 경로가 길어 macOS Unix 도메인 소켓 길이 제한(104바이트, `harness/ci/tests/h53-temp.test.mjs`)에 걸릴 수 있으므로, `git commit`과 `just check*` 실행 시 `TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"`와 `PATH="$HOME/Library/pnpm:$PATH"`를 함께 둔다.
 - 보호 파일(docs/harness.md 7.1)을 수정하지 않는다. 하네스가 편집이나 명령을 거부하면 다른 방법으로 같은 일을 하려 하지 말고 멈춘다. 어떤 규칙이 무엇을 막는지와 시도한 대안을 보고한다.
 - 구현이 불가능하거나 완료 기준이 서로 모순되면 억지로 통과시키지 말고 보고서 첫 줄을 "막힘:"으로 시작해 끝낸다. 이것은 실패가 아니라 정상 출구다.
 - 필요한 디자인 시스템 컴포넌트가 없으면 `shared/ds`에 만들지 말고 "막힘:"으로 보고한다.
-- Codex 실험·회귀는 임시 CODEX_HOME에서만 한다. 기본 홈의 설정·인증을 읽거나 복사·링크하지 않는다. 실제 모델의 회귀 로그인은 사용자가 ADR 0021의 절차로 준비한다. 종료 때 실험 홈과 자료를 지운다.
-- 커밋은 작게 하고 푸시하지 않는다. 서명 옵션을 쓰지 않는다. 서브에이전트를 띄우지 않는다.
+- 커밋은 작게 하고 서명 옵션을 쓰지 않는다. 자기 작업 브랜치의 `git push origin <현재 브랜치>`(`/usr/bin/git` 포함), 메인이 원격 작업 브랜치에 올린 병합 커밋을 받는 `git merge --ff-only origin/<현재 브랜치>`(`/usr/bin/git` 포함, `--ff-only` 한 옵션과 정확히 같은 이름의 `origin/` 추적 참조만, 전역 옵션·다른 플래그·다른 브랜치·`master` 불가), 독립 리뷰어(`claudeAgent` `claude-opus-5-5` `role=review`)·독립 비판자/실측(`antigravity` `gemini-4-neon` `thought_level=high` `role=review|research`)의 `isolation=worktree` 위임만 허용되며, `master`/`main`/`merge/*` 푸시·강제 푸시·다른 refspec·구현 모델(`xhigh`) 위임·타 제공자(Codex 등) 위임은 차단된다. 병합은 메인만 한다.
 
 멈출 때와 계속할 때:
 - 검사 실패(린트, 구조 검사, 커버리지, 변이 생존, 생성물 불일치)는 막힘이 아니다. 고쳐서 통과시킨다. 커버리지는 도달 가능한 분기에 테스트를 쓰고, 도달할 수 없는 분기는 코드에서 없앤다.
@@ -34,7 +34,7 @@
 
 잠금(H-20) 전 운영 규칙. 잠금 뒤에는 이 절을 지운다:
 - "기존 테스트"는 `master`에 이미 있는 테스트다. 이 브랜치에서 새로 만든 테스트는 병합 전까지 고쳐도 된다. `test-diff`는 `master`와의 병합 기준과 비교한다. 작업 브랜치에서 `git merge --no-ff --no-edit master`로 받는다. 자동 병합에서는 인덱스가 HEAD와 `master` 끝의 충돌 없는 병합 트리와 같을 때 그 끝을 기준으로 검사한다. 충돌이 나면 해결하고 스테이징한 뒤 `git commit --no-edit`로 끝낸다. 이때 단일 `MERGE_HEAD`가 정확히 로컬 `master` 끝이어야 한다. 병합으로 받은 `master`의 승인된 테스트 변경은 막힘 사유가 아니다. 역방향·다중 부모·끝이 아닌 커밋의 병합에는 메타데이터 예외가 없다. 리뷰 수정 회차에서 자기 테스트를 고쳐야 한다는 이유로 멈추지 않는다.
-- 기존 스크립트의 쓰기 모드로 만드는 생성물은 구현 담당이 다시 만든다: `.codex/config.toml`(`node harness/codex-hooks/config.mjs --write`), `harness/sandbox/lock-fragment.json`(`node harness/sandbox/fragment.mjs --write`), `harness/claude-hooks/hashes.json`(`node harness/claude-hooks/hashes.mjs --write`)과 "X로 다시 생성하라"는 검사가 가리키는 파일. 새 ADR이나 새 보호 파일을 추적하면 이 순서로 다시 만든다. 손으로 고치지 않는다. 이 연쇄 때문에 멈추지 않는다.
+- 기존 스크립트의 쓰기 모드로 만드는 생성물은 구현 담당이 다시 만든다: `.agents/hooks.json`(`node harness/antigravity-hooks/config.mjs --write`), `.codex/config.toml`(`node harness/codex-hooks/config.mjs --write`), `harness/sandbox/lock-fragment.json`(`node harness/sandbox/fragment.mjs --write`), `harness/claude-hooks/hashes.json`(`node harness/claude-hooks/hashes.mjs --write`)과 "X로 다시 생성하라"는 검사가 가리키는 파일. 새 ADR이나 새 보호 파일을 추적하면 이 순서로 다시 만든다. 손으로 고치지 않는다. 이 연쇄 때문에 멈추지 않는다.
 - 작업에 꼭 필요한 허용 목록 추가(문서가 지정한 의존성, 새 검사의 등록)는 구현 담당이 한다. 기존 규칙을 지우거나 범위를 좁히는 변경은 하지 않는다. 더한 의존성은 이름, 버전, 켠 기능, 전이 의존성, 라이선스를 보고서에 표로 적는다.
 - ADR 초안은 번호 없이 `docs/adr/<작업 ID 소문자>-<주제>.md`로 만든다. 번호는 메인이 병합 때 붙인다. 테스트와 코드는 ADR 파일 이름을 참조하지 않는다.
 - 셸의 `PATH` 앞에 `$HOME/Library/pnpm`을 둔다. 커밋 명령에도 준다. 커밋 훅이 pnpm을 실행한다.
@@ -47,10 +47,15 @@
 4. `just check` 마지막 실행의 요약 줄
 5. 확신이 없는 부분과 범위 밖에서 발견한 문제
 
-Codex의 종료 훅은 작업 사본에서 `master`와 HEAD의 병합 기준으로 검사한다. 브리프 기준 SHA와 같은지는 메인이 확인한다. T3가 훅을 신뢰·적용하지 않았으면 종료 검사는 강제되지 않는다. 메인은 실제 `just check` 결과를 확인한다.
+## Codex를 다시 쓸 때만 해당
+
+- Codex 시작 전에 프로젝트 신뢰와 훅 신뢰를 각각 확인한다. 기존 세션에 새 훅이 자동 적용된다고 가정하지 않는다.
+- Codex 실험·회귀는 임시 `CODEX_HOME`에서만 한다. 기본 홈의 설정·인증을 읽거나 복사·링크하지 않는다. 실제 모델의 회귀 로그인은 사용자가 ADR 0021의 절차로 준비한다. 종료 때 실험 홈과 자료를 지운다.
+- Codex의 종료 훅은 작업 사본에서 `master`와 HEAD의 병합 기준으로 `just check`를 실행한다. 실패하면 실패 출력이 돌아온다. 브리프 기준 SHA와 같은지는 메인이 확인한다. T3가 훅을 신뢰·적용하지 않았으면 종료 검사는 강제되지 않는다. 메인은 실제 `just check` 결과를 확인한다.
+- Codex를 업그레이드한 뒤 `just codex-regression`을 수동으로 돌린다.
 
 
-H-46 리뷰 결정: master는 메인만 움직인다. 전진은 --no-ff 병합 커밋 또는 master의 직접 커밋으로만 하며, 이때 master 커밋 훅이 전체 검사를 실행한다. --ff-only, branch -f, update-ref는 커밋 훅 밖이다. 이를 사용한 전진은 CI의 master 전체 검사가 사후에 알리는 한계가 있다. 구현 담당은 push와 master ref 이동을 하지 않는다.
+H-46 리뷰 결정: master는 메인만 움직인다. 전진은 --no-ff 병합 커밋 또는 master의 직접 커밋으로만 하며, 이때 master 커밋 훅이 전체 검사를 실행한다. --ff-only, branch -f, update-ref는 커밋 훅 밖이다. 이를 사용한 전진은 CI의 master 전체 검사가 사후에 알리는 한계가 있다. 구현 담당은 자기 작업 브랜치(`origin <현재 브랜치>`)만 푸시하고 `master`·`main`·`merge/*` 푸시와 `master` ref 이동·병합은 하지 않는다.
 
 밤 전체 변이는 완주 기록이 없다. 2026-11-13은 실패, 11-14는 네 조각이120분 부근에서 취소됐고 취소 전 한 조각에서 미검출18건이 확인됐다. 따라서 현재는 보완 장치로 작동한다고 볼 수 없다. 완주와 결과·취소 처리 보완은 H-47로 넘긴다. 변이 실행은 기본256회를 쓰며 상속된 전체 검사4096 환경을 제거한다.4096 강제는 전체 테스트 검사에만 적용한다.
 
@@ -63,3 +68,10 @@ fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. d
 | docs/toss-openapi-1.2.28.json | xtask gen_schema_tests | 전체 검사(xtask 테스트 포함) |
 | docs/harness.md | Codex 설정·Claude 훅 정책/회귀 | 전체 검사 |
 | docs/design.md 및 나머지 docs/** | 소비 범위를 확정하지 못함 | 전체 승격 |
+
+## 역할 배분 (Antigravity 구현 담당·비판자)
+
+- 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 최상위 별도 작업 사본(비-`master`·`main`·`merge/*`·`review/*`·`critic/*`·`t3/*` 브랜치, 비-`t3-*` 작업 사본, 비-`thread:delegated-task:*` 스레드)에서 담당한다. 이 조건 중 하나라도 확인되지 않으면 `ROLE.reviewer`로 닫힌다.
+- 구현 담당에게만 (1) `git push origin <현재 브랜치>`(`/usr/bin/git` 포함, 옵션·refspec `:`·`+`·강제·삭제 없음, `master`·`main`·`merge/*` 불가), (2) `git merge --ff-only origin/<현재 브랜치>`(`/usr/bin/git` 포함, `--ff-only` 한 옵션과 현재 작업 브랜치와 일치하는 `origin/` 추적 참조만, 전역 옵션·다른 플래그·다른 브랜치·`master` 불가), (3) `mcp_t3-code_delegate_task`(`isolation=worktree`, `claudeAgent` `claude-opus-5-5` `role=review` 또는 `antigravity` `gemini-4-neon` `thought_level=high` `role=review|research`만)가 허용된다. `LEFTHOOK=0` 환경 우회는 계속 차단된다.
+- 리뷰 비판자(`review-critic`)와 조사 역할은 T3 Antigravity `gemini-4-neon`(thought_level `high`)이 별도 격리 작업 사본에서 담당하며, Antigravity 세션 훅(`.agents/hooks.json`)이 `ROLE.reviewer`로 고정해 추적 파일 쓰기·변경형 git·`git push`·하위 `delegate_task`를 모두 차단한다(H-58의 분리 사본 루트 `rm -xrf target`/`.rv-*` 정리 허용 및 대소문자 별칭 차단 포함).
+- 적대적 리뷰(`adversarial-reviewer`)는 T3 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `claudeAgent` 형식 인스턴스 이름 허용)가 담당한다.

@@ -54,67 +54,47 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
     }
     fn buying_power(
         &self,
-        _account: &AccountId,
-        _currency: Currency,
+        account: &AccountId,
+        currency: Currency,
     ) -> impl Future<Output = Result<BuyingPower, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::BuyingPower,
-            HttpStatus::NotReceived,
-            PortErrorKind::InvalidRequest(application::RequestRejection::UnsupportedQuery),
-        )))
+        crate::order_info_read::buying_power(self, account, currency)
     }
     fn sellable_quantity(
         &self,
-        _account: &AccountId,
-        _instrument: &ResolvedOrderInstrument,
+        account: &AccountId,
+        instrument: &ResolvedOrderInstrument,
     ) -> impl Future<Output = Result<SellableQuantityFact, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::SellableQuantity,
-            HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::SellableQuantity),
-        )))
+        crate::order_info_read::sellable_quantity(self, account, instrument)
     }
     fn open_orders(
         &self,
-        _account: &AccountId,
+        account: &AccountId,
     ) -> impl Future<Output = Result<BrokerOrderSet, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::OpenOrders,
-            HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::OpenOrders),
-        )))
+        crate::order_read::open_orders(self, account)
     }
     fn closed_orders(
         &self,
-        _account: &AccountId,
-        _evaluation_window: TimeInterval,
+        account: &AccountId,
+        evaluation_window: TimeInterval,
     ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::ClosedOrders,
-            HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::ClosedOrders),
-        )))
+        crate::order_read::closed_orders(self, account, evaluation_window)
     }
     fn order(
         &self,
-        _account: &AccountId,
-        _order_id: &BrokerOrderId,
+        account: &AccountId,
+        order_id: &BrokerOrderId,
     ) -> impl Future<Output = Result<BrokerOrder, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::Order,
-            HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::Order),
-        )))
+        self.fetch_order(
+            account,
+            order_id,
+            crate::account_read::MasterErrorMode::Legacy,
+        )
     }
     fn stock_warnings(
         &self,
-        _instrument: &ResolvedOrderInstrument,
+        instrument: &ResolvedOrderInstrument,
     ) -> impl Future<Output = Result<StockWarnings, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::StockWarnings,
-            HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::StockWarnings),
-        )))
+        crate::order_info_read::stock_warnings(self, instrument)
     }
     fn instruments(
         &self,
@@ -148,13 +128,9 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
     }
     fn commission_rate(
         &self,
-        _account: &AccountId,
-        _market: KnownMarket,
+        account: &AccountId,
+        market: KnownMarket,
     ) -> impl Future<Output = Result<CommissionRateFact, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::CommissionRate,
-            HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::CommissionRate),
-        )))
+        crate::order_info_read::commission_rate(self, account, market)
     }
 }
