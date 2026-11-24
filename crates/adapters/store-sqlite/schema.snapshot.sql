@@ -21,6 +21,10 @@ CREATE INDEX signal_occurrences_instrument ON signal_occurrences(instrument_id, 
 CREATE INDEX signal_occurrences_symbol ON signal_occurrences(market, symbol, id);
 CREATE INDEX tool_call_ledger_run ON tool_call_ledger(run_id, id);
 CREATE INDEX transaction_entries_account_id ON transaction_entries(account, id);
+CREATE INDEX wake_triggers_by_time ON wake_triggers(recorded_seconds, recorded_nanos);
+CREATE UNIQUE INDEX wake_triggers_daily_once ON wake_triggers(kind, instrument, recorded_day) WHERE kind != 'disclosure';
+CREATE UNIQUE INDEX wake_triggers_disclosure_once ON wake_triggers(disclosure_source, receipt, instrument, grade, action) WHERE kind = 'disclosure';
+CREATE INDEX web_collected_items_subject ON web_collected_items(subject_kind, subject, id);
 CREATE TABLE audit_log (
     seq INTEGER PRIMARY KEY CHECK (seq >= 1),
     at_payload TEXT NOT NULL,
@@ -417,6 +421,27 @@ CREATE TABLE transaction_sources (
     row_id INTEGER PRIMARY KEY REFERENCES transaction_rows(id),
     source TEXT NOT NULL
 ) STRICT;
+CREATE TABLE wake_triggers (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('disclosure', 'price_move', 'news_burst')),
+    instrument TEXT NOT NULL,
+    disclosure_source TEXT CHECK (disclosure_source IN ('dart', 'kind', 'sec_edgar')),
+    receipt TEXT,
+    grade TEXT CHECK (grade IN ('urgent', 'high', 'normal', 'low')),
+    action TEXT CHECK (action IN ('wake_and_notify', 'wake', 'briefing', 'collect_only')),
+    recorded_day INTEGER NOT NULL CHECK (recorded_day BETWEEN 10101 AND 99991231),
+    recorded_seconds INTEGER NOT NULL,
+    recorded_nanos INTEGER NOT NULL CHECK (recorded_nanos BETWEEN 0 AND 999999999),
+    recorded_offset INTEGER NOT NULL CHECK (recorded_offset BETWEEN -93599 AND 93599),
+    CHECK ((kind = 'disclosure') = (disclosure_source IS NOT NULL AND receipt IS NOT NULL AND grade IS NOT NULL AND action IS NOT NULL)),
+    CHECK (kind = 'disclosure' OR (disclosure_source IS NULL AND receipt IS NULL AND grade IS NULL AND action IS NULL))
+) STRICT;
+CREATE TABLE web_collected_items (
+    id INTEGER PRIMARY KEY,
+    subject_kind TEXT NOT NULL CHECK (subject_kind IN ('symbol', 'instrument')),
+    subject TEXT NOT NULL,
+    payload TEXT NOT NULL
+) STRICT;
 CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER audit_log_seq BEFORE INSERT ON audit_log WHEN NEW.seq IS NOT (SELECT coalesce(max(seq), 0) + 1 FROM audit_log) BEGIN SELECT RAISE(ABORT, 'audit_log seq must be contiguous'); END;
@@ -489,3 +514,7 @@ CREATE TRIGGER thesis_history_no_replace BEFORE INSERT ON thesis_history WHEN EX
 CREATE TRIGGER thesis_history_no_update BEFORE UPDATE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
 CREATE TRIGGER tool_call_ledger_no_delete BEFORE DELETE ON tool_call_ledger BEGIN SELECT RAISE(ABORT, 'tool call ledger is append only'); END;
 CREATE TRIGGER tool_call_ledger_no_update BEFORE UPDATE ON tool_call_ledger BEGIN SELECT RAISE(ABORT, 'tool call ledger is append only'); END;
+CREATE TRIGGER wake_triggers_no_delete BEFORE DELETE ON wake_triggers BEGIN SELECT RAISE(ABORT, 'wake triggers are append only'); END;
+CREATE TRIGGER wake_triggers_no_update BEFORE UPDATE ON wake_triggers BEGIN SELECT RAISE(ABORT, 'wake triggers are append only'); END;
+CREATE TRIGGER web_collected_items_no_delete BEFORE DELETE ON web_collected_items BEGIN SELECT RAISE(ABORT, 'web collected items are append only'); END;
+CREATE TRIGGER web_collected_items_no_update BEFORE UPDATE ON web_collected_items BEGIN SELECT RAISE(ABORT, 'web collected items are append only'); END;

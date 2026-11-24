@@ -225,3 +225,8 @@ mod status;
 pub use status::{NewsDataSettingsStore, SourceStatusStore, SpecStatusStore};
 #[cfg(test)]
 mod status_tests;
+
+mod wake;
+pub use wake::{WakeTriggerStore, WebItemStore};
+#[cfg(test)]
+mod wake_tests;
