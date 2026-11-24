@@ -1,0 +1,34 @@
+{
+  "origin": "synthetic",
+  "method": "get",
+  "path": "/api/v1/transactions",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1transactions/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "transactions": [
+        {
+          "transactionType": "BUY",
+          "marketCountry": "KR",
+          "currency": "KRW",
+          "symbol": "005930",
+          "assetClass": "STOCK",
+          "isinCode": "KR7005930003",
+          "quantity": "10",
+          "filledPrice": "70000",
+          "amount": "700000",
+          "commission": "1050",
+          "tax": "0",
+          "netAmount": "701050",
+          "exchangeRate": null,
+          "settlementDate": "2026-03-30",
+          "settled": true,
+          "transactionTime": "2026-03-30T06:30:00+09:00",
+          "isCancellation": false
+        }
+      ],
+      "hasNext": false,
+      "nextCursor": null
+    }
+  }
+}

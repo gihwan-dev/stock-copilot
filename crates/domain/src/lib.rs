@@ -637,6 +637,10 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod trade_cost_confirmation;
+pub use trade_cost_confirmation::{
+    ConfirmedTradeCost, EstimatedTradeCost, TradeCostDisplay, trade_cost_display,
+};
 mod order_progress;
 pub use order_progress::{
     OrderProgress, OrderProgressChange, order_progress, order_progress_change,
