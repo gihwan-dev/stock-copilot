@@ -230,3 +230,8 @@ mod wake;
 pub use wake::{WakeTriggerStore, WebItemStore};
 #[cfg(test)]
 mod wake_tests;
+
+mod watchlist;
+pub use watchlist::{SignalSkipStore, WatchlistStore};
+#[cfg(test)]
+mod watchlist_tests;
