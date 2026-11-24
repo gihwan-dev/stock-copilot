@@ -155,6 +155,14 @@ pub(super) fn missing_data() -> ToolErrorPayload {
     )
 }
 
+pub(super) fn require<V>(reply: Result<Option<V>, SystemPortError>) -> Result<V, ToolErrorPayload> {
+    match reply {
+        Ok(Some(view)) => Ok(view),
+        Ok(None) => Err(missing_data()),
+        Err(error) => Err(upstream_error(&error)),
+    }
+}
+
 #[must_use]
 pub(super) fn object(entries: Vec<(&'static str, Value)>) -> Value {
     let mut map = Map::new();

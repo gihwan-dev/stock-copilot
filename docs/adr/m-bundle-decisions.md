@@ -20,3 +20,6 @@
 | M-03 | 표본 부족 처리 | `SampleSufficiency::Insufficient`이면 `sample: "insufficient"`와 함께 위험 지표(변동성·최대 낙폭)를 `null`로 고정해 내보내고 기간 수익률·벤치마크는 그대로 준다 | 수익률까지 숨김 |
 | M-03 | 외부 이름 | 종목명·섹터 이름은 브로커 자료지만 외부 텍스트로 보고 `untrusted_text`로 정규화해 준다. 시각은 오프셋을 붙인 RFC 3339 문자열, 금액은 `{amount, currency}` 십진 문자열 | 이름을 평문 문자열로 노출 |
 | M-03 | `get_transactions` 범위 | 인자는 `kind`(all·trades·dividends·cash_flows), `limit`, `cursor`뿐. 최신순(같으면 종류·종목순) 정렬, 커서는 `kind`별 질의 지문에 묶음 | 기간 인자(문서 미정) |
+| M-04 | 시장 도구의 자료원 | M-03과 같은 방식으로 `application::MarketToolReads` 포트와 보기 레코드(`QuoteToolView` 등, 모두 `collected_at` 필수)를 두고 `mcp-server`는 검증·정렬·렌더링만 한다. 포트 구현(`GetMarketOverview`·`read_queries` 조립)은 U-01에 인계 | 도구가 `MarketOverview`·`MarketIndicatorQuote`를 직접 렌더링 |
+| M-04 | 근사·공식 표시 | 항목마다 `provenance`(official·approximate). 토스 미국 ETF로만 얻는 S&P 500·나스닥 100·원유·금·달러 지수는 포트 값과 무관하게 `approximate`로 고정(공식 값으로 잘못 표시되는 쪽을 닫음). 미 국채 금리는 재무부·FRED 값이라 포트 표시를 따른다 | 포트 표시를 그대로 믿음 |
+| M-04 | 인자 범위 | `market`은 KR·US(생략 시 KR), `get_investor_flow`는 KR만, `get_candles`는 `days` 1~250(기본 60)과 `limit`·`cursor` 페이지, `get_rankings`의 `kind`는 거래대금·상승·하락·외국인 순매수·기관 순매수. 지수·금리 값은 단위(`unit`)를 붙인 십진 문자열 | 미국 수급 허용, 일봉 한 번에 전부 |

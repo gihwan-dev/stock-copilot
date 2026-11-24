@@ -4,10 +4,12 @@ mod tests {
     use std::sync::Arc;
 
     use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
-    use mcp_server::{ToolRegistry, make_cursor_store, register_portfolio_tools};
+    use mcp_server::{
+        ToolRegistry, make_cursor_store, register_market_tools, register_portfolio_tools,
+    };
     use serde_json::Value;
     use testkit_ports::SteppedClock;
-    use testkit_ports::tool_read_fakes::FixedPortfolioToolReads;
+    use testkit_ports::tool_read_fakes::{FixedMarketToolReads, FixedPortfolioToolReads};
 
     fn golden_text() -> String {
         let exe = testkit::test_executable().expect("test executable");
@@ -32,6 +34,8 @@ mod tests {
         let mut registry = ToolRegistry::new();
         let portfolio = Arc::new(FixedPortfolioToolReads::default());
         register_portfolio_tools(&mut registry, &portfolio, &cursors).expect("포트폴리오 도구");
+        let market = Arc::new(FixedMarketToolReads::default());
+        register_market_tools(&mut registry, &market, &cursors).expect("시장 도구");
         registry
     }
 

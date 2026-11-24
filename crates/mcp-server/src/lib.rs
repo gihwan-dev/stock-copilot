@@ -11,6 +11,7 @@ mod untrusted;
 #[cfg(test)]
 mod contract_tests;
 
+pub use catalog::market::register_market_tools;
 pub use catalog::portfolio::register_portfolio_tools;
 pub use handler::{ConnectionEvent, ConnectionRejection};
 pub use pagination::{

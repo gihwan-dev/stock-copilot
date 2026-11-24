@@ -10,8 +10,8 @@ use domain::Currency;
 use serde_json::{Map, Value, json};
 
 use crate::catalog::render::{
-    completeness, currency_code, fx_rate, missing_data, money, object, optional_money,
-    optional_ratio, quantity, ratio, timestamp, untrusted_label, upstream_error,
+    completeness, currency_code, fx_rate, money, object, optional_money, optional_ratio, quantity,
+    ratio, require, timestamp, untrusted_label,
 };
 use crate::pagination::{CursorStore, PageRequest, PaginationContext, paginate_items};
 use crate::tools::{
@@ -167,16 +167,6 @@ impl<P: PortfolioToolReads, C: Clock> PortfolioTool<P, C> {
         extra.insert(String::from("recorded_at"), timestamp(view.recorded_at));
         extra.insert(String::from("kind"), Value::String(filter_name.to_owned()));
         paginate_items(&items, &page, &context, &extra)
-    }
-}
-
-fn require<V>(
-    reply: Result<Option<V>, application::SystemPortError>,
-) -> Result<V, ToolErrorPayload> {
-    match reply {
-        Ok(Some(view)) => Ok(view),
-        Ok(None) => Err(missing_data()),
-        Err(error) => Err(upstream_error(&error)),
     }
 }
 
