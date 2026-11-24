@@ -119,7 +119,7 @@ impl<N: NewsToolReads, C: Clock> NewsTool<N, C> {
             "{}|{}|{}",
             query.symbol.as_ref().map_or("", Symbol::as_str),
             query.keyword.as_ref().map_or("", NewsKeyword::as_str),
-            query.lookback.days()
+            query.lookback.as_u16()
         );
         let context = PaginationContext {
             cursors: &self.cursors,
