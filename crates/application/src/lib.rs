@@ -486,6 +486,11 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod tool_call_ledger;
+pub use tool_call_ledger::{
+    ToolCallLedger, ToolCallOutcome, ToolCallRecord, ToolCallRecordInput, ToolLedgerError,
+    ToolName, ToolPayloadJson, ToolProtocolVersion, ToolRequestId,
+};
 
 mod warm_chat;
 pub use warm_chat::{
