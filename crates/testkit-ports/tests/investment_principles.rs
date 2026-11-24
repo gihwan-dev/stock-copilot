@@ -96,7 +96,7 @@ mod tests {
         let policy = run(ApplyInvestmentPrinciples::new(&repo)
             .execute(Policy::new(InvestorProfile::default()), &empty_holdings()))
         .expect("적용");
-        assert!(policy.context().is_empty());
+        assert_eq!(policy.context().len(), 0_usize);
         assert_eq!(policy.minimum_cash(), None);
     }
 

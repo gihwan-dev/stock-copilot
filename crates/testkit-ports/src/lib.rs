@@ -22,6 +22,7 @@ pub use draft_record::DraftRecord;
 mod thesis_record;
 pub use thesis_record::ThesisRecord;
 pub mod chat_fakes;
+pub mod estimate_fixtures;
 pub mod memory;
 pub mod principles_fakes;
 pub mod proposal_memory;

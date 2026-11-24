@@ -573,7 +573,7 @@
       "openWorldHint": false,
       "readOnlyHint": false
     },
-    "description": "Propose claim-level changes to the thesis note of one app-known symbol against base_version from get_thesis. Evidence is tool:<name>, a collected item handle, or a web address; changes backed only by web addresses wait for user review. History is kept.",
+    "description": "Propose claim-level changes to the thesis note of one app-known symbol against base_version from get_thesis. Evidence is tool:<request id> of a successful call in this run, a handle of an item collected for this symbol, or a web address; changes backed only by web addresses wait for user review. History is kept.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
