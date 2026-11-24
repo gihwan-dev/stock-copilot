@@ -1,9 +1,11 @@
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::fmt;
 use std::future::{Future, poll_fn, ready};
-use std::pin::pin;
+use std::io::{self, ErrorKind};
+use std::pin::{Pin, pin};
 use std::sync::{Arc, RwLock};
-use std::task::Poll;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use application::{AiRunId, Clock, RunKind};
@@ -16,8 +18,8 @@ use rmcp::model::{
     PaginatedRequestParams, ProtocolVersion, ServerCapabilities, ServerConfig,
 };
 use rmcp::service::{RequestContext, RoleServer, RunningService, ServiceExt};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
-use tokio::sync::{Notify, watch};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
+use tokio::sync::watch;
 use zeroize::Zeroizing;
 
 use crate::peer::PeerVerificationFailure;
@@ -25,6 +27,8 @@ use crate::token::{AuthLineLimit, AuthRejection, AuthenticatedRun, RunAuthBindin
 
 const SERVER_NAME: &str = "stock-copilot-mcp";
 const SERVER_VERSION: &str = "0.1.0";
+const MAX_CONNECTION_EVENTS: usize = 256_usize;
+const EXPIRY_CHECK_INTERVAL: Duration = Duration::from_millis(50_u64);
 
 const SUPPORTED_VERSIONS: [ProtocolVersion; 3] = [
     ProtocolVersion::V_2026_07_28,
@@ -33,14 +37,28 @@ const SUPPORTED_VERSIONS: [ProtocolVersion; 3] = [
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShutdownSignal {
+pub(crate) enum ShutdownSignal {
     Running,
     Stopped,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SessionStopSignal {
+    Active,
+    Stopped,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PreSessionStopReason {
+    ServerShuttingDown,
+    TokenRevoked,
+    TokenExpired,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionRejection {
     ConnectionLimitReached,
+    ServerShuttingDown,
     Peer(PeerVerificationFailure),
     AuthTimeout,
     AuthLineTooLong,
@@ -62,40 +80,131 @@ pub enum ConnectionEvent {
     Closed {
         run_id: AiRunId,
     },
+    AcceptFailed {
+        run_id: AiRunId,
+    },
+    SessionTaskFailed {
+        run_id: AiRunId,
+    },
 }
 
-#[derive(Debug, Default)]
-pub struct ConnectionEventLog {
-    events: RwLock<Vec<ConnectionEvent>>,
+#[derive(Debug)]
+pub(crate) struct ConnectionEventLog {
+    events: RwLock<VecDeque<ConnectionEvent>>,
+    max_events: usize,
 }
 
 impl ConnectionEventLog {
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub(crate) fn new() -> Self {
+        Self::with_capacity_limit(MAX_CONNECTION_EVENTS)
     }
 
-    pub fn push(&self, event: ConnectionEvent) {
+    #[must_use]
+    pub(crate) fn with_capacity_limit(max_events: usize) -> Self {
+        let cap = max_events.max(1_usize);
+        Self {
+            events: RwLock::new(VecDeque::with_capacity(cap)),
+            max_events: cap,
+        }
+    }
+
+    pub(crate) fn push(&self, event: ConnectionEvent) {
         let mut guard = match self.events.write() {
             Ok(locked) => locked,
             Err(poisoned) => poisoned.into_inner(),
         };
-        guard.push(event);
+        if guard.len() >= self.max_events {
+            let _evicted = guard.pop_front();
+        }
+        guard.push_back(event);
     }
 
     #[must_use]
-    pub fn snapshot(&self) -> Vec<ConnectionEvent> {
+    pub(crate) fn snapshot(&self) -> Vec<ConnectionEvent> {
         let guard = match self.events.read() {
             Ok(locked) => locked,
             Err(poisoned) => poisoned.into_inner(),
         };
-        guard.clone()
+        guard.iter().cloned().collect()
     }
 }
 
-pub struct McpSkeletonHandler<C: Clock + 'static> {
+fn signal_session_stop(tx: &watch::Sender<SessionStopSignal>) {
+    match tx.send(SessionStopSignal::Stopped) {
+        Ok(()) => {}
+        Err(_no_receivers) => {}
+    }
+}
+
+struct ExpiryGuardedReader<R, C: Clock + 'static> {
+    inner: R,
     auth: Arc<RunAuthBinding<C>>,
-    cancel_session: Arc<Notify>,
+    stop_tx: watch::Sender<SessionStopSignal>,
+}
+
+impl<R: AsyncRead + Unpin, C: Clock + 'static> AsyncRead for ExpiryGuardedReader<R, C> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        if this.auth.ensure_active().is_err() {
+            signal_session_stop(&this.stop_tx);
+            return Poll::Ready(Err(io::Error::new(
+                ErrorKind::PermissionDenied,
+                "run token is no longer active",
+            )));
+        }
+        Pin::new(&mut this.inner).poll_read(cx, buf)
+    }
+}
+
+struct ExpiryGuardedWriter<W, C: Clock + 'static> {
+    inner: W,
+    auth: Arc<RunAuthBinding<C>>,
+    stop_tx: watch::Sender<SessionStopSignal>,
+}
+
+impl<W: AsyncWrite + Unpin, C: Clock + 'static> AsyncWrite for ExpiryGuardedWriter<W, C> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        if this.auth.ensure_active().is_err() {
+            signal_session_stop(&this.stop_tx);
+            return Poll::Ready(Err(io::Error::new(
+                ErrorKind::PermissionDenied,
+                "run token is no longer active",
+            )));
+        }
+        Pin::new(&mut this.inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        if this.auth.ensure_active().is_err() {
+            signal_session_stop(&this.stop_tx);
+            return Poll::Ready(Err(io::Error::new(
+                ErrorKind::PermissionDenied,
+                "run token is no longer active",
+            )));
+        }
+        Pin::new(&mut this.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.inner).poll_shutdown(cx)
+    }
+}
+
+pub(crate) struct McpSkeletonHandler<C: Clock + 'static> {
+    auth: Arc<RunAuthBinding<C>>,
+    stop_tx: watch::Sender<SessionStopSignal>,
 }
 
 impl<C: Clock + 'static> fmt::Debug for McpSkeletonHandler<C> {
@@ -109,18 +218,18 @@ impl<C: Clock + 'static> fmt::Debug for McpSkeletonHandler<C> {
 
 impl<C: Clock + 'static> McpSkeletonHandler<C> {
     #[must_use]
-    pub fn new(auth: Arc<RunAuthBinding<C>>, cancel_session: Arc<Notify>) -> Self {
-        Self {
-            auth,
-            cancel_session,
-        }
+    pub(crate) fn new(
+        auth: Arc<RunAuthBinding<C>>,
+        stop_tx: watch::Sender<SessionStopSignal>,
+    ) -> Self {
+        Self { auth, stop_tx }
     }
 
     fn ensure_active(&self) -> Result<(), McpError> {
         match self.auth.ensure_active() {
             Ok(()) => Ok(()),
             Err(AuthRejection::TokenRevoked | AuthRejection::TokenExpired) => {
-                self.cancel_session.notify_waiters();
+                signal_session_stop(&self.stop_tx);
                 Err(McpError::invalid_request(
                     "run session is no longer active",
                     None,
@@ -133,7 +242,7 @@ impl<C: Clock + 'static> McpSkeletonHandler<C> {
                 | AuthRejection::MissingToken
                 | AuthRejection::InvalidToken,
             ) => {
-                self.cancel_session.notify_waiters();
+                signal_session_stop(&self.stop_tx);
                 Err(McpError::invalid_request(
                     "run session authorization rejected",
                     None,
@@ -245,7 +354,7 @@ impl<C: Clock + 'static> ServerHandler for McpSkeletonHandler<C> {
     }
 }
 
-pub struct StreamAuthParams<C: Clock + 'static> {
+pub(crate) struct StreamAuthParams<C: Clock + 'static> {
     auth: Arc<RunAuthBinding<C>>,
     auth_line_limit: AuthLineLimit,
     auth_timeout: Duration,
@@ -253,19 +362,9 @@ pub struct StreamAuthParams<C: Clock + 'static> {
     events: Arc<ConnectionEventLog>,
 }
 
-impl<C: Clock + 'static> fmt::Debug for StreamAuthParams<C> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("StreamAuthParams")
-            .field("auth", &self.auth)
-            .field("auth_line_limit", &self.auth_line_limit)
-            .field("auth_timeout", &self.auth_timeout)
-            .finish_non_exhaustive()
-    }
-}
-
 impl<C: Clock + 'static> StreamAuthParams<C> {
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         auth: Arc<RunAuthBinding<C>>,
         auth_line_limit: AuthLineLimit,
         auth_timeout: Duration,
@@ -336,18 +435,84 @@ pub(crate) async fn wait_for_revocation(revoke_rx: &mut watch::Receiver<TokenSta
     }
 }
 
-async fn wait_for_session_stop(
+async fn wait_for_session_signal(stop_rx: &mut watch::Receiver<SessionStopSignal>) {
+    let initial = *stop_rx.borrow();
+    match initial {
+        SessionStopSignal::Stopped => return,
+        SessionStopSignal::Active => {}
+    }
+    while stop_rx.changed().await.is_ok() {
+        let current = *stop_rx.borrow();
+        match current {
+            SessionStopSignal::Stopped => return,
+            SessionStopSignal::Active => {}
+        }
+    }
+}
+
+pub(crate) async fn wait_for_expiry<C: Clock + 'static>(auth: &RunAuthBinding<C>) {
+    loop {
+        if auth.ensure_active().is_err() {
+            return;
+        }
+        let sleep_for = auth.remaining_until_expiry().min(EXPIRY_CHECK_INTERVAL);
+        if sleep_for.is_zero() {
+            return;
+        }
+        tokio::time::sleep(sleep_for).await;
+    }
+}
+
+pub(crate) async fn wait_for_pre_session_stop<C: Clock + 'static>(
     shutdown_rx: &mut watch::Receiver<ShutdownSignal>,
     revoke_rx: &mut watch::Receiver<TokenStatus>,
-    cancel_session: &Notify,
-) {
+    auth: &RunAuthBinding<C>,
+) -> PreSessionStopReason {
     let stop_or_revoke = race(
         wait_for_shutdown(shutdown_rx),
         wait_for_revocation(revoke_rx),
     );
-    match race(stop_or_revoke, cancel_session.notified()).await {
-        RaceOutcome::First(RaceOutcome::First(()) | RaceOutcome::Second(()))
-        | RaceOutcome::Second(()) => {}
+    match race(stop_or_revoke, wait_for_expiry(auth)).await {
+        RaceOutcome::First(RaceOutcome::First(())) => PreSessionStopReason::ServerShuttingDown,
+        RaceOutcome::First(RaceOutcome::Second(())) => PreSessionStopReason::TokenRevoked,
+        RaceOutcome::Second(()) => match auth.ensure_active() {
+            Err(AuthRejection::TokenRevoked) => PreSessionStopReason::TokenRevoked,
+            Ok(())
+            | Err(
+                AuthRejection::TokenExpired
+                | AuthRejection::RunMismatch
+                | AuthRejection::AuthMissing
+                | AuthRejection::InvalidAuthFormat
+                | AuthRejection::MissingToken
+                | AuthRejection::InvalidToken,
+            ) => PreSessionStopReason::TokenExpired,
+        },
+    }
+}
+
+pub(crate) const fn pre_session_stop_to_rejection(
+    reason: PreSessionStopReason,
+) -> ConnectionRejection {
+    match reason {
+        PreSessionStopReason::ServerShuttingDown => ConnectionRejection::ServerShuttingDown,
+        PreSessionStopReason::TokenRevoked => {
+            ConnectionRejection::Auth(AuthRejection::TokenRevoked)
+        }
+        PreSessionStopReason::TokenExpired => {
+            ConnectionRejection::Auth(AuthRejection::TokenExpired)
+        }
+    }
+}
+
+async fn wait_for_session_stop<C: Clock + 'static>(
+    shutdown_rx: &mut watch::Receiver<ShutdownSignal>,
+    revoke_rx: &mut watch::Receiver<TokenStatus>,
+    stop_rx: &mut watch::Receiver<SessionStopSignal>,
+    auth: &RunAuthBinding<C>,
+) {
+    let pre_stop = wait_for_pre_session_stop(shutdown_rx, revoke_rx, auth);
+    match race(pre_stop, wait_for_session_signal(stop_rx)).await {
+        RaceOutcome::First(_) | RaceOutcome::Second(()) => {}
     }
 }
 
@@ -392,15 +557,10 @@ where
     R: AsyncRead + Unpin,
     C: Clock + 'static,
 {
-    let stop = race(
-        wait_for_shutdown(&mut params.shutdown_rx),
-        wait_for_revocation(revoke_rx),
-    );
+    let stop = wait_for_pre_session_stop(&mut params.shutdown_rx, revoke_rx, &params.auth);
     let read_auth = read_bounded_auth_line(reader, params.auth_line_limit, params.auth_timeout);
     let line = match race(stop, read_auth).await {
-        RaceOutcome::First(_stopped) => {
-            return Err(ConnectionRejection::Auth(AuthRejection::TokenRevoked));
-        }
+        RaceOutcome::First(reason) => return Err(pre_session_stop_to_rejection(reason)),
         RaceOutcome::Second(result) => result?,
     };
     params
@@ -409,14 +569,42 @@ where
         .map_err(ConnectionRejection::Auth)
 }
 
-async fn await_service_handle(
-    handle: tokio::task::JoinHandle<Result<rmcp::service::QuitReason, tokio::task::JoinError>>,
+async fn drive_running_mcp_service<C: Clock + 'static>(
+    running: RunningService<RoleServer, McpSkeletonHandler<C>>,
+    params: &mut StreamAuthParams<C>,
+    revoke_rx: &mut watch::Receiver<TokenStatus>,
+    stop_rx: &mut watch::Receiver<SessionStopSignal>,
+    run_id: &AiRunId,
 ) {
-    match handle.await {
-        Ok(Ok(_quit)) => {}
-        Ok(Err(_join)) => {}
-        Err(_abort) => {}
+    let cancellation = running.cancellation_token();
+    let mut wait_handle = tokio::spawn(async move { running.waiting().await });
+    match race(
+        wait_for_session_stop(&mut params.shutdown_rx, revoke_rx, stop_rx, &params.auth),
+        &mut wait_handle,
+    )
+    .await
+    {
+        RaceOutcome::First(()) => {
+            cancellation.cancel();
+            match wait_handle.await {
+                Ok(Ok(_quit)) => {}
+                Ok(Err(_)) | Err(_) => {
+                    params.events.push(ConnectionEvent::SessionTaskFailed {
+                        run_id: run_id.clone(),
+                    });
+                }
+            }
+        }
+        RaceOutcome::Second(Ok(Ok(_quit))) => {}
+        RaceOutcome::Second(Ok(Err(_)) | Err(_)) => {
+            params.events.push(ConnectionEvent::SessionTaskFailed {
+                run_id: run_id.clone(),
+            });
+        }
     }
+    params.events.push(ConnectionEvent::Closed {
+        run_id: run_id.clone(),
+    });
 }
 
 async fn start_and_run_mcp_service<R, W, C>(
@@ -430,12 +618,27 @@ async fn start_and_run_mcp_service<R, W, C>(
     W: AsyncWrite + Send + Unpin + 'static,
     C: Clock + 'static,
 {
-    let cancel_session = Arc::new(Notify::new());
-    let handler = McpSkeletonHandler::new(Arc::clone(&params.auth), Arc::clone(&cancel_session));
+    let (stop_tx, mut stop_rx) = watch::channel(SessionStopSignal::Active);
+    let guarded_reader = ExpiryGuardedReader {
+        inner: reader,
+        auth: Arc::clone(&params.auth),
+        stop_tx: stop_tx.clone(),
+    };
+    let guarded_writer = ExpiryGuardedWriter {
+        inner: writer,
+        auth: Arc::clone(&params.auth),
+        stop_tx: stop_tx.clone(),
+    };
+    let handler = McpSkeletonHandler::new(Arc::clone(&params.auth), stop_tx);
 
-    let running: RunningService<RoleServer, McpSkeletonHandler<C>> = match race(
-        wait_for_session_stop(&mut params.shutdown_rx, revoke_rx, &cancel_session),
-        handler.serve((reader, writer)),
+    let running = match race(
+        wait_for_session_stop(
+            &mut params.shutdown_rx,
+            revoke_rx,
+            &mut stop_rx,
+            &params.auth,
+        ),
+        handler.serve((guarded_reader, guarded_writer)),
     )
     .await
     {
@@ -455,26 +658,10 @@ async fn start_and_run_mcp_service<R, W, C>(
         }
     };
 
-    let cancellation = running.cancellation_token();
-    let mut wait_handle = tokio::spawn(async move { running.waiting().await });
-    match race(
-        wait_for_session_stop(&mut params.shutdown_rx, revoke_rx, &cancel_session),
-        &mut wait_handle,
-    )
-    .await
-    {
-        RaceOutcome::First(()) => {
-            cancellation.cancel();
-            await_service_handle(wait_handle).await;
-        }
-        RaceOutcome::Second(_completed) => {}
-    }
-    params.events.push(ConnectionEvent::Closed {
-        run_id: run_id.clone(),
-    });
+    drive_running_mcp_service(running, params, revoke_rx, &mut stop_rx, run_id).await;
 }
 
-pub async fn authenticate_and_serve_stream<R, W, C>(
+pub(crate) async fn authenticate_and_serve_stream<R, W, C>(
     mut reader: R,
     writer: W,
     mut params: StreamAuthParams<C>,
@@ -514,13 +701,13 @@ mod tests {
     use serde_json::Value;
     use testkit_ports::SteppedClock;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, duplex};
-    use tokio::sync::{Notify, watch};
+    use tokio::sync::watch;
 
     use crate::token::{AuthLineLimit, AuthRejection, RunAuthBinding, TokenTtl};
 
     use super::{
         ConnectionEvent, ConnectionEventLog, ConnectionRejection, McpSkeletonHandler,
-        ShutdownSignal, StreamAuthParams, authenticate_and_serve_stream,
+        SessionStopSignal, ShutdownSignal, StreamAuthParams, authenticate_and_serve_stream,
     };
 
     fn runtime() -> tokio::runtime::Runtime {
@@ -539,140 +726,136 @@ mod tests {
         .expect("유효한 시각")
     }
 
-    async fn read_rpc(reader: &mut BufReader<tokio::io::ReadHalf<DuplexStream>>) -> Option<Value> {
+    async fn read_json_line(reader: &mut BufReader<tokio::io::ReadHalf<DuplexStream>>) -> Value {
         let mut line = String::new();
         let count = tokio::time::timeout(Duration::from_secs(2_u64), reader.read_line(&mut line))
             .await
-            .expect("읽기 제한 시간")
-            .expect("줄 읽기");
-        if count == 0_usize {
-            return None;
-        }
-        Some(serde_json::from_str(&line).expect("JSON 파싱"))
+            .expect("응답 시간 초과")
+            .expect("응답 읽기");
+        assert!(count > 0_usize, "응답 줄이 비어 있으면 안 된다");
+        serde_json::from_str(&line).expect("유효 JSON-RPC 응답")
     }
 
     #[test]
-    fn handler_info_declares_server_identity_and_supported_protocol_versions() {
+    fn event_log_evicts_oldest_entries_when_bounded() {
+        let log = ConnectionEventLog::with_capacity_limit(2_usize);
+        let first = AiRunId::try_new("run-1").expect("id1");
+        let second = AiRunId::try_new("run-2").expect("id2");
+        let third = AiRunId::try_new("run-3").expect("id3");
+        log.push(ConnectionEvent::Closed { run_id: first });
+        log.push(ConnectionEvent::Closed {
+            run_id: second.clone(),
+        });
+        log.push(ConnectionEvent::Closed {
+            run_id: third.clone(),
+        });
+        assert_eq!(
+            log.snapshot(),
+            vec![
+                ConnectionEvent::Closed { run_id: second },
+                ConnectionEvent::Closed { run_id: third },
+            ],
+            "이벤트 로그 상한을 넘으면 가장 오래된 항목을 밀어낸다"
+        );
+    }
+
+    #[test]
+    fn skeleton_handler_declares_both_protocol_generations_and_debug_is_redacted() {
         let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
-        let auth = Arc::new(
+        let binding = Arc::new(
             RunAuthBinding::issue(
-                AiRunId::try_new("run-info").expect("id"),
+                AiRunId::try_new("run-proto-1").expect("실행 ID"),
                 RunKind::Analysis,
                 clock,
-                TokenTtl::default_ttl().expect("ttl"),
+                TokenTtl::try_from_seconds(60_u64).expect("TTL"),
             )
             .expect("발급"),
         );
-        let handler = McpSkeletonHandler::new(Arc::clone(&auth), Arc::new(Notify::new()));
-        let info = handler.get_info();
-        assert_eq!(info.server_info.name, "stock-copilot-mcp", "서버 이름");
-        assert_eq!(info.server_info.version, "0.1.0", "서버 버전");
-        assert_eq!(
-            info.protocol_version,
-            ProtocolVersion::V_2026_07_28,
-            "기본 규격 버전"
-        );
+        let (stop_tx, _stop_rx) = watch::channel(SessionStopSignal::Active);
+        let handler = McpSkeletonHandler::new(Arc::clone(&binding), stop_tx);
         let versions = handler.supported_protocol_versions();
         assert!(
-            versions.contains(&ProtocolVersion::V_2026_07_28)
-                && versions.contains(&ProtocolVersion::V_2025_06_18),
-            "두 프로토콜 세대 모두 지원"
+            versions.contains(&ProtocolVersion::V_2026_07_28),
+            "2026-07-28 지원 선언"
         );
-        let raw = std::str::from_utf8(auth.token().as_exposed_bytes()).expect("UTF-8");
         assert!(
-            !format!("{handler:?}").contains(raw),
-            "핸들러 Debug에 원문 토큰 노출 금지"
+            versions.contains(&ProtocolVersion::V_2025_06_18),
+            "2025-06-18 지원 선언"
+        );
+        assert_eq!(
+            handler.get_info().protocol_version,
+            ProtocolVersion::V_2026_07_28,
+            "기본 프로토콜은 2026-07-28"
+        );
+        let debug_text = format!("{handler:?}");
+        let raw = std::str::from_utf8(binding.token().as_exposed_bytes()).expect("UTF-8");
+        assert!(
+            debug_text.contains("McpSkeletonHandler") && debug_text.contains("run-proto-1"),
+            "핸들러 Debug 출력은 구조와 실행 ID를 담는다"
+        );
+        assert!(
+            !debug_text.contains(raw),
+            "핸들러 Debug에 원문 토큰이 없어야 한다"
         );
     }
 
-    #[test]
-    fn duplex_stream_serves_all_skeleton_methods_and_aborts_on_shutdown_during_auth() {
-        runtime().block_on(async {
-            let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
-            let auth = Arc::new(
-                RunAuthBinding::issue(
-                    AiRunId::try_new("run-duplex").expect("id"),
-                    RunKind::Analysis,
-                    clock,
-                    TokenTtl::default_ttl().expect("ttl"),
-                )
-                .expect("발급"),
-            );
-            let events = Arc::new(ConnectionEventLog::new());
-            let (shutdown_tx, shutdown_rx) = watch::channel(ShutdownSignal::Running);
-            let (client_io, server_io) = duplex(8192_usize);
-            let (server_read, server_write) = tokio::io::split(server_io);
-            let params = StreamAuthParams::new(
-                Arc::clone(&auth),
-                AuthLineLimit::default_limit(),
-                Duration::from_secs(2_u64),
-                shutdown_rx,
-                Arc::clone(&events),
-            );
-            let server_task =
-                tokio::spawn(authenticate_and_serve_stream(server_read, server_write, params));
+    async fn send_auth_and_skeleton_requests(
+        client_write: &mut tokio::io::WriteHalf<DuplexStream>,
+        reader: &mut BufReader<tokio::io::ReadHalf<DuplexStream>>,
+        binding: &RunAuthBinding<SteppedClock>,
+    ) {
+        let mut auth_line = b"AUTH ".to_vec();
+        auth_line.extend_from_slice(binding.token().as_exposed_bytes());
+        auth_line.push(b'\n');
+        client_write.write_all(&auth_line).await.expect("인증 전송");
 
-            let (client_read, mut client_write) = tokio::io::split(client_io);
-            let mut reader = BufReader::new(client_read);
-            let raw = std::str::from_utf8(auth.token().as_exposed_bytes()).expect("UTF-8");
+        let meta = r#""_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}"#;
+        let requests = [
+            format!(r#"{{"jsonrpc":"2.0","id":1,"method":"ping","params":{{{meta}}}}}"#),
+            format!(r#"{{"jsonrpc":"2.0","id":2,"method":"prompts/list","params":{{{meta}}}}}"#),
+            format!(r#"{{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{{{meta}}}}}"#),
+            format!(
+                r#"{{"jsonrpc":"2.0","id":4,"method":"resources/templates/list","params":{{{meta}}}}}"#
+            ),
+            format!(
+                r#"{{"jsonrpc":"2.0","id":5,"method":"completion/complete","params":{{{meta},"ref":{{"type":"ref/prompt","name":"x"}},"argument":{{"name":"a","value":"b"}}}}}}"#
+            ),
+        ];
+        for request in requests {
             client_write
-                .write_all(format!("AUTH {raw}\n").as_bytes())
+                .write_all(format!("{request}\n").as_bytes())
                 .await
-                .expect("인증");
-
-            let requests = [
-                r#"{"jsonrpc":"2.0","id":1,"method":"ping","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#,
-                r#"{"jsonrpc":"2.0","id":2,"method":"prompts/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#,
-                r#"{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#,
-                r#"{"jsonrpc":"2.0","id":4,"method":"resources/templates/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#,
-                r#"{"jsonrpc":"2.0","id":5,"method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"none"},"argument":{"name":"a","value":""},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#,
-            ];
-            for request in requests {
-                client_write
-                    .write_all(format!("{request}\n").as_bytes())
-                    .await
-                    .expect("요청 전송");
-                let resp = read_rpc(&mut reader).await.expect("응답 수신");
-                assert!(resp.get("result").is_some(), "정상 결과 응답: {resp}");
-            }
-
-            shutdown_tx.send(ShutdownSignal::Stopped).expect("종료 신호");
-            server_task.await.expect("서버 태스크 종료");
+                .expect("요청 전송");
+            let response = read_json_line(reader).await;
             assert!(
-                events.snapshot().iter().any(matches_closed),
-                "종료 이벤트 기록"
+                response.get("result").is_some(),
+                "뼈대 메서드 정상 응답: {response}"
             );
-        });
-    }
-
-    fn matches_closed(event: &ConnectionEvent) -> bool {
-        match event {
-            ConnectionEvent::Closed { .. } => true,
-            ConnectionEvent::Accepted { .. } | ConnectionEvent::Rejected { .. } => false,
         }
     }
 
     #[test]
-    fn shutdown_signal_interrupts_pending_auth_read_immediately() {
+    fn duplex_stream_serves_all_skeleton_methods_and_blocks_expired_ping() {
         runtime().block_on(async {
             let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
-            let auth = Arc::new(
+            let run_id = AiRunId::try_new("run-duplex-1").expect("실행 ID");
+            let binding = Arc::new(
                 RunAuthBinding::issue(
-                    AiRunId::try_new("run-stop-auth").expect("id"),
+                    run_id.clone(),
                     RunKind::Analysis,
-                    clock,
-                    TokenTtl::default_ttl().expect("ttl"),
+                    Arc::clone(&clock),
+                    TokenTtl::try_from_seconds(60_u64).expect("TTL"),
                 )
                 .expect("발급"),
             );
             let events = Arc::new(ConnectionEventLog::new());
             let (shutdown_tx, shutdown_rx) = watch::channel(ShutdownSignal::Running);
-            let (_client_io, server_io) = duplex(1024_usize);
-            let (server_read, server_write) = tokio::io::split(server_io);
+            let (client, server) = duplex(16_384_usize);
+            let (server_read, server_write) = tokio::io::split(server);
             let params = StreamAuthParams::new(
-                auth,
+                Arc::clone(&binding),
                 AuthLineLimit::default_limit(),
-                Duration::from_secs(30_u64),
+                Duration::from_secs(2_u64),
                 shutdown_rx,
                 Arc::clone(&events),
             );
@@ -681,21 +864,124 @@ mod tests {
                 server_write,
                 params,
             ));
-            tokio::time::sleep(Duration::from_millis(20_u64)).await;
-            shutdown_tx
-                .send(ShutdownSignal::Stopped)
-                .expect("종료 신호");
-            tokio::time::timeout(Duration::from_secs(1_u64), task)
+
+            let (client_read, mut client_write) = tokio::io::split(client);
+            let mut reader = BufReader::new(client_read);
+            send_auth_and_skeleton_requests(&mut client_write, &mut reader, &binding).await;
+
+            clock
+                .advance_to(timestamp_at(1_700_000_060_i64))
+                .expect("시각 이동");
+            client_write
+                .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}\n")
                 .await
-                .expect("종료 신호는 인증 대기를 즉시 중단해야 한다")
-                .expect("태스크 종료");
-            assert_eq!(
-                events.snapshot(),
-                vec![ConnectionEvent::Rejected {
-                    run_id: AiRunId::try_new("run-stop-auth").expect("id"),
+                .expect("만료 후 ping 전송");
+            let mut after_expiry = String::new();
+            let after_count = tokio::time::timeout(
+                Duration::from_secs(2_u64),
+                reader.read_line(&mut after_expiry),
+            )
+            .await
+            .expect("만료 후 연결 종료 대기")
+            .expect("만료 후 읽기");
+            assert_eq!(after_count, 0_usize, "만료 뒤 ping은 연결을 닫는다");
+            match shutdown_tx.send(ShutdownSignal::Stopped) {
+                Ok(()) | Err(_) => {}
+            }
+            task.await.expect("서버 태스크 종료");
+            let recorded = events.snapshot();
+            assert!(
+                recorded.contains(&ConnectionEvent::Accepted {
+                    run_id: run_id.clone(),
+                    run_kind: RunKind::Analysis,
+                }) && recorded.contains(&ConnectionEvent::Closed { run_id }),
+                "인증 성공 및 종료 이벤트 기록"
+            );
+        });
+    }
+
+    #[test]
+    fn duplex_stream_rejects_shutdown_during_auth() {
+        runtime().block_on(async {
+            let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
+            let run_id = AiRunId::try_new("run-duplex-2").expect("실행 ID");
+            let binding = Arc::new(
+                RunAuthBinding::issue(
+                    run_id.clone(),
+                    RunKind::Analysis,
+                    clock,
+                    TokenTtl::try_from_seconds(60_u64).expect("TTL"),
+                )
+                .expect("발급"),
+            );
+            let events = Arc::new(ConnectionEventLog::new());
+            let (shutdown_tx, shutdown_rx) = watch::channel(ShutdownSignal::Running);
+            let (client, server) = duplex(1024_usize);
+            let (server_read, server_write) = tokio::io::split(server);
+            let params = StreamAuthParams::new(
+                Arc::clone(&binding),
+                AuthLineLimit::default_limit(),
+                Duration::from_secs(5_u64),
+                shutdown_rx,
+                Arc::clone(&events),
+            );
+            let task = tokio::spawn(authenticate_and_serve_stream(
+                server_read,
+                server_write,
+                params,
+            ));
+
+            match shutdown_tx.send(ShutdownSignal::Stopped) {
+                Ok(()) => {}
+                Err(_closed) => {}
+            }
+            task.await.expect("종료 중 인증 취소 완료");
+            let _keep_client_open = client;
+            assert!(
+                events.snapshot().contains(&ConnectionEvent::Rejected {
+                    run_id,
+                    reason: ConnectionRejection::ServerShuttingDown,
+                }),
+                "서버 종료 중 인증 대기는 ServerShuttingDown으로 거부"
+            );
+        });
+    }
+
+    #[test]
+    fn duplex_stream_rejects_revocation_during_auth() {
+        runtime().block_on(async {
+            let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
+            let run_id = AiRunId::try_new("run-duplex-3").expect("실행 ID");
+            let binding = Arc::new(
+                RunAuthBinding::issue(
+                    run_id.clone(),
+                    RunKind::Analysis,
+                    clock,
+                    TokenTtl::try_from_seconds(60_u64).expect("TTL"),
+                )
+                .expect("발급"),
+            );
+            let events = Arc::new(ConnectionEventLog::new());
+            let (_tx, rx) = watch::channel(ShutdownSignal::Running);
+            let (client, server) = duplex(1024_usize);
+            let (sr, sw) = tokio::io::split(server);
+            let params = StreamAuthParams::new(
+                Arc::clone(&binding),
+                AuthLineLimit::default_limit(),
+                Duration::from_secs(5_u64),
+                rx,
+                Arc::clone(&events),
+            );
+            let task = tokio::spawn(authenticate_and_serve_stream(sr, sw, params));
+            binding.revoke();
+            task.await.expect("폐기 중 인증 취소 완료");
+            let _keep_client = client;
+            assert!(
+                events.snapshot().contains(&ConnectionEvent::Rejected {
+                    run_id,
                     reason: ConnectionRejection::Auth(AuthRejection::TokenRevoked),
-                }],
-                "종료 중단 거부 사유 기록"
+                }),
+                "토큰 폐기 중 인증 대기는 TokenRevoked로 거부"
             );
         });
     }

@@ -49,7 +49,8 @@ mod tests {
             let mut raw = [0_u8; 4];
             getrandom::fill(&mut raw).expect("임시 폴더 난수");
             let hex = format!("{:08x}", u32::from_be_bytes(raw));
-            let path = std::env::temp_dir().join(format!("m01-{tag}-{hex}"));
+            let canonical_tmp = fs::canonicalize(std::env::temp_dir()).expect("임시 루트 정규화");
+            let path = canonical_tmp.join(format!("m01-{tag}-{hex}"));
             DirBuilder::new()
                 .mode(0o700_u32)
                 .create(&path)
@@ -116,7 +117,7 @@ mod tests {
         RunServerRequest::new(
             RunIdentity::new(AiRunId::try_new(run_id).expect("run id"), run_kind),
             spec,
-            PeerProcessTarget::new(expected_parent_pid(), expected_exe_path()),
+            PeerProcessTarget::with_parent(expected_parent_pid(), expected_exe_path()),
             deps,
         )
     }
@@ -166,7 +167,10 @@ mod tests {
     fn is_rejected_with(event: &ConnectionEvent, expected: ConnectionRejection) -> bool {
         match event {
             ConnectionEvent::Rejected { reason, .. } => *reason == expected,
-            ConnectionEvent::Accepted { .. } | ConnectionEvent::Closed { .. } => false,
+            ConnectionEvent::Accepted { .. }
+            | ConnectionEvent::Closed { .. }
+            | ConnectionEvent::AcceptFailed { .. }
+            | ConnectionEvent::SessionTaskFailed { .. } => false,
         }
     }
 
@@ -947,6 +951,17 @@ mod tests {
         }
     }
 
+    fn collect_rust_sources_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).expect("소스 디렉터리 읽기") {
+            let path = entry.expect("엔트리").path();
+            if path.is_dir() {
+                collect_rust_sources_recursive(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
     #[test]
     fn manifest_and_sources_forbid_tcp_chrono_pastey_and_unsafe() {
         let root = PathBuf::from("../..");
@@ -964,11 +979,309 @@ mod tests {
         }
 
         let src_dir = root.join("crates/mcp-server/src");
-        for entry in fs::read_dir(&src_dir).expect("src 디렉터리 읽기") {
-            let path = entry.expect("엔트리").path();
-            if path.extension().is_some_and(|ext| ext == "rs") {
-                assert_source_has_no_forbidden_tokens(&path);
-            }
+        let mut files = Vec::new();
+        collect_rust_sources_recursive(&src_dir, &mut files);
+        assert!(
+            !files.is_empty(),
+            "mcp-server/src 아래에 검사 대상 Rust 파일이 있어야 한다"
+        );
+        for path in files {
+            assert_source_has_no_forbidden_tokens(&path);
         }
+    }
+
+    async fn assert_handle_debug_redacted(server: &McpServerHandle<SteppedClock>) {
+        let handle_debug = format!("{server:?}");
+        let raw_token = std::str::from_utf8(server.token().as_exposed_bytes()).expect("UTF-8");
+        assert!(
+            handle_debug.contains("McpServerHandle")
+                && handle_debug.contains("RunAuthToken(<redacted>)")
+                && !handle_debug.contains(raw_token),
+            "서버 핸들 Debug는 구조와 가림 표식을 출력하고 원문을 노출하지 않는다"
+        );
+        send_bytes_expect_close(server.socket_path(), &auth_line_for(server)).await;
+        let pre_events = wait_for_rejection(
+            server,
+            ConnectionRejection::Peer(PeerVerificationFailure::ParentPidUnbound),
+        )
+        .await;
+        assert!(
+            pre_events.iter().any(|event| is_rejected_with(
+                event,
+                ConnectionRejection::Peer(PeerVerificationFailure::ParentPidUnbound)
+            )),
+            "부모 PID 결합 전에는 닫힌 실패로 거부한다"
+        );
+    }
+
+    async fn assert_bound_bridge_and_mismatch(server: &McpServerHandle<SteppedClock>) {
+        let list_resp = {
+            let stream = UnixStream::connect(server.socket_path())
+                .await
+                .expect("결합 후 연결");
+            let (read_half, mut write_half) = stream.into_split();
+            let mut reader = BufReader::new(read_half);
+            let mut payload = auth_line_for(server);
+            payload.extend_from_slice(format!("{LIST_TOOLS_2026}\n").as_bytes());
+            write_lines(&mut write_half, &payload).await;
+            read_json_line(&mut reader)
+                .await
+                .expect("결합 후 정상 도구 목록 응답")
+        };
+        assert_eq!(
+            list_resp.pointer("/result/tools"),
+            Some(&serde_json::json!([])),
+            "결합된 부모 PID 브리지는 정상 응답한다"
+        );
+        send_bytes_expect_close(server.socket_path(), &auth_line_for(server)).await;
+        let mismatch_events = wait_for_rejection(
+            server,
+            ConnectionRejection::Peer(PeerVerificationFailure::ParentPidMismatch),
+        )
+        .await;
+        assert!(
+            mismatch_events.iter().any(|event| is_rejected_with(
+                event,
+                ConnectionRejection::Peer(PeerVerificationFailure::ParentPidMismatch)
+            )),
+            "다른 부모 PID는 결합 후에도 거부한다"
+        );
+    }
+
+    #[test]
+    fn late_binding_parent_pid_fails_closed_until_bound_once() {
+        runtime().block_on(async {
+            let base = TempBaseDir::new("latebind");
+            let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
+            let cli_pid = ProcessId::try_new(8888_u32).expect("CLI PID");
+            let wrong_pid = ProcessId::try_new(9999_u32).expect("다른 PID");
+            let inspector = Arc::new(ScriptedPeerProcessInspector::new([
+                Ok(PeerProcessInfo::new(cli_pid, expected_exe_path())),
+                Ok(PeerProcessInfo::new(wrong_pid, expected_exe_path())),
+            ]));
+            let deps = RunServerDeps::new(
+                Arc::clone(&clock),
+                PeerInspectorMode::Configured(inspector),
+                McpServerConfig::default_config().expect("설정"),
+            );
+            let spec = RunSocketSpec::generate_under(base.path()).expect("소켓");
+            let request = RunServerRequest::new(
+                RunIdentity::new(
+                    AiRunId::try_new("run-late-bind").expect("id"),
+                    RunKind::Analysis,
+                ),
+                spec,
+                PeerProcessTarget::pending_parent(expected_exe_path()),
+                deps,
+            );
+            assert!(
+                format!("{request:?}").contains("RunServerRequest"),
+                "요청 Debug 출력 확인"
+            );
+            let server = McpServerHandle::start(request).expect("서버 시작");
+            assert_handle_debug_redacted(&server).await;
+
+            assert_eq!(
+                server.bind_expected_parent_pid(cli_pid),
+                Ok(()),
+                "CLI 기동 직후 1회 부모 PID 결합 성공"
+            );
+            assert_eq!(
+                server.bind_expected_parent_pid(wrong_pid),
+                Err(McpServerError::ParentPidAlreadyBound),
+                "이미 결합된 부모 PID 재설정은 거부한다"
+            );
+            assert_bound_bridge_and_mismatch(&server).await;
+
+            let final_events = tokio::time::timeout(Duration::from_secs(2_u64), server.shutdown())
+                .await
+                .expect("종료는 2초 안에 끝나야 한다");
+            assert!(
+                final_events.iter().any(|event| match event {
+                    ConnectionEvent::Closed { .. } => true,
+                    ConnectionEvent::Accepted { .. }
+                    | ConnectionEvent::Rejected { .. }
+                    | ConnectionEvent::AcceptFailed { .. }
+                    | ConnectionEvent::SessionTaskFailed { .. } => false,
+                }),
+                "정상 종료 시 Closed 이벤트가 기록된다"
+            );
+        });
+    }
+
+    #[test]
+    fn expired_token_rejects_post_discover_ping() {
+        runtime().block_on(async {
+            let base = TempBaseDir::new("expping");
+            let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
+            let cfg = McpServerConfig::try_new(
+                AuthLineLimit::default_limit(),
+                Duration::from_secs(2_u64),
+                Duration::from_secs(1_u64),
+                MaxConcurrentConnections::try_new(1_usize).expect("동시 1"),
+                TokenTtl::try_from_seconds(30_u64).expect("30초"),
+            )
+            .expect("설정");
+            let server = start_matching_server(&base, "run-exp-ping", &clock, 4_usize, cfg);
+
+            let ping_after_expiry = {
+                let stream = UnixStream::connect(server.socket_path())
+                    .await
+                    .expect("연결 1");
+                let (read_half, mut write_half) = stream.into_split();
+                let mut reader = BufReader::new(read_half);
+                let mut first_msg = auth_line_for(&server);
+                first_msg.extend_from_slice(
+                    b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}\n",
+                );
+                write_lines(&mut write_half, &first_msg).await;
+                let discover = read_json_line(&mut reader)
+                    .await
+                    .expect("만료 전 discover 응답");
+                assert!(
+                    discover.pointer("/result/supportedVersions").is_some(),
+                    "만료 전 discover 정상"
+                );
+
+                clock
+                    .advance_to(timestamp_at(1_700_000_030_i64))
+                    .expect("시각 이동");
+                write_lines(
+                    &mut write_half,
+                    b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n",
+                )
+                .await;
+                read_json_line(&mut reader).await
+            };
+            assert_eq!(
+                ping_after_expiry, None,
+                "만료 뒤 discover 이후 ping은 성공 응답 없이 즉시 닫혀야 한다"
+            );
+
+            let _events = tokio::time::timeout(Duration::from_secs(2_u64), server.shutdown())
+                .await
+                .expect("서버 종료");
+        });
+    }
+
+    #[test]
+    fn expired_idle_session_closes_and_releases_concurrency_slot() {
+        runtime().block_on(async {
+            let base = TempBaseDir::new("expidle");
+            let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
+            let cfg = McpServerConfig::try_new(
+                AuthLineLimit::default_limit(),
+                Duration::from_secs(2_u64),
+                Duration::from_secs(1_u64),
+                MaxConcurrentConnections::try_new(1_usize).expect("동시 1"),
+                TokenTtl::try_from_seconds(30_u64).expect("30초"),
+            )
+            .expect("설정");
+            let server = start_matching_server(&base, "run-exp-idle", &clock, 4_usize, cfg);
+            let idle_after_expiry = {
+                let idle_stream = UnixStream::connect(server.socket_path())
+                    .await
+                    .expect("유휴 연결");
+                let (idle_read, mut idle_write) = idle_stream.into_split();
+                let mut idle_reader = BufReader::new(idle_read);
+                write_lines(&mut idle_write, &auth_line_for(&server)).await;
+                tokio::time::sleep(Duration::from_millis(40_u64)).await;
+
+                clock
+                    .advance_to(timestamp_at(1_700_000_030_i64))
+                    .expect("시각 이동");
+                read_json_line(&mut idle_reader).await
+            };
+            assert_eq!(
+                idle_after_expiry, None,
+                "아무 요청 없는 유휴 세션도 만료 뒤 자동으로 닫혀야 한다"
+            );
+
+            send_bytes_expect_close(server.socket_path(), &auth_line_for(&server)).await;
+            let events = wait_for_rejection(
+                &server,
+                ConnectionRejection::Auth(AuthRejection::TokenExpired),
+            )
+            .await;
+            assert!(
+                events.iter().any(|event| is_rejected_with(
+                    event,
+                    ConnectionRejection::Auth(AuthRejection::TokenExpired)
+                )),
+                "유휴 세션 종료 후 슬롯 반환으로 TokenExpired가 기록된다"
+            );
+            let _events = tokio::time::timeout(Duration::from_secs(2_u64), server.shutdown())
+                .await
+                .expect("서버 종료");
+        });
+    }
+
+    #[test]
+    fn socket_rejects_ancestor_symlink_and_unsticky_world_writable_base_dir() {
+        runtime().block_on(async {
+            let base = TempBaseDir::new("anc");
+            let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
+
+            let real_dir = base.path().join("real");
+            let nested = real_dir.join("child");
+            DirBuilder::new()
+                .mode(0o700_u32)
+                .create(&real_dir)
+                .expect("실제 폴더");
+            DirBuilder::new()
+                .mode(0o700_u32)
+                .create(&nested)
+                .expect("하위 폴더");
+            let ancestor_link = base.path().join("link");
+            symlink(&real_dir, &ancestor_link).expect("상위 심볼릭 링크");
+            let via_ancestor_link =
+                RunSocketSpec::explicit(ancestor_link.join("child").join("r1"), "m.sock")
+                    .expect("경로 스펙");
+            assert_eq!(
+                start_unconfigured("run-anc-link", via_ancestor_link, &clock).err(),
+                Some(McpServerError::Socket(SocketSetupError::SymlinkNotAllowed)),
+                "상위 경로 심볼릭 링크는 거부한다"
+            );
+
+            let world_dir = base.path().join("open777");
+            DirBuilder::new()
+                .mode(0o700_u32)
+                .create(&world_dir)
+                .expect("임시 폴더");
+            fs::set_permissions(
+                &world_dir,
+                std::os::unix::fs::PermissionsExt::from_mode(0o777_u32),
+            )
+            .expect("0777 설정");
+            let open_spec = RunSocketSpec::explicit(world_dir.join("r1"), "m.sock").expect("스펙");
+            assert_eq!(
+                start_unconfigured("run-open-base", open_spec, &clock).err(),
+                Some(McpServerError::Socket(
+                    SocketSetupError::BaseDirectoryPermissionsInvalid
+                )),
+                "sticky 없는 0777 기반 폴더는 거부한다"
+            );
+            assert!(
+                !world_dir.join("r1").exists(),
+                "기반 폴더 권한 거부 시 하위 실행 폴더를 만들지 않는다"
+            );
+        });
+    }
+
+    #[test]
+    fn start_outside_tokio_runtime_returns_error_without_creating_directory() {
+        let base = TempBaseDir::new("nort");
+        let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
+        let spec = RunSocketSpec::generate_under(base.path()).expect("소켓 스펙");
+        let run_dir = spec.run_dir().to_path_buf();
+        assert_eq!(
+            start_unconfigured("run-no-rt", spec, &clock).err(),
+            Some(McpServerError::RuntimeUnavailable),
+            "Tokio 런타임 밖 호출은 패닉 대신 RuntimeUnavailable 오류를 반환한다"
+        );
+        assert!(
+            !run_dir.exists(),
+            "런타임 부재 오류 시 실행 폴더를 만들지 않는다"
+        );
     }
 }

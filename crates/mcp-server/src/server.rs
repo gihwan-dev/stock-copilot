@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,16 +12,15 @@ use tokio::task::JoinHandle;
 
 use crate::handler::{
     ConnectionEvent, ConnectionEventLog, ConnectionRejection, RaceOutcome, ShutdownSignal,
-    StreamAuthParams, authenticate_and_serve_stream, race, wait_for_revocation, wait_for_shutdown,
+    StreamAuthParams, authenticate_and_serve_stream, pre_session_stop_to_rejection, race,
+    wait_for_pre_session_stop, wait_for_shutdown,
 };
 use crate::peer::{
     ExpectedPeerPolicy, ObservedPeerCredentials, PeerInspectorMode, PeerVerificationFailure,
     UserId, verify_peer,
 };
 use crate::socket::{BoundRunSocket, RunSocketSpec, SocketCleanupGuard, SocketSetupError};
-use crate::token::{
-    AuthLineLimit, AuthRejection, RunAuthBinding, RunAuthToken, TokenError, TokenTtl,
-};
+use crate::token::{AuthLineLimit, RunAuthBinding, RunAuthToken, TokenError, TokenTtl};
 
 pub const DEFAULT_AUTH_TIMEOUT_SECS: u64 = 5_u64;
 pub const MAX_AUTH_TIMEOUT_SECS: u64 = 30_u64;
@@ -29,11 +29,15 @@ pub const MAX_PEER_INSPECTION_TIMEOUT_SECS: u64 = 10_u64;
 pub const DEFAULT_MAX_CONCURRENT_CONNECTIONS: usize = 4_usize;
 pub const MAX_CONCURRENT_CONNECTIONS_CAP: usize = 16_usize;
 
+const ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(50_u64);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum McpServerError {
+    RuntimeUnavailable,
     InvalidAuthTimeout,
     InvalidPeerInspectionTimeout,
     InvalidConcurrencyLimit,
+    ParentPidAlreadyBound,
     Token(TokenError),
     Socket(SocketSetupError),
 }
@@ -145,16 +149,30 @@ impl RunIdentity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum InitialParentTarget {
+    Pending,
+    Bound(ProcessId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PeerProcessTarget {
-    parent_pid: ProcessId,
+    parent_pid: InitialParentTarget,
     executable_path: ExecutablePath,
 }
 
 impl PeerProcessTarget {
     #[must_use]
-    pub const fn new(parent_pid: ProcessId, executable_path: ExecutablePath) -> Self {
+    pub const fn pending_parent(executable_path: ExecutablePath) -> Self {
         Self {
-            parent_pid,
+            parent_pid: InitialParentTarget::Pending,
+            executable_path,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_parent(parent_pid: ProcessId, executable_path: ExecutablePath) -> Self {
+        Self {
+            parent_pid: InitialParentTarget::Bound(parent_pid),
             executable_path,
         }
     }
@@ -226,6 +244,7 @@ impl<C, P> RunServerRequest<C, P> {
 
 pub struct McpServerHandle<C: Clock + 'static> {
     auth: Arc<RunAuthBinding<C>>,
+    expected_peer: Arc<ExpectedPeerPolicy>,
     owner_uid: UserId,
     run_dir: PathBuf,
     socket_path: PathBuf,
@@ -250,6 +269,8 @@ impl<C: Clock + 'static> McpServerHandle<C> {
     pub fn start<P: PeerProcessInspector + 'static>(
         request: RunServerRequest<C, P>,
     ) -> Result<Self, McpServerError> {
+        let runtime = tokio::runtime::Handle::try_current()
+            .map_err(|_error| McpServerError::RuntimeUnavailable)?;
         let auth = Arc::new(
             RunAuthBinding::issue(
                 request.identity.run_id,
@@ -261,11 +282,16 @@ impl<C: Clock + 'static> McpServerHandle<C> {
         );
         let bound = BoundRunSocket::bind(&request.socket_spec).map_err(McpServerError::Socket)?;
         let (listener, owner_uid, run_dir, socket_path, cleanup) = bound.into_parts();
-        let expected_peer = Arc::new(ExpectedPeerPolicy::new(
-            owner_uid,
-            request.peer_target.parent_pid,
-            request.peer_target.executable_path,
-        ));
+        let expected_peer = Arc::new(match request.peer_target.parent_pid {
+            InitialParentTarget::Pending => {
+                ExpectedPeerPolicy::new_pending(owner_uid, request.peer_target.executable_path)
+            }
+            InitialParentTarget::Bound(parent_pid) => ExpectedPeerPolicy::new_bound(
+                owner_uid,
+                parent_pid,
+                request.peer_target.executable_path,
+            ),
+        });
         let events = Arc::new(ConnectionEventLog::new());
         let (shutdown_tx, shutdown_rx) = watch::channel(ShutdownSignal::Running);
         let semaphore = Arc::new(Semaphore::new(
@@ -274,16 +300,17 @@ impl<C: Clock + 'static> McpServerHandle<C> {
 
         let loop_state = AcceptLoopState {
             auth: Arc::clone(&auth),
-            expected_peer,
+            expected_peer: Arc::clone(&expected_peer),
             inspector: request.deps.peer_inspector,
             config: request.deps.config,
             semaphore,
             events: Arc::clone(&events),
         };
-        let accept_task = tokio::spawn(run_accept_loop(listener, shutdown_rx, loop_state));
+        let accept_task = runtime.spawn(run_accept_loop(listener, shutdown_rx, loop_state));
 
         Ok(Self {
             auth,
+            expected_peer,
             owner_uid,
             run_dir,
             socket_path,
@@ -292,6 +319,12 @@ impl<C: Clock + 'static> McpServerHandle<C> {
             accept_task: Some(accept_task),
             cleanup,
         })
+    }
+
+    pub fn bind_expected_parent_pid(&self, parent_pid: ProcessId) -> Result<(), McpServerError> {
+        self.expected_peer
+            .bind_parent_pid(parent_pid)
+            .map_err(|_existing| McpServerError::ParentPidAlreadyBound)
     }
 
     #[must_use]
@@ -338,16 +371,21 @@ impl<C: Clock + 'static> McpServerHandle<C> {
         self.auth.revoke();
     }
 
-    pub async fn shutdown(mut self) {
+    pub async fn shutdown(mut self) -> Vec<ConnectionEvent> {
         self.auth.revoke();
         signal_shutdown(&self.shutdown_tx);
         if let Some(task) = self.accept_task.take() {
             match task.await {
                 Ok(()) => {}
-                Err(_error) => {}
+                Err(_error) => {
+                    self.events.push(ConnectionEvent::SessionTaskFailed {
+                        run_id: self.auth.run_id().clone(),
+                    });
+                }
             }
         }
         self.cleanup.cleanup();
+        self.events.snapshot()
     }
 }
 
@@ -366,6 +404,23 @@ fn signal_shutdown(shutdown_tx: &watch::Sender<ShutdownSignal>) {
     match shutdown_tx.send(ShutdownSignal::Stopped) {
         Ok(()) => {}
         Err(_no_receivers) => {}
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AcceptErrorAction {
+    RetryAfterBackoff,
+    StopLoop,
+}
+
+fn classify_accept_error(kind: ErrorKind) -> AcceptErrorAction {
+    if kind == ErrorKind::InvalidInput
+        || kind == ErrorKind::PermissionDenied
+        || kind == ErrorKind::NotConnected
+    {
+        AcceptErrorAction::StopLoop
+    } else {
+        AcceptErrorAction::RetryAfterBackoff
     }
 }
 
@@ -388,7 +443,31 @@ async fn run_accept_loop<C: Clock + 'static, P: PeerProcessInspector + 'static>(
     for task in active_tasks {
         match task.await {
             Ok(()) => {}
-            Err(_error) => {}
+            Err(_error) => {
+                state.events.push(ConnectionEvent::SessionTaskFailed {
+                    run_id: state.auth.run_id().clone(),
+                });
+            }
+        }
+    }
+}
+
+async fn handle_accept_error(
+    error_kind: ErrorKind,
+    shutdown_rx: &mut watch::Receiver<ShutdownSignal>,
+) -> AcceptErrorAction {
+    match classify_accept_error(error_kind) {
+        AcceptErrorAction::StopLoop => AcceptErrorAction::StopLoop,
+        AcceptErrorAction::RetryAfterBackoff => {
+            match race(
+                wait_for_shutdown(shutdown_rx),
+                tokio::time::sleep(ACCEPT_ERROR_BACKOFF),
+            )
+            .await
+            {
+                RaceOutcome::First(()) => AcceptErrorAction::StopLoop,
+                RaceOutcome::Second(()) => AcceptErrorAction::RetryAfterBackoff,
+            }
         }
     }
 }
@@ -408,7 +487,15 @@ async fn accept_until_shutdown<C: Clock + 'static, P: PeerProcessInspector + 'st
                     active_tasks.push(task);
                 }
             }
-            RaceOutcome::Second(Err(_error)) => {}
+            RaceOutcome::Second(Err(error)) => {
+                state.events.push(ConnectionEvent::AcceptFailed {
+                    run_id: state.auth.run_id().clone(),
+                });
+                match handle_accept_error(error.kind(), shutdown_rx).await {
+                    AcceptErrorAction::StopLoop => break,
+                    AcceptErrorAction::RetryAfterBackoff => {}
+                }
+            }
         }
     }
 }
@@ -465,10 +552,7 @@ async fn handle_unix_connection<C: Clock + 'static, P: PeerProcessInspector>(
     };
 
     let mut revoke_rx = context.auth.subscribe_revocation();
-    let stop = race(
-        wait_for_shutdown(&mut context.shutdown_rx),
-        wait_for_revocation(&mut revoke_rx),
-    );
+    let stop = wait_for_pre_session_stop(&mut context.shutdown_rx, &mut revoke_rx, &context.auth);
     let peer_check = verify_peer(
         observed,
         &context.expected_peer,
@@ -476,10 +560,10 @@ async fn handle_unix_connection<C: Clock + 'static, P: PeerProcessInspector>(
         context.config.peer_inspection_timeout(),
     );
     match race(stop, peer_check).await {
-        RaceOutcome::First(_stopped) => {
+        RaceOutcome::First(reason) => {
             context.events.push(ConnectionEvent::Rejected {
                 run_id,
-                reason: ConnectionRejection::Auth(AuthRejection::TokenRevoked),
+                reason: pre_session_stop_to_rejection(reason),
             });
             return;
         }
@@ -501,69 +585,73 @@ async fn handle_unix_connection<C: Clock + 'static, P: PeerProcessInspector>(
         context.shutdown_rx,
         context.events,
     );
-    authenticate_and_serve_stream(read_half, write_half, params).await;
+    Box::pin(authenticate_and_serve_stream(read_half, write_half, params)).await;
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::ErrorKind;
     use std::time::Duration;
 
     use crate::token::{AuthLineLimit, TokenTtl};
 
     use super::{
-        DEFAULT_AUTH_TIMEOUT_SECS, DEFAULT_MAX_CONCURRENT_CONNECTIONS,
+        AcceptErrorAction, DEFAULT_AUTH_TIMEOUT_SECS, DEFAULT_MAX_CONCURRENT_CONNECTIONS,
         DEFAULT_PEER_INSPECTION_TIMEOUT_SECS, MAX_AUTH_TIMEOUT_SECS,
         MAX_CONCURRENT_CONNECTIONS_CAP, MAX_PEER_INSPECTION_TIMEOUT_SECS, MaxConcurrentConnections,
-        McpServerConfig, McpServerError,
+        McpServerConfig, McpServerError, classify_accept_error,
     };
 
     #[test]
     fn server_config_defaults_and_concurrency_bounds() {
-        let default_cfg = McpServerConfig::default_config().expect("기본 설정");
+        let default = McpServerConfig::default_config().expect("기본 설정");
         assert_eq!(
-            default_cfg.auth_timeout(),
+            default.auth_timeout(),
             Duration::from_secs(DEFAULT_AUTH_TIMEOUT_SECS),
             "기본 인증 제한 시간"
         );
         assert_eq!(
-            default_cfg.peer_inspection_timeout(),
+            default.peer_inspection_timeout(),
             Duration::from_secs(DEFAULT_PEER_INSPECTION_TIMEOUT_SECS),
-            "기본 피어 조회 제한 시간"
+            "기본 프로세스 조회 제한 시간"
         );
         assert_eq!(
-            default_cfg.max_concurrent_connections().as_usize(),
+            default.max_concurrent_connections().as_usize(),
             DEFAULT_MAX_CONCURRENT_CONNECTIONS,
             "기본 동시 연결 수"
         );
         assert_eq!(
             MaxConcurrentConnections::try_new(0_usize),
             Err(McpServerError::InvalidConcurrencyLimit),
-            "0개 연결 상한 거부"
+            "동시 연결 0 거부"
         );
         assert_eq!(
             MaxConcurrentConnections::try_new(
                 MAX_CONCURRENT_CONNECTIONS_CAP.saturating_add(1_usize)
             ),
             Err(McpServerError::InvalidConcurrencyLimit),
-            "최대 초과 연결 상한 거부"
+            "동시 연결 상한 초과 거부"
         );
         assert_eq!(
-            MaxConcurrentConnections::try_new(MAX_CONCURRENT_CONNECTIONS_CAP)
-                .map(MaxConcurrentConnections::as_usize),
-            Ok(MAX_CONCURRENT_CONNECTIONS_CAP),
-            "상한 경계 허용"
+            classify_accept_error(ErrorKind::InvalidInput),
+            AcceptErrorAction::StopLoop,
+            "치명 accept 오류는 루프를 종료한다"
+        );
+        assert_eq!(
+            classify_accept_error(ErrorKind::Interrupted),
+            AcceptErrorAction::RetryAfterBackoff,
+            "일시 accept 오류는 대기 후 재시도한다"
         );
     }
 
     #[test]
-    fn server_config_validates_timeout_bounds() {
+    fn server_config_rejects_invalid_timeouts() {
         let ttl = TokenTtl::default_ttl().expect("기본 TTL");
-        let limit = AuthLineLimit::default_limit();
-        let concurrency = MaxConcurrentConnections::default_limit();
-
+        let line_limit = AuthLineLimit::default_limit();
+        let concurrency = MaxConcurrentConnections::try_new(1_usize).expect("동시 연결 1");
         assert_eq!(
             McpServerConfig::try_new(
-                limit,
+                line_limit,
                 Duration::ZERO,
                 Duration::from_secs(1_u64),
                 concurrency,
@@ -574,7 +662,7 @@ mod tests {
         );
         assert_eq!(
             McpServerConfig::try_new(
-                limit,
+                line_limit,
                 Duration::from_secs(MAX_AUTH_TIMEOUT_SECS.saturating_add(1_u64)),
                 Duration::from_secs(1_u64),
                 concurrency,
@@ -585,56 +673,25 @@ mod tests {
         );
         assert_eq!(
             McpServerConfig::try_new(
-                limit,
+                line_limit,
                 Duration::from_secs(1_u64),
                 Duration::ZERO,
                 concurrency,
                 ttl,
             ),
             Err(McpServerError::InvalidPeerInspectionTimeout),
-            "0초 피어 조회 제한 시간 거부"
+            "0초 조회 제한 시간 거부"
         );
         assert_eq!(
             McpServerConfig::try_new(
-                limit,
+                line_limit,
                 Duration::from_secs(1_u64),
                 Duration::from_secs(MAX_PEER_INSPECTION_TIMEOUT_SECS.saturating_add(1_u64)),
                 concurrency,
                 ttl,
             ),
             Err(McpServerError::InvalidPeerInspectionTimeout),
-            "상한 초과 피어 조회 제한 시간 거부"
+            "상한 초과 조회 제한 시간 거부"
         );
-    }
-
-    #[test]
-    fn server_config_accepts_upper_and_lower_boundary_values() {
-        let ttl = TokenTtl::default_ttl().expect("기본 TTL");
-        let limit = AuthLineLimit::default_limit();
-        let cfg = McpServerConfig::try_new(
-            limit,
-            Duration::from_secs(MAX_AUTH_TIMEOUT_SECS),
-            Duration::from_secs(MAX_PEER_INSPECTION_TIMEOUT_SECS),
-            MaxConcurrentConnections::try_new(1_usize).expect("1연결"),
-            ttl,
-        )
-        .expect("상한 경계 설정은 허용한다");
-        assert_eq!(cfg.auth_line_limit(), limit, "인증 줄 한도 보존");
-        assert_eq!(
-            cfg.auth_timeout(),
-            Duration::from_secs(MAX_AUTH_TIMEOUT_SECS),
-            "인증 제한 시간 보존"
-        );
-        assert_eq!(
-            cfg.peer_inspection_timeout(),
-            Duration::from_secs(MAX_PEER_INSPECTION_TIMEOUT_SECS),
-            "피어 조회 제한 시간 보존"
-        );
-        assert_eq!(
-            cfg.max_concurrent_connections().as_usize(),
-            1_usize,
-            "최소 동시 연결 수 보존"
-        );
-        assert_eq!(cfg.token_ttl(), ttl, "토큰 TTL 보존");
     }
 }

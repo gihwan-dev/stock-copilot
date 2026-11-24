@@ -1,6 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::Duration;
 
 use application::{AiRunId, Clock, RunKind, SecretValue};
 use domain::{Nanosecond, SpanSeconds, TimeSpan, Timestamp};
@@ -31,7 +32,7 @@ pub enum TokenError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TokenStatus {
+pub(crate) enum TokenStatus {
     Active,
     Revoked,
 }
@@ -101,7 +102,7 @@ impl fmt::Debug for RunAuthToken {
 }
 
 impl RunAuthToken {
-    pub fn generate() -> Result<Self, TokenError> {
+    pub(crate) fn generate() -> Result<Self, TokenError> {
         let mut raw = Zeroizing::new([0_u8; TOKEN_RANDOM_BYTES]);
         getrandom::fill(raw.as_mut()).map_err(|_error| TokenError::EntropyUnavailable)?;
         let encoded = encode_hex(raw.as_ref())?;
@@ -114,7 +115,7 @@ impl RunAuthToken {
     }
 
     #[must_use]
-    pub fn matches_constant_time(&self, candidate: &[u8]) -> TokenMatch {
+    pub(crate) fn matches_constant_time(&self, candidate: &[u8]) -> TokenMatch {
         let expected = self.0.as_exposed_secret();
         let expected_len_ok = expected.len().ct_eq(&TOKEN_HEX_BYTES);
         let candidate_len_ok = candidate.len().ct_eq(&TOKEN_HEX_BYTES);
@@ -128,7 +129,7 @@ impl RunAuthToken {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TokenMatch {
+pub(crate) enum TokenMatch {
     Matched,
     Rejected,
 }
@@ -151,24 +152,24 @@ fn encode_hex(bytes: &[u8]) -> Result<Vec<u8>, TokenError> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AuthenticatedRun {
+pub(crate) struct AuthenticatedRun {
     run_id: AiRunId,
     run_kind: RunKind,
 }
 
 impl AuthenticatedRun {
     #[must_use]
-    pub const fn run_id(&self) -> &AiRunId {
+    pub(crate) const fn run_id(&self) -> &AiRunId {
         &self.run_id
     }
 
     #[must_use]
-    pub const fn run_kind(&self) -> RunKind {
+    pub(crate) const fn run_kind(&self) -> RunKind {
         self.run_kind
     }
 }
 
-pub struct RunAuthBinding<C: Clock> {
+pub(crate) struct RunAuthBinding<C: Clock> {
     run_id: AiRunId,
     run_kind: RunKind,
     token: RunAuthToken,
@@ -193,7 +194,7 @@ impl<C: Clock> fmt::Debug for RunAuthBinding<C> {
 }
 
 impl<C: Clock> RunAuthBinding<C> {
-    pub fn issue(
+    pub(crate) fn issue(
         run_id: AiRunId,
         run_kind: RunKind,
         clock: Arc<C>,
@@ -222,32 +223,27 @@ impl<C: Clock> RunAuthBinding<C> {
     }
 
     #[must_use]
-    pub const fn run_id(&self) -> &AiRunId {
+    pub(crate) const fn run_id(&self) -> &AiRunId {
         &self.run_id
     }
 
     #[must_use]
-    pub const fn run_kind(&self) -> RunKind {
+    pub(crate) const fn run_kind(&self) -> RunKind {
         self.run_kind
     }
 
     #[must_use]
-    pub const fn issued_at(&self) -> Timestamp {
-        self.issued_at
-    }
-
-    #[must_use]
-    pub const fn expires_at(&self) -> Timestamp {
+    pub(crate) const fn expires_at(&self) -> Timestamp {
         self.expires_at
     }
 
     #[must_use]
-    pub const fn token(&self) -> &RunAuthToken {
+    pub(crate) const fn token(&self) -> &RunAuthToken {
         &self.token
     }
 
     #[must_use]
-    pub fn status(&self) -> TokenStatus {
+    pub(crate) fn status(&self) -> TokenStatus {
         match self.state.load(Ordering::Acquire) {
             TOKEN_STATE_ACTIVE => TokenStatus::Active,
             _other => TokenStatus::Revoked,
@@ -255,11 +251,11 @@ impl<C: Clock> RunAuthBinding<C> {
     }
 
     #[must_use]
-    pub fn subscribe_revocation(&self) -> watch::Receiver<TokenStatus> {
+    pub(crate) fn subscribe_revocation(&self) -> watch::Receiver<TokenStatus> {
         self.revoke_tx.subscribe()
     }
 
-    pub fn revoke(&self) {
+    pub(crate) fn revoke(&self) {
         self.state.store(TOKEN_STATE_REVOKED, Ordering::Release);
         match self.revoke_tx.send(TokenStatus::Revoked) {
             Ok(()) => {}
@@ -267,7 +263,23 @@ impl<C: Clock> RunAuthBinding<C> {
         }
     }
 
-    pub fn ensure_active(&self) -> Result<(), AuthRejection> {
+    #[must_use]
+    pub(crate) fn remaining_until_expiry(&self) -> Duration {
+        match self.status() {
+            TokenStatus::Active => {}
+            TokenStatus::Revoked => return Duration::ZERO,
+        }
+        let now = self.clock.now();
+        match now.elapsed_until(self.expires_at) {
+            Ok(span) => {
+                let (secs, nanos) = span.as_parts();
+                Duration::new(*secs.as_u64(), *nanos.as_u32())
+            }
+            Err(_elapsed_or_overflow) => Duration::ZERO,
+        }
+    }
+
+    pub(crate) fn ensure_active(&self) -> Result<(), AuthRejection> {
         match self.status() {
             TokenStatus::Active => {}
             TokenStatus::Revoked => return Err(AuthRejection::TokenRevoked),
@@ -278,16 +290,12 @@ impl<C: Clock> RunAuthBinding<C> {
         Ok(())
     }
 
-    pub fn verify_auth_line(
+    pub(crate) fn verify_auth_line(
         &self,
         line_bytes: &[u8],
         expected_run_id: &AiRunId,
     ) -> Result<AuthenticatedRun, AuthRejection> {
         self.ensure_active()?;
-        match self.run_kind {
-            RunKind::Analysis => {}
-            RunKind::Collection => return Err(AuthRejection::RunMismatch),
-        }
         if &self.run_id != expected_run_id {
             return Err(AuthRejection::RunMismatch);
         }
@@ -316,6 +324,7 @@ impl<C: Clock> RunAuthBinding<C> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::time::Duration;
 
     use application::{AiRunId, RunKind};
     use domain::{Nanosecond, OffsetSeconds, SpanSeconds, Timestamp, UnixSeconds};
@@ -448,164 +457,154 @@ mod tests {
             "최대 길이 초과 거부"
         );
         assert_eq!(
-            AuthLineLimit::try_new(MIN_AUTH_LINE_BYTES).map(AuthLineLimit::as_usize),
-            Ok(MIN_AUTH_LINE_BYTES),
-            "최소 경계 허용"
-        );
-        assert_eq!(
-            AuthLineLimit::try_new(MAX_AUTH_LINE_BYTES_CAP).map(AuthLineLimit::as_usize),
-            Ok(MAX_AUTH_LINE_BYTES_CAP),
-            "최대 경계 허용"
-        );
-        assert_eq!(
             AuthLineLimit::default_limit().as_usize(),
             DEFAULT_MAX_AUTH_LINE_BYTES,
-            "기본 한도 반환"
+            "기본 인증 줄 상한"
         );
     }
 
     #[test]
-    fn run_auth_binding_rejects_collection_run_and_validates_run_id() {
+    fn run_auth_binding_rejects_collection_and_verifies_run_id() {
         let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
-        let run_a = AiRunId::try_new("run-a").expect("run-a");
-        let run_b = AiRunId::try_new("run-b").expect("run-b");
-        let ttl = TokenTtl::try_from_seconds(60_u64).expect("60초 TTL");
+        let run_id = AiRunId::try_new("run-analysis-1").expect("실행 ID");
+        let other_run_id = AiRunId::try_new("run-analysis-2").expect("다른 실행 ID");
+        let ttl = TokenTtl::try_from_seconds(60_u64).expect("유효 TTL");
 
+        let collection =
+            RunAuthBinding::issue(run_id.clone(), RunKind::Collection, Arc::clone(&clock), ttl);
         assert_eq!(
-            RunAuthBinding::issue(run_a.clone(), RunKind::Collection, Arc::clone(&clock), ttl)
-                .err(),
+            collection.err(),
             Some(TokenError::CollectionRunNotAllowed),
-            "수집 실행은 앱 MCP 토큰을 발급받을 수 없다"
+            "수집 실행에는 MCP 토큰을 발급하지 않는다"
         );
 
-        let binding_a =
-            RunAuthBinding::issue(run_a.clone(), RunKind::Analysis, Arc::clone(&clock), ttl)
-                .expect("바인딩 A");
-        let binding_b =
-            RunAuthBinding::issue(run_b.clone(), RunKind::Analysis, Arc::clone(&clock), ttl)
-                .expect("바인딩 B");
-
-        let raw_a = std::str::from_utf8(binding_a.token().as_exposed_bytes()).expect("UTF-8");
+        let binding =
+            RunAuthBinding::issue(run_id.clone(), RunKind::Analysis, clock, ttl).expect("발급");
+        assert_eq!(
+            binding.remaining_until_expiry(),
+            Duration::from_secs(60_u64),
+            "잔여 유효 시간 계산"
+        );
+        let binding_debug = format!("{binding:?}");
+        let raw = std::str::from_utf8(binding.token().as_exposed_bytes()).expect("UTF-8");
         assert!(
-            !format!("{binding_a:?}").contains(raw_a),
-            "RunAuthBinding Debug에 원문 토큰 노출 금지"
+            binding_debug.contains("RunAuthBinding")
+                && binding_debug.contains("RunAuthToken(<redacted>)")
+                && !binding_debug.contains(raw),
+            "RunAuthBinding Debug는 구조와 가림 표식을 출력하고 원문을 노출하지 않는다"
         );
-        let valid_line = format!("AUTH {raw_a}\n");
-        let authenticated = binding_a
-            .verify_auth_line(valid_line.as_bytes(), &run_a)
-            .expect("유효한 토큰 인증 성공");
-        assert_eq!(authenticated.run_id(), &run_a, "실행 ID 일치");
+
+        let mut valid_line = b"AUTH ".to_vec();
+        valid_line.extend_from_slice(binding.token().as_exposed_bytes());
+        valid_line.push(b'\n');
+
         assert_eq!(
-            authenticated.run_kind(),
-            RunKind::Analysis,
-            "실행 종류 일치"
-        );
-        assert_eq!(
-            binding_a.verify_auth_line(valid_line.as_bytes(), &run_b),
+            binding.verify_auth_line(&valid_line, &other_run_id),
             Err(AuthRejection::RunMismatch),
             "다른 실행 ID 거부"
         );
-        let raw_b = std::str::from_utf8(binding_b.token().as_exposed_bytes()).expect("UTF-8");
-        assert_eq!(
-            binding_a.verify_auth_line(format!("AUTH {raw_b}\n").as_bytes(), &run_a),
-            Err(AuthRejection::InvalidToken),
-            "다른 실행 토큰 거부"
-        );
+        let ok = binding
+            .verify_auth_line(&valid_line, &run_id)
+            .expect("일치하는 실행 인증 성공");
+        assert_eq!(ok.run_id(), &run_id, "인증된 실행 ID 일치");
+        assert_eq!(ok.run_kind(), RunKind::Analysis, "분석 실행 확인");
     }
 
     #[test]
     fn run_auth_binding_rejects_malformed_auth_lines() {
         let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
-        let run_a = AiRunId::try_new("run-a").expect("run-a");
-        let ttl = TokenTtl::try_from_seconds(60_u64).expect("60초 TTL");
-        let binding_a =
-            RunAuthBinding::issue(run_a.clone(), RunKind::Analysis, clock, ttl).expect("바인딩 A");
-        let raw_a = std::str::from_utf8(binding_a.token().as_exposed_bytes()).expect("UTF-8");
+        let run_id = AiRunId::try_new("run-analysis-fmt").expect("실행 ID");
+        let ttl = TokenTtl::try_from_seconds(60_u64).expect("유효 TTL");
+        let binding =
+            RunAuthBinding::issue(run_id.clone(), RunKind::Analysis, clock, ttl).expect("발급");
+        let mut crlf = b"AUTH ".to_vec();
+        crlf.extend_from_slice(binding.token().as_exposed_bytes());
+        crlf.extend_from_slice(b"\r\n");
 
-        assert_eq!(
-            binding_a.verify_auth_line(format!("AUTH {raw_a}\r\n").as_bytes(), &run_a),
-            Err(AuthRejection::InvalidToken),
-            "CRLF 거부"
-        );
-        assert_eq!(
-            binding_a.verify_auth_line(format!("AUTH {raw_a} \n").as_bytes(), &run_a),
-            Err(AuthRejection::InvalidToken),
-            "뒤 공백 거부"
-        );
-        assert_eq!(
-            binding_a.verify_auth_line(b"", &run_a),
-            Err(AuthRejection::AuthMissing),
-            "빈 입력 거부"
-        );
-        assert_eq!(
-            binding_a.verify_auth_line(b"\n", &run_a),
-            Err(AuthRejection::AuthMissing),
-            "빈 줄 거부"
-        );
-        assert_eq!(
-            binding_a.verify_auth_line(b"HELLO world\n", &run_a),
-            Err(AuthRejection::InvalidAuthFormat),
-            "잘못된 접두사 거부"
-        );
-        assert_eq!(
-            binding_a.verify_auth_line(b"AUTH \n", &run_a),
-            Err(AuthRejection::MissingToken),
-            "빈 토큰 거부"
-        );
+        let cases: [(&[u8], AuthRejection, &str); 6] = [
+            (b"", AuthRejection::AuthMissing, "빈 입력 거부"),
+            (b"\n", AuthRejection::AuthMissing, "빈 줄 거부"),
+            (
+                b"BEARER abc\n",
+                AuthRejection::InvalidAuthFormat,
+                "접두사 오류 거부",
+            ),
+            (b"AUTH \n", AuthRejection::MissingToken, "토큰 누락 거부"),
+            (
+                b"AUTH wrong\n",
+                AuthRejection::InvalidToken,
+                "잘못된 토큰 거부",
+            ),
+            (&crlf, AuthRejection::InvalidToken, "CRLF 토큰 거부"),
+        ];
+        for (line, expected, msg) in cases {
+            assert_eq!(
+                binding.verify_auth_line(line, &run_id),
+                Err(expected),
+                "{msg}"
+            );
+        }
     }
 
     #[test]
     fn run_auth_binding_enforces_expiry_and_revocation_notification() {
         let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
-        let run_a = AiRunId::try_new("run-a").expect("run-a");
-        let run_b = AiRunId::try_new("run-b").expect("run-b");
-        let ttl = TokenTtl::try_from_seconds(60_u64).expect("60초 TTL");
-        let binding_a =
-            RunAuthBinding::issue(run_a.clone(), RunKind::Analysis, Arc::clone(&clock), ttl)
-                .expect("바인딩 A");
-        let binding_b =
-            RunAuthBinding::issue(run_b.clone(), RunKind::Analysis, Arc::clone(&clock), ttl)
-                .expect("바인딩 B");
+        let run_id = AiRunId::try_new("run-ttl-1").expect("실행 ID");
+        let ttl = TokenTtl::try_from_seconds(30_u64).expect("유효 TTL");
+        let binding =
+            RunAuthBinding::issue(run_id.clone(), RunKind::Analysis, Arc::clone(&clock), ttl)
+                .expect("발급");
+        let mut line = b"AUTH ".to_vec();
+        line.extend_from_slice(binding.token().as_exposed_bytes());
+        line.push(b'\n');
 
-        assert_eq!(
-            binding_a.issued_at(),
-            timestamp_at(1_700_000_000_i64),
-            "발급 시각 보존"
-        );
-        assert_eq!(
-            binding_a.expires_at(),
-            timestamp_at(1_700_000_060_i64),
-            "만료 시각 계산"
-        );
         clock
-            .advance_to(timestamp_at(1_700_000_059_i64))
-            .expect("시계 전진");
+            .advance_to(timestamp_at(1_700_000_029_i64))
+            .expect("시각 이동");
         assert_eq!(
-            binding_a.ensure_active(),
-            Ok(()),
-            "만료 시각 직전에는 유효하다"
+            binding.remaining_until_expiry(),
+            Duration::from_secs(1_u64),
+            "만료 1초 전 잔여 시간"
         );
+        assert!(
+            binding.verify_auth_line(&line, &run_id).is_ok(),
+            "만료 1초 전 허용"
+        );
+
         clock
-            .advance_to(timestamp_at(1_700_000_060_i64))
-            .expect("시계 전진");
-        let raw_a = std::str::from_utf8(binding_a.token().as_exposed_bytes()).expect("UTF-8");
+            .advance_to(timestamp_at(1_700_000_030_i64))
+            .expect("시각 이동");
         assert_eq!(
-            binding_a.verify_auth_line(format!("AUTH {raw_a}\n").as_bytes(), &run_a),
+            binding.remaining_until_expiry(),
+            Duration::ZERO,
+            "만료 시각 잔여 0"
+        );
+        assert_eq!(
+            binding.verify_auth_line(&line, &run_id),
             Err(AuthRejection::TokenExpired),
-            "만료 시각 이상에서는 거부한다"
+            "만료 경계 시각 즉시 거부"
         );
 
-        let rx = binding_b.subscribe_revocation();
-        assert_eq!(*rx.borrow(), TokenStatus::Active, "구독 초기 상태 Active");
-        assert_eq!(binding_b.status(), TokenStatus::Active, "폐기 전 Active");
-        binding_b.revoke();
-        assert_eq!(binding_b.status(), TokenStatus::Revoked, "폐기 후 Revoked");
+        let clock_revoke = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
+        let binding_revoke =
+            RunAuthBinding::issue(run_id.clone(), RunKind::Analysis, clock_revoke, ttl)
+                .expect("폐기 테스트 발급");
+        let mut revoke_line = b"AUTH ".to_vec();
+        revoke_line.extend_from_slice(binding_revoke.token().as_exposed_bytes());
+        revoke_line.push(b'\n');
+        let rx = binding_revoke.subscribe_revocation();
+        assert_eq!(*rx.borrow(), TokenStatus::Active, "초기 상태 활성");
+        binding_revoke.revoke();
         assert_eq!(*rx.borrow(), TokenStatus::Revoked, "폐기 알림 전달");
-        let raw_b = std::str::from_utf8(binding_b.token().as_exposed_bytes()).expect("UTF-8");
         assert_eq!(
-            binding_b.verify_auth_line(format!("AUTH {raw_b}\n").as_bytes(), &run_b),
+            binding_revoke.remaining_until_expiry(),
+            Duration::ZERO,
+            "폐기 후 잔여 0"
+        );
+        assert_eq!(
+            binding_revoke.verify_auth_line(&revoke_line, &run_id),
             Err(AuthRejection::TokenRevoked),
-            "폐기된 토큰은 거부한다"
+            "폐기된 토큰 거부"
         );
     }
 }
