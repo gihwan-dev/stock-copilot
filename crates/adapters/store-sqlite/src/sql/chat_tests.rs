@@ -1,0 +1,12 @@
+pub(crate) const RUN_COUNT: &str = "SELECT count(*) FROM chat_run_ledger";
+pub(crate) const TOOL_COUNT: &str = "SELECT count(*) FROM tool_call_ledger";
+pub(crate) const UPDATE_ENTRY: &str = "UPDATE chat_entries SET entry_payload = 'forged'";
+pub(crate) const DELETE_ENTRY: &str = "DELETE FROM chat_entries";
+pub(crate) const DELETE_SESSION: &str = "DELETE FROM chat_sessions";
+pub(crate) const RENAME_SESSION: &str = "UPDATE chat_sessions SET session_id = 'other'";
+pub(crate) const UPDATE_RUN: &str = "UPDATE chat_run_ledger SET entry_payload = 'forged'";
+pub(crate) const DELETE_RUN: &str = "DELETE FROM chat_run_ledger";
+pub(crate) const UPDATE_TOOL: &str = "UPDATE tool_call_ledger SET result_json = 'forged'";
+pub(crate) const DELETE_TOOL: &str = "DELETE FROM tool_call_ledger";
+pub(crate) const ENTRY_GAP: &str = "INSERT INTO chat_entries(session_id, position, user_message_id, entry_payload) VALUES ('session-1', 9, NULL, 'x')";
+pub(crate) const TOOL_ROW: &str = "SELECT run_id, request_id, tool_name, arguments_json, result_json, outcome, protocol_version FROM tool_call_ledger ORDER BY id";

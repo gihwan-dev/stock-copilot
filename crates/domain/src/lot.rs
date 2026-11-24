@@ -84,6 +84,10 @@ impl LotIdentity {
         }
     }
     #[must_use]
+    pub const fn cost_currency_kind(&self) -> LotCostCurrency {
+        self.cost_currency
+    }
+    #[must_use]
     pub const fn instrument(&self) -> &InstrumentId {
         &self.instrument
     }
@@ -192,6 +196,53 @@ impl CostPool {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedLot {
+    pub acquired: CalendarDate,
+    pub quantity: ShareQuantity,
+    pub cost: LotCost,
+    pub tax_status: LotTaxStatus,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedLotRealization {
+    pub transaction: Transaction,
+    pub consumed: LotCost,
+    pub gain: LotCost,
+    pub assumptions: BTreeSet<LotAssumption>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedCostPool {
+    pub quantity: ShareQuantity,
+    pub cost: LotCost,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedFractionalEntitlement {
+    pub action: CorporateActionId,
+    pub quantity: ShareQuantity,
+    pub cost: LotCost,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedCorporateDelivery {
+    pub action: CorporateActionId,
+    pub quantity: ShareQuantity,
+    pub receipt: Option<Transaction>,
+    pub status: DeliveryStatus,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedLotBook {
+    pub identity: LotIdentity,
+    pub method: CostBasisMethod,
+    pub lots: Vec<SavedLot>,
+    pub pool: SavedCostPool,
+    pub realized: LotCost,
+    pub realizations: Vec<SavedLotRealization>,
+    pub listing: LotListing,
+    pub applied: BTreeSet<CorporateActionId>,
+    pub fractional: Vec<SavedFractionalEntitlement>,
+    pub deliveries: Vec<SavedCorporateDelivery>,
+    pub assumptions: BTreeSet<LotAssumption>,
+    pub reserved: BTreeSet<Transaction>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LotBook {
     identity: LotIdentity,
     method: CostBasisMethod,
@@ -293,6 +344,132 @@ impl LotBook {
             assumptions: BTreeSet::new(),
             reserved: BTreeSet::new(),
         }
+    }
+    #[must_use]
+    pub fn saved_state(&self) -> SavedLotBook {
+        SavedLotBook {
+            identity: self.identity.clone(),
+            method: self.method,
+            lots: self
+                .lots
+                .iter()
+                .map(|lot| SavedLot {
+                    acquired: lot.acquired,
+                    quantity: lot.quantity.clone(),
+                    cost: lot.cost,
+                    tax_status: lot.tax_status,
+                })
+                .collect(),
+            pool: SavedCostPool {
+                quantity: self.pool.quantity.clone(),
+                cost: self.pool.cost,
+            },
+            realized: self.realized,
+            realizations: self
+                .realizations
+                .iter()
+                .map(|item| SavedLotRealization {
+                    transaction: item.transaction.clone(),
+                    consumed: item.consumed,
+                    gain: item.gain,
+                    assumptions: item.assumptions.clone(),
+                })
+                .collect(),
+            listing: self.listing,
+            applied: self.applied.clone(),
+            fractional: self
+                .fractional
+                .iter()
+                .map(|item| SavedFractionalEntitlement {
+                    action: item.action().clone(),
+                    quantity: item.rational_quantity().clone(),
+                    cost: item.cost(),
+                })
+                .collect(),
+            deliveries: self
+                .deliveries
+                .iter()
+                .map(|item| SavedCorporateDelivery {
+                    action: item.action().clone(),
+                    quantity: item.rational_quantity().clone(),
+                    receipt: item.receipt().cloned(),
+                    status: item.status(),
+                })
+                .collect(),
+            assumptions: self.assumptions.clone(),
+            reserved: self.reserved.clone(),
+        }
+    }
+    fn validate_saved_costs(saved: &SavedLotBook) -> Result<(), LotError> {
+        let cost_currency = saved.identity.cost_currency();
+        let check_cost = |cost: LotCost| match cost {
+            LotCost::Known(money) if money.currency() != cost_currency => {
+                Err(LotError::CurrencyMismatch)
+            }
+            LotCost::Known(_) | LotCost::Unknown => Ok(()),
+        };
+        check_cost(saved.pool.cost)?;
+        check_cost(saved.realized)?;
+        for lot in &saved.lots {
+            check_cost(lot.cost)?;
+        }
+        for item in &saved.realizations {
+            check_cost(item.consumed)?;
+            check_cost(item.gain)?;
+        }
+        for item in &saved.fractional {
+            check_cost(item.cost)?;
+        }
+        Ok(())
+    }
+    pub fn restore_from_saved_state(saved: SavedLotBook) -> Result<Self, LotError> {
+        validate_identity(&saved.identity)?;
+        Self::validate_saved_costs(&saved)?;
+        Ok(Self {
+            identity: saved.identity,
+            method: saved.method,
+            lots: saved
+                .lots
+                .into_iter()
+                .map(|lot| Lot {
+                    acquired: lot.acquired,
+                    quantity: lot.quantity,
+                    cost: lot.cost,
+                    tax_status: lot.tax_status,
+                })
+                .collect(),
+            pool: CostPool {
+                quantity: saved.pool.quantity,
+                cost: saved.pool.cost,
+            },
+            realized: saved.realized,
+            realizations: saved
+                .realizations
+                .into_iter()
+                .map(|item| LotRealization {
+                    transaction: item.transaction,
+                    consumed: item.consumed,
+                    gain: item.gain,
+                    assumptions: item.assumptions,
+                })
+                .collect(),
+            listing: saved.listing,
+            applied: saved.applied,
+            fractional: saved
+                .fractional
+                .into_iter()
+                .map(|item| FractionalEntitlement::new(item.action, item.quantity, item.cost))
+                .collect(),
+            deliveries: saved
+                .deliveries
+                .into_iter()
+                .map(|item| {
+                    CorporateDelivery::new(item.action, item.quantity, item.receipt, item.status)
+                })
+                .collect(),
+            assumptions: saved.assumptions,
+            reserved: saved.reserved,
+        })
     }
     #[must_use]
     pub const fn identity(&self) -> &LotIdentity {

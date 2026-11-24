@@ -181,6 +181,16 @@ impl PartialOrd for Natural {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntegerText(String);
 impl IntegerText {
+    pub fn try_new(value: &str) -> Result<Self, LotError> {
+        if value.is_empty()
+            || value.len() > 256
+            || !value.bytes().all(|byte| byte.is_ascii_digit())
+            || (value.len() > 1 && value.starts_with('0'))
+        {
+            return Err(LotError::InvalidQuantity);
+        }
+        Ok(Self(value.to_owned()))
+    }
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
@@ -224,6 +234,24 @@ impl ShareQuantity {
             &Natural::amount(Amount::new(value.as_decimal())),
             &Positive(Natural::one().scaled(Places(value.as_decimal().scale()))),
         )
+    }
+    pub fn from_parts(
+        numerator: &IntegerText,
+        denominator: &IntegerText,
+    ) -> Result<Self, LotError> {
+        let parse = |text: &IntegerText| {
+            Natural(
+                text.as_str()
+                    .bytes()
+                    .rev()
+                    .map(|byte| Digit(byte.wrapping_sub(b'0')))
+                    .collect(),
+            )
+            .normalize()
+        };
+        let num = parse(numerator);
+        let den = Positive::new(parse(denominator)).ok_or(LotError::InvalidRatio)?;
+        Ok(Self::reduced(&num, &den))
     }
     #[must_use]
     pub fn numerator(&self) -> IntegerText {
