@@ -266,6 +266,12 @@ externals = ["syn", "proc-macro2"]
 through = "serde_json"
 reason = "serde_json → serde(derive) → serde_derive의 절차 매크로 의존. 기록 응답을 JSON으로 다시 읽고 쓰는 데 쓴다 (ADR 0016)"
 
+[[external-location-exception]]
+crates = ["src-tauri"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "tokio"
+reason = "U-20: 자식 프로세스 그룹 정리와 감사 로그 쓰기 완료 대기를 위한 tokio(rt·sync·time)의 작업 공간 기능 통합 전이 경로. 네트워크 소켓은 직접 열지 않는다"
+
 [[external-allowlist]]
 crate = "domain"
 allowed = ["rust_decimal", "time"]
