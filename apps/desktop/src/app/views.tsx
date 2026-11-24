@@ -7,6 +7,7 @@ import { InstrumentDetail, InstrumentList } from "../features/instruments";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
 import { SettingsScreen } from "../features/settings";
+import { RiskEditors } from "../features/settings-risk";
 import { SignalCards } from "../features/signal";
 import { StatusScreen } from "../features/status";
 import { TransactionsScreen } from "../features/transactions";
@@ -144,6 +145,7 @@ export const TransactionsView = (): ReactElement => {
 
 export const SettingsRouteView = (): ReactElement => {
   const go = useNavigate();
+  const sources = useSources();
   const system = useSystemSettings();
   return (
     <SettingsScreen
@@ -159,6 +161,7 @@ export const SettingsRouteView = (): ReactElement => {
             ...(system === "shown"
               ? [<SettingsSections key="sections" />]
               : []),
+            <RiskEditors key="risk-editors" sources={sources} />,
             <AboutSection key="about" />,
           ]}
         </Stack>

@@ -21,6 +21,12 @@ import type {
   ThesisView,
   WatchlistChange,
 } from "./estimate-views";
+import type {
+  OrderSettingsDraft,
+  ProfileDraft,
+  RiskEditorSources,
+  RiskSaveOutcome,
+} from "./risk-editor";
 import type { IpcFailure } from "./schema";
 
 type PriceDirection = "up" | "down" | "flat";
@@ -153,13 +159,14 @@ export type StatusView = {
 
 type Load<T> = () => Promise<Result<T, IpcFailure>>;
 
-export type ScreenSources = EstimateSources & {
-  readonly portfolio: Load<PortfolioView>;
-  readonly allocation: Load<AllocationView>;
-  readonly transactions: Load<TransactionsView>;
-  readonly selfCheck: Load<SelfCheckView>;
-  readonly status: Load<StatusView>;
-};
+export type ScreenSources = EstimateSources &
+  RiskEditorSources & {
+    readonly portfolio: Load<PortfolioView>;
+    readonly allocation: Load<AllocationView>;
+    readonly transactions: Load<TransactionsView>;
+    readonly selfCheck: Load<SelfCheckView>;
+    readonly status: Load<StatusView>;
+  };
 
 const pending = <T>(): Load<T> => {
   const noData: IpcFailure = { kind: "command", error: { kind: "no-data" } };
@@ -177,6 +184,10 @@ export const pendingScreenSources: ScreenSources = {
   skipSignal: pending<"recorded">(),
   addWatchlist: pending<WatchlistChange>(),
   removeWatchlist: pending<WatchlistChange>(),
+  investorProfile: pending<ProfileDraft>(),
+  orderSettings: pending<OrderSettingsDraft>(),
+  saveInvestorProfile: pending<RiskSaveOutcome>(),
+  saveOrderSettings: pending<RiskSaveOutcome>(),
   portfolio: pending<PortfolioView>(),
   allocation: pending<AllocationView>(),
   transactions: pending<TransactionsView>(),
