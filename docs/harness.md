@@ -660,20 +660,20 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 ### 7.3 에이전트 훅
 
-판정 코어는 `.claude/hooks/lib/{edit-guard,bash-guard,paths,verdict}.mjs` 하나다. Codex 어댑터는 `harness/codex-hooks/`다. `.codex/hooks.json`과 `.codex/config.toml`은 보호 경로다. 보호 경로의 기준은 `agent-writable.txt`의 허용 목록 밖이다. 잠금 조각·해시도 검사한다.
+판정 코어는 `.claude/hooks/lib/{edit-guard,bash-guard,paths,verdict}.mjs` 하나다. 이 훅들은 Claude Code 세션, Antigravity 세션(`.agents/hooks.json`, `harness/antigravity-hooks/`), 그리고 (Codex를 다시 쓸 때만 해당) Codex 세션에 같은 단일 정책 원본으로 연결된다. Codex 어댑터는 `harness/codex-hooks/`다. `.codex/hooks.json`, `.codex/config.toml`, `.agents/hooks.json`은 보호 경로다. 보호 경로의 기준은 `agent-writable.txt`의 허용 목록 밖이다. 잠금 조각·해시도 검사한다.
 
-| 항목 | Claude Code | Codex 0.168.0 |
-|---|---|---|
-| 편집 전 보호 경로 | PreToolUse, 잠금 off면 경고 | apply_patch의 모든 대상·이동 전후 경로를 같은 코어로 판정 |
-| 금지 셸 | PreToolUse Bash | PreToolUse Bash, 같은 코어 |
-| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch·단독 Bash heredoc 패치의 모든 대상에 `just lint-file` |
-| 설정 변경 | ConfigChange 차단 | 전용 이벤트 없음. 편집·셸 판정과 샌드박스만 적용 |
-| 종료 검사 | SubagentStop | Stop에서 `just base=<병합 기준> check`. 적용 여부와 브리프 기준은 메인이 확인 |
-| 훅 실행 실패 | onFailure block (Stop 제외) | 실행 자체 실패·시간 초과는 강제 차단을 보장하지 못함 |
-| 샌드박스 | 정책 준비, H-20 전 비활성 | 프로젝트 권한 프로필. T3가 샌드박스를 덮으면 미적용 |
-| 프로젝트 신뢰 | 작업 공간 신뢰 | 프로젝트 신뢰와 훅 정의 해시 신뢰가 각각 필요 |
+| 항목 | Claude Code | Codex 0.168.0 (Codex를 다시 쓸 때만 해당) | Antigravity (H-61 적용) |
+|---|---|---|---|
+| 편집 전 보호 경로 | PreToolUse, 잠금 off면 경고 | apply_patch의 모든 대상·이동 전후 경로를 같은 코어로 판정 | PreToolUse, 모든 경로 키·`.agents` 폴더·git 삭제/복원 포함 같은 코어로 판정 |
+| 금지 셸 | PreToolUse Bash | PreToolUse Bash, 같은 코어 | PreToolUse `run_command`, 같은 코어 + 홈 읽기·토스 API·`open`·`curl`/`wget` 차단 |
+| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch·단독 Bash heredoc 패치의 모든 대상에 `just lint-file` | 계약상 `{}`만 반환 (Git 커밋 훅·`check-fast`·원격 CI 보완, 7.4 빈틈) |
+| 설정 변경 | ConfigChange 차단 | 전용 이벤트 없음. 편집·셸 판정과 샌드박스만 적용 | 전용 이벤트 없음. `.agents`/`.agents/hooks.json` 쓰기·이동·삭제·git 복원 즉시 차단 |
+| 종료 검사 | SubagentStop | Stop에서 `just base=<병합 기준> check`. 적용 여부와 브리프 기준은 메인이 확인 | Stop에서 리뷰어 추적 파일 무변경·구현자 미커밋·`lefthook` 설치 검사(git 실패 시 닫힌 실패). 전체 검사는 원격 CI |
+| 훅 실행 실패 | onFailure block (Stop 제외) | 실행 자체 실패·시간 초과는 강제 차단을 보장하지 못함 | 래퍼·CLI 오류·이벤트 불일치 시 닫힌 실패 (`PreToolUse` `deny`, `Stop` `continue`) |
+| 샌드박스 | 정책 준비, H-20 전 비활성 | 프로젝트 권한 프로필. T3가 샌드박스를 덮으면 미적용 | OS 커널 샌드박스 없음(도구·셸 인자 훅 계층, 7.4 빈틈) |
+| 프로젝트 신뢰 | 작업 공간 신뢰 | 프로젝트 신뢰와 훅 정의 해시 신뢰가 각각 필요 | T3 `antigravity acp`에서 `full-access`에서도 별도 수동 신뢰 창 없이 실행(실측 `cli-1.5.14`), 전역 설정 비활성화는 7.4 빈틈 |
 
-`just codex-regression`은 대표 10개 도구 시도를 헤드리스로 확인한다. 실제 시도가 없으면 미확정이다. `just check`에는 토큰 없는 어댑터·판정·설정 테스트만 넣는다. 실측과 한계는 ADR 0021에 있다.
+(Codex를 다시 쓸 때만 해당) `just codex-regression`은 대표 10개 도구 시도를 헤드리스로 확인한다. 실제 시도가 없으면 미확정이다. `just check`에는 토큰 없는 어댑터·판정·설정 테스트만 넣는다. 실측과 한계는 ADR 0021에 있다.
 
 셸 훅이 거부하는 것:
 
@@ -682,12 +682,12 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | git 훅 건너뛰기 | `git commit --no-verify`, `git commit -n`, `git push --no-verify` |
 | 강제 푸시 | `--force`, `--force-with-lease`, `-f`, `+refspec` |
 | git 설정 | `git -c`, `git config`, `--config-env`, `--git-dir`, `--work-tree`, `core.hooksPath` |
-| 훅·git 환경 변수 | `LEFTHOOK`, `LEFTHOOK_CONFIG`, `LEFTHOOK_EXCLUDE`, `HUSKY`, `SKIP`, `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` |
+| 훅·git 환경 변수 | `LEFTHOOK`, `LEFTHOOK_CONFIG`, `LEFTHOOK_EXCLUDE`, `HUSKY`, `SKIP`, `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, `GIT_SSH`, `GIT_SSH_COMMAND`, `GIT_PROXY_COMMAND`, `GIT_ASKPASS`, `GIT_GRAFT_FILE` |
 | git 훅 상태 | `lefthook install`, `lefthook uninstall` |
-| 이력 조작 | `update-ref`, `replace`, `filter-branch`, `filter-repo`, `rebase`, `reset --hard` |
+| 이력 조작 | `update-ref`, `replace`, `filter-branch`, `filter-repo`, `rebase`, `reset --hard`, `git fetch --refmap`, `git remote` 변경 하위 명령(`set-url`, `add`, `rename`, `remove` 등), 원격 추적 브랜치 삭제(`git branch -D -r`), 서브에이전트 브랜치 개명·복사(`git branch -m/-M/-c/-C`)·원격 접두사/기준 브랜치 가리기 생성·`git worktree` 변경(`list` 외)·`git tag` 변경(조회 외), 기준 브랜치 `git branch -m/--move` |
 | Rust 검사 끄기 | `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS`, `RUSTDOCFLAGS`, `CLIPPY_CONF_DIR`, `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER` 설정, `--cap-lints`, `cargo clippy -- -A` (R-09 Q2) |
 | 파일 속성 | `chmod`, `chflags`, `xattr` |
-| 기타 | 중첩 `claude` 실행, `dangerouslyDisableSandbox`, 서브에이전트의 `git push` |
+| 기타 | 중첩 `claude` 실행, `dangerouslyDisableSandbox`, 서브에이전트의 임의 `git push`(구현 담당의 자기 작업 브랜치 `git push origin <현재 브랜치>` 1종만 허용, `master`·`main`·`merge/*`·강제·refspec·옵션 전부 거부) |
 
 `SubagentStop`의 주의점 (R-10 Q10):
 
@@ -702,12 +702,43 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 | 역할 | 실행 | 강제 |
 |---|---|---|
-| 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸 가드 |
-| 구현·수정 | T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다), 별도 작업 사본. sol high, terra max. 수정은 같은 스레드에서 계속 가능 | Claude 위임 가드가 정확한 두 모델·작업 사본·브리프를 확인. Terra만 implementation 역할 명시를 요구하며 sol 역할 생략은 기존 호환으로 허용 |
-| 조사·비판 | T3 Codex `gpt-6.1-sol` high, 별도 작업 사본 | Claude 위임 가드가 sol만 허용 |
-| 적대적 리뷰 | 새 Claude Opus 5.5 adversarial-reviewer | T3 격리, 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
+| 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸·위임 가드 |
+| 구현·수정 | T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 최상위 별도 작업 사본. 수정은 같은 스레드에서 계속 가능 | 메인 Claude 위임 가드가 `provider=antigravity`·`model=gemini-4-neon`·`thought_level=xhigh`·작업 사본·브리프(`- 역할: implementation`)를 확인. Antigravity `.agents/hooks.json`(`harness/antigravity-hooks/`)이 5개 조건(분리 작업 사본, `gemini-4-neon-xhigh`, 비-`master`/`main`/`merge/*`/`review/*`/`critic/*`/`t3/*` 브랜치, 비-`t3-*` 폴더, 비-`thread:delegated-task:*` 스레드)을 모두 만족할 때만 `implementer` 역할을 부여하며, 구현 담당에게만 자기 브랜치 `git push origin <현재 브랜치>`, `git merge --ff-only origin/<현재 브랜치>`(`--ff-only` 한 옵션만, 전역 옵션·다른 브랜치·`master` 불가), `isolation=worktree` 독립 리뷰(`claudeAgent`/`claude-opus-5-5`)·비판/실측(`antigravity`/`gemini-4-neon` `high`) `delegate_task`를 허용한다. `LEFTHOOK=0`은 계속 차단하며 보호 경로 쓰기·홈 읽기·실제 토스 API/주문 명령·금지 셸·미커밋 종료를 차단 |
+| 조사·비판 | T3 Antigravity `gemini-4-neon`(`thought_level=high`), 별도 작업 사본 | 메인·구현 담당 위임 가드가 `driverKind=antigravity`·`model=gemini-4-neon`·`role=research\|review`·`thought_level=high`·`isolation=worktree`를 확인. Antigravity `.agents/hooks.json`이 허용 목록(`gemini-4-neon-xhigh`) 외 모델·주 작업 트리 세션·detached HEAD·`t3/*`/`review/*`/`critic/*`/`merge/*` 브랜치·`t3-*` 작업 사본·`thread:delegated-task:*` 하위를 모두 `ROLE.reviewer`로 고정해 추적 파일 쓰기·변경형 git·`git push`·중첩 `delegate_task`를 차단(H-58 분리 사본 루트 `rm -xrf target`/`.rv-*` 정리 허용 및 대소문자 별칭 차단 포함) |
+| 적대적 리뷰 | 새 Claude(`driverKind=claudeAgent`) `claude-opus-5-5` `adversarial-reviewer` | 메인 Claude 위임 가드가 `driverKind=claudeAgent`·`model=claude-opus-5-5`·`role=review`·worktree 격리를 확인(생략 또는 `claudeAgent` 접두 인스턴스 이름 허용, 그 외 이름·빈 문자열 거부). 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
 
-Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다. 모델별 위임 판정은 메인 Claude의 orchestrationFindings가 수행한다. sol high는 운영 기본 요청이며 기존 옵션 생략·빈 객체·빈 배열에서는 실제 강도가 T3 상속·기본값에 따른다. Terra에는 max 옵션을 명시하며 생략·빈 옵션은 거부한다. 메인의 T3 t3_thread_send 수정 회차는 허용한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude Agent 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. 적대적 리뷰는 정확한 Opus 모델·review 역할·worktree 격리의 T3 위임만 허용한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+메인 Claude의 `orchestrationFindings`가 모델·제공자·드라이버·역할·옵션·격리·브리프를 판정한다. 허용되는 위임 대상은 Antigravity `gemini-4-neon`(구현 `thought_level=xhigh`, 조사·비판 `thought_level=high`)과 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`, 옵션 생략 또는 `effort=high`)뿐이다. `providerInstanceId`는 기기마다 다를 수 있으므로(`claudeAgent`, `claudeAgent_claude2` 등) 생략하거나 `claudeAgent` 접두 형식 문자열을 허용하고 빈 문자열·`null`·그 외 이름(`other`, `codex`, `antigravity`, `myCodex` 등)은 거부한다. Codex(`codex`, gpt 계열)와 다른 모델·역할·옵션 키·혼합 키는 모두 거부한다. 메인의 T3 `t3_thread_send` 수정 회차는 소유한 `implementation`·`research` 스레드에만 허용한다. 등록된 주 작업 트리의 Claude만 메인이며, 나머지 진짜 git worktree의 Claude는 리뷰어로 고정한다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude `Agent` 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. (Codex를 다시 쓸 때만 해당: Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다.) 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+
+#### Antigravity 세션의 집행 경계와 빈틈 (H-60 → H-61)
+
+Antigravity 세션에는 Codex·Claude 세션 훅이 직접 실행되지 않으므로, H-61에서 저장소 루트 `.agents/hooks.json`과 `harness/antigravity-hooks/`를 추가해 기존 단일 정책 원본(`.claude/hooks/lib/*`, `harness/agent-writable.txt`, `harness/claude-hooks/rules.json`, `harness/sandbox/policy.json`, `harness/arch-check/rules.toml`)을 Antigravity 훅으로 연결했다. 남은 빈틈은 `just known-gaps`에도 등록된다.
+
+**기계로 강제되는 것 (H-61 적용 후)**
+
+| 영역 | 강제 장치 | 범위와 조건 |
+|---|---|---|
+| 세션 중 보호 경로 쓰기·금지 셸 차단 | `.agents/hooks.json` `PreToolUse` (`harness/antigravity-hooks/`) | `.agents` 폴더·`.agents/hooks.json`·하위 `.agents/**`·`GEMINI.md`·`.claude/settings.local.json`·`.cargo/config*`·`.git/**`·`docs/progress.md`·`docs/tasks.md`·쓰기 도구의 모든 경로 키·`rm`/`mv`/`git rm`/`git mv`/`git checkout`/`git switch`/`git restore`/`git stash`/`git clean`(git pathspec 매직 `:/`, `:(top)` 포함)·아카이브 해제(`tar -x`/`bsdtar`/`cpio -i`/`pax -r`/`unzip`)·`sqlite3` 셸 메타 명령·`git grep -O`·`trap` 중첩 셸·심볼릭 링크·`..`·작업 사본 밖 쓰기(홈 설정·셸 프로필·Antigravity 앱 설정·상대 경로 우회 포함)·금지 셸(`--no-verify`, `LEFTHOOK=0`, `RUSTFLAGS`, `GIT_SSH*`, `git remote set-url`, `git fetch --refmap`, `git branch -D -r`, 자기 작업 브랜치 `origin <현재 브랜치>` 외 모든 `git push` 등)을 즉시 거부. `harness/agent-writable.txt` 밖 보호 경로(`justfile`, `harness/**`, 추적된 ADR 등)는 `lock.txt = on`에서 거부 |
+| 세션 중 홈 설정·메모리·자격 증명 읽기 차단 | `.agents/hooks.json` `PreToolUse` (`policy.mjs`) | `policy.json` `denyRead` + `rules.json` `protectedHome` + `~/.gemini`·`~/.antigravity`·`~/Library/Application Support/Antigravity`·셸 기록·작업 사본 밖 `MEMORY.md`·홈 루트 및 상위 폴더(`/`, `/Users` 등)·홈 이름/하위 와일드카드(`/Users/user*/...`, `~/.s?h/...`, `~/.local/st*/...`)·동적 읽기 인자(`~/$x`, `$HOME/$x`, `$'...'`, `$PWD/..`, `$(...)`, 동적 `<` 리다이렉션)·`~user`·`security` 키체인 도구를 `read_file`·탐색 별칭·셸 인자(`key=value`, `export`, `-d@path` 포함)·`<` 리다이렉션·심볼릭 링크(끊긴 링크·루프 포함)에서 차단 |
+| Antigravity 구현 담당·리뷰·비판 역할 구분과 위임 통제 | `.agents/hooks.json` `PreToolUse` + `Stop` | 호스트 `process.cwd()`로 작업 사본을 고정하고, 분리 작업 사본 + `gemini-4-neon-xhigh` + 비-`master`/`main`/`merge/*`/`review/*`/`critic/*`/`t3/*` 브랜치 + 비-`t3-*` 작업 사본 + 비-`thread:delegated-task:*` 스레드를 모두 만족할 때만 `ROLE.implementer`를 부여한다(하나라도 미충족 시 `ROLE.reviewer`로 닫힘). 구현 담당에게만 자기 브랜치 `git push origin <현재 브랜치>`(`/usr/bin/git` 포함, 옵션·refspec `:`·`+` 없음), `git merge --ff-only origin/<현재 브랜치>`(`/usr/bin/git` 포함, `--ff-only` 한 옵션·같은 브랜치 `origin/` 추적 참조만, 전역 옵션·다른 플래그·다른 브랜치·`master`·동명 로컬 브랜치/태그 가리기 불가), `git merge --no-ff --no-edit origin/master`(분리 작업 사본·전역 옵션 없음·`--no-ff` 필수·동명 가리기 불가), `mcp_t3-code_delegate_task`(`isolation=worktree`, `claudeAgent`/`claude-opus-5-5`/`review` 또는 `antigravity`/`gemini-4-neon`/`review\|research`/`thought_level=high`, 주 작업 트리 `agent-rules.json` 기반 구현자 보고서 표식 차단 + `review` 역할의 현재 브랜치·기준/대상 `HEAD` SHA·조상 이력 검증)를 허용한다. 리뷰어·비판자·하위 스레드·주 작업 트리 세션은 편집·추적 파일 셸 쓰기·변경형 git(`format-patch` 포함)·`git push`·모든 `delegate_task`를 차단한다(H-58 임시 폴더 `rm -xrf target`/`.rv-*` 정리 허용 및 대소문자 별칭 차단 포함). `Stop`은 `continuationActive`만으로 우회되지 않으며 추적 파일 변경 잔류·미커밋 변경·`lefthook` 미설치·`git status` 실패 시 `continue`를 반환(상한 8회) |
+| 실제 주문·토스 API 호출 명령 차단 | `.agents/hooks.json` `PreToolUse` | `toss-smoke`·`broker-toss-trade`·`src-tauri`(단독 `--bin gen-bindings` 제외) 실행(`cargo r`, `-p<pkg>`, `-p=<pkg>`, `@version` pkgid, `-C`, `--manifest-path`, 동적 패키지 지정, crate 폴더 내부 실행 포함), `tauri dev`, `TOSS_*` 환경 변수, `open` 실행 명령, `git ls-remote`/`git clone`/`git fetch`의 토스 호스트 연결, `rsync` 원격 전송, `curl`/`wget` 붙여쓰기·묶음 우회 플래그(`-sn`, `-K...`, `-x...`, `-i...`), HTTP·원격 네트워크 클라이언트의 `tossinvest.com` 및 `allowedDomains`·루프백 밖 연결(정수 IP 포함 닫힌 실패)을 차단 |
+| 닫힌 실패·동등성·무결성 | `.agents/hooks.json` 래퍼 + `hashes.json` + `parity.test.mjs` | 병합 후 주 작업 트리(`--git-common-dir`)의 `dispatch.mjs`를 우선 실행. CLI 이벤트 인자를 우선 검증(불일치 거부)하며 Git·Node·JSON·미지 도구 오류 시 `PreToolUse`는 `deny`, `Stop`은 `continue`. `lastUserInput` 대화 본문은 판정에 섞지 않고 도구 이름·인자만 검사. Claude `bash-cases.json`·`edit-cases.json` 전체 거부 코퍼스와의 동등성 테스트 및 `.agents/`·`harness/antigravity-hooks/` 해시 보호 |
+| 커밋·푸시·원격 CI·위임 통제 | 로컬 `lefthook`, `just push-check`(`xtask push-check`), `just check-full`, GitHub Actions CI, 메인 `guard-orchestration.mjs` | 변경분 검사·전체 승격·`test-diff`·서명 사후 탐지·독립 리뷰·비판과 대상 스냅숏 전후 비교. 컨테이너 런타임(`docker`, `DOCKER_HOST`, 고정 경로 및 `~/.colima`/`~/.docker`/`~/.orbstack`/`~/.rd` 소켓·바이너리)이 모두 없는 기기의 단일 작업 브랜치(`master`·`main`·`merge/*`·`review/*`·`critic/*`·`t3/*` 제외) 푸시에 한해 `push-check`가 `check-fast`(하네스·문서·`justfile`·`xtask` 변경은 전체 `just check` 승격)를 실행하며, `master`·`main`·`merge/*` 푸시 및 컨테이너 런타임이 있는 환경은 모두 `check-full`을 유지하고 전체·시각·변이 검사는 원격 CI와 메인 병합 검사가 맡는다 |
+
+**적용 조건과 미적용 세션 확인 절차**
+
+- T3 Code의 `antigravity acp` 세션은 각 턴 시작 시 작업 사본 루트의 `.agents/hooks.json`을 읽고 `runtimeMode: "full-access"`에서도 별도 수동 신뢰 창 없이 `PreToolUse`·`PostToolUse`·`Stop`을 실행한다(실측: `cli-1.5.14`).
+- 세션 훅(`dispatch.mjs` → `sessionProject` → `loadProject(mainRoot)`)은 작업 사본이 자기 `rules.json`을 고쳐 훅을 약화하지 못하도록 **주 작업 트리(`master`)의 `harness/claude-hooks/rules.json`**을 읽는다. 따라서 허용 목록을 넓히는 변경(예: `implementerMerge`의 `origin/master`, `implementerPush`의 `origin` 허용)은 `master`에 병합되고 주 작업 트리가 갱신된 뒤에야 실시간 세션에 적용된다(의도된 보안 성질).
+- 훅이 적용되지 않은 세션(예: 비신뢰 폴더, 사용자 전역 설정 `~/.gemini`가 훅을 끈 환경, 훅 파일이 없는 이전 커밋)을 확인하려면 상태 폴더(`~/.local/state/stock-copilot-harness/records/antigravityaudit-*.json`)와 실제 차단 응답, Git 커밋 훅 실행 여부를 함께 확인하고 리뷰 기록 `## 측정`의 `세션 훅` 행에 `적용(.agents/hooks.json)` 또는 `미적용(사유)`으로 기록한다. 미적용 세션의 변경은 대상 스냅숏 전후 비교와 원격 CI 전체 검사로 보완한다.
+
+**남은 빈틈 (H-61 이후에도 기계로 완전 강제되지 않는 것)**
+
+| 빈틈 | 이유 | 보완 수단 |
+|---|---|---|
+| 편집 직후 자동 `just lint-file` 차단 피드백 | Antigravity `PostToolUse` 계약이 `{}` 반환만 허용 | Git 커밋 훅(`lefthook`), `just check-fast`, 원격 CI |
+| OS 커널 수준 프로세스 샌드박스 | Antigravity 훅은 도구 인자·셸 구문 계층이며 Codex Seatbelt처럼 임의 컴파일 바이너리·스크립트 파일 내부 I/O까지 감싸지 않음 | 셸 인라인 코드·미지 도구 차단 + Git 커밋 훅 + 원격 CI 서명 검사 + 독립 리뷰 |
+| 사용자 홈 전역 설정(`~/.gemini/**`)과 폴더 신뢰 | 저장소 파일만으로 사용자 전역 훅 비활성화나 신뢰 거부를 막을 수 없음 | 리뷰 기록 `세션 훅` 확인 + 커밋 훅 + 원격 CI |
+| 종료 시 동기 전체 `just check` | `Stop` 훅은 리뷰어 추적 파일 무변경·구현자 미커밋 여부·`lefthook` 설치만 빠르게 검사 | 2026-11-23 결정에 따라 원격 GitHub Actions CI가 전체 `just check`와 변경분 변이 수행 |
+| 스테이징 중 `origin/master` 전진 시 막힘 종료 교착 | `[antigravity-hook-config]`가 `git stash`·`git reset`·`git restore`를 차단하고 `Stop` 훅이 미커밋 턴 종료를 반복 차단해, `test-diff` 기준 신뢰 실패 시 세션 안에서 `master`를 받거나 종료하지 못함 | 메인이 훅 밖에서 보관·병합·복원 후 재개(교착 해소는 후속 작업) |
 
 #### Claude 적대적 리뷰어 통제
 
@@ -729,7 +760,7 @@ Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다. 모�
 
 ### 7.5 리뷰어 격리
 
-Claude 적대적 리뷰어와 Codex 비판자는 T3의 `isolation: worktree`가 준비한 메인 저장소 밖 사본에서만 일한다. Claude Agent의 `isolation` 설정으로 추가 사본을 만들지 않는다. 정의 파일은 역할 안내로 사용한다. T3가 준 권한과 훅 적용 여부는 별도로 확인한다.
+Claude 적대적 리뷰어와 Antigravity 비판자는 T3의 `isolation: worktree`가 준비한 메인 저장소 밖 사본에서만 일한다. Claude Agent의 `isolation` 설정으로 추가 사본을 만들지 않는다. 정의 파일은 역할 안내로 사용한다. T3가 준 권한과 훅 적용 여부는 별도로 확인한다.
 
 #### 리뷰어의 대상 변경 감지
 
@@ -758,7 +789,7 @@ native SubagentStart/SubagentStop은 호환·회귀용 어댑터다. 현재 T3 �
 | 검증 | CI가 `git verify-commit`으로 확인한다. 신뢰하는 키는 `gpg.ssh.allowedSignersFile`의 키뿐이다 |
 | 신뢰 자료의 출처 | 허용 서명자 목록(`harness/allowed_signers`), 에이전트 쓰기 허용 목록, 검증 스크립트를 **푸시된 커밋이 아니라 기준 커밋(서명 작업이 마지막으로 성공한 `master` 커밋)에서** 읽는다. 같은 푸시에서 서명자 목록을 바꿔 통과하는 길을 막는다. 잠금 시점(`harness/ci/signatures/lock-point.txt`) 이후의 커밋만 검사하고, 잠금 시점이 없는 동안은 "비활성"을 출력하고 통과한다 (ADR 0020) |
 | 워크플로 | 보호 경로 검사는 푸시마다 돈다. 푸시된 코드를 실행하지 않고 git 명령만 쓴다. 푸시 뒤에 도는 사후 탐지이고, 실패하면 알린다 |
-| 푸시 | 메인 에이전트만 한다. 서브에이전트는 하지 않는다(7.3의 셸 훅이 거부). 메인은 새 작업의 브리프를 쓰기 전에 `main`의 CI가 통과 상태인지 확인하고, 실패면 멈추고 사용자에게 보고한다([workflow.md](workflow.md) 2.1) |
+| 푸시 | `master`·`main`·`merge/*` 푸시와 병합은 메인 에이전트만 한다. 구현 담당은 자기 작업 브랜치의 `git push origin <현재 브랜치>` 1종만 허용된다(7.3의 셸 훅이 나머지 푸시·강제·refspec을 전부 거부). 리뷰어·비판자·하위 스레드는 모든 푸시가 거부된다. 메인은 새 작업의 브리프를 쓰기 전에 `main`의 CI가 통과 상태인지 확인하고, 실패면 멈추고 사용자에게 보고한다([workflow.md](workflow.md) 2.1) |
 | 원격 강제 수단 | 공개 저장소다. 규칙 세트는 `master` 삭제·강제 푸시 금지만 쓴다(ADR 0020). 상태 검사 필수·PR 필수·서명 필수는 쓰지 않는다. 에이전트에게 주는 토큰에는 저장소 관리 권한을 주지 않는다 |
 
 남는 빈틈:
@@ -778,14 +809,14 @@ native SubagentStart/SubagentStop은 호환·회귀용 어댑터다. 현재 T3 �
 | 승인된 변경 | 테스트 준비·승인 단언 변경은 메인이 원격 master의 단일 부모 직접 커밋으로 남긴 정확한 전·후 파일 해시와 지적 목록이 일치하는 `harness/test-diff/approvals.toml` 행(단언 구조 보존) 또는 해당 병합 구간 1회 한정 승인 묶음(`harness/test-diff/bundles/<작업 ID>.toml`, 병합 트레일러 대조, H-62)으로만 `test-diff` 예외를 받는다. 사용자 서명 검사는 별도로 유지한다 (workflow 2.9, 7.6) | 커밋 훅, CI |
 | 구현을 베낀 테스트 | 변이 테스트로 드러난다(베낀 테스트는 변이를 죽이지 못한다). 테스트 입력 리터럴을 구현에서 다시 쓰는지 찾는 xtask 검사는 효과가 확인되지 않아 두지 않는다 | `just check-full`, 리뷰 |
 
-커밋·병합 커밋 훅은 `commit-base`가 선택한 40자리 커밋을 선택된 전체 또는 fast 검사에 전달한다. 평소에는 `merge-base HEAD refs/heads/master`다. 이름 있는 현재 작업 브랜치가 `master`가 아닐 때 다음 두 경로에서만 로컬 `master` 끝을 쓴다.
+커밋·병합 커밋 훅은 `commit-base`가 선택한 40자리 커밋을 선택된 전체 또는 fast 검사에 전달한다. 기본 기준 참조는 로컬 `refs/heads/master`이며, 로컬 `refs/heads/master`가 `refs/remotes/origin/master`의 엄격한 조상일 때만(갈라지거나 로컬이 앞설 때는 제외) `refs/remotes/origin/master`를 기준 참조로 삼는다. 평소에는 `merge-base HEAD <기준 참조>`다. 이름 있는 현재 작업 브랜치가 `master`가 아닐 때 다음 두 경로에서만 기준 참조 끝을 쓴다.
 
 - `MERGE_HEAD`가 있으면 소문자 40자리 ID인 내용 줄 하나가 정확히 로컬 `master` 끝이어야 한다. 마지막 줄바꿈 없음·LF·CRLF를 받는다. 다른 형식·다중 부모에는 기존 기준을 쓰고, 읽기 실패는 오류로 중단한다.
 - `MERGE_HEAD` 파일이 없으면 `master` 끝을 SHA로 고정해 실행한 `git merge-tree --write-tree HEAD <끝>`이 충돌 없이 성공하고, 나온 트리 ID가 `git write-tree`의 인덱스 트리 ID와 같아야 한다. 일반 커밋에서도 같은 조건으로 검사한다. `master`가 HEAD의 조상이면 인덱스가 HEAD와 같은 경우에만 참이며 기존 분기점과 같다. 비조상이면 결과 트리 전체가 작업 HEAD와 `master`를 합친 내용이므로 `master` 대비 작업 브랜치 변경이 모두 심사된다.
 
 Git 2.38 이상이 자동 트리 조건의 최소 요구다. 로컬과 CI가 같은 명령으로 기능을 확인한다. 미지원·명령 실패에는 진단을 출력하고 기존 분기점으로 물러나며, 충돌·트리 불일치에도 예외를 주지 않는다. `master` 위의 역방향 병합·detached HEAD·`refs/heads/` 밖의 symbolic HEAD에는 예외가 없다. `MERGE_HEAD`가 존재하지만 잘못됐을 때는 트리 조건으로 넘기지 않는다.
 
-`BaseUse::Commit`은 계산된 커밋 기준만 비조상으로 허용한다. `commit-check`가 검사 자식에게 명시하며 `test-diff`·끄기 보고·변이 범위 계산이 같은 타입을 사용한다. 일반 `check`·CI의 기본값은 `BaseUse::Ancestor`다. `push-check`는 `push-base`가 엄격하게 조상으로 검증한 SHA만 전달한다. `resolve_base`·`push-base`와 `require-base` CLI는 병합 중에도 엄격하게 HEAD 조상만 받는다. 인덱스와 작업 트리의 일치는 커밋 가드가 계속 요구한다. 로컬 참조의 인증 한계, S11b와 잠금 경계는 H-44 ADR에 적는다. CI의 검증된 기준·서명·잠금 후손 검사는 유지한다.
+`BaseUse::Commit`은 계산된 커밋 기준만 비조상으로 허용한다. `commit-check`가 검사 자식에게 명시하며 `test-diff`·끄기 보고·변이 범위 계산이 같은 타입을 사용한다. 일반 `check`·CI의 기본값은 `BaseUse::Ancestor`다. `push-check`(`xtask push-check`)는 `push-base`가 엄격하게 조상으로 검증한 SHA만 전달하며, 컨테이너 런타임(Docker)이 없는 기기에서 현재 체크아웃된 단일 구현 작업 브랜치(`master`·`main`·`merge/*`·`review/*`·`critic/*`·`t3/*` 제외, `local_ref == remote_ref`)를 푸시할 때만 `check-fast`(하네스·문서·`justfile`·`xtask` 변경은 전체 `just check` 승격)를 실행하고 그 밖의 모든 푸시(`master`·`merge/*`·다중 ref·컨테이너 런타임 존재)는 `check-full`을 유지한다. 전체·시각·변이 검사는 원격 CI와 메인의 병합 검사가 맡는다. `resolve_base`·`push-base`와 `require-base` CLI는 병합 중에도 엄격하게 HEAD 조상만 받는다. 인덱스와 작업 트리의 일치는 커밋 가드가 계속 요구한다. 로컬 참조의 인증 한계, S11b와 잠금 경계는 H-44 ADR에 적는다. CI의 검증된 기준·서명·잠금 후손 검사는 유지한다.
 
 작업 브랜치는 `git merge --no-ff --no-edit master` 한 번으로 받는다. 충돌이 나면 해결하고 스테이징한 뒤 `git commit --no-edit`로 끝낸다. 병합으로 받은 `master`의 승인된 기존 테스트 변경은 “기존 테스트를 바꿔야 하면 막힘”에 해당하지 않는다. 작업 브랜치가 직접 기존 테스트를 바꿔야 하면 계속 멈추고 보고한다.
 

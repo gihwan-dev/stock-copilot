@@ -796,6 +796,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -1071,6 +1076,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -1316,6 +1326,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -1497,6 +1512,11 @@
     },
     {
       "name": "@content-medium:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -3026,6 +3046,46 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -3067,6 +3127,11 @@
     },
     {
       "name": "@content-medium:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -3761,6 +3826,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -3782,6 +3852,11 @@
     },
     {
       "name": "@content-medium:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -4596,6 +4671,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -4871,6 +4951,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -5116,6 +5201,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -5297,6 +5387,11 @@
     },
     {
       "name": "@content-wide:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -6826,6 +6921,46 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -6867,6 +7002,11 @@
     },
     {
       "name": "@content-wide:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -7561,6 +7701,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -7582,6 +7727,11 @@
     },
     {
       "name": "@content-wide:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -8406,6 +8556,11 @@
       "generated": "yes"
     },
     {
+      "name": "active:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -8681,6 +8836,11 @@
       "generated": "yes"
     },
     {
+      "name": "active:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -8926,6 +9086,11 @@
       "generated": "yes"
     },
     {
+      "name": "active:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -9107,6 +9272,11 @@
     },
     {
       "name": "active:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -10636,6 +10806,46 @@
       "generated": "yes"
     },
     {
+      "name": "active:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -10677,6 +10887,11 @@
     },
     {
       "name": "active:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -11371,6 +11586,11 @@
       "generated": "yes"
     },
     {
+      "name": "active:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -11392,6 +11612,11 @@
     },
     {
       "name": "active:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -12801,6 +13026,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -13076,6 +13306,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -13321,6 +13556,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -13502,6 +13742,11 @@
     },
     {
       "name": "disabled:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15031,6 +15276,46 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -15072,6 +15357,11 @@
     },
     {
       "name": "disabled:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15766,6 +16056,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -15787,6 +16082,11 @@
     },
     {
       "name": "disabled:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -16032,6 +16332,11 @@
     },
     {
       "name": "flex-row",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "flex-wrap",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -16821,6 +17126,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -17096,6 +17406,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -17341,6 +17656,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -17522,6 +17842,11 @@
     },
     {
       "name": "focus-visible:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -19051,6 +19376,46 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -19092,6 +19457,11 @@
     },
     {
       "name": "focus-visible:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -19786,6 +20156,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -19807,6 +20182,11 @@
     },
     {
       "name": "focus-visible:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -20621,6 +21001,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -20896,6 +21281,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -21141,6 +21531,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -21322,6 +21717,11 @@
     },
     {
       "name": "focus:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -22851,6 +23251,46 @@
       "generated": "yes"
     },
     {
+      "name": "focus:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -22892,6 +23332,11 @@
     },
     {
       "name": "focus:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -23586,6 +24031,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -23607,6 +24057,11 @@
     },
     {
       "name": "focus:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -23917,6 +24372,11 @@
     },
     {
       "name": "h-dot-size",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "h-full",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -24761,6 +25221,11 @@
       "generated": "yes"
     },
     {
+      "name": "hover:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -25036,6 +25501,11 @@
       "generated": "yes"
     },
     {
+      "name": "hover:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -25281,6 +25751,11 @@
       "generated": "yes"
     },
     {
+      "name": "hover:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -25462,6 +25937,11 @@
     },
     {
       "name": "hover:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -26991,6 +27471,46 @@
       "generated": "yes"
     },
     {
+      "name": "hover:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -27032,6 +27552,11 @@
     },
     {
       "name": "hover:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -27726,6 +28251,11 @@
       "generated": "yes"
     },
     {
+      "name": "hover:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -27747,6 +28277,11 @@
     },
     {
       "name": "hover:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -27976,6 +28511,11 @@
       "generated": "yes"
     },
     {
+      "name": "max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -28157,6 +28697,11 @@
     },
     {
       "name": "min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -29051,6 +29596,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -29326,6 +29876,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -29571,6 +30126,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -29752,6 +30312,11 @@
     },
     {
       "name": "motion-reduce:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -31281,6 +31846,46 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -31322,6 +31927,11 @@
     },
     {
       "name": "motion-reduce:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -32016,6 +32626,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -32037,6 +32652,11 @@
     },
     {
       "name": "motion-reduce:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -33531,6 +34151,46 @@
       "generated": "yes"
     },
     {
+      "name": "scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -33572,6 +34232,11 @@
     },
     {
       "name": "size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -34282,6 +34947,11 @@
     },
     {
       "name": "w-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "w-max",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -35101,6 +35771,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -35376,6 +36051,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -35621,6 +36301,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -35802,6 +36487,11 @@
     },
     {
       "name": "window-lg:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -37331,6 +38021,46 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -37372,6 +38102,11 @@
     },
     {
       "name": "window-lg:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -38066,6 +38801,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -38087,6 +38827,11 @@
     },
     {
       "name": "window-lg:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -38901,6 +39646,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:flex-wrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:font-bold",
       "kind": "allowed",
       "generated": "yes"
@@ -39176,6 +39926,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:h-icon-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -39421,6 +40176,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:max-h-full",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:max-w-bubble-max-width",
       "kind": "allowed",
       "generated": "yes"
@@ -39602,6 +40362,11 @@
     },
     {
       "name": "window-md:min-h-control-height",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:min-h-control-height-sm",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -41131,6 +41896,46 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:scroll-content-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:scroll-flex",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:scroll-outline-inset",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:scroll-track-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:scroll-track-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:scroll-viewport-both",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:scroll-viewport-x",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:scroll-viewport-y",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:select-none",
       "kind": "allowed",
       "generated": "yes"
@@ -41172,6 +41977,11 @@
     },
     {
       "name": "window-md:size-icon-sm",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:size-space-3",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -41866,6 +42676,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:w-max",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:w-sidebar-collapsed",
       "kind": "allowed",
       "generated": "yes"
@@ -41891,6 +42706,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:wrap-slot",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -41912,6 +42732,11 @@
     },
     {
       "name": "window-md:z-toast",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "wrap-slot",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -42591,6 +43416,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:flex-wrap",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:font-bold",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -42811,6 +43640,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:h-full",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:h-icon-lg",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -43007,6 +43840,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:max-h-full",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:max-w-bubble-max-width",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -43152,6 +43989,10 @@
     },
     {
       "selector": ".\\@content-medium\\:min-h-control-height",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:min-h-control-height-sm",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
@@ -44375,6 +45216,38 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:scroll-content-y",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:scroll-flex",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:scroll-outline-inset",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:scroll-track-x",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:scroll-track-y",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:scroll-viewport-both",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:scroll-viewport-x",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:scroll-viewport-y",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:select-none",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -44408,6 +45281,10 @@
     },
     {
       "selector": ".\\@content-medium\\:size-icon-sm",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:size-space-3",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
@@ -44867,6 +45744,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:w-max",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:w-sidebar-collapsed",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -44884,6 +45765,10 @@
     },
     {
       "selector": ".\\@content-medium\\:whitespace-nowrap",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:wrap-slot",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
@@ -45535,6 +46420,10 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:flex-wrap",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:font-bold",
       "context": ["@container (width >= 75rem)"]
     },
@@ -45755,6 +46644,10 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:h-full",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:h-icon-lg",
       "context": ["@container (width >= 75rem)"]
     },
@@ -45951,6 +46844,10 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:max-h-full",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:max-w-bubble-max-width",
       "context": ["@container (width >= 75rem)"]
     },
@@ -46096,6 +46993,10 @@
     },
     {
       "selector": ".\\@content-wide\\:min-h-control-height",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:min-h-control-height-sm",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -47319,6 +48220,38 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:scroll-content-y",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:scroll-flex",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:scroll-outline-inset",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:scroll-track-x",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:scroll-track-y",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:scroll-viewport-both",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:scroll-viewport-x",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:scroll-viewport-y",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:select-none",
       "context": ["@container (width >= 75rem)"]
     },
@@ -47352,6 +48285,10 @@
     },
     {
       "selector": ".\\@content-wide\\:size-icon-sm",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:size-space-3",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -47811,6 +48748,10 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:w-max",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:w-sidebar-collapsed",
       "context": ["@container (width >= 75rem)"]
     },
@@ -47828,6 +48769,10 @@
     },
     {
       "selector": ".\\@content-wide\\:whitespace-nowrap",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:wrap-slot",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -48483,6 +49428,10 @@
       "context": []
     },
     {
+      "selector": ".active\\:flex-wrap:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:flex:active",
       "context": []
     },
@@ -48707,6 +49656,10 @@
       "context": []
     },
     {
+      "selector": ".active\\:h-full:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:h-icon-lg:active",
       "context": []
     },
@@ -48903,6 +49856,10 @@
       "context": []
     },
     {
+      "selector": ".active\\:max-h-full:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:max-w-bubble-max-width:active",
       "context": []
     },
@@ -49044,6 +50001,10 @@
     },
     {
       "selector": ".active\\:min-h-chat-input-min:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:min-h-control-height-sm:active",
       "context": []
     },
     {
@@ -50271,6 +51232,38 @@
       "context": []
     },
     {
+      "selector": ".active\\:scroll-content-y:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:scroll-flex:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:scroll-outline-inset:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:scroll-track-x:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:scroll-track-y:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:scroll-viewport-both:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:scroll-viewport-x:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:scroll-viewport-y:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:select-none:active",
       "context": []
     },
@@ -50304,6 +51297,10 @@
     },
     {
       "selector": ".active\\:size-icon-sm:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:size-space-3:active",
       "context": []
     },
     {
@@ -50763,6 +51760,10 @@
       "context": []
     },
     {
+      "selector": ".active\\:w-max:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:w-sidebar-collapsed:active",
       "context": []
     },
@@ -50780,6 +51781,10 @@
     },
     {
       "selector": ".active\\:whitespace-nowrap:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:wrap-slot:active",
       "context": []
     },
     {
@@ -51899,6 +52904,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:flex-wrap:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:flex:disabled",
       "context": []
     },
@@ -52123,6 +53132,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:h-full:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:h-icon-lg:disabled",
       "context": []
     },
@@ -52319,6 +53332,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:max-h-full:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:max-w-bubble-max-width:disabled",
       "context": []
     },
@@ -52460,6 +53477,10 @@
     },
     {
       "selector": ".disabled\\:min-h-chat-input-min:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:min-h-control-height-sm:disabled",
       "context": []
     },
     {
@@ -53687,6 +54708,38 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:scroll-content-y:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:scroll-flex:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:scroll-outline-inset:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:scroll-track-x:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:scroll-track-y:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:scroll-viewport-both:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:scroll-viewport-x:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:scroll-viewport-y:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:select-none:disabled",
       "context": []
     },
@@ -53720,6 +54773,10 @@
     },
     {
       "selector": ".disabled\\:size-icon-sm:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:size-space-3:disabled",
       "context": []
     },
     {
@@ -54179,6 +55236,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:w-max:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:w-sidebar-collapsed:disabled",
       "context": []
     },
@@ -54196,6 +55257,10 @@
     },
     {
       "selector": ".disabled\\:whitespace-nowrap:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:wrap-slot:disabled",
       "context": []
     },
     {
@@ -54392,6 +55457,10 @@
     },
     {
       "selector": ".flex-row",
+      "context": []
+    },
+    {
+      "selector": ".flex-wrap",
       "context": []
     },
     {
@@ -55019,6 +56088,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:flex-wrap:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:flex:focus-visible",
       "context": []
     },
@@ -55243,6 +56316,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:h-full:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:h-icon-lg:focus-visible",
       "context": []
     },
@@ -55439,6 +56516,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:max-h-full:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:max-w-bubble-max-width:focus-visible",
       "context": []
     },
@@ -55580,6 +56661,10 @@
     },
     {
       "selector": ".focus-visible\\:min-h-chat-input-min:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:min-h-control-height-sm:focus-visible",
       "context": []
     },
     {
@@ -56807,6 +57892,38 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:scroll-content-y:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:scroll-flex:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:scroll-outline-inset:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:scroll-track-x:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:scroll-track-y:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:scroll-viewport-both:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:scroll-viewport-x:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:scroll-viewport-y:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:select-none:focus-visible",
       "context": []
     },
@@ -56840,6 +57957,10 @@
     },
     {
       "selector": ".focus-visible\\:size-icon-sm:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:size-space-3:focus-visible",
       "context": []
     },
     {
@@ -57299,6 +58420,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:w-max:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:w-sidebar-collapsed:focus-visible",
       "context": []
     },
@@ -57316,6 +58441,10 @@
     },
     {
       "selector": ".focus-visible\\:whitespace-nowrap:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:wrap-slot:focus-visible",
       "context": []
     },
     {
@@ -57963,6 +59092,10 @@
       "context": []
     },
     {
+      "selector": ".focus\\:flex-wrap:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:flex:focus",
       "context": []
     },
@@ -58187,6 +59320,10 @@
       "context": []
     },
     {
+      "selector": ".focus\\:h-full:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:h-icon-lg:focus",
       "context": []
     },
@@ -58383,6 +59520,10 @@
       "context": []
     },
     {
+      "selector": ".focus\\:max-h-full:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:max-w-bubble-max-width:focus",
       "context": []
     },
@@ -58524,6 +59665,10 @@
     },
     {
       "selector": ".focus\\:min-h-chat-input-min:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:min-h-control-height-sm:focus",
       "context": []
     },
     {
@@ -59751,6 +60896,38 @@
       "context": []
     },
     {
+      "selector": ".focus\\:scroll-content-y:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:scroll-flex:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:scroll-outline-inset:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:scroll-track-x:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:scroll-track-y:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:scroll-viewport-both:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:scroll-viewport-x:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:scroll-viewport-y:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:select-none:focus",
       "context": []
     },
@@ -59784,6 +60961,10 @@
     },
     {
       "selector": ".focus\\:size-icon-sm:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:size-space-3:focus",
       "context": []
     },
     {
@@ -60243,6 +61424,10 @@
       "context": []
     },
     {
+      "selector": ".focus\\:w-max:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:w-sidebar-collapsed:focus",
       "context": []
     },
@@ -60260,6 +61445,10 @@
     },
     {
       "selector": ".focus\\:whitespace-nowrap:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:wrap-slot:focus",
       "context": []
     },
     {
@@ -60508,6 +61697,10 @@
     },
     {
       "selector": ".h-dot-size",
+      "context": []
+    },
+    {
+      "selector": ".h-full",
       "context": []
     },
     {
@@ -61179,6 +62372,10 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:flex-wrap:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:flex:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -61403,6 +62600,10 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:h-full:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:h-icon-lg:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -61599,6 +62800,10 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:max-h-full:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:max-w-bubble-max-width:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -61740,6 +62945,10 @@
     },
     {
       "selector": ".hover\\:min-h-chat-input-min:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:min-h-control-height-sm:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -62967,6 +64176,38 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:scroll-content-y:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:scroll-flex:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:scroll-outline-inset:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:scroll-track-x:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:scroll-track-y:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:scroll-viewport-both:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:scroll-viewport-x:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:scroll-viewport-y:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:select-none:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -63000,6 +64241,10 @@
     },
     {
       "selector": ".hover\\:size-icon-sm:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:size-space-3:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -63459,6 +64704,10 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:w-max:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:w-sidebar-collapsed:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -63476,6 +64725,10 @@
     },
     {
       "selector": ".hover\\:whitespace-nowrap:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:wrap-slot:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -63659,6 +64912,10 @@
       "context": []
     },
     {
+      "selector": ".max-h-full",
+      "context": []
+    },
+    {
       "selector": ".max-w-bubble-max-width",
       "context": []
     },
@@ -63804,6 +65061,10 @@
     },
     {
       "selector": ".min-h-control-height",
+      "context": []
+    },
+    {
+      "selector": ".min-h-control-height-sm",
       "context": []
     },
     {
@@ -64519,6 +65780,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:flex-wrap",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:font-bold",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -64739,6 +66004,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:h-full",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:h-icon-lg",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -64935,6 +66204,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:max-h-full",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:max-w-bubble-max-width",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -65080,6 +66353,10 @@
     },
     {
       "selector": ".motion-reduce\\:min-h-control-height",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:min-h-control-height-sm",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -66303,6 +67580,38 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:scroll-content-y",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:scroll-flex",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:scroll-outline-inset",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:scroll-track-x",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:scroll-track-y",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:scroll-viewport-both",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:scroll-viewport-x",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:scroll-viewport-y",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:select-none",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -66336,6 +67645,10 @@
     },
     {
       "selector": ".motion-reduce\\:size-icon-sm",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:size-space-3",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -66795,6 +68108,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:w-max",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:w-sidebar-collapsed",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -66812,6 +68129,10 @@
     },
     {
       "selector": ".motion-reduce\\:whitespace-nowrap",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:wrap-slot",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -68003,6 +69324,38 @@
       "context": []
     },
     {
+      "selector": ".scroll-content-y",
+      "context": []
+    },
+    {
+      "selector": ".scroll-flex",
+      "context": []
+    },
+    {
+      "selector": ".scroll-outline-inset",
+      "context": []
+    },
+    {
+      "selector": ".scroll-track-x",
+      "context": []
+    },
+    {
+      "selector": ".scroll-track-y",
+      "context": []
+    },
+    {
+      "selector": ".scroll-viewport-both",
+      "context": []
+    },
+    {
+      "selector": ".scroll-viewport-x",
+      "context": []
+    },
+    {
+      "selector": ".scroll-viewport-y",
+      "context": []
+    },
+    {
       "selector": ".select-none",
       "context": []
     },
@@ -68036,6 +69389,10 @@
     },
     {
       "selector": ".size-icon-sm",
+      "context": []
+    },
+    {
+      "selector": ".size-space-3",
       "context": []
     },
     {
@@ -68504,6 +69861,10 @@
     },
     {
       "selector": ".w-icon-sm",
+      "context": []
+    },
+    {
+      "selector": ".w-max",
       "context": []
     },
     {
@@ -69159,6 +70520,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:flex-wrap",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:font-bold",
       "context": ["@media (width >= 80rem)"]
     },
@@ -69379,6 +70744,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:h-full",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:h-icon-lg",
       "context": ["@media (width >= 80rem)"]
     },
@@ -69575,6 +70944,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:max-h-full",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:max-w-bubble-max-width",
       "context": ["@media (width >= 80rem)"]
     },
@@ -69720,6 +71093,10 @@
     },
     {
       "selector": ".window-lg\\:min-h-control-height",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:min-h-control-height-sm",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -70943,6 +72320,38 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:scroll-content-y",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:scroll-flex",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:scroll-outline-inset",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:scroll-track-x",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:scroll-track-y",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:scroll-viewport-both",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:scroll-viewport-x",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:scroll-viewport-y",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:select-none",
       "context": ["@media (width >= 80rem)"]
     },
@@ -70976,6 +72385,10 @@
     },
     {
       "selector": ".window-lg\\:size-icon-sm",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:size-space-3",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -71435,6 +72848,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:w-max",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:w-sidebar-collapsed",
       "context": ["@media (width >= 80rem)"]
     },
@@ -71452,6 +72869,10 @@
     },
     {
       "selector": ".window-lg\\:whitespace-nowrap",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:wrap-slot",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -72103,6 +73524,10 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:flex-wrap",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:font-bold",
       "context": ["@media (width >= 67.5rem)"]
     },
@@ -72323,6 +73748,10 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:h-full",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:h-icon-lg",
       "context": ["@media (width >= 67.5rem)"]
     },
@@ -72519,6 +73948,10 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:max-h-full",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:max-w-bubble-max-width",
       "context": ["@media (width >= 67.5rem)"]
     },
@@ -72664,6 +74097,10 @@
     },
     {
       "selector": ".window-md\\:min-h-control-height",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:min-h-control-height-sm",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
@@ -73887,6 +75324,38 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:scroll-content-y",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:scroll-flex",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:scroll-outline-inset",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:scroll-track-x",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:scroll-track-y",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:scroll-viewport-both",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:scroll-viewport-x",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:scroll-viewport-y",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:select-none",
       "context": ["@media (width >= 67.5rem)"]
     },
@@ -73920,6 +75389,10 @@
     },
     {
       "selector": ".window-md\\:size-icon-sm",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:size-space-3",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
@@ -74379,6 +75852,10 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:w-max",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:w-sidebar-collapsed",
       "context": ["@media (width >= 67.5rem)"]
     },
@@ -74396,6 +75873,10 @@
     },
     {
       "selector": ".window-md\\:whitespace-nowrap",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:wrap-slot",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
@@ -74417,6 +75898,10 @@
     {
       "selector": ".window-md\\:z-toast",
       "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".wrap-slot",
+      "context": []
     },
     {
       "selector": ".z-50",

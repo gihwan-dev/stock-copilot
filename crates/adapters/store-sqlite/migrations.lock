@@ -37,3 +37,8 @@ sha256 = "92f2a168e6756500cc661a90d69a9cdba8435f26d0ab46d806556e4923a7ee9b"
 number = 8
 file = "0008_instrument_mappings.sql"
 sha256 = "3ca8969d7037814b80623db44995726103048e074ca877cb92ba714d7cff0483"
+
+[[migration]]
+number = 9
+file = "0009_instrument_mapping_history.sql"
+sha256 = "b6e60a6119333d85641ea8073b26f04673105104d97493a36a40be319f8a25fb"

@@ -789,3 +789,278 @@ fn r3_as_prompt_trait_alias_and_non_expr_macro_are_blocked() {
         BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
     );
 }
+
+fn defining_file_base() -> (String, String) {
+    let seal_head = String::from(
+        "#[derive(Debug, PartialEq, Eq)] struct UserIdentityConfirmationSeal;
+#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);
+impl UserIdentityConfirmation { #[must_use] pub const fn issue_after_user_confirmation() -> Self { Self(UserIdentityConfirmationSeal) } }",
+    );
+    let base = format!(
+        "{seal_head}
+#[derive(Debug, PartialEq, Eq)] pub enum IdentityConfirmationOrigin {{ UserConfirmed(UserIdentityConfirmation), BrokerObservation, AiSuggestion }}
+#[derive(Debug, PartialEq, Eq)] pub struct IdentityChangeConfirmation {{ origin: IdentityConfirmationOrigin }}
+impl IdentityChangeConfirmation {{ #[must_use] pub const fn new(origin: IdentityConfirmationOrigin) -> Self {{ Self {{ origin }} }} #[must_use] pub const fn origin(&self) -> &IdentityConfirmationOrigin {{ &self.origin }} }}
+#[derive(Debug, PartialEq, Eq)] pub struct ConfirmedIdentifierChange {{ confirmation: IdentityChangeConfirmation }}
+impl ConfirmedIdentifierChange {{ #[must_use] pub const fn new(confirmation: IdentityChangeConfirmation) -> Self {{ Self {{ confirmation }} }} #[must_use] pub const fn confirmation(&self) -> &IdentityChangeConfirmation {{ &self.confirmation }} }}"
+    );
+    (seal_head, base)
+}
+
+#[test]
+fn h66_defining_file_wrapper_extraction_is_blocked() {
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let (seal_head, base) = defining_file_base();
+    assert!(scan("domain", defining, &base).is_empty());
+    for bad in [
+        format!(
+            "{base}\nimpl ConfirmedIdentifierChange {{ #[must_use] pub fn into_confirmation(self) -> IdentityChangeConfirmation {{ self.confirmation }} }}"
+        ),
+        format!(
+            "{base}\nimpl IdentityChangeConfirmation {{ #[must_use] pub fn into_origin(self) -> IdentityConfirmationOrigin {{ self.origin }} }}"
+        ),
+        format!(
+            "{base}\nimpl IdentityChangeConfirmation {{ pub fn take(&mut self) -> Option<IdentityConfirmationOrigin> {{ None }} }}"
+        ),
+        format!("{base}\nimpl IdentityChangeConfirmation {{ pub fn mutate(&mut self) {{}} }}"),
+        format!(
+            "{base}\nimpl IdentityChangeConfirmation {{ pub fn drain(self, out: &mut Option<IdentityConfirmationOrigin>) {{ let _ = out; }} }}"
+        ),
+        format!(
+            "{base}\nimpl From<ConfirmedIdentifierChange> for IdentityChangeConfirmation {{ fn from(value: ConfirmedIdentifierChange) -> Self {{ value.confirmation }} }}"
+        ),
+        format!("{base}\ntrait Marker {{}} impl Marker for ConfirmedIdentifierChange {{}}"),
+        format!(
+            "{base}\npub fn extract_origin(change: ConfirmedIdentifierChange) -> IdentityConfirmationOrigin {{ change.confirmation.origin }}"
+        ),
+        format!("{base}\npub struct SmuggleWrapper(pub IdentityConfirmationOrigin);"),
+        format!(
+            "{seal_head}\n#[derive(Debug, PartialEq, Eq)] pub struct ConfirmedIdentifierChange {{ pub confirmation: IdentityChangeConfirmation }}"
+        ),
+        format!(
+            "{seal_head}\n#[derive(Debug, Clone, PartialEq, Eq)] pub struct ConfirmedIdentifierChange {{ confirmation: IdentityChangeConfirmation }}"
+        ),
+        format!(
+            "{seal_head}\n#[derive(Debug, Clone, PartialEq, Eq)] pub enum IdentityConfirmationOrigin {{ UserConfirmed(UserIdentityConfirmation) }}"
+        ),
+        format!("{base}\nimpl IdentityConfirmationOrigin {{ pub fn unpack(self) {{}} }}"),
+        format!(
+            "{base}\npub fn mutate_free(out: &mut Option<IdentityConfirmationOrigin>) {{ let _ = out; }}"
+        ),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn h66_defining_file_type_alias_and_callback_extraction_are_blocked() {
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let (_, base) = defining_file_base();
+    for bad in [
+        format!("{base}\ntype OriginAlias = IdentityConfirmationOrigin;"),
+        format!(
+            "{base}\nimpl ConfirmedIdentifierChange {{ pub fn leak_cb(self, cb: fn(IdentityChangeConfirmation)) {{ cb(self.confirmation); }} }}"
+        ),
+        format!(
+            "{base}\npub fn leak_free_cb(change: ConfirmedIdentifierChange, cb: impl FnOnce(IdentityConfirmationOrigin)) {{ cb(change.confirmation.origin); }}"
+        ),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn h66_prompt_macro_attr_and_spaced_paste_bypasses_are_blocked() {
+    assert_eq!(
+        scan(
+            "store-sqlite",
+            "crates/adapters/store-sqlite/src/lib.rs",
+            "pub fn f() { custom_macro!(use AutoPrompt => IdentityConfirmationPrompt); }",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
+    );
+    assert_eq!(
+        scan(
+            "store-sqlite",
+            "crates/adapters/store-sqlite/src/lib.rs",
+            "#[some_attr(IdentityConfirmationPrompt)] pub struct Fake;",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
+    );
+    assert_eq!(
+        scan(
+            "src-tauri",
+            "apps/desktop/src-tauri/src/lib.rs",
+            "pub fn f() { cf![[ <x y> ]::g]; }",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationIssuance])
+    );
+    assert_eq!(
+        scan(
+            "src-tauri",
+            "apps/desktop/src-tauri/src/lib.rs",
+            "pub(crate) use specta::_collect_functions as cf;",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationIssuance])
+    );
+}
+
+#[test]
+fn h66_r2_defining_file_trait_rebind_and_sink_bypasses_are_blocked() {
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let (_, base) = defining_file_base();
+    let valid_verify = format!(
+        "{base}\npub(crate) fn verify_change_evidence(change: ConfirmedIdentifierChange) -> Result<(), ()> {{ let _ = change; Ok(()) }}"
+    );
+    assert!(scan("domain", defining, &valid_verify).is_empty());
+    for bad in [
+        format!(
+            "{base}\npub trait StealConfirmation {{ fn steal(self) -> IdentityChangeConfirmation; }}\nimpl StealConfirmation for [ConfirmedIdentifierChange; 1] {{ fn steal(self) -> IdentityChangeConfirmation {{ let [item] = self; item.confirmation }} }}"
+        ),
+        format!(
+            "{base}\nimpl crate::ExternalSteal for [ConfirmedIdentifierChange; 1] {{ fn steal(self) {{}} }}"
+        ),
+        format!(
+            "{base}\npub struct Thief;\nimpl crate::ExternalSteal for Thief {{ fn steal(change: ConfirmedIdentifierChange) {{ let _ = change; }} }}"
+        ),
+        format!(
+            "{base}\npub trait ConfirmationSink {{ fn take(self, c: IdentityChangeConfirmation); }}\npub fn drain_change<S: ConfirmationSink>(change: ConfirmedIdentifierChange, sink: S) {{ sink.take(change.confirmation); }}"
+        ),
+        format!(
+            "{base}\npub fn drain_ext<S: crate::ExternalSink>(change: ConfirmedIdentifierChange, sink: S) {{ let _ = (change, sink); }}"
+        ),
+        format!(
+            "{base}\npub fn rebind_change(change: ConfirmedIdentifierChange) -> ConfirmedIdentifierChange {{ change }}"
+        ),
+        format!(
+            "{base}\npub(crate) fn leak_two_args(change: ConfirmedIdentifierChange, sink: &crate::EvilSink) {{ let _ = (change, sink); }}"
+        ),
+        format!(
+            "{base}\nimpl IdentityChangeConfirmation {{ pub fn new(other: IdentityChangeConfirmation) -> Self {{ other }} }}"
+        ),
+        format!(
+            "{base}\nimpl ConfirmedIdentifierChange {{ pub fn copy_origin(&self) -> IdentityConfirmationOrigin {{ IdentityConfirmationOrigin::BrokerObservation }} }}"
+        ),
+        format!(
+            "{base}\npub(crate) fn unwrap_change(change: ConfirmedIdentifierChange) -> IdentityChangeConfirmation {{ change.confirmation }}"
+        ),
+        format!(
+            "{base}\npub(crate) fn mutate_crate(out: &mut Option<IdentityConfirmationOrigin>) {{ let _ = out; }}"
+        ),
+        format!(
+            "{base}\npub struct Thief;\nimpl crate::ExternalTrait<ConfirmedIdentifierChange> for Thief {{}}"
+        ),
+        format!("{base}\npub struct Thief;\nimpl crate::ExternalTrait for Thief {{}}"),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn h66_r2_prompt_def_blocks_hidden_fields_extra_constructors_and_into_parts_swaps() {
+    let prompt_file = "crates/application/src/identity_confirmation_prompt.rs";
+    let head = "use domain::{IdentityChangeEvidence, InstrumentId, InstrumentSource, MappingCorrectionEvidence};
+use std::future::Future;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] pub enum IdentityConfirmationDecision { Confirmed, Denied, Unavailable }
+pub trait IdentityConfirmationPrompt: Send + Sync {
+    fn confirm_identifier_change(&self, request: &IdentifierChangePrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send;
+    fn confirm_retirement_correction(&self, request: &RetirementCorrectionPrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send;
+    fn confirm_link_correction(&self, request: &LinkCorrectionPrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send;
+}";
+    let valid_struct = "#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdentifierChangePrompt { instrument_id: InstrumentId, previous: InstrumentSource, next: InstrumentSource, evidence: IdentityChangeEvidence }";
+    let valid_impl = "impl IdentifierChangePrompt {
+    pub const fn new(instrument_id: InstrumentId, previous: InstrumentSource, next: InstrumentSource, evidence: IdentityChangeEvidence) -> Self { Self { instrument_id, previous, next, evidence } }
+    pub const fn instrument_id(&self) -> &InstrumentId { &self.instrument_id }
+    pub const fn previous(&self) -> &InstrumentSource { &self.previous }
+    pub const fn next(&self) -> &InstrumentSource { &self.next }
+    pub const fn evidence(&self) -> &IdentityChangeEvidence { &self.evidence }
+    pub(crate) fn into_parts(self) -> (InstrumentId, InstrumentSource, InstrumentSource, IdentityChangeEvidence) { (self.instrument_id, self.previous, self.next, self.evidence) }
+}";
+    assert!(
+        scan(
+            "application",
+            prompt_file,
+            &format!("{head}\n{valid_struct}\n{valid_impl}")
+        )
+        .is_empty()
+    );
+    for bad in [
+        format!(
+            "{head}\n#[derive(Debug, Clone, PartialEq, Eq)] pub struct IdentifierChangePrompt {{ instrument_id: InstrumentId, previous: InstrumentSource, next: InstrumentSource, actual_next: Option<InstrumentSource>, evidence: IdentityChangeEvidence }}\n{valid_impl}"
+        ),
+        format!(
+            "{head}\n{valid_struct}\n{valid_impl}\nimpl IdentifierChangePrompt {{ pub const fn new_swapped(instrument_id: InstrumentId, previous: InstrumentSource, next: InstrumentSource, evidence: IdentityChangeEvidence) -> Self {{ Self {{ instrument_id, previous, next, evidence }} }} }}"
+        ),
+        format!(
+            "{head}\n{valid_struct}\nimpl IdentifierChangePrompt {{ pub(crate) fn into_parts(self) -> (InstrumentId, InstrumentSource, InstrumentSource, IdentityChangeEvidence) {{ (self.instrument_id, self.next, self.previous, self.evidence) }} }}"
+        ),
+        format!(
+            "{head}\n{valid_struct}\nimpl IdentifierChangePrompt {{ pub const fn next(&self) -> &InstrumentSource {{ &self.previous }} }}"
+        ),
+        format!(
+            "{head}\n{valid_struct}\nimpl IdentifierChangePrompt {{ pub const fn new(instrument_id: InstrumentId, previous: InstrumentSource, next: InstrumentSource, evidence: IdentityChangeEvidence) -> Self {{ Self {{ instrument_id, previous: next, next: previous, evidence }} }} }}"
+        ),
+        format!("{head}\nuse fake::Send;\n{valid_struct}\n{valid_impl}"),
+    ] {
+        assert_eq!(
+            scan("application", prompt_file, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationPromptImpl]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn h66_r2_followup_blocks_any_erasure_assoc_relay_and_wrapper_renames() {
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let (_, base) = defining_file_base();
+    for bad in [
+        format!(
+            "{base}\npub fn into_any_origin(value: Box<dyn core::any::Any>) -> Box<dyn core::any::Any> {{ match value.downcast::<ConfirmedIdentifierChange>() {{ Ok(change) => Box::new(change.confirmation.origin), Err(other) => other }} }}"
+        ),
+        format!(
+            "{base}\npub static LEAK: fn(Box<dyn core::any::Any>) -> Box<dyn core::any::Any> = |v| v;"
+        ),
+        format!(
+            "{base}\npub struct BoxRelay;\nimpl BoxRelay {{ pub fn strip(value: Box<dyn core::any::Any>) -> Box<dyn core::any::Any> {{ match value.downcast::<ConfirmedIdentifierChange>() {{ Ok(change) => Box::new(change.confirmation.origin), Err(other) => other }} }} }}"
+        ),
+        format!(
+            "{base}\nimpl From<<ChangeToOriginRelay as ConfirmationRelay>::Input> for <ChangeToOriginRelay as ConfirmationRelay>::Output {{ fn from(value: <ChangeToOriginRelay as ConfirmationRelay>::Input) -> Self {{ value.confirmation.origin }} }}"
+        ),
+        format!("{base}\nuse self::ConfirmedIdentifierChange as RenamedChange;"),
+        format!(
+            "{base}\npub(crate) fn opaque_leak(value: Box<dyn core::any::Any>) -> Box<dyn core::any::Any> {{ let _ = value; Box::new(()) }}"
+        ),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+    let sibling = "crates/domain/src/instrument_mapping.rs";
+    for bad in [
+        "pub trait ConfirmationRelay { type Input; type Output; }\npub struct ChangeToOriginRelay;\nimpl ConfirmationRelay for ChangeToOriginRelay { type Input = ConfirmedIdentifierChange; type Output = crate::IdentityConfirmationOrigin; }",
+        "pub trait AssocLeak { type Out = IdentityChangeConfirmation; }",
+        "use crate::instrument_mapping_change::ConfirmedIdentifierChange as C;",
+    ] {
+        assert_eq!(
+            scan("domain", sibling, bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}

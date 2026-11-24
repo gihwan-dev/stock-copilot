@@ -24,7 +24,11 @@ const launch = {
   tool_name: "mcp__t3_code__t3_thread_launch",
   tool_input: {
     title: "구현",
-    modelSelection: { provider: "codex", model: "gpt-6.1-sol" },
+    modelSelection: {
+      provider: "antigravity",
+      model: "gemini-4-neon",
+      options: { thought_level: "xhigh" },
+    },
     workspaceStrategy: {
       type: "worktree",
       branch: "topic",
@@ -37,7 +41,8 @@ const launch = {
       ", 브랜치 " +
       String.fromCharCode(96) +
       "topic" +
-      String.fromCharCode(96),
+      String.fromCharCode(96) +
+      "\n- 역할: implementation",
   },
 };
 test("R8 T3 launch rejects cross project environment elevated mode arbitrary keys and options", () => {
@@ -116,7 +121,12 @@ test("R8 legacy delegation rejects target project environment options and unappr
     tool_name: "mcp__t3_code__delegate_task",
     tool_input: {
       task: launch.tool_input.message,
-      target: { driverKind: "codex", model: "gpt-6.1-sol" },
+      role: "implementation",
+      target: {
+        driverKind: "antigravity",
+        model: "gemini-4-neon",
+        options: { thought_level: "xhigh" },
+      },
       isolation: "worktree",
     },
   };

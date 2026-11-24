@@ -1,0 +1,14 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/stocks/{symbol}/warnings",
+  "method": "get",
+  "status": "404",
+  "schema": "#/components/responses/NotFound/content/application~1json/schema",
+  "body": {
+    "error": {
+      "requestId": "synthetic-warnings-404",
+      "code": "stock-not-found",
+      "message": "종목을 찾을 수 없습니다."
+    }
+  }
+}

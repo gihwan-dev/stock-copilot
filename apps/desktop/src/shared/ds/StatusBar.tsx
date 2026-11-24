@@ -12,10 +12,10 @@ type Props = {
 };
 const styles = {
   warning:
-    "flex items-center gap-space-2 min-h-control-height py-space-1 px-space-6 text-size-md leading-md bg-alert-soft text-ink border-b-hairline border-solid border-alert",
+    "flex flex-wrap items-center gap-space-2 min-h-control-height py-space-1 px-space-4 text-size-md leading-md bg-alert-soft text-ink border-b-hairline border-solid border-alert",
   error:
-    "flex items-center gap-space-2 min-h-control-height py-space-1 px-space-6 text-size-md leading-md bg-alert-soft text-ink border-b-hairline border-solid border-alert",
-  info: "flex items-center gap-space-2 min-h-control-height py-space-1 px-space-6 text-size-md leading-md bg-surface-sunken text-ink border-b-hairline border-solid border-line",
+    "flex flex-wrap items-center gap-space-2 min-h-control-height py-space-1 px-space-4 text-size-md leading-md bg-alert-soft text-ink border-b-hairline border-solid border-alert",
+  info: "flex flex-wrap items-center gap-space-2 min-h-control-height py-space-1 px-space-4 text-size-md leading-md bg-surface-sunken text-ink border-b-hairline border-solid border-line",
 } as const;
 const statusIcon = (tone: Tone): IconName => {
   switch (tone) {
@@ -38,7 +38,13 @@ const statusAction = (action: Props["action"]): ReactElement | null =>
     </Button>
   );
 const statusIndicator = (tone: Tone): ReactElement => (
-  <span className={tone === "info" ? "text-ink-muted" : "text-alert"}>
+  <span
+    className={
+      tone === "info"
+        ? "flex-none text-ink-muted mr-space-2"
+        : "flex-none text-alert mr-space-2"
+    }
+  >
     <Icon name={statusIcon(tone)} />
   </span>
 );
@@ -47,18 +53,28 @@ const emptyStyles = {
   error: "flex items-center",
   info: "flex items-center",
 } as const;
+const statusClasses = {
+  warning: "flex-1 status-sentence",
+  info: "flex-1 status-sentence",
+  error: "status-sentence",
+} as const;
+const alertClasses = {
+  warning: "status-sentence",
+  info: "status-sentence",
+  error: "flex-1 status-sentence",
+} as const;
 export const StatusBar = (props: Props): ReactElement => {
   const tone = props.tone ?? "warning";
   const present = props.children !== undefined && props.children.length > 0;
   return (
     <div className="flex-none">
       <div className={present ? styles[tone] : emptyStyles[tone]}>
-        {present ? statusIndicator(tone) : null}
-        <div className="flex-1 status-sentence">
-          <div role="status" aria-atomic="true">
+        <div className="flex-1 flex items-center wrap-slot">
+          {present ? statusIndicator(tone) : null}
+          <div role="status" aria-atomic="true" className={statusClasses[tone]}>
             {tone === "error" ? undefined : props.children}
           </div>
-          <div role="alert" aria-atomic="true">
+          <div role="alert" aria-atomic="true" className={alertClasses[tone]}>
             {tone === "error" ? props.children : undefined}
           </div>
         </div>

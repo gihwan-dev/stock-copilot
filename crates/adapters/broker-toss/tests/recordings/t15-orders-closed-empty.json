@@ -1,0 +1,14 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/orders",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1orders/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "orders": [],
+      "nextCursor": null,
+      "hasNext": false
+    }
+  }
+}

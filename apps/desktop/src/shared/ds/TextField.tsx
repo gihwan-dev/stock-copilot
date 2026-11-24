@@ -109,8 +109,8 @@ const TextInput = (data: InputProps): ReactElement => {
       }
       className={
         data.state.error !== undefined
-          ? "h-control-height w-full px-space-3 text-body bg-surface-sunken border-hairline border-solid border-alert rounded-md disabled:opacity-disabled focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
-          : "h-control-height w-full px-space-3 text-body bg-surface-sunken border-hairline border-solid border-line-strong rounded-md disabled:opacity-disabled focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
+          ? "h-control-height flex-1 scroll-flex w-full px-space-3 text-body bg-surface-sunken border-hairline border-solid border-alert rounded-md disabled:opacity-disabled focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
+          : "h-control-height flex-1 scroll-flex w-full px-space-3 text-body bg-surface-sunken border-hairline border-solid border-line-strong rounded-md disabled:opacity-disabled focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
       }
     />
   );
@@ -150,23 +150,27 @@ export const TextField = (props: Props): ReactElement | null => {
   return (
     <label className="flex flex-col gap-space-1 text-ink">
       <span className="status-sentence text-label">{props.label}</span>
-      <span className="flex items-center gap-space-1 bg-surface-sunken rounded-md">
-        <TextInput
-          field={props}
-          state={state}
-          visibility={visibility}
-          descriptionId={id.value}
-        />
-        {reveal({ field: props, state, visibility, toggle })}
+      <span className="flex flex-wrap items-center gap-space-1 bg-surface-sunken rounded-md">
+        <span className="flex items-center gap-space-1 flex-1 wrap-slot">
+          <TextInput
+            field={props}
+            state={state}
+            visibility={visibility}
+            descriptionId={id.value}
+          />
+          {reveal({ field: props, state, visibility, toggle })}
+        </span>
         {props.type === "secret" ? (
-          <Button
-            variant="ghost"
-            size="control-height-sm"
-            disabled={props.disabled ?? "enabled"}
-            onClick={state.paste}
-          >
-            {text("ds.paste", "ko")}
-          </Button>
+          <span className="flex-none max-w-full">
+            <Button
+              variant="ghost"
+              size="control-height-sm"
+              disabled={props.disabled ?? "enabled"}
+              onClick={state.paste}
+            >
+              {text("ds.paste", "ko")}
+            </Button>
+          </span>
         ) : null}
       </span>
       {state.error !== undefined ? (

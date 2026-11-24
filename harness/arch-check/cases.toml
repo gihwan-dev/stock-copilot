@@ -905,3 +905,13 @@ findings = [
     { rule = "identity-confirmation-prompt-impl", subject = "crates/application/src/identity_confirmation_prompt.rs" },
     { rule = "identity-confirmation-prompt-reexport", subject = "crates/application/src/identity_confirmation_prompt.rs" },
 ]
+
+[[case]]
+name = "identity-confirmation-h66-followup-bypasses-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/collect_functions_reexport.rs" },
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/spaced_paste_brackets.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/domain/src/instrument_mapping_change.rs" },
+    { rule = "identity-confirmation-prompt-impl", subject = "crates/adapters/store-sqlite/src/attr_ident_bypass.rs" },
+    { rule = "identity-confirmation-prompt-impl", subject = "crates/adapters/store-sqlite/src/macro_use_bypass.rs" },
+]

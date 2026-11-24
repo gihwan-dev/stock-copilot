@@ -72,6 +72,24 @@ check-audited: check-node require-base check-ts
     "{{just_executable()}}" disable-report-since {{quote(base)}}
     "{{just_executable()}}" hooks-installed
 
+[env("STOCK_COPILOT_PROPTEST_CASES", "256")]
+check-lite: check-node check-pnpm
+    pnpm install --frozen-lockfile --ignore-scripts
+    pnpm -C apps/desktop exec tsc -p .
+    pnpm -C apps/desktop exec eslint --max-warnings 0 src
+    pnpm -C apps/desktop exec vite build
+    node harness/vitest-check/check.mjs
+    node --test 'apps/desktop/tests/*.test.mjs'
+    cargo fmt --all --check
+    "{{just_executable()}}" clippy Cargo.toml
+    "{{just_executable()}}" arch-check
+    "{{just_executable()}}" source-check
+    "{{just_executable()}}" sql-check
+    "{{just_executable()}}" migration-check
+    "{{just_executable()}}" capability-check
+    node harness/generated-files/check.mjs
+    cargo nextest run --workspace --locked --exclude xtask
+
 check-full: advisory-db-fetch check
     "{{just_executable()}}" visual-check
     node harness/ds-overflow/examples.mjs
@@ -120,6 +138,8 @@ check-ts: check-node check-pnpm
     node --test 'harness/claude-hooks/tests/*.test.mjs'
     node --test 'harness/codex-hooks/tests/*.test.mjs'
     node harness/codex-hooks/config.mjs
+    node --test 'harness/antigravity-hooks/tests/*.test.mjs'
+    node harness/antigravity-hooks/config.mjs
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
     node harness/ci/linux/exclusions.mjs verify
@@ -185,7 +205,7 @@ commit-check:
     if [ -f "$(git rev-parse --git-path stock-copilot-merge-gate.json)" ]; then node harness/ci/merge-gate.mjs --hook; else base="$("{{just_executable()}}" commit-base)"; STOCK_COPILOT_BASE_USE=commit "{{just_executable()}}" base="$base" "$("{{just_executable()}}" commit-recipe)"; fi
 
 push-check:
-    base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
+    cargo run --locked --quiet --package xtask -- push-check "{{just_executable()}}"
 
 remote-check sha:
     node harness/ci/remote-check.mjs "$1"
@@ -300,6 +320,7 @@ check-fast-static:
     node harness/config-files/check.mjs
     node harness/claude-hooks/hashes.mjs
     node harness/codex-hooks/config.mjs
+    node harness/antigravity-hooks/config.mjs
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
 

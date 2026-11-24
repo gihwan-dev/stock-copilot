@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"session-fixture-001","cwd":"/tmp/empty","tools":["mcp__app__get_portfolio"],"mcp_servers":[{"name":"app","status":"connected","source":"dynamic"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy","path":"builtin"}],"apiKeySource":"none","claude_code_version":"2.1.322","future_unknown_field":42}
+{"type":"assistant","message":{"model":"claude-opus-5-5","content":[{"type":"tool_use","id":"toolu_01","name":"mcp__app__get_portfolio","input":{"currency":"KRW"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_01","content":[{"type":"text","text":"{\"holdings\":[{\"symbol\":\"TEST\",\"weight\":\"0.60\"}]}"}],"is_error":false}]}}
+{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1794906000,"rateLimitType":"seven_day","utilization":0.11,"unifiedWindows":{"seven_day":{"utilization":0.11,"resetsAt":1794906000,"status":"allowed"}}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"TEST 60%"}}}
+{"type":"assistant","message":{"model":"claude-opus-5-5","content":[{"type":"text","text":"TEST 60%"}]}}
+{"type":"result","subtype":"success","is_error":false,"num_turns":2,"usage":{"input_tokens":1200,"output_tokens":340,"cache_read_input_tokens":500,"cache_creation_input_tokens":80},"modelUsage":{"claude-opus-5-5":{"inputTokens":1200}}}
