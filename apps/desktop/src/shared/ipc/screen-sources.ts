@@ -105,7 +105,7 @@ export type SelfCheckView =
   | { readonly kind: "clear" }
   | { readonly kind: "problem"; readonly problem: SelfCheckProblem };
 
-type CheckRecord = {
+export type CheckRecord = {
   readonly id: EntityId;
   readonly at: Timestamp;
   readonly check: FreeText;
@@ -120,20 +120,20 @@ type AiLimitState =
   | { readonly kind: "available" }
   | { readonly kind: "waiting"; readonly resumesAt: Timestamp };
 
-type SourceStatus = {
+export type SourceStatus = {
   readonly id: EntityId;
   readonly name: FreeText;
   readonly lastSuccess: Timestamp | undefined;
 };
 
-type AiUsageRow = {
+export type AiUsageRow = {
   readonly id: EntityId;
   readonly task: FreeText;
   readonly tokens: ChartDecimal;
   readonly seconds: ChartDecimal;
 };
 
-type StatusView = {
+export type StatusView = {
   readonly records: readonly CheckRecord[];
   readonly aiRuntime: AiRuntimeState;
   readonly aiLimit: AiLimitState;

@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
 import { SettingsScreen } from "../features/settings";
+import { StatusScreen } from "../features/status";
 import { TransactionsScreen } from "../features/transactions";
 import {
   AppShell,
@@ -146,17 +147,13 @@ export const SettingsRouteView = (): ReactElement => {
 
 export const StatusView = (): ReactElement => {
   const go = useNavigate();
+  const sources = useSources();
   return (
-    <Page
-      title={text("app.statusTitle", "ko")}
-      actions={{
-        label: text("app.openSettings", "ko"),
-        onPress: (): void => {
-          go("/settings");
-        },
+    <StatusScreen
+      load={sources.status}
+      onBack={(): void => {
+        go("/settings");
       }}
-    >
-      <EmptyState title={text("app.ipcNoData", "ko")} />
-    </Page>
+    />
   );
 };

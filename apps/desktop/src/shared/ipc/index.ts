@@ -22,14 +22,18 @@ export type {
 } from "./settings-schema";
 export { pendingScreenSources } from "./screen-sources";
 export type {
+  AiUsageRow,
   AllocationRow,
   AllocationView,
+  CheckRecord,
   CurrencyValue,
   HoldingRow,
   PortfolioView,
   ScreenSources,
   SelfCheckProblem,
   SelfCheckView,
+  SourceStatus,
+  StatusView,
   TransactionKind,
   TransactionRow,
   TransactionsView,
