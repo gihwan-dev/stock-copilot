@@ -1,0 +1,3 @@
+pub mod identity_confirmation_prompt;
+mod confirm_instrument_identity;
+pub use confirm_instrument_identity::ConfirmInstrumentIdentity;

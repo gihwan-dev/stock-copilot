@@ -264,6 +264,13 @@ mod secret_port;
 pub use secret_port::{SecretKey, SecretStore};
 pub mod user_presence;
 pub use user_presence::{OrderConfirmation, RiskChangeConfirmation};
+pub mod identity_confirmation_prompt;
+pub use identity_confirmation_prompt::{
+    IdentifierChangePrompt, IdentityConfirmationDecision, LinkCorrectionPrompt,
+    RetirementCorrectionPrompt,
+};
+mod confirm_instrument_identity;
+pub use confirm_instrument_identity::{ConfirmInstrumentIdentity, IdentityConfirmationOutcome};
 mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
 mod instrument_mapping;

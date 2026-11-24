@@ -888,3 +888,38 @@ expect = ["file:darwin-baseline"]
 name = "darwin-baseline-member"
 overlay = "darwin-baseline-member"
 expect = ["file:darwin-baseline"]
+
+[[source]]
+example = "macro-paste.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:paste"]
+
+[[source]]
+example = "macro-paste-use-alias.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:paste"]
+
+[[source]]
+example = "macro-tauri-specta-paste.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:_tauri_specta_paste"]
+
+[[source]]
+example = "macro-tauri-specta-paste-use-alias.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:_tauri_specta_paste"]
+
+[[source]]
+example = "macro-fn-datatype.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:fn_datatype"]
+
+[[source]]
+example = "macro-underscore-fn-datatype.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:_fn_datatype"]
+
+[[source]]
+example = "macro-fn-datatype-internal.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:_fn_datatype_internal"]
