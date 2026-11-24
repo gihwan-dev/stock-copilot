@@ -36,7 +36,7 @@ mod tests {
     struct FixedHasher;
     impl PromptHasher for FixedHasher {
         fn digest(&self, _source: &PromptSource) -> PromptDigest {
-            PromptDigest::try_from_hex(DIGEST).expect("해시")
+            PromptDigest::try_new(DIGEST).expect("해시")
         }
     }
     const fn digest() -> &'static FixedHasher {
@@ -117,7 +117,7 @@ mod tests {
             &DIGEST.to_uppercase(),
         ] {
             assert_eq!(
-                PromptDigest::try_from_hex(bad),
+                PromptDigest::try_new(bad),
                 Err(PromptLocationError::InvalidDigest),
                 "{bad}"
             );

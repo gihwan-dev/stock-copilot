@@ -112,7 +112,7 @@ fn decode_prompt(input: &mut Decoder<'_>) -> rusqlite::Result<Option<PromptRef>>
         "prompt" => {
             let id = PromptId::new(input.next()?);
             let version = PromptVersion::new(input.next()?);
-            let digest = PromptDigest::try_from_hex(input.next()?).map_err(invalid)?;
+            let digest = PromptDigest::try_new(input.next()?).map_err(invalid)?;
             Ok(Some(PromptRef::restore(id, version, digest)))
         }
         _ => Err(invalid(())),

@@ -524,8 +524,11 @@ impl crate::platform::process_cleanup::ShutdownHook for SharedDatabaseShutdownHo
     }
 }
 
+mod briefing;
 mod maintenance;
 pub use maintenance::{back_up, compact_intraday, reclaim_space};
 
+#[cfg(test)]
+mod briefing_tests;
 #[cfg(test)]
 mod tests;
