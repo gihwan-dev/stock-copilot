@@ -40,5 +40,16 @@ export { emptyInputValue, parseInputValue } from "./brand";
 export type { ChartDecimal, ChartCoordinate, ChartPath } from "./brand";
 export { parseChartDecimal, chartCoordinate, chartPath } from "./brand";
 export type { FreeText, ExternalUrl } from "./brand";
-export { parseFreeText, emptyFreeText, parseExternalUrl } from "./brand";
+export {
+  appendFreeText,
+  emptyFreeText,
+  parseExternalUrl,
+  parseFreeText,
+} from "./brand";
 export { queryKeys, type AppRoutePath } from "./query-keys";
+export {
+  chatIdSchema,
+  countSchema,
+  externalUrlSchema,
+  freeTextSchema,
+} from "./brand";

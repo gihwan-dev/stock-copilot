@@ -77,6 +77,18 @@ export const settleOpenExternal = (
 ): Result<OpenExternalResult, IpcFailure> =>
   settleWithSchema(outcome, openExternalResultSchema);
 
+export type Wire = Brand<"Wire">;
+
+export type WireOutcome =
+  | { readonly status: "ok"; readonly data: Wire }
+  | { readonly status: "error"; readonly error: Wire };
+
+export const wire = (raw: unknown): Wire => raw as Wire;
+
+export const wireOutcome = (outcome: CommandOutcome): WireOutcome =>
+  outcome.status === "ok"
+    ? { status: "ok", data: wire(outcome.data) }
+    : { status: "error", error: wire(outcome.error) };
 export type SecretText = string & Brand<"SecretText">;
 export type IpAddressText = string & Brand<"IpAddressText">;
 export type AccountRef = string & Brand<"AccountRef">;

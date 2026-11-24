@@ -515,6 +515,11 @@ pub use news_data_settings::{
     SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
+mod deep_research;
+pub use deep_research::{
+    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchEvidenceSource,
+    ResearchWebCollector, ResearchWebOutcome, ResearchWebStore,
+};
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
