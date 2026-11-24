@@ -363,6 +363,11 @@ pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
 mod change_risk_settings;
 pub use change_risk_settings::{ChangeRiskSettings, RiskSettingsChangeOutcome};
 
+mod update_investor_profile;
+pub use update_investor_profile::{
+    InvestorProfileRequest, UpdateInvestorProfile, profile_confirmations,
+};
+
 mod market_overview;
 pub use market_overview::{
     GetMarketOverview, MarketOverview, OverviewData, OverviewEntry, OverviewError,
