@@ -3,6 +3,7 @@ mod code_jobs;
 mod engine;
 mod market_hours;
 mod registry;
+mod schedule_settings;
 mod schedule_time;
 mod sync_jobs;
 mod types;
@@ -20,6 +21,10 @@ pub use engine::{
 };
 pub use market_hours::{MarketCalendarSource, NoMarketCalendar, trading_status_now};
 pub use registry::{JobFuture, JobRegistry, RegisteredJobMeta, RegistryError, ScheduledJob};
+pub use schedule_settings::{
+    JobScheduleChange, JobScheduleSettingsRepository, ScheduleRestoreReport, ScheduleSettings,
+    ScheduleSettingsError,
+};
 pub use schedule_time::{
     KST_OFFSET_SECONDS, ScheduleTimeError, is_within_skip_grace, kst_time_of_day, next_due_after,
 };
@@ -41,6 +46,8 @@ mod code_jobs_tests;
 mod engine_tests;
 #[cfg(test)]
 mod fixture_tests;
+#[cfg(test)]
+mod schedule_settings_tests;
 #[cfg(test)]
 mod sync_jobs_tests;
 #[cfg(test)]
