@@ -22,3 +22,4 @@ pub mod memory;
 pub mod proposal_memory;
 pub mod spec_check;
 pub mod system_fakes;
+pub mod tool_read_fakes;

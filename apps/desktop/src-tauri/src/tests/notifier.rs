@@ -274,3 +274,38 @@ fn async_runtime_dispatch_delivers_through_filtered_notifier_without_blocking() 
         "비동기 런타임에서 FilteredNotifier까지 전달 완료"
     );
 }
+
+#[test]
+fn briefing_finished_event_dispatches_briefing_notification() {
+    let recorded = Arc::new(RwLock::new(Vec::new()));
+    let subscriber = NotificationEventSubscriber::new(
+        SyncRecordingDispatch {
+            recorded: Arc::clone(&recorded),
+        },
+        FixedUrgencyLookup {
+            urgent_keys: BTreeSet::new(),
+        },
+    );
+    let mut builder = EventBusBuilder::default();
+    let _subscription = builder.subscribe(
+        NotificationEventSubscriber::<SyncRecordingDispatch, FixedUrgencyLookup>::subscribed_kinds(
+        ),
+        subscriber,
+    );
+    let bus = builder.build();
+    let date = domain::CalendarDate::from_parts(
+        domain::CalendarYear::new(2026),
+        domain::MonthNumber::new(11),
+        domain::DayNumber::new(25),
+    )
+    .expect("날짜");
+    let report = bus.publish(DomainEvent::BriefingFinished(domain::BriefingId::new(
+        domain::BriefingKind::Morning,
+        date,
+    )));
+    assert!(report.failures.is_empty(), "브리핑 완료 이벤트 전달 성공");
+    assert_eq!(
+        *recorded.read().expect("수신 기록"),
+        vec![Notification::BriefingFinished]
+    );
+}

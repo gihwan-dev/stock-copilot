@@ -1,4 +1,4 @@
-use crate::types::{JobConfig, JobError, JobRunDetail, ScheduledJobId};
+use crate::types::{JobConfig, JobError, JobRunDetail, ScheduledJobId, StartupPolicy};
 use domain::Timestamp;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
@@ -11,6 +11,9 @@ pub trait ScheduledJob: Send + Sync {
     fn id(&self) -> ScheduledJobId;
     fn default_config(&self) -> JobConfig;
     fn run(&self, now: Timestamp) -> JobFuture<'_>;
+    fn startup_policy(&self) -> StartupPolicy {
+        StartupPolicy::WaitForSchedule
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +25,7 @@ pub enum RegistryError {
 pub struct RegisteredJobMeta {
     pub id: ScheduledJobId,
     pub default_config: JobConfig,
+    pub startup_policy: StartupPolicy,
 }
 
 #[derive(Default)]
@@ -59,6 +63,7 @@ impl JobRegistry {
             .map(|job| RegisteredJobMeta {
                 id: job.id(),
                 default_config: job.default_config(),
+                startup_policy: job.startup_policy(),
             })
             .collect()
     }
