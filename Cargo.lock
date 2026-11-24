@@ -3577,6 +3577,7 @@ dependencies = [
  "platform-macos",
  "serde",
  "serde_json",
+ "sources",
  "specta",
  "specta-typescript",
  "store-sqlite",

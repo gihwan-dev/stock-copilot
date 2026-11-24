@@ -256,6 +256,8 @@ mod tests {
             "AppName a@b.com c@d.com",
             "AppName user@example.com\r\nX-Injected: 1",
             "AppName user@example.com\nInjected",
+            "AppName user@example.com\r\n",
+            "AppName user@example.com\t",
             "이름 user@example.com",
             "12345 user@example.com",
         ] {
@@ -263,6 +265,13 @@ mod tests {
                 ContactUserAgent::try_new(bad).expect_err("invalid contact"),
                 SourceHttpError::InvalidHeader,
                 "{bad}"
+            );
+        }
+        for bad_validator in ["", "   ", "\"v1\"\r\n", "\"v1\"\t", "\"v1\"\nX: 1"] {
+            assert_eq!(
+                ValidatorHeader::try_new(bad_validator).expect_err("invalid validator"),
+                SourceHttpError::InvalidHeader,
+                "{bad_validator}"
             );
         }
 
@@ -445,17 +454,23 @@ mod tests {
             "https://www.hankyung.com:443/feed",
             "https://www.hankyung.com:8443/feed",
             "https://user:pass@www.hankyung.com/feed",
+            "https://user@www.hankyung.com/feed",
             "https://127.0.0.1/feed",
             "https://www.hankyung.com/../secret",
             "https://www.hankyung.com/%2e%2e/secret",
             "https://www.hankyung.com/%252e/secret",
             "https://www.hankyung.com/feed#frag",
+            "https://www.hankyung.com/feed#",
             "https://www.hankyung.com/feed?a=1%0d%0aX:1",
             "https://www.hankyung.com/feed\\evil",
             "https://www.hankyung.com/feed\r\n",
             "https://www.hankyung.com/feed?api_key=smuggled",
             "https://www.hankyung.com/feed?crtfc_key=smuggled",
             "https://www.hankyung.com/feed?%61pi_key=smuggled",
+            "https://www.hankyung.com/feed?ok=1;crtfc_key=smuggled",
+            "https://www.hankyung.com/feed?ok=1;api%5fkey=smuggled",
+            "https://www.hankyung.com/feed?ok=1;%63rtfc_key=smuggled",
+            "https://www.hankyung.com/feed?ok=1;%61pi%5fkey=smuggled",
         ] {
             assert_eq!(
                 rt.block_on(client.fetch(&SourceFetch::new(HttpDataSource::Hankyung, bad_url))),
@@ -830,7 +845,9 @@ mod tests {
             )))
             .expect_err("too large");
         assert_eq!(err, SourceHttpError::ResponseTooLarge);
-        let _oversized = server.finish();
+        match server.finish() {
+            Ok(_) | Err(_) => {}
+        }
     }
 
     struct MemoryStatusRepo(RwLock<BTreeMap<DataSource, SourceStatus>>);

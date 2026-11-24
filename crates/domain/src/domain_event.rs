@@ -139,7 +139,7 @@ impl DomainEvent {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AccountId, ClientOrderId, DataSource, Disclosure, DomainEvent, DomainEventKind, FxPair,
+        AccountId, ClientOrderId, Disclosure, DomainEvent, DomainEventKind, FxPair,
         InformationSource, InstrumentId, KnownMarket, NormalizedUrl, ProposalId, ReceiptNo,
         UntrustedText,
     };
@@ -400,7 +400,7 @@ mod tests {
                 "DisclosureTriggerRecorded",
             ),
             (
-                DomainEvent::SourceStatusChanged(DataSource::KindDisclosure),
+                DomainEvent::SourceStatusChanged(crate::DataSource::KindDisclosure),
                 DomainEventKind::SourceStatusChanged,
                 "SourceStatusChanged",
             ),

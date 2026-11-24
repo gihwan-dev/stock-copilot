@@ -49,19 +49,20 @@ fn is_valid_email_token(token: &str) -> bool {
     valid_local && valid_domain && valid_tld
 }
 
-fn has_valid_header_bytes(value: &str, max_len: usize) -> bool {
-    !value.is_empty()
-        && value.len() <= max_len
-        && value.bytes().all(|byte| (0x20..=0x7E).contains(&byte))
-        && HeaderValue::try_from(value).is_ok()
+fn normalize_header_text(value: &str, max_len: usize) -> Result<&str, SourceHttpError> {
+    if !value.bytes().all(|byte| (0x20..=0x7E).contains(&byte)) {
+        return Err(SourceHttpError::InvalidHeader);
+    }
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.len() > max_len {
+        return Err(SourceHttpError::InvalidHeader);
+    }
+    Ok(trimmed)
 }
 
 impl ContactUserAgent {
     pub fn try_new(value: &str) -> Result<Self, SourceHttpError> {
-        let trimmed = value.trim();
-        if !has_valid_header_bytes(trimmed, 256) {
-            return Err(SourceHttpError::InvalidHeader);
-        }
+        let trimmed = normalize_header_text(value, 256)?;
         let tokens: Vec<&str> = trimmed.split_ascii_whitespace().collect();
         if tokens.len() < 2 {
             return Err(SourceHttpError::InvalidHeader);
@@ -92,10 +93,7 @@ pub struct ValidatorHeader(String);
 
 impl ValidatorHeader {
     pub fn try_new(value: &str) -> Result<Self, SourceHttpError> {
-        let trimmed = value.trim();
-        if !has_valid_header_bytes(trimmed, 512) {
-            return Err(SourceHttpError::InvalidHeader);
-        }
+        let trimmed = normalize_header_text(value, 512)?;
         Ok(Self(trimmed.to_owned()))
     }
 

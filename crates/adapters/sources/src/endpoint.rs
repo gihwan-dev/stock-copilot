@@ -46,22 +46,14 @@ fn raw_authority_and_path(raw: &str) -> Result<(&str, &str), SourceHttpError> {
     {
         return Err(SourceHttpError::DisallowedUrl);
     }
-    let Some((scheme, rest)) = raw.split_once("://") else {
+    let Some((_scheme, rest)) = raw.split_once("://") else {
         return Err(SourceHttpError::DisallowedUrl);
     };
-    if !scheme.eq_ignore_ascii_case("https") {
-        return Err(SourceHttpError::DisallowedUrl);
-    }
-    let before_fragment = rest.split_once('#').map_or(rest, |_| "");
-    if rest.contains('#') || before_fragment.is_empty() {
-        return Err(SourceHttpError::DisallowedUrl);
-    }
-    let before_query = rest.split_once('?').map_or(rest, |(head, _)| head);
+    let before_query = rest.split_once(['?', '#']).map_or(rest, |(head, _)| head);
     let (authority, path) = before_query
         .split_once('/')
         .map_or((before_query, ""), |(host, tail)| (host, tail));
     if authority.is_empty()
-        || authority.contains('@')
         || authority.contains(':')
         || authority.contains('%')
         || authority.ends_with('.')
@@ -73,10 +65,9 @@ fn raw_authority_and_path(raw: &str) -> Result<(&str, &str), SourceHttpError> {
 
 fn has_unsafe_path_or_query(raw_path: &str, url: &Url) -> bool {
     let lower_raw_path = raw_path.to_ascii_lowercase();
-    let lower_path = url.path().to_ascii_lowercase();
     let bad_encoding = ["%00", "%5c", "%2f", "%0d", "%0a", "%252e", "%252f", "%255c"]
         .iter()
-        .any(|needle| lower_raw_path.contains(needle) || lower_path.contains(needle));
+        .any(|needle| lower_raw_path.contains(needle));
     let dot_segment = raw_path.split('/').any(|segment| {
         let decoded = segment.to_ascii_lowercase().replace("%2e", ".");
         decoded == "." || decoded == ".."
@@ -126,6 +117,32 @@ fn validate_credential<'secret>(
     }
 }
 
+fn percent_decode_ascii_lowercase(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut idx = 0_usize;
+    while let Some(&byte) = bytes.get(idx) {
+        if byte == b'%'
+            && let (Some(&hi), Some(&lo)) = (
+                bytes.get(idx.saturating_add(1_usize)),
+                bytes.get(idx.saturating_add(2_usize)),
+            )
+            && let (Some(high), Some(low)) = (
+                char::from(hi).to_digit(16_u32),
+                char::from(lo).to_digit(16_u32),
+            )
+            && let Ok(decoded) = u8::try_from((high << 4_u32) | low)
+        {
+            out.push(decoded.to_ascii_lowercase());
+            idx = idx.saturating_add(3_usize);
+        } else {
+            out.push(byte.to_ascii_lowercase());
+            idx = idx.saturating_add(1_usize);
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 pub(crate) fn resolve_wire_url(
     spec: &SourceSpec,
     endpoint: SourceEndpoint,
@@ -136,9 +153,6 @@ pub(crate) fn resolve_wire_url(
     let (authority, raw_path) = raw_authority_and_path(raw_url)?;
     let mut parsed = Url::parse(raw_url).map_err(|_error| SourceHttpError::DisallowedUrl)?;
     if parsed.scheme() != "https"
-        || !parsed.username().is_empty()
-        || parsed.password().is_some()
-        || parsed.port().is_some()
         || parsed.fragment().is_some()
         || has_unsafe_path_or_query(raw_path, &parsed)
     {
@@ -148,7 +162,6 @@ pub(crate) fn resolve_wire_url(
         Some(host) => {
             host.eq_ignore_ascii_case(authority)
                 && host.parse::<IpAddr>().is_err()
-                && !host.starts_with('[')
                 && spec.host_allowance(host) == HostAllowance::Allowed
         }
         None => false,
@@ -156,8 +169,12 @@ pub(crate) fn resolve_wire_url(
     if !host_ok {
         return Err(SourceHttpError::DisallowedUrl);
     }
-    let forbidden_secret_param = parsed.query_pairs().any(|(name, _)| {
-        name.eq_ignore_ascii_case("crtfc_key") || name.eq_ignore_ascii_case("api_key")
+    let forbidden_secret_param = parsed.query().is_some_and(|query| {
+        query.split(['&', ';']).any(|pair| {
+            let key = pair.split_once('=').map_or(pair, |(name, _)| name);
+            let normalized = percent_decode_ascii_lowercase(key);
+            normalized == "crtfc_key" || normalized == "api_key"
+        })
     });
     if forbidden_secret_param {
         return Err(SourceHttpError::DisallowedUrl);

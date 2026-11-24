@@ -684,3 +684,11 @@ pub use draft_order_intent::{
     DraftOrderIntent, HistoricalDecimalText, HistoricalOrderAmount, HistoricalOrderTerms,
     HistoricalSellQuantity, HistoricalWholeQuantity,
 };
+
+mod web_search_query;
+pub use web_search_query::{
+    ApprovedWebSearchQuery, RejectedWebSearchQuery, SensitiveAccountNumber, SensitiveContextError,
+    SensitivePersonalName, WebSearchCandidateQuery, WebSearchDigestError, WebSearchInspection,
+    WebSearchQueryDigest, WebSearchQueryText, WebSearchRejectionReason, WebSearchSensitiveContext,
+    inspect_web_search_query,
+};
