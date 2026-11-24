@@ -87,4 +87,6 @@
 | T11-10 | `crates/adapters/broker-toss/src/order_info_read.rs` | `stock_warnings` 256건 상한 완화(`> 257`) | `stock_warnings_enforces_256_item_limit_boundary` |
 | T11-11 | `crates/adapters/broker-toss/src/order_info_read.rs` | `stock_warnings` 256건 경계 오류(`>= 256`) | `stock_warnings_enforces_256_item_limit_boundary` |
 
-(리뷰 종료 후 `just mutants-daily` 결과 추가)
+### 자동 변경분 변이 (`just mutants-daily 6b8cabf3b4cab2521f5489725ffc0c63de2c6e83 0/1`, 대상 `389503b8`)
+
+- 결과 원문: `120 mutants tested in 19m: 80 caught, 40 unviable` / `mutants: 위반 없음` (미검출 0, 타임아웃 0; T-11+T-15 묶음의 `crates/domain` 변경분 4개 파일 대상)

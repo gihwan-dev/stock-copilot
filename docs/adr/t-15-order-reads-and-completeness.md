@@ -12,7 +12,7 @@
 | 엔드포인트 | 계좌 헤더 | 제한기 그룹 | 반환 도메인 타입 | 핵심 규칙 |
 |---|---|---|---|---|
 | `GET /api/v1/orders?status=OPEN` | `X-Tossinvest-Account` | `OrderHistory` (5/s) | `BrokerOrderSet` | `symbol`·`from`·`to` 무필터 조회. 각 행에 요청 계좌·마스터 종목·호출자 시계 `observed_at` 결합. `hasNext == true`, 종료 상태 혼입, 미래 시각, 식별 불가·거부 행이 하나라도 있으면 `OpenOrderCoverage::Incomplete` |
-| `GET /api/v1/orders?status=CLOSED&limit=100[&cursor=...]` | `X-Tossinvest-Account` | `OrderHistory` (5/s) | `ClosedOrderSet` (+ `ClosedOrderCompletenessProof`) | 무필터 페이지 끝까지 수집(최대 8192페이지·4096행). `invalid-cursor` 400 시 1회 처음부터 재시작, `orders: [] && hasNext: true` 빈 페이지 연속은 즉시 차단. `ClosedOrderPageCollector`가 완전성 증거를 봉인해 D-38에 전달 |
+| `GET /api/v1/orders?status=CLOSED&limit=100[&cursor=...]` | `X-Tossinvest-Account` | `OrderHistory` (5/s) | `ClosedOrderSet` (+ `ClosedOrderCompletenessProof`) | 무필터 페이지 끝까지 수집(최대 8192페이지·4096행, 거부·중복 행 포함 전체 읽은 행 기준). `invalid-cursor` 400 시 1회 처음부터 재시작, `orders: [] && hasNext: true` 빈 페이지 연속은 즉시 차단. `ClosedOrderPageCollector`가 완전성 증거를 봉인해 D-38에 전달 |
 | `GET /api/v1/orders/{orderId}` | `X-Tossinvest-Account` | `OrderHistory` (5/s) | `BrokerOrder` | 요청 `orderId`와 응답 `orderId` 대조(불일치 시 `InvalidResponse(Validation)`). 미래 `orderedAt`·`filledAt`·`canceledAt` 거부. `order-not-found`는 `ReadEndpoint::Order`에서만 `NotFound(MissingData::Order)`로 매핑 |
 
 ### 완전성 증거, D-38 소비, 봉인 경계와 한계 (`crates/domain/src/order_query_proof.rs`, `net_purchase.rs`)
@@ -24,7 +24,7 @@
    - `OpenOrderCollector`는 필터 조회(`symbol`/`from`/`to`), 페이지 잔여(`hasNext == true`), 종료 상태 혼입, 완료 후 행 추가, 미래 시각·식별 불가·거부 행이 있으면 `OpenOrderCoverage::Incomplete`만 생성한다.
 2. **D-38 소비 계약**:
    - `crates/domain`에 `proven_net_purchases(&ProvenClosedOrderSet, period)`와 `proven_net_purchase_amount(&ProvenClosedOrderSet, period, scope)`를 추가한다. 증명 없는 `ClosedOrderSet`을 넘기면 컴파일 실패(`E0308`)한다.
-   - 기존 `net_purchases`/`net_purchase_amount`의 `validate_query`도 `orders.completeness_proof()`가 첨부돼 있으면(`broker-toss::closed_orders`는 항상 첨부) `proof.verify_for_period(period)`를 직접 호출해 완전성과 평가 구간 포함 여부를 판정한다.
+   - 기존 `net_purchases`/`net_purchase_amount`의 `validate_query`도 `orders.completeness_proof()`가 첨부돼 있으면(`broker-toss::closed_orders`는 항상 첨부) 기존 `covered` 검사를 중복 수행하지 않고 `proof.verify_for_period(period)` 단일 경로로 완전성과 평가 구간 포함 여부를 판정한다.
    - 기존 `ClosedOrderSet::new`는 기존 D-38 테스트 4개 파일(`net_purchase.rs`, `net_purchase_closed.rs`, `net_purchase_daily.rs`, `application/tests/ports.rs`)과 `BrokerRead::closed_orders` 반환형 호환(`test-diff` 보호) 때문에 당분간 유지한다(제거 이행은 인계에 기록).
 3. **어댑터 신뢰 경계와 크레이트 간 호출 제한 한계(ADR 0064·H-64 선례)**:
    - `docs/architecture.md`에 따라 `crates/domain`은 작업 공간 의존성이 없고 `broker-toss → domain` 단방향이다. 따라서 Rust 가시성만으로는 `broker-toss`에만 열린 수집기 진입점을 `domain`에 둘 수 없다(기존 `CompleteTransactionResponse::after_last_page_without_quarantine`, `BrokerOrderSet::from_open_lookup_result`, `SellableQuantityFact::from_lookup_result`와 동일).
@@ -113,4 +113,7 @@
 | T15-14 | `crates/domain/src/order_query_proof.rs` | `ClosedOrderPageCollector` 페이지 끝 도달 요구 제거 | `closed_collector_forbids_complete_on_limits_and_request_failure` |
 | T15-15 | `crates/domain/src/order_query_proof.rs` | `OpenOrderCollector` 필터 조회 `Complete` 금지 제거 | `open_collector_enforces_unfiltered_scope_and_closed_mix` |
 
-(리뷰 종료 후 `just mutants-daily` 결과 추가)
+### 자동 변경분 변이 (`just mutants-daily 6b8cabf3b4cab2521f5489725ffc0c63de2c6e83 0/1`, 대상 `389503b8`)
+
+- 1차 실행(`0c2e174a`): `120 mutants tested in 21m: 5 missed, 75 caught, 40 unviable` (`order_query_proof.rs` 미검출 5건)
+- 미검출 5건 단독 결함 격리 테스트 보강(`389503b8`) 후 최종 실행: `120 mutants tested in 19m: 80 caught, 40 unviable` / `mutants: 위반 없음` (미검출 0, 타임아웃 0)
