@@ -11,7 +11,7 @@ mod process_cleanup;
 mod residency;
 mod responsiveness;
 mod startup;
-mod support;
+pub(crate) mod support;
 
 #[test]
 fn build_app_builds_empty_app_on_mock_runtime() {
