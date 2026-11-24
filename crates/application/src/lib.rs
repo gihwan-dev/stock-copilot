@@ -448,3 +448,10 @@ pub use send_chat_message::{
     AnalysisToolAllowance, ChatModelConfig, SendChatMessage, SendChatOutcome, SendChatRequest,
     build_chat_prompt, check_analysis_tool,
 };
+
+mod warm_chat;
+pub use warm_chat::{
+    McpConnectionState, PrewarmChat, PrewarmChatOutcome, SendWarmChatMessage, WarmChatId,
+    WarmChatProbe, WarmChatReadiness, WarmChatRejection, WarmChatRequest, WarmChatRuntime,
+    WarmChatSession, WarmFreshness, WarmMatch,
+};
