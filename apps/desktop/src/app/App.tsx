@@ -2,6 +2,7 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { useState, type ReactElement } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { EmptyState, Page } from "../shared/ds";
+import { pendingScreenSources, type ScreenSources } from "../shared/ipc";
 import { text, type AppRoutePath } from "../shared/lib";
 import { useCoreEvent } from "../shared/platform";
 import { createAppQueryClient } from "./query";
@@ -10,6 +11,7 @@ import { AppRouter } from "./router";
 type AppProps = {
   readonly initialPath?: AppRoutePath | undefined;
   readonly queryClient?: QueryClient | undefined;
+  readonly sources?: ScreenSources | undefined;
 };
 
 const CoreEventBridge = (): null => {
@@ -40,7 +42,10 @@ export const App = (props: AppProps): ReactElement => {
     <ErrorBoundary FallbackComponent={AppErrorFallback}>
       <QueryClientProvider client={client}>
         <CoreEventBridge />
-        <AppRouter initialPath={props.initialPath} />
+        <AppRouter
+          initialPath={props.initialPath}
+          sources={props.sources ?? pendingScreenSources}
+        />
       </QueryClientProvider>
     </ErrorBoundary>
   );

@@ -11,4 +11,12 @@ export const queryKeys = {
   status: ["status"] as const,
 } as const;
 
+export const screenKeys = {
+  portfolio: [...queryKeys.portfolio, "view"] as const,
+  allocation: [...queryKeys.allocation, "view"] as const,
+  transactions: [...queryKeys.transactions, "view"] as const,
+  selfCheck: [...queryKeys.selfCheck, "view"] as const,
+  status: [...queryKeys.status, "view"] as const,
+} as const;
+
 export type AppQueryKey = (typeof queryKeys)[keyof typeof queryKeys];
