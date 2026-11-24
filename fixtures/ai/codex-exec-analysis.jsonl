@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"thread-fixture-001"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_28","type":"mcp_tool_call","server":"app","tool":"get_portfolio","arguments":{"currency":"KRW"},"result":null,"error":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_28","type":"mcp_tool_call","server":"app","tool":"get_portfolio","arguments":{"currency":"KRW"},"result":{"content":[{"type":"text","text":"{\"holdings\":[{\"symbol\":\"TEST\",\"weight\":\"0.60\"}]}"}],"structured_content":null},"error":null,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_29","type":"web_search","query":"","action":{"type":"other"}}}
+{"type":"item.completed","item":{"id":"item_29","type":"web_search","query":"KOSPI index today","action":{"type":"search"}}}
+{"type":"item.completed","item":{"id":"item_30","type":"agent_message","text":"TEST 60%"}}
+{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":500,"cache_write_input_tokens":80,"output_tokens":340},"model":"gpt-6.1-sol"}
