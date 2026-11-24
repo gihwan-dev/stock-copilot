@@ -6,6 +6,7 @@ import { ChatPanel } from "../features/chat";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
 import { SettingsScreen } from "../features/settings";
+import { SignalCards } from "../features/signal";
 import { StatusScreen } from "../features/status";
 import { TransactionsScreen } from "../features/transactions";
 import {
@@ -84,12 +85,15 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
       );
     case "ready":
       return (
-        <PortfolioOverview
-          sources={sources}
-          onOpenTransactions={(): void => {
-            go("/transactions");
-          }}
-        />
+        <Stack gap="space-6">
+          <SignalCards sources={sources} />
+          <PortfolioOverview
+            sources={sources}
+            onOpenTransactions={(): void => {
+              go("/transactions");
+            }}
+          />
+        </Stack>
       );
   }
 };

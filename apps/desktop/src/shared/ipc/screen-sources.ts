@@ -11,6 +11,15 @@ import {
   type Ticker,
   type Timestamp,
 } from "../lib";
+import type {
+  BriefingsView,
+  EstimateSources,
+  InstrumentDetailView,
+  InstrumentListView,
+  ScorecardScreenView,
+  SignalsView,
+  ThesisView,
+} from "./estimate-views";
 import type { IpcFailure } from "./schema";
 
 type PriceDirection = "up" | "down" | "flat";
@@ -143,7 +152,7 @@ export type StatusView = {
 
 type Load<T> = () => Promise<Result<T, IpcFailure>>;
 
-export type ScreenSources = {
+export type ScreenSources = EstimateSources & {
   readonly portfolio: Load<PortfolioView>;
   readonly allocation: Load<AllocationView>;
   readonly transactions: Load<TransactionsView>;
@@ -157,6 +166,14 @@ const pending = <T>(): Load<T> => {
 };
 
 export const pendingScreenSources: ScreenSources = {
+  signals: pending<SignalsView>(),
+  scorecard: pending<ScorecardScreenView>(),
+  instruments: pending<InstrumentListView>(),
+  instrumentDetail: pending<InstrumentDetailView>(),
+  briefings: pending<BriefingsView>(),
+  thesis: pending<ThesisView>(),
+  requestOrderApproval: pending<"requested">(),
+  skipSignal: pending<"recorded">(),
   portfolio: pending<PortfolioView>(),
   allocation: pending<AllocationView>(),
   transactions: pending<TransactionsView>(),
