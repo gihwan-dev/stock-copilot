@@ -100,8 +100,8 @@ reason = "D-29 날짜 묶음 재표본과 독립 정수 유리수 기준값의 �
 
 [[clock-environment]]
 path = "crates/testkit/src/lib.rs"
-names = ["clock-env:var:STOCK_COPILOT_PROPTEST_CASES", "test-awareness:env::current_exe"]
-reason = "H-46 속성 테스트 도우미. 전용 상수 키만 읽고 전체 레시피에서4096을 강제한다"
+names = ["clock-env:var:STOCK_COPILOT_PROPTEST_CASES", "test-awareness:env::current_exe", "clock-env:temp_dir"]
+reason = "H-46 속성 테스트 도우미 및 통합 테스트용 정규화 임시 폴더 제공. 전용 상수 키만 읽고 전체 레시피에서 4096을 강제한다"
 
 [[clock-environment]]
 path = "crates/adapters/store-sqlite/src/tests.rs"
