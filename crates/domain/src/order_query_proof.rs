@@ -1228,4 +1228,69 @@ mod tests {
             OpenOrderCoverage::Incomplete
         );
     }
+
+    #[test]
+    fn isolated_fault_signals_individually_prevent_complete() {
+        let closed_scope = ClosedOrderQueryScope::unfiltered(AccountId::new(7), interval(0, 200));
+        let mut only_unid = ClosedOrderPageCollector::start(closed_scope.clone());
+        only_unid.record_unidentified_row();
+        only_unid.record_page_boundary(OrderPageBoundary::LastPage);
+        assert_eq!(
+            only_unid
+                .finish(time(300))
+                .expect("미식별")
+                .proof()
+                .completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::RejectedRows)
+        );
+
+        let mut only_row_limit = ClosedOrderPageCollector::start(closed_scope.clone());
+        only_row_limit.record_row_limit_reached();
+        only_row_limit.record_page_boundary(OrderPageBoundary::LastPage);
+        let limited = only_row_limit.finish(time(300)).expect("행 상한");
+        assert_eq!(
+            limited.proof().completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
+        );
+        assert_eq!(limited.proof().exhaustion(), OrderPageExhaustion::MorePages);
+
+        let mut only_future_cancel = ClosedOrderPageCollector::start(closed_scope);
+        let mut future_cancel = row("fc-only", OrderSide::Buy, "0", 120);
+        future_cancel.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("0");
+        future_cancel.filled_at = None;
+        future_cancel.average_filled_price = None;
+        future_cancel.filled_amount = BrokerOrderMoney::Absent;
+        future_cancel.canceled_at = crate::BrokerOrderTime::Known(time(301));
+        assert_eq!(
+            only_future_cancel.accept_row(future_cancel),
+            OrderRowIntake::Accepted
+        );
+        only_future_cancel.record_page_boundary(OrderPageBoundary::LastPage);
+        let cancel_proven = only_future_cancel.finish(time(300)).expect("미래 취소");
+        assert_eq!(
+            cancel_proven.proof().completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::RejectedRows)
+        );
+        assert!(cancel_proven.orders().orders().is_empty());
+
+        let open_scope = OpenOrderQueryScope::unfiltered(AccountId::new(7));
+        let mut open_unid = OpenOrderCollector::start(open_scope.clone());
+        open_unid.record_unidentified_row();
+        open_unid.record_all_pages_received();
+        assert_eq!(
+            open_unid
+                .finish(time(300))
+                .expect("미체결 미식별")
+                .coverage(),
+            OpenOrderCoverage::Incomplete
+        );
+
+        let mut open_inc = OpenOrderCollector::start(open_scope);
+        open_inc.record_incomplete_page();
+        open_inc.record_all_pages_received();
+        assert_eq!(
+            open_inc.finish(time(300)).expect("미체결 잔여").coverage(),
+            OpenOrderCoverage::Incomplete
+        );
+    }
 }
