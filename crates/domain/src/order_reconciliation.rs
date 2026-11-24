@@ -82,9 +82,6 @@ impl ReconciliationReport {
     }
 }
 
-const UNKNOWN_MATCH_BEFORE_SECONDS: u64 = 60;
-const UNKNOWN_MATCH_AFTER_SECONDS: u64 = 600;
-
 fn ordered_quantity(terms: &OrderTerms) -> Option<Quantity> {
     match terms {
         OrderTerms::KrLimit { quantity, .. }
@@ -96,33 +93,48 @@ fn ordered_quantity(terms: &OrderTerms) -> Option<Quantity> {
     }
 }
 
-fn content_matches(local: &LocalSubmission, order: &BrokerOrder) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Fit {
+    Matches,
+    Differs,
+}
+
+fn fit(matches: impl FnOnce() -> Option<Fit>) -> Fit {
+    matches().unwrap_or(Fit::Differs)
+}
+
+fn content_matches(local: &LocalSubmission, order: &BrokerOrder) -> Fit {
     if order.instrument() != &local.instrument || order.side() != local.terms.side() {
-        return false;
+        return Fit::Differs;
     }
-    ordered_quantity(&local.terms).is_none_or(|quantity| {
-        order.quantity().as_decimal().normalize() == quantity.as_decimal().normalize()
+    match ordered_quantity(&local.terms) {
+        Some(quantity)
+            if order.quantity().as_decimal().normalize() != quantity.as_decimal().normalize() =>
+        {
+            Fit::Differs
+        }
+        Some(_) | None => Fit::Matches,
+    }
+}
+
+fn span(seconds: SpanSeconds) -> Option<TimeSpan> {
+    TimeSpan::try_new(seconds, Nanosecond::new(0)).ok()
+}
+
+fn within_unknown_window(local: &LocalSubmission, order: &BrokerOrder) -> Fit {
+    fit(|| {
+        let before = span(SpanSeconds::new(60))?;
+        let after = span(SpanSeconds::new(600))?;
+        let start = local.prepared_at.checked_sub(before).ok()?;
+        let end = local.prepared_at.checked_add(after).ok()?;
+        Some(
+            if order.ordered_at() >= start && order.ordered_at() <= end {
+                Fit::Matches
+            } else {
+                Fit::Differs
+            },
+        )
     })
-}
-
-fn span(seconds: u64) -> Option<TimeSpan> {
-    TimeSpan::try_new(SpanSeconds::new(seconds), Nanosecond::new(0)).ok()
-}
-
-fn within_unknown_window(local: &LocalSubmission, order: &BrokerOrder) -> bool {
-    let (Some(before), Some(after)) = (
-        span(UNKNOWN_MATCH_BEFORE_SECONDS),
-        span(UNKNOWN_MATCH_AFTER_SECONDS),
-    ) else {
-        return false;
-    };
-    let (Ok(start), Ok(end)) = (
-        local.prepared_at.checked_sub(before),
-        local.prepared_at.checked_add(after),
-    ) else {
-        return false;
-    };
-    order.ordered_at() >= start && order.ordered_at() <= end
 }
 
 fn check_submission(
@@ -137,7 +149,7 @@ fn check_submission(
                 .iter()
                 .find(|order| order.order_id() == broker_order_id);
             match found {
-                Some(order) if content_matches(local, order) => None,
+                Some(order) if content_matches(local, order) == Fit::Matches => None,
                 Some(_) => Some(ReconciliationIssue::ContentMismatch {
                     client_order_id: local.client_order_id.clone(),
                     broker_order_id: broker_order_id.clone(),
@@ -149,9 +161,10 @@ fn check_submission(
             }
         }
         LocalSubmissionResult::Unknown => {
-            let found = broker_orders
-                .iter()
-                .any(|order| content_matches(local, order) && within_unknown_window(local, order));
+            let found = broker_orders.iter().any(|order| {
+                content_matches(local, order) == Fit::Matches
+                    && within_unknown_window(local, order) == Fit::Matches
+            });
             (!found && complete).then(|| ReconciliationIssue::UnknownWithoutBrokerOrder {
                 client_order_id: local.client_order_id.clone(),
             })
@@ -180,7 +193,11 @@ pub fn reconcile_orders(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        BrokerOrder, BrokerOrderCoverage, BrokerOrderId, ClientOrderId, LocalSubmission,
+        LocalSubmissionResult, OrderTerms, Quantity, ReconciliationIssue, ReconciliationStatus,
+        reconcile_orders,
+    };
     use crate::net_purchase::tests::{row, time};
     use crate::{Currency, KrOrderPrice, NumericInput, OrderSide, Price, WholeOrderQuantity};
     use rust_decimal::Decimal;

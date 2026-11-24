@@ -1,8 +1,7 @@
 use crate::{
-    BrokerOrder, Cancellation, Money, OrderProgress, OrderSide, Settlement, Transaction,
+    BrokerOrder, Cancellation, Money, OrderProgress, OrderSide, Quantity, Settlement, Transaction,
     TransactionKind, order_progress,
 };
-use rust_decimal::Decimal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EstimatedTradeCost {
@@ -47,20 +46,31 @@ fn trade_kind(side: OrderSide) -> TransactionKind {
     }
 }
 
-fn belongs_to(order: &BrokerOrder, transaction: &Transaction) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ownership {
+    Same,
+    Other,
+}
+
+fn belongs_to(order: &BrokerOrder, transaction: &Transaction) -> Ownership {
     let data = transaction.data();
-    data.kind == trade_kind(order.side())
+    let same = data.kind == trade_kind(order.side())
         && data.market == order.instrument().market()
         && data.symbol.as_ref() == Some(order.instrument().symbol())
         && data.settlement == Settlement::Settled
         && data.cancellation == Cancellation::Regular
         && data
             .transaction_time
-            .is_some_and(|time| time >= order.ordered_at())
+            .is_some_and(|time| time >= order.ordered_at());
+    if same {
+        Ownership::Same
+    } else {
+        Ownership::Other
+    }
 }
 
 struct Totals {
-    quantity: Decimal,
+    quantity: Quantity,
     commission: Money,
     tax: Money,
     net_amount: Option<Money>,
@@ -68,7 +78,7 @@ struct Totals {
 
 fn accumulate(totals: Option<Totals>, transaction: &Transaction) -> Option<Totals> {
     let data = transaction.data();
-    let quantity = data.quantity?.as_decimal();
+    let quantity = data.quantity?;
     let Some(previous) = totals else {
         return Some(Totals {
             quantity,
@@ -82,7 +92,13 @@ fn accumulate(totals: Option<Totals>, transaction: &Transaction) -> Option<Total
         (None, _) | (_, None) => None,
     };
     Some(Totals {
-        quantity: previous.quantity.checked_add(quantity)?,
+        quantity: Quantity::try_new(
+            previous
+                .quantity
+                .as_decimal()
+                .checked_add(quantity.as_decimal())?,
+        )
+        .ok()?,
         commission: previous.commission.checked_add(&data.commission).ok()?,
         tax: previous.tax.checked_add(&data.tax).ok()?,
         net_amount,
@@ -99,7 +115,10 @@ pub fn trade_cost_display(
         return TradeCostDisplay::Estimated(estimate);
     }
     let mut totals = None;
-    for transaction in transactions.iter().filter(|item| belongs_to(order, item)) {
+    for transaction in transactions
+        .iter()
+        .filter(|item| belongs_to(order, item) == Ownership::Same)
+    {
         totals = accumulate(totals, transaction);
         if totals.is_none() {
             return TradeCostDisplay::Estimated(estimate);
@@ -107,7 +126,8 @@ pub fn trade_cost_display(
     }
     match totals {
         Some(sum)
-            if sum.quantity.normalize() == order.filled_quantity().as_decimal().normalize() =>
+            if sum.quantity.as_decimal().normalize()
+                == order.filled_quantity().as_decimal().normalize() =>
         {
             TradeCostDisplay::Confirmed(ConfirmedTradeCost {
                 commission: sum.commission,
@@ -121,12 +141,16 @@ pub fn trade_cost_display(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        BrokerOrder, Cancellation, EstimatedTradeCost, OrderSide, Settlement, TradeCostDisplay,
+        Transaction, TransactionKind, trade_cost_display,
+    };
     use crate::net_purchase::tests::{money, row, time};
     use crate::{
         BrokerOrderStatus, CalendarDate, CalendarYear, Currency, DayNumber, Market, MonthNumber,
         Quantity, Symbol, TransactionData,
     };
+    use rust_decimal::Decimal;
 
     fn order(status: BrokerOrderStatus, filled: i64) -> BrokerOrder {
         let mut input = row("b1", OrderSide::Buy, "39", 150);
