@@ -240,3 +240,6 @@ mod briefing;
 pub use briefing::BriefingStore;
 #[cfg(test)]
 mod briefing_tests;
+
+#[cfg(test)]
+mod signal_store_boundary_tests;
