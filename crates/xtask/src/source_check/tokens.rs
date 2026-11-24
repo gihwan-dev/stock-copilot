@@ -21,7 +21,7 @@ pub(crate) const TOOL_ATTRIBUTES: [&str; 3] = ["clippy", "rustfmt", "mutants"];
 
 const STANDARD_ROOTS: [&str; 3] = ["core", "std", "alloc"];
 
-pub(crate) const BANNED_MACROS: [&str; 12] = [
+pub(crate) const BANNED_MACROS: [&str; 13] = [
     "macro_rules",
     "include",
     "include_str",
@@ -34,6 +34,7 @@ pub(crate) const BANNED_MACROS: [&str; 12] = [
     "fn_datatype",
     "_fn_datatype",
     "_fn_datatype_internal",
+    "_collect_functions",
 ];
 
 pub(crate) const ENVIRONMENT_MACRO: &str = "env";

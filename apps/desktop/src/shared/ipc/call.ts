@@ -14,6 +14,15 @@ import {
   type OrderSwitchOutcome,
   type SettingsView,
 } from "./settings-schema";
+import { err, type ExternalUrl, type Result } from "../lib";
+import { commands } from "./bindings";
+import {
+  settleAppVersion,
+  settleOpenExternal,
+  type AppVersion,
+  type IpcFailure,
+  type OpenExternalResult,
+} from "./schema";
 import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
@@ -56,6 +65,17 @@ export const getSettings = (): Promise<Result<SettingsView, IpcFailure>> => {
       return settleSettingsView(outcome);
     })
     .catch((): Result<SettingsView, IpcFailure> => {
+export const openExternal = (
+  url: ExternalUrl,
+): Promise<Result<OpenExternalResult, IpcFailure>> => {
+  const timer = createTimeout<OpenExternalResult>();
+  const request = commands
+    .openExternal({ url })
+    .then((outcome): Result<OpenExternalResult, IpcFailure> => {
+      timer.cancel();
+      return settleOpenExternal(outcome);
+    })
+    .catch((): Result<OpenExternalResult, IpcFailure> => {
       timer.cancel();
       return err(frameworkFailure);
     });

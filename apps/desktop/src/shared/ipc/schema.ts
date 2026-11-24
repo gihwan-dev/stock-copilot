@@ -5,6 +5,13 @@ type Brand<N extends string> = Readonly<z.core.$brand<N>>;
 type AppVersionText = string & Brand<"AppVersionText">;
 export type AppVersion = { readonly version: AppVersionText };
 type CommandErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
+
+export type AppVersionText = string & Brand<"AppVersionText">;
+
+export type AppVersion = { readonly version: AppVersionText };
+
+export type CommandErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
+
 export type CommandError = { readonly kind: CommandErrorKind };
 export type IpcFailure =
   | { readonly kind: "command"; readonly error: CommandError }
@@ -214,6 +221,14 @@ export const parseUiEvent = (
   const matched = unitEvents.get(payload);
   return matched === undefined ? err(invalidResponseFailure) : ok(matched);
 };
+type OpenExternalStatus = "opened";
+
+export type OpenExternalResult = { readonly status: OpenExternalStatus };
+
+const openExternalResultSchema = z
+  .object({ status: z.literal("opened") })
+  .strict()
+  .readonly();
 
 const settleWithSchema = <T>(
   outcome: CommandOutcome,
@@ -237,3 +252,8 @@ export const settleAppVersion = (
   outcome: CommandOutcome,
 ): Result<AppVersion, IpcFailure> =>
   settleWithSchema(outcome, appVersionSchema);
+
+export const settleOpenExternal = (
+  outcome: CommandOutcome,
+): Result<OpenExternalResult, IpcFailure> =>
+  settleWithSchema(outcome, openExternalResultSchema);

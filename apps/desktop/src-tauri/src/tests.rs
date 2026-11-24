@@ -2,8 +2,11 @@ use tauri::test::{mock_builder, mock_context, noop_assets};
 
 use crate::build_app;
 mod database;
+mod exit;
 mod ipc_contract;
 mod lifecycle;
+mod notifier;
+mod residency;
 mod startup;
 pub(crate) mod support;
 
@@ -16,5 +19,3 @@ fn build_app_builds_empty_app_on_mock_runtime() {
     )
     .expect("mock runtime builds empty app");
 }
-
-mod exit;

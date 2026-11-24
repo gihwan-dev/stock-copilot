@@ -226,6 +226,18 @@
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
+      "issue": "exports src/shared/ipc/call.ts openExternal",
+      "reason": "후속 화면(온보딩·뉴스·설정 등)에서 소비될 외부 링크 IPC 호출 어댑터"
+    },
+    {
+      "issue": "exports src/shared/ipc/index.ts openExternal",
+      "reason": "후속 화면(온보딩·뉴스·설정 등)에서 소비될 외부 링크 IPC 공개 내보내기"
+    },
+    {
+      "issue": "exports src/shared/lib/brand.ts parseChartDecimal",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
       "issue": "exports src/shared/lib/brand.ts parseCount",
       "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
@@ -424,6 +436,22 @@
     {
       "issue": "types src/shared/ds/index.ts PanelState",
       "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "types src/shared/ipc/index.ts OpenExternalResult",
+      "reason": "후속 화면(온보딩·뉴스·설정 등)에서 소비될 외부 링크 IPC 결과 타입"
+    },
+    {
+      "issue": "types src/shared/lib/brand.ts Count",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "types src/shared/lib/brand.ts Ticker",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "types src/shared/lib/brand.ts Timestamp",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
       "issue": "types src/shared/lib/index.ts Count",

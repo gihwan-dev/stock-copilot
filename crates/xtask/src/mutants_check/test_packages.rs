@@ -6,11 +6,12 @@ const COMPANION: (&str, &str, &str) = (
     "crates/testkit-ports",
 );
 
-const DECLARATIONS: [(&str, &str, Option<&str>); 4] = [
+const DECLARATIONS: [(&str, &str, Option<&str>); 5] = [
     ("crates/domain", "domain", None),
     (COMPANION.0, "application", Some(COMPANION.1)),
     ("crates/order-execution", "order-execution", None),
     ("crates/adapters/store-sqlite", "store-sqlite", None),
+    ("crates/mcp-server", "mcp-server", None),
 ];
 
 pub(super) fn package_of_file(path: &str) -> Result<&'static str, String> {

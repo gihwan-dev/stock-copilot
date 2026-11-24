@@ -2,3 +2,4 @@
 identifier = "commands"
 description = "IPC 명령 허용 항목. gen-bindings가 ipc/commands.txt와 같은 목록에서 만든다"
 permissions = ["allow-app-version", "allow-get-settings", "allow-set-order-permission"]
+permissions = ["allow-app-version", "allow-open-external"]

@@ -6,7 +6,7 @@ use std::str::FromStr;
 mod ast;
 mod composition;
 mod endpoint;
-mod identity_confirmation;
+pub(super) mod identity_confirmation;
 mod schema_surface;
 
 use proc_macro2::{TokenStream, TokenTree};

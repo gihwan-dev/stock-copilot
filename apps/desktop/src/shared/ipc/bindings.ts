@@ -16,6 +16,9 @@ export const commands = {
   setOrderPermission: (request: SetOrderPermissionRequest) =>
     typedError<UiOrderSwitchOutcome, IpcError>(
       __TAURI_INVOKE("set_order_permission", { request }),
+  openExternal: (request: OpenExternalRequest) =>
+    typedError<OpenExternalResponse, IpcError>(
+      __TAURI_INVOKE("open_external", { request }),
     ),
 };
 
@@ -52,6 +55,34 @@ export type SetOrderPermissionRequest = {
 export type SettingsQueryScope = "all";
 
 export type UiConnectionState = "connected" | "needs-key";
+export type OpenExternalRequest = {
+  url: string;
+};
+
+export type OpenExternalResponse = {
+  status: OpenExternalStatus;
+};
+
+export type OpenExternalStatus = "opened";
+
+export type UiDataSource =
+  | "KindDisclosure"
+  | "DartDisclosureApi"
+  | "DartDisclosureRss"
+  | "DartFundamentals"
+  | "KindCorpList"
+  | "Hankyung"
+  | "Maekyung"
+  | "Yonhap"
+  | "Edaily"
+  | "GoogleNews"
+  | "WebSearch"
+  | "YahooFinance"
+  | "SecEdgar"
+  | "BankOfKorea"
+  | "FederalReserve"
+  | "UsTreasury"
+  | "Fred";
 
 export type UiDisclosureKey = {
   source: UiDisclosureSource;
@@ -85,6 +116,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ PriceMoved: string } & {
@@ -109,6 +141,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ DisclosureArrived: UiDisclosureKey } & {
@@ -133,6 +166,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ NewsActivityIncreased: string } & {
@@ -157,6 +191,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ ProposalCreated: string } & {
@@ -181,6 +216,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ ProposalExpired: string } & {
@@ -205,6 +241,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ ProposalApproved: string } & {
@@ -229,6 +266,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ ProposalRejected: string } & {
@@ -253,6 +291,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ ProposalSkipped: string } & {
@@ -277,6 +316,7 @@ export type UiEvent =
       ProposalRejected?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ OrderSubmitted: string } & {
@@ -301,6 +341,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ OrderOutcomeUnknown: string } & {
@@ -325,6 +366,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | "BrokerConnectionChanged"
@@ -355,6 +397,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
     })
   | "SelfCheckChanged"
   | ({ MarketSessionChanged: UiMarket } & {
@@ -379,6 +422,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ SignalRaised: string } & {
@@ -403,6 +447,7 @@ export type UiEvent =
       ProposalRejected?: never;
       ProposalSkipped?: never;
       SignalCleared?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ SignalCleared: string } & {
@@ -427,6 +472,7 @@ export type UiEvent =
       ProposalRejected?: never;
       ProposalSkipped?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ EstimateSubmitted: string } & {
@@ -451,6 +497,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ EstimateResolved: string } & {
@@ -475,6 +522,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | "ValuationSnapshotTaken"
@@ -500,6 +548,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ OrderOutcomeResolved: string } & {
@@ -524,6 +573,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | "OrderFilled"
@@ -551,6 +601,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ NewsClusterGrew: string } & {
@@ -575,6 +626,7 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | "AiBudgetChanged"
@@ -602,11 +654,38 @@ export type UiEvent =
       ProposalSkipped?: never;
       SignalCleared?: never;
       SignalRaised?: never;
+      SourceStatusChanged?: never;
       ThesisUpdated?: never;
     })
   | ({ DisclosureTriggerRecorded: UiDisclosureKey } & {
       CollectionFinished?: never;
       DisclosureArrived?: never;
+      EstimateResolved?: never;
+      EstimateSubmitted?: never;
+      FxRateUpdated?: never;
+      MarketSessionChanged?: never;
+      NewsActivityIncreased?: never;
+      NewsClusterGrew?: never;
+      OrderOutcomeResolved?: never;
+      OrderOutcomeUnknown?: never;
+      OrderRejected?: never;
+      OrderSubmitted?: never;
+      PriceMoved?: never;
+      PriceUpdated?: never;
+      ProposalApproved?: never;
+      ProposalCreated?: never;
+      ProposalExpired?: never;
+      ProposalRejected?: never;
+      ProposalSkipped?: never;
+      SignalCleared?: never;
+      SignalRaised?: never;
+      SourceStatusChanged?: never;
+      ThesisUpdated?: never;
+    })
+  | ({ SourceStatusChanged: UiDataSource } & {
+      CollectionFinished?: never;
+      DisclosureArrived?: never;
+      DisclosureTriggerRecorded?: never;
       EstimateResolved?: never;
       EstimateSubmitted?: never;
       FxRateUpdated?: never;

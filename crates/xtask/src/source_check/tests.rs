@@ -361,12 +361,14 @@ fn allowlists_hold_only_the_documented_paths() {
             String::from("apps/desktop/src-tauri/src/main.rs"),
             String::from("crates/adapters/store-sqlite/src/tests.rs"),
             String::from("crates/adapters/platform-macos/src/system_clock.rs"),
+            String::from("crates/mcp-server/tests/server_security.rs"),
             String::from("crates/xtask/src/main.rs"),
             String::from("crates/xtask/src/mutants_check/environment.rs"),
             String::from("crates/xtask/src/network_sandbox_tests.rs"),
             String::from("crates/xtask/src/private_temp.rs"),
             String::from("crates/testkit/src/lib.rs"),
             String::from("crates/testkit/src/bin/fake_ai_cli.rs"),
+            String::from("crates/toss-smoke/src/main.rs"),
         ])
     );
     assert_eq!(
