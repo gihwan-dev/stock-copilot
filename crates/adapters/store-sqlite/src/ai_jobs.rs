@@ -126,16 +126,11 @@ pub struct Sha256PromptHasher;
 impl PromptHasher for Sha256PromptHasher {
     fn digest(&self, source: &PromptSource) -> Result<PromptDigest, PromptLocationError> {
         use sha2::{Digest, Sha256};
-        use std::fmt::Write;
-        let hex = Sha256::digest(source.as_str().as_bytes()).iter().fold(
-            String::with_capacity(64),
-            |mut text, byte| {
-                match write!(text, "{byte:02x}") {
-                    Ok(()) | Err(_) => {}
-                }
-                text
-            },
-        );
+        let hex: String = Sha256::digest(source.as_str().as_bytes())
+            .iter()
+            .flat_map(|byte| [byte >> 4_u8, byte & 0x0f_u8])
+            .filter_map(|nibble| char::from_digit(u32::from(nibble), 16))
+            .collect();
         PromptDigest::try_new(&hex)
     }
 }
