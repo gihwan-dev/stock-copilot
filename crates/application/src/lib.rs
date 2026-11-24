@@ -2,14 +2,14 @@ mod observations;
 mod port_error;
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
-    CalendarDate, Candle, CandlePeriod, ClosedOrderSet, CommissionRateFact, CreditTrade, Currency,
-    FlowInterval, FxPair, FxRate, FxRateKind, IndicatorCode, InstrumentMaster, InvestorFlow,
+    CalendarDate, Candle, CandlePeriod, CommissionRateFact, CreditTrade, Currency, FlowInterval,
+    FxPair, FxRate, FxRateKind, IndicatorCode, InstrumentMaster, InvestorFlow,
     InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
     MarketIndicatorQuote, OrderFxRates, Orderbook, PriceAdjustment, PriceLimits, ProgramTrade,
-    QuoteInstrument, RankingLimit, ResolvedOrderInstrument, SectorCatalog, SectorComposition,
-    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
-    SettlementWindow, ShortSelling, StockRanking, StockWarnings, TimeInterval, Timestamp,
-    TransactionFilter,
+    ProvenClosedOrderSet, QuoteInstrument, RankingLimit, ResolvedOrderInstrument, SectorCatalog,
+    SectorComposition, SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending,
+    SellableQuantityFact, SettlementWindow, ShortSelling, StockRanking, StockWarnings,
+    TimeInterval, Timestamp, TransactionFilter,
 };
 pub use observations::{
     HoldingsObservation, IncompleteReason, IncompleteTransactions, QuarantinedTransaction,
@@ -125,7 +125,7 @@ pub trait BrokerRead: Send + Sync {
         &self,
         account: &AccountId,
         evaluation_window: TimeInterval,
-    ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send;
+    ) -> impl Future<Output = Result<ProvenClosedOrderSet, PortError>> + Send;
     fn order(
         &self,
         account: &AccountId,
@@ -378,6 +378,21 @@ pub use market_overview::{
     OverviewFreshness, OverviewObservation, OverviewRequest,
 };
 
+mod market_tool_reads;
+pub use market_tool_reads::{
+    CandleToolLine, CandleWindow, CandleWindowError, CandlesToolView, InvestorFlowToolLine,
+    InvestorFlowToolView, MarketOverviewToolView, MarketToolReads, OverviewItem, OverviewToolLine,
+    OverviewUnit, QuoteToolView, RankingToolKind, RankingToolLine, RankingsToolView,
+    SectorToolLine, SectorsToolView, SessionStatus, SessionToolLine, ValueProvenance,
+};
+mod portfolio_tool_reads;
+pub use portfolio_tool_reads::{
+    AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
+    BenchmarkReturnLine, BuyingPowerLine, ConcentrationLine, HoldingToolLine, PerformanceBenchmark,
+    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, RiskMetrics,
+    SampleSufficiency, TransactionAdmission, TransactionToolFilter, TransactionToolKind,
+    TransactionToolLine, TransactionsToolView,
+};
 mod portfolio_views;
 pub use portfolio_views::{
     GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,
@@ -406,9 +421,16 @@ pub use transaction_observation::{
 
 mod valuation_gap;
 pub use valuation_gap::{
-    PlanValuationGap, ValuationCalendarSource, ValuationDayRepository, ValuationGapError,
+    BackfillValuationDays, PlanValuationGap, ValuationBackfillError, ValuationCalendarSource,
+    ValuationDayInputSource, ValuationDayRepository, ValuationDaySuccessSource, ValuationGapError,
+    ValuationInputError,
 };
+mod briefing;
 mod run_full_inspection;
+pub use briefing::{
+    BriefingContext, BriefingContextSource, BriefingFailure, BriefingOutcome, BriefingRecord,
+    BriefingRepository, BriefingRunError, BriefingRunReport, BriefingSource, RunBriefing,
+};
 pub use run_full_inspection::{
     FullInspectionReport, FullInspectionRun, FullInspectionRunError, RunFullInspection,
 };
@@ -441,6 +463,13 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
+mod spec_check;
+pub use spec_check::{
+    CheckTossSpec, HttpLastModified, SchemaReviewState, SpecChangeReason, SpecCheckReport,
+    SpecDocumentSnapshot, SpecDriftStatus, SpecFetchError, SpecHash, SpecStatusRecord,
+    SpecVersionLabel, TossSpecBaseline, TossSpecObservation, TossSpecSource,
+    TossSpecStatusRepository, evaluate_spec_drift,
+};
 mod open_external;
 pub use open_external::{
     CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
@@ -464,6 +493,26 @@ pub use collection_schedule::{
 mod record_wake_trigger;
 pub use record_wake_trigger::{
     RecordWakeTriggers, TriggerWrite, WakeTriggerOutcome, WakeTriggerRepository,
+};
+
+mod stock_web_collection;
+pub use stock_web_collection::{
+    RunStockWebCollection, STOCK_WEB_TOPICS, StockWebCollectionOutcome, StockWebCollectionReport,
+    StockWebCollectionResult, WebCollectionFailure, WebCollectionReservation, WebCollectionRunner,
+    WebCollectionStore, WebFinding, plan_stock_web_collection,
+};
+
+mod important_disclosures;
+pub use important_disclosures::{
+    DisclosureCardFact, DisclosureCardLevel, DisclosureTriggerLog, GetImportantDisclosureCards,
+    ImportantDisclosureCard,
+};
+
+mod news_data_settings;
+pub use news_data_settings::{
+    AliasName, GetNewsDataSettings, NewsDataSettings, NewsDataSettingsChange,
+    NewsDataSettingsError, NewsDataSettingsRepository, NewsSettingValueError, SecContactSetting,
+    SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
 mod web_search_guard;

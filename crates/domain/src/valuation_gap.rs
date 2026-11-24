@@ -76,6 +76,17 @@ impl ValuationGapPlan {
         }
         Ok(Self { days })
     }
+    #[must_use]
+    pub fn excluding(&self, filled: &[CalendarDate]) -> Self {
+        Self {
+            days: self
+                .days
+                .iter()
+                .filter(|row| !filled.contains(&row.date))
+                .copied()
+                .collect(),
+        }
+    }
     pub fn dates(&self) -> impl Iterator<Item = CalendarDate> + '_ {
         self.days.iter().map(|row| row.date)
     }
@@ -384,6 +395,35 @@ mod tests {
                 .dates()
                 .count(),
             400
+        );
+    }
+
+    #[test]
+    fn excluding_filled_days_keeps_remaining_reasons_and_order() {
+        let rows = [
+            row(2, Open, Open),
+            ValuationCalendarDay::unavailable(date(3), SnapshotError::MissingPrice),
+            row(4, Open, Open),
+            row(5, Open, Open),
+        ];
+        let plan = ValuationGapPlan::new(date(1), at(5, 2), &rows).expect("계획");
+        let rest = plan.excluding(&[date(2), date(5), date(9)]);
+        assert_eq!(rest.dates().collect::<Vec<_>>(), vec![date(3), date(4)]);
+        let results = rest.resolve(|_, _| Ok(observed(4, "1", "2")));
+        assert_eq!(
+            results.first().expect("3일").result(),
+            Err(&SnapshotError::MissingPrice)
+        );
+        assert_eq!(
+            results.get(1).expect("4일").result(),
+            Ok(&observed(4, "1", "2"))
+        );
+        assert_eq!(plan.excluding(&[]), plan);
+        assert_eq!(
+            plan.excluding(&plan.dates().collect::<Vec<_>>())
+                .dates()
+                .count(),
+            0
         );
     }
 
