@@ -405,6 +405,8 @@ mod article_tool;
 pub use article_tool::{
     ArticleBody, ArticleFetchFailure, ArticleLocation, ArticleToolPort, BodyReadingSetting,
 };
+mod estimate_tool_ports;
+pub use estimate_tool_ports::{EstimateRunContextSource, ProfileSource, ReadOnlySettings};
 mod portfolio_tool_reads;
 mod thesis_tool;
 pub use thesis_tool::{ThesisRunMetadata, ThesisToolPort, ThesisUpdateFailure, UpdateThesis};

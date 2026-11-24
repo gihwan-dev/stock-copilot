@@ -9,25 +9,31 @@ mod tests {
         ArticleBody, ArticleLocation, CollectedItemHandle, ThesisRunMetadata,
         WebResearchToolOutcome,
     };
+    use application::{EventBusBuilder, RetryDelay, SystemFailure, SystemPort, SystemPortError};
+    use domain::EstimateAssignments;
     use domain::{
         InformationSource, InstrumentId, Nanosecond, NewsSource, NormalizedUrl, OffsetSeconds,
         Symbol, Timestamp, UnixSeconds, UntrustedText,
     };
     use mcp_server::{
-        AnalysisCatalogPorts, ToolErrorCode, ToolInvocation, ToolRegistry, build_analysis_catalog,
-        make_cursor_store, validate_arguments_against_schema,
+        AnalysisCatalogPorts, EstimateToolPorts, ToolErrorCode, ToolInvocation, ToolRegistry,
+        build_analysis_catalog, make_cursor_store, validate_arguments_against_schema,
     };
     use proptest::prelude::{BoxedStrategy, Just, Strategy, any, prop, prop_oneof};
     use proptest::test_runner::{Config, TestCaseError, TestRunner};
     use serde_json::{Map, Value};
     use testkit_ports::SteppedClock;
+    use testkit_ports::memory::MemoryEstimateLedger;
+    use testkit_ports::system_fakes::MemoryToolCallLedger;
     use testkit_ports::tool_read_fakes::{
-        ArticleCall, FixedArticleToolPort, FixedMarketToolReads, FixedNewsToolReads,
-        FixedPortfolioToolReads, FixedThesisToolPort, FixedWebResearchToolPort,
+        ArticleCall, FixedArticleToolPort, FixedEstimateAssignments, FixedEstimateRunContext,
+        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads, FixedProfileSource,
+        FixedScorecardObservations, FixedThesisToolPort, FixedWebResearchToolPort,
         LatestThesisRepository,
     };
 
-    const STATE_CHANGING_ALLOWED: [&str; 2] = ["request_web_research", "update_thesis"];
+    const STATE_CHANGING_ALLOWED: [&str; 3] =
+        ["request_web_research", "submit_estimate", "update_thesis"];
 
     const FORBIDDEN_FRAGMENTS: [&str; 16] = [
         "order",
@@ -80,6 +86,32 @@ mod tests {
         )
     }
 
+    type TestEstimatePorts = EstimateToolPorts<
+        FixedEstimateAssignments,
+        MemoryEstimateLedger,
+        MemoryToolCallLedger,
+        FixedEstimateRunContext,
+        FixedProfileSource,
+        FixedScorecardObservations,
+        SteppedClock,
+    >;
+
+    fn estimate_ports(clock: &Arc<SteppedClock>) -> Arc<TestEstimatePorts> {
+        Arc::new(EstimateToolPorts {
+            assignments: Arc::new(FixedEstimateAssignments::new(EstimateAssignments::default())),
+            submissions: Arc::new(MemoryEstimateLedger::new()),
+            history: Arc::new(MemoryToolCallLedger::recording()),
+            context: Arc::new(FixedEstimateRunContext(Err(SystemPortError::new(
+                SystemPort::Repository,
+                SystemFailure::Unavailable(RetryDelay::Unknown),
+            )))),
+            settings: Arc::new(FixedProfileSource(Ok(None))),
+            observations: Arc::new(FixedScorecardObservations(Ok(Vec::new()))),
+            clock: Arc::clone(clock),
+            events: Arc::new(EventBusBuilder::default().build()),
+        })
+    }
+
     fn catalog() -> Catalog {
         let clock = Arc::new(SteppedClock::new(
             Timestamp::from_parts(
@@ -125,6 +157,7 @@ mod tests {
                 },
             )),
             thesis_repository: Arc::new(LatestThesisRepository::default()),
+            estimates: estimate_ports(&clock),
         };
         let registry =
             build_analysis_catalog(&ports, &clock, &make_cursor_store(Arc::clone(&clock)))
