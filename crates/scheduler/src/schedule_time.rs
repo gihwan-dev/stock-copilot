@@ -52,6 +52,27 @@ pub(crate) fn initial_due(
     }
 }
 
+pub fn kst_time_of_day(instant: Timestamp) -> Result<KstTimeOfDay, ScheduleTimeError> {
+    let kst_seconds = instant
+        .utc_seconds()
+        .as_i64()
+        .checked_add(i64::from(KST_OFFSET_SECONDS))
+        .ok_or(ScheduleTimeError::Overflow)?;
+    let of_day = kst_seconds
+        .checked_rem_euclid(SECONDS_PER_DAY)
+        .ok_or(ScheduleTimeError::Overflow)?;
+    let hour = of_day
+        .checked_div(SECONDS_PER_HOUR)
+        .and_then(|value| u8::try_from(value).ok())
+        .ok_or(ScheduleTimeError::Overflow)?;
+    let minute = of_day
+        .checked_rem(SECONDS_PER_HOUR)
+        .and_then(|value| value.checked_div(SECONDS_PER_MINUTE))
+        .and_then(|value| u8::try_from(value).ok())
+        .ok_or(ScheduleTimeError::Overflow)?;
+    KstTimeOfDay::try_new(hour, minute).map_err(|_invalid| ScheduleTimeError::Overflow)
+}
+
 #[must_use]
 pub fn is_within_skip_grace(scheduled_for: Timestamp, now: Timestamp) -> bool {
     let Ok(grace) = TimeSpan::try_new(SpanSeconds::new(SKIP_GRACE_SECONDS), Nanosecond::new(0))

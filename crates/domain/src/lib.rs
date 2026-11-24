@@ -8,6 +8,8 @@ pub use money_display::{
 };
 
 mod account_id;
+mod briefing_id;
+pub use briefing_id::{BriefingId, BriefingKind};
 mod client_order_id;
 mod instrument_id;
 mod instrument_issuer;
@@ -674,6 +676,12 @@ pub use valuation_price_evidence::{
 };
 
 mod valuation_recompute_contract;
+
+mod deep_research;
+pub use deep_research::{
+    EvidenceBundle, EvidenceBundleError, EvidenceItem, EvidenceItemId, EvidenceItemIdError,
+    EvidenceKind, ResearchTopic, research_search_plan,
+};
 
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};

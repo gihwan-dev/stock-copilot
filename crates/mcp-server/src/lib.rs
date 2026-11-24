@@ -1,3 +1,4 @@
+pub mod catalog;
 mod handler;
 mod pagination;
 mod peer;
@@ -7,6 +8,11 @@ mod token;
 mod tools;
 mod untrusted;
 
+#[cfg(test)]
+mod contract_tests;
+
+pub use catalog::market::register_market_tools;
+pub use catalog::portfolio::register_portfolio_tools;
 pub use handler::{ConnectionEvent, ConnectionRejection};
 pub use pagination::{
     CursorStore, DEFAULT_CURSOR_TTL_SECS, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_STORED_CURSORS,

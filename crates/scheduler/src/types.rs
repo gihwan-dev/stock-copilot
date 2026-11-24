@@ -16,6 +16,8 @@ pub enum ScheduledJobId {
     IntradayCompaction,
     TossSpecWatch,
     DailyBackup,
+    UsEstimateResolution,
+    IntradayWatch,
 }
 
 impl ScheduledJobId {
@@ -36,6 +38,8 @@ impl ScheduledJobId {
             Self::IntradayCompaction => "intraday_compaction",
             Self::TossSpecWatch => "toss_spec_watch",
             Self::DailyBackup => "daily_backup",
+            Self::UsEstimateResolution => "us_estimate_resolution",
+            Self::IntradayWatch => "intraday_watch",
         }
     }
 
@@ -56,6 +60,8 @@ impl ScheduledJobId {
             "intraday_compaction" => Some(Self::IntradayCompaction),
             "toss_spec_watch" => Some(Self::TossSpecWatch),
             "daily_backup" => Some(Self::DailyBackup),
+            "us_estimate_resolution" => Some(Self::UsEstimateResolution),
+            "intraday_watch" => Some(Self::IntradayWatch),
             _ => None,
         }
     }
@@ -71,6 +77,12 @@ pub enum JobKind {
 pub enum MissedPolicy {
     CatchUpOnce,
     Skip,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupPolicy {
+    WaitForSchedule,
+    RunAtStartup,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,10 +161,12 @@ pub enum ScheduleRule {
     Interval(TimeSpan),
     AfterMarketClose {
         market: KnownMarket,
+        delay: TimeSpan,
         fallback: KstTimeOfDay,
     },
     BeforeMarketOpen {
         market: KnownMarket,
+        lead: TimeSpan,
         fallback: KstTimeOfDay,
     },
     EventTriggered,

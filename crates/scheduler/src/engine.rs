@@ -1,17 +1,21 @@
 use crate::ai_queue::{AiJobQueue, AiQueueAdmission};
+use crate::market_hours::{DueBound, MarketCalendarSource, NoMarketCalendar, market_due};
 use crate::registry::{JobRegistry, ScheduledJob};
 use crate::schedule_time::{ScheduleTimeError, initial_due, is_within_skip_grace, next_due_after};
+use crate::sync_jobs::SyncDemand;
 use crate::types::{
     JobConfig, JobEnablement, JobError, JobExecutionRecord, JobKind, JobRunOutcome,
-    JobScheduleOverride, JobStatusSnapshot, LoopControl, MissedPolicy, ScheduledJobId, TickReport,
+    JobScheduleOverride, JobStatusSnapshot, LoopControl, MissedPolicy, ScheduleRule,
+    ScheduledJobId, StartupPolicy, TickReport,
 };
 use application::{Clock, EventSubscriber, SubscriberFailure};
 use domain::{DomainEvent, Timestamp};
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, Notify, watch};
+use tokio::sync::{Mutex, Notify, mpsc, watch};
 
 pub const DEFAULT_TICK_INTERVAL_SECONDS: u64 = 30;
 const MAX_HISTORY_PER_JOB: usize = 32;
@@ -37,25 +41,70 @@ impl SchedulerWakeSignal {
 }
 
 #[derive(Debug)]
+pub struct JobTriggers {
+    sender: mpsc::UnboundedSender<ScheduledJobId>,
+    wake: Arc<SchedulerWakeSignal>,
+}
+
+impl JobTriggers {
+    pub fn trigger(&self, id: ScheduledJobId) {
+        if let Err(_closed) = self.sender.send(id) {
+            return;
+        }
+        self.wake.wake();
+    }
+}
+
+#[derive(Debug)]
 pub struct SchedulerEventSubscriber {
     wake: Arc<SchedulerWakeSignal>,
+    triggers: Option<Arc<JobTriggers>>,
+    order_sync: Option<Arc<SyncDemand>>,
 }
 
 impl SchedulerEventSubscriber {
     #[must_use]
     pub const fn new(wake: Arc<SchedulerWakeSignal>) -> Self {
-        Self { wake }
+        Self {
+            wake,
+            triggers: None,
+            order_sync: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_triggers(triggers: Arc<JobTriggers>, wake: Arc<SchedulerWakeSignal>) -> Self {
+        Self {
+            wake,
+            triggers: Some(triggers),
+            order_sync: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_order_sync(mut self, demand: Arc<SyncDemand>) -> Self {
+        self.order_sync = Some(demand);
+        self
     }
 }
 
 impl EventSubscriber for SchedulerEventSubscriber {
     fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
         match event {
+            DomainEvent::OrderSubmitted(_) => {
+                if let Some(demand) = &self.order_sync {
+                    demand.request();
+                }
+                if let Some(triggers) = &self.triggers {
+                    triggers.trigger(ScheduledJobId::PortfolioSync);
+                }
+                self.wake.wake();
+                Ok(())
+            }
             DomainEvent::SettingsChanged
             | DomainEvent::AiBudgetChanged
             | DomainEvent::MarketSessionChanged(_)
             | DomainEvent::WatchlistChanged
-            | DomainEvent::OrderSubmitted(_)
             | DomainEvent::BrokerConnectionChanged => {
                 self.wake.wake();
                 Ok(())
@@ -92,7 +141,8 @@ impl EventSubscriber for SchedulerEventSubscriber {
             | DomainEvent::StoredDataChanged
             | DomainEvent::FxRateUpdated(_)
             | DomainEvent::DisclosureTriggerRecorded(_)
-            | DomainEvent::SourceStatusChanged(_) => Ok(()),
+            | DomainEvent::SourceStatusChanged(_)
+            | DomainEvent::BriefingFinished(_) => Ok(()),
         }
     }
 }
@@ -141,6 +191,11 @@ pub struct Scheduler<C: Clock, Q: AiJobQueue> {
     jobs: BTreeMap<ScheduledJobId, Box<dyn ScheduledJob>>,
     states: Mutex<BTreeMap<ScheduledJobId, JobRuntimeState>>,
     wake: Arc<SchedulerWakeSignal>,
+    triggers: Arc<JobTriggers>,
+    trigger_inbox: Mutex<mpsc::UnboundedReceiver<ScheduledJobId>>,
+    calendars: Arc<dyn MarketCalendarSource>,
+    records: Arc<dyn JobRecordSink>,
+    startup: Timestamp,
 }
 
 impl<C: Clock, Q: AiJobQueue> Debug for Scheduler<C, Q> {
@@ -157,12 +212,44 @@ impl<C: Clock, Q: AiJobQueue> Scheduler<C, Q> {
         ai_queue: Arc<Q>,
         registry: JobRegistry,
     ) -> Result<Self, ScheduleTimeError> {
+        Self::with_market_calendar(clock, ai_queue, registry, Arc::new(NoMarketCalendar))
+    }
+
+    pub fn with_market_calendar(
+        clock: Arc<C>,
+        ai_queue: Arc<Q>,
+        registry: JobRegistry,
+        calendars: Arc<dyn MarketCalendarSource>,
+    ) -> Result<Self, ScheduleTimeError> {
+        Self::with_options(
+            clock,
+            ai_queue,
+            registry,
+            SchedulerOptions {
+                calendars,
+                records: Arc::new(DiscardJobRecords),
+            },
+        )
+    }
+
+    pub fn with_options(
+        clock: Arc<C>,
+        ai_queue: Arc<Q>,
+        registry: JobRegistry,
+        options: SchedulerOptions,
+    ) -> Result<Self, ScheduleTimeError> {
+        let SchedulerOptions { calendars, records } = options;
         let started_at = clock.now();
         let entries = registry.into_entries();
         let mut states = BTreeMap::new();
         for (id, job) in &entries {
             let config = job.default_config();
-            let next_due = initial_due(started_at, config.schedule)?;
+            let next_due = match job.startup_policy() {
+                StartupPolicy::RunAtStartup => Some(started_at),
+                StartupPolicy::WaitForSchedule => {
+                    first_due(calendars.as_ref(), started_at, config.schedule)?
+                }
+            };
             states.insert(
                 *id,
                 JobRuntimeState {
@@ -175,13 +262,54 @@ impl<C: Clock, Q: AiJobQueue> Scheduler<C, Q> {
                 },
             );
         }
+        let wake = Arc::new(SchedulerWakeSignal::new());
+        let (sender, receiver) = mpsc::unbounded_channel();
         Ok(Self {
             clock,
             ai_queue,
             jobs: entries,
             states: Mutex::new(states),
-            wake: Arc::new(SchedulerWakeSignal::new()),
+            triggers: Arc::new(JobTriggers {
+                sender,
+                wake: Arc::clone(&wake),
+            }),
+            trigger_inbox: Mutex::new(receiver),
+            wake,
+            calendars,
+            records,
+            startup: started_at,
         })
+    }
+
+    pub async fn restore_last_runs(&self, last_runs: &[(ScheduledJobId, Timestamp)]) {
+        let mut states = self.states.lock().await;
+        for (id, last_scheduled_for) in last_runs {
+            let Some(state) = states.get_mut(id) else {
+                continue;
+            };
+            if state.config.missed_policy != MissedPolicy::CatchUpOnce {
+                continue;
+            }
+            if state.next_due.is_some_and(|due| due <= self.startup) {
+                continue;
+            }
+            let Some(missed) = latest_due_at_or_before(
+                self.calendars.as_ref(),
+                self.startup,
+                state.config.schedule,
+            ) else {
+                continue;
+            };
+            if *last_scheduled_for < missed {
+                state.next_due = Some(missed);
+            }
+        }
+        self.wake.wake();
+    }
+
+    #[must_use]
+    pub fn triggers(&self) -> Arc<JobTriggers> {
+        Arc::clone(&self.triggers)
     }
 
     #[must_use]
@@ -191,7 +319,7 @@ impl<C: Clock, Q: AiJobQueue> Scheduler<C, Q> {
 
     #[must_use]
     pub fn event_subscriber(&self) -> SchedulerEventSubscriber {
-        SchedulerEventSubscriber::new(Arc::clone(&self.wake))
+        SchedulerEventSubscriber::with_triggers(Arc::clone(&self.triggers), Arc::clone(&self.wake))
     }
 
     pub async fn apply_override(
@@ -205,7 +333,7 @@ impl<C: Clock, Q: AiJobQueue> Scheduler<C, Q> {
         };
         state.config.enabled = override_entry.enabled;
         state.config.schedule = override_entry.schedule;
-        state.next_due = initial_due(now, state.config.schedule)?;
+        state.next_due = first_due(self.calendars.as_ref(), now, state.config.schedule)?;
         let snapshot = build_snapshot(override_entry.id, state);
         self.wake.wake();
         Ok(Some(snapshot))
@@ -256,20 +384,31 @@ impl<C: Clock, Q: AiJobQueue> Scheduler<C, Q> {
         }
     }
 
+    async fn drain_triggers(&self) -> BTreeSet<ScheduledJobId> {
+        let mut inbox = self.trigger_inbox.lock().await;
+        let mut triggered = BTreeSet::new();
+        while let Ok(id) = inbox.try_recv() {
+            triggered.insert(id);
+        }
+        triggered
+    }
+
     async fn collect_due_jobs(
         &self,
         now: Timestamp,
     ) -> Vec<(ScheduledJobId, JobConfig, Timestamp)> {
+        let triggered = self.drain_triggers().await;
         let states = self.states.lock().await;
         let mut due = Vec::new();
         for (id, state) in &*states {
             if state.config.enabled == JobEnablement::Disabled {
                 continue;
             }
-            if let Some(scheduled_for) = state.next_due
-                && scheduled_for <= now
-            {
-                due.push((*id, state.config, scheduled_for));
+            let scheduled = state.next_due.filter(|scheduled_for| *scheduled_for <= now);
+            match (scheduled, triggered.contains(id)) {
+                (Some(scheduled_for), _) => due.push((*id, state.config, scheduled_for)),
+                (None, true) => due.push((*id, state.config, now)),
+                (None, false) => {}
             }
         }
         due
@@ -338,6 +477,7 @@ impl<C: Clock, Q: AiJobQueue> Scheduler<C, Q> {
             outcome: JobRunOutcome::DeferredByAiQueue { resumes_at },
         };
         self.record_deferred(id, resumes_at, record.clone()).await;
+        self.records.record(&record);
         Some(record)
     }
 
@@ -348,6 +488,7 @@ impl<C: Clock, Q: AiJobQueue> Scheduler<C, Q> {
     ) -> JobExecutionRecord {
         self.finish_job_cycle(record.id, config, record.evaluated_at, record.clone())
             .await;
+        self.records.record(&record);
         record
     }
 
@@ -385,13 +526,99 @@ impl<C: Clock, Q: AiJobQueue> Scheduler<C, Q> {
     ) {
         let mut states = self.states.lock().await;
         if let Some(state) = states.get_mut(&id) {
-            if let Ok(next) = next_due_after(now, config.schedule) {
+            if let Ok(next) = following_due(self.calendars.as_ref(), now, config.schedule) {
                 state.next_due = next;
             } else {
                 state.next_due = None;
             }
             state.record_execution(record);
         }
+    }
+}
+
+pub trait JobRecordSink: Send + Sync {
+    fn record(&self, record: &JobExecutionRecord);
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DiscardJobRecords;
+
+impl JobRecordSink for DiscardJobRecords {
+    fn record(&self, _record: &JobExecutionRecord) {}
+}
+
+pub struct SchedulerOptions {
+    pub calendars: Arc<dyn MarketCalendarSource>,
+    pub records: Arc<dyn JobRecordSink>,
+}
+
+impl Debug for SchedulerOptions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SchedulerOptions").finish_non_exhaustive()
+    }
+}
+
+impl Default for SchedulerOptions {
+    fn default() -> Self {
+        Self {
+            calendars: Arc::new(NoMarketCalendar),
+            records: Arc::new(DiscardJobRecords),
+        }
+    }
+}
+
+const CATCH_UP_LOOKBACK_SECONDS: u64 = 8 * 86_400;
+const MAX_CATCH_UP_STEPS: usize = 32;
+
+fn latest_due_at_or_before(
+    calendars: &dyn MarketCalendarSource,
+    at: Timestamp,
+    rule: ScheduleRule,
+) -> Option<Timestamp> {
+    match rule {
+        ScheduleRule::Interval(_) | ScheduleRule::EventTriggered => return None,
+        ScheduleRule::DailyKst(_)
+        | ScheduleRule::WeeklyKst { .. }
+        | ScheduleRule::AfterMarketClose { .. }
+        | ScheduleRule::BeforeMarketOpen { .. } => {}
+    }
+    let lookback = domain::TimeSpan::try_new(
+        domain::SpanSeconds::new(CATCH_UP_LOOKBACK_SECONDS),
+        domain::Nanosecond::new(0),
+    )
+    .ok()?;
+    let mut cursor = first_due(calendars, at.checked_sub(lookback).ok()?, rule).ok()??;
+    if cursor > at {
+        return None;
+    }
+    for _ in 0..MAX_CATCH_UP_STEPS {
+        match following_due(calendars, cursor, rule) {
+            Ok(Some(next)) if next <= at => cursor = next,
+            Ok(_) | Err(_) => break,
+        }
+    }
+    Some(cursor)
+}
+
+fn first_due(
+    calendars: &dyn MarketCalendarSource,
+    at: Timestamp,
+    rule: ScheduleRule,
+) -> Result<Option<Timestamp>, ScheduleTimeError> {
+    match market_due(calendars, rule, at, DueBound::AtOrAfter) {
+        Some(due) => Ok(Some(due)),
+        None => initial_due(at, rule),
+    }
+}
+
+fn following_due(
+    calendars: &dyn MarketCalendarSource,
+    after: Timestamp,
+    rule: ScheduleRule,
+) -> Result<Option<Timestamp>, ScheduleTimeError> {
+    match market_due(calendars, rule, after, DueBound::StrictlyAfter) {
+        Some(due) => Ok(Some(due)),
+        None => next_due_after(after, rule),
     }
 }
 

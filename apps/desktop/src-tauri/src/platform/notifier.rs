@@ -211,6 +211,7 @@ impl<D, L> NotificationEventSubscriber<D, L> {
         BTreeSet::from([
             DomainEventKind::SignalRaised,
             DomainEventKind::DisclosureTriggerRecorded,
+            DomainEventKind::BriefingFinished,
         ])
     }
 }
@@ -221,6 +222,9 @@ impl<D: NotificationDispatch, L: DisclosureUrgencyLookup> EventSubscriber
     fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
         match event {
             DomainEvent::SignalRaised(_) => self.dispatcher.dispatch(Notification::NewSignal),
+            DomainEvent::BriefingFinished(_) => {
+                self.dispatcher.dispatch(Notification::BriefingFinished)
+            }
             DomainEvent::DisclosureTriggerRecorded(key) => match self.urgency_lookup.urgency(key) {
                 DisclosureUrgency::Urgent => {
                     self.dispatcher.dispatch(Notification::UrgentDisclosure)

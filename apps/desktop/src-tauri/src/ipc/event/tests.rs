@@ -592,3 +592,20 @@ fn uidatasource_and_source_status_changed_retain_every_closed_kind() {
         );
     }
 }
+
+#[test]
+fn briefing_finished_carries_kind_and_kst_date_only() {
+    let date = domain::CalendarDate::from_parts(
+        domain::CalendarYear::new(2026),
+        domain::MonthNumber::new(3),
+        domain::DayNumber::new(5),
+    )
+    .expect("날짜");
+    assert_eq!(
+        serde_json::to_value(UiEvent::from(DomainEvent::BriefingFinished(
+            domain::BriefingId::new(domain::BriefingKind::ClosingReview, date)
+        )))
+        .expect("event"),
+        serde_json::json!({"BriefingFinished": {"kind": "ClosingReview", "date": "2026-03-05"}})
+    );
+}
