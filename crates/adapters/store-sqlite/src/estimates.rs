@@ -1,3 +1,4 @@
+mod assignments;
 pub(crate) mod codec;
 pub(crate) mod valuation_codec;
 
@@ -96,7 +97,9 @@ fn decode_consumption(raw: &str) -> rusqlite::Result<EstimateConsumption> {
     }
 }
 
-fn load_assignments(connection: &Connection) -> rusqlite::Result<EstimateAssignments<AiRunId>> {
+pub(crate) fn load_assignments(
+    connection: &Connection,
+) -> rusqlite::Result<EstimateAssignments<AiRunId>> {
     let mut statement = connection.prepare(sql::ALL_TASKS)?;
     let entries = statement
         .query_map([], |row| {
@@ -258,7 +261,7 @@ fn commit_submission_tx(
     Ok(EstimateCommitOutcome::Committed)
 }
 
-fn issue_task_tx(
+pub(crate) fn issue_task_tx(
     tx: &Transaction<'_>,
     task_id: &str,
     run: &AiRunId,

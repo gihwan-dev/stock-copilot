@@ -23,6 +23,7 @@ mod thesis_record;
 pub use thesis_record::ThesisRecord;
 pub mod chat_fakes;
 pub mod memory;
+pub mod principles_fakes;
 pub mod proposal_memory;
 pub mod spec_check;
 pub mod system_fakes;

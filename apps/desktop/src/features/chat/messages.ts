@@ -27,7 +27,7 @@ const catalog = {
     ko: "AI와 연결하지 못했어요. 잠시 뒤 다시 물어봐 주세요." as UiText,
   },
   "chat.failedCredential": {
-    ko: "Claude Code에 로그인하면 AI 기능이 다시 켜져요." as UiText,
+    ko: "AI 로그인이 필요해요. Claude에 다시 로그인한 뒤 물어봐 주세요." as UiText,
   },
   "chat.failedSafety": {
     ko: "안전 점검을 통과하지 못해 답을 멈췄어요." as UiText,

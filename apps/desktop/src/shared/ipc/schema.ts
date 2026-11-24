@@ -1,16 +1,16 @@
 import { z } from "zod";
 import { err, ok, parseTicker, type Result, type Ticker } from "../lib";
 
-type Brand<N extends string> = Readonly<z.core.$brand<N>>;
+export { parseUiEvent, type CoreUiEvent } from "./event-schema";
 
-export type AppVersionText = string & Brand<"AppVersionText">;
+type Brand<N extends string> = Readonly<z.core.$brand<N>>;
+type AppVersionText = string & Brand<"AppVersionText">;
 
 export type AppVersion = { readonly version: AppVersionText };
 
-export type CommandErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
+type CommandErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
 
 export type CommandError = { readonly kind: CommandErrorKind };
-
 export type IpcFailure =
   | { readonly kind: "command"; readonly error: CommandError }
   | { readonly kind: "framework" }
@@ -22,6 +22,7 @@ export type CommandOutcome =
   | { readonly status: "error"; readonly error: unknown };
 
 const frameworkFailure: IpcFailure = { kind: "framework" };
+const invalidResponseFailure: IpcFailure = { kind: "invalid-response" };
 
 const appVersionSchema = z
   .object({
@@ -54,9 +55,7 @@ export const settleWithSchema = <T>(
   switch (outcome.status) {
     case "ok": {
       const parsed = schema.safeParse(outcome.data);
-      return parsed.success
-        ? ok(parsed.data)
-        : err({ kind: "invalid-response" });
+      return parsed.success ? ok(parsed.data) : err(invalidResponseFailure);
     }
     case "error": {
       const parsed = commandErrorSchema.safeParse(outcome.error);

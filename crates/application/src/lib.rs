@@ -570,8 +570,13 @@ pub use news_data_settings::{
 
 mod deep_research;
 pub use deep_research::{
-    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchEvidenceSource,
-    ResearchWebCollector, ResearchWebOutcome, ResearchWebStore,
+    AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
+    DeepResearchRun, DeepResearchStages, DraftResearchCases, FinishResearch, FinishResearchError,
+    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchAnalyst,
+    ResearchCaseError, ResearchCases, ResearchCheckpoint, ResearchCheckpointStore,
+    ResearchConcluder, ResearchConclusion, ResearchEvidenceSource, ResearchModels, ResearchOutcome,
+    ResearchPrincipleCheck, ResearchStage, ResearchWebCollector, ResearchWebOutcome,
+    ResearchWebStore, RunDeepResearch, VerifyResearchClaims,
 };
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
@@ -594,6 +599,17 @@ pub use chat_types::{
 
 mod chat_ports;
 pub use chat_ports::{ChatChunkSink, ChatQueuePort, ChatRepository, ChatRunLedger, ChatStopSignal};
+
+mod investment_principles;
+pub use investment_principles::{
+    ApplyInvestmentPrinciples, PrinciplesRepository, UpdateInvestmentPrinciples,
+};
+
+mod chat_number_check;
+pub use chat_number_check::{
+    ChatNumberCheck, ChatNumberEvidence, ChatNumberEvidenceSet, NoNumberEvidence,
+    check_chat_numbers,
+};
 
 mod send_chat_message;
 pub use send_chat_message::{
