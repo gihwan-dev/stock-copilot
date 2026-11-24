@@ -273,7 +273,8 @@ mod confirm_instrument_identity;
 pub use confirm_instrument_identity::{ConfirmInstrumentIdentity, IdentityConfirmationOutcome};
 mod audit_log;
 pub use audit_log::{
-    AuditEntry, AuditIntegrity, AuditKind, AuditLog, WebSearchAuditError, WebSearchAuditOutcome,
+    AuditChainHash, AuditEntry, AuditHead, AuditHeadAnchor, AuditHeadError, AuditIntegrity,
+    AuditKind, AuditLog, AuditSequence, WebSearchAuditError, WebSearchAuditOutcome,
     WebSearchAuditRecord, WebSearchQueryMode,
 };
 mod instrument_mapping;
@@ -605,6 +606,8 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod order_button;
+pub use order_button::ReadOrderButton;
 mod order_rate_limit;
 pub use order_rate_limit::{CheckOrderRateLimit, OrderRateRepository};
 
@@ -620,3 +623,5 @@ pub use warm_chat::{
     WarmChatProbe, WarmChatReadiness, WarmChatRejection, WarmChatRequest, WarmChatRuntime,
     WarmChatSession, WarmFreshness, WarmMatch,
 };
+mod database_restore;
+pub use database_restore::{RestoreOutcome, announce_restore};

@@ -5,7 +5,7 @@ mod tests {
 
     use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
     use mcp_server::{
-        ToolRegistry, make_cursor_store, register_market_tools, register_portfolio_tools,
+        AnalysisCatalogPorts, ToolRegistry, build_analysis_catalog, make_cursor_store,
     };
     use serde_json::Value;
     use testkit_ports::SteppedClock;
@@ -31,12 +31,11 @@ mod tests {
             .expect("시각"),
         ));
         let cursors = make_cursor_store(clock);
-        let mut registry = ToolRegistry::new();
-        let portfolio = Arc::new(FixedPortfolioToolReads::default());
-        register_portfolio_tools(&mut registry, &portfolio, &cursors).expect("포트폴리오 도구");
-        let market = Arc::new(FixedMarketToolReads::default());
-        register_market_tools(&mut registry, &market, &cursors).expect("시장 도구");
-        registry
+        let ports = AnalysisCatalogPorts {
+            portfolio: Arc::new(FixedPortfolioToolReads::default()),
+            market: Arc::new(FixedMarketToolReads::default()),
+        };
+        build_analysis_catalog(&ports, &cursors).expect("제품 카탈로그 조립")
     }
 
     #[test]

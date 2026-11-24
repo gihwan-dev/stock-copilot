@@ -632,6 +632,11 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod order_button;
+pub use order_button::{
+    OrderButtonHiddenReason, OrderButtonState, ProposalAvailability, order_button_state,
+    saved_order_permission,
+};
 mod risk_settings;
 pub use risk_settings::{OrderPermission, RiskSettings};
 
