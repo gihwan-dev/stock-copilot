@@ -3491,6 +3491,14 @@ dependencies = [
 [[package]]
 name = "sources"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "reqwest",
+ "testkit",
+ "testkit-ports",
+ "tokio",
+]
 
 [[package]]
 name = "specta"

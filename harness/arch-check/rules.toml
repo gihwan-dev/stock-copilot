@@ -465,3 +465,9 @@ crates = ["broker-toss"]
 externals = ["socket2", "syn", "proc-macro2"]
 through = "tokio"
 reason = "T-18: tokio 런타임의 socket2 및 작업 공간 tokio-macros 기능 통합으로 생기는 syn/proc-macro2 경로"
+
+[[external-location-exception]]
+crates = ["sources"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "tokio"
+reason = "N-01: rt·time·sync만 켠 tokio의 작업 공간 기능 통합으로 생기는 socket2·syn·proc-macro2 경로. 소켓 직접 사용은 source.http-socket으로 차단한다"

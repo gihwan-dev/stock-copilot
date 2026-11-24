@@ -1,6 +1,6 @@
 use crate::{
-    AccountId, ClientOrderId, DisclosureKey, FxPair, InformationSource, InstrumentId, KnownMarket,
-    ProposalId,
+    AccountId, ClientOrderId, DataSource, DisclosureKey, FxPair, InformationSource, InstrumentId,
+    KnownMarket, ProposalId,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +43,7 @@ pub enum DomainEvent {
     StoredDataChanged,
     FxRateUpdated(FxPair),
     DisclosureTriggerRecorded(DisclosureKey),
+    SourceStatusChanged(DataSource),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -85,6 +86,7 @@ pub enum DomainEventKind {
     StoredDataChanged,
     FxRateUpdated,
     DisclosureTriggerRecorded,
+    SourceStatusChanged,
 }
 
 impl DomainEvent {
@@ -129,6 +131,7 @@ impl DomainEvent {
             Self::StoredDataChanged => DomainEventKind::StoredDataChanged,
             Self::FxRateUpdated(_) => DomainEventKind::FxRateUpdated,
             Self::DisclosureTriggerRecorded(_) => DomainEventKind::DisclosureTriggerRecorded,
+            Self::SourceStatusChanged(_) => DomainEventKind::SourceStatusChanged,
         }
     }
 }
@@ -136,7 +139,7 @@ impl DomainEvent {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AccountId, ClientOrderId, Disclosure, DomainEvent, DomainEventKind, FxPair,
+        AccountId, ClientOrderId, DataSource, Disclosure, DomainEvent, DomainEventKind, FxPair,
         InformationSource, InstrumentId, KnownMarket, NormalizedUrl, ProposalId, ReceiptNo,
         UntrustedText,
     };
@@ -396,6 +399,11 @@ mod tests {
                 DomainEventKind::DisclosureTriggerRecorded,
                 "DisclosureTriggerRecorded",
             ),
+            (
+                DomainEvent::SourceStatusChanged(DataSource::KindDisclosure),
+                DomainEventKind::SourceStatusChanged,
+                "SourceStatusChanged",
+            ),
         ]
     }
     fn cases() -> Vec<(DomainEvent, DomainEventKind, &'static str)> {
@@ -455,6 +463,7 @@ mod tests {
             DomainEvent::DisclosureTriggerRecorded(id) => {
                 format!("DisclosureTriggerRecorded({id:?})")
             }
+            DomainEvent::SourceStatusChanged(id) => format!("SourceStatusChanged({id:?})"),
         }
     }
     #[test]
@@ -567,7 +576,6 @@ mod tests {
         let expected = BTreeMap::from([
             ("AiJobFinished".to_owned(), "AI-17".to_owned()),
             ("BriefingFinished".to_owned(), "J-03".to_owned()),
-            ("SourceStatusChanged".to_owned(), "N-01".to_owned()),
         ]);
         let mut actual = BTreeMap::new();
         for [

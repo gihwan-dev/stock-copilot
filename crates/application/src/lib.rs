@@ -428,3 +428,9 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
+
+mod source_status;
+pub use source_status::{
+    GetSourceStatuses, RecordSourceStatus, SourceAttemptOutcome, SourceState, SourceStatus,
+    SourceStatusError, SourceStatusReport, SourceStatusRepository,
+};

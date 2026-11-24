@@ -38,11 +38,13 @@ pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMa
 
 mod cluster;
 mod collected_item;
+mod data_source;
 mod disclosure;
 mod news_item;
 
 pub use cluster::{Cluster, ClusterError};
 pub use collected_item::{CollectedItem, InformationSource, UntrustedText, UntrustedTextError};
+pub use data_source::{DataSource, DataSourceCategory};
 pub use disclosure::{Disclosure, DisclosureKey, DisclosureSource, ReceiptNo, ReceiptNoError};
 pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
 

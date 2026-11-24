@@ -557,3 +557,38 @@ fn disclosure_receipts_keep_distinct_fields() {
         );
     }
 }
+
+#[test]
+fn uidatasource_and_source_status_changed_retain_every_closed_kind() {
+    for (source, expected) in [
+        (domain::DataSource::KindDisclosure, "KindDisclosure"),
+        (domain::DataSource::DartDisclosureApi, "DartDisclosureApi"),
+        (domain::DataSource::DartDisclosureRss, "DartDisclosureRss"),
+        (domain::DataSource::DartFundamentals, "DartFundamentals"),
+        (domain::DataSource::KindCorpList, "KindCorpList"),
+        (domain::DataSource::Hankyung, "Hankyung"),
+        (domain::DataSource::Maekyung, "Maekyung"),
+        (domain::DataSource::Yonhap, "Yonhap"),
+        (domain::DataSource::Edaily, "Edaily"),
+        (domain::DataSource::GoogleNews, "GoogleNews"),
+        (domain::DataSource::WebSearch, "WebSearch"),
+        (domain::DataSource::YahooFinance, "YahooFinance"),
+        (domain::DataSource::SecEdgar, "SecEdgar"),
+        (domain::DataSource::BankOfKorea, "BankOfKorea"),
+        (domain::DataSource::FederalReserve, "FederalReserve"),
+        (domain::DataSource::UsTreasury, "UsTreasury"),
+        (domain::DataSource::Fred, "Fred"),
+    ] {
+        assert_eq!(
+            serde_json::to_value(super::UiDataSource::from(source)).expect("source"),
+            serde_json::json!(expected),
+            "{expected}"
+        );
+        assert_eq!(
+            serde_json::to_value(UiEvent::from(DomainEvent::SourceStatusChanged(source)))
+                .expect("event"),
+            serde_json::json!({"SourceStatusChanged": expected}),
+            "{expected}"
+        );
+    }
+}
