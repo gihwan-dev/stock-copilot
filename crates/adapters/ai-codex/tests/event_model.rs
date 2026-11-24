@@ -592,6 +592,23 @@ mod tests {
                 StreamOrderError::IsolationRegressed(IsolationFailure::Tools)
             ))
         );
+
+        let mut unhealthy_with_extra_tool = CodexAppServerDecoder::new(analysis_expectation());
+        unhealthy_with_extra_tool
+            .decode_line(startup_thread_ok())
+            .expect("t");
+        unhealthy_with_extra_tool
+            .decode_line(startup_mcp_ok())
+            .expect("m");
+        assert_eq!(
+            unhealthy_with_extra_tool.decode_line(
+                r#"{"id":3,"result":{"data":[{"name":"app","status":"failed","tools":["get_portfolio","place_order"]}]}}"#
+            ),
+            Err(StreamDecodeError::Order(
+                StreamOrderError::IsolationRegressed(IsolationFailure::Tools)
+            )),
+            "unhealthy expected server with unauthorized tool must regress rather than mask as McpUnavailable"
+        );
     }
 
     #[test]
