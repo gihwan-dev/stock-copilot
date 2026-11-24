@@ -167,8 +167,8 @@ fn build_open_set(
 ) -> Result<BrokerOrderSet, PortError> {
     let mut parsed_rows = Vec::new();
     let mut quality = OpenRowQuality::Clean;
-    for raw in page.orders {
-        if parsed_rows.len() >= MAX_ORDER_ROWS {
+    for (seen_rows, raw) in page.orders.into_iter().enumerate() {
+        if seen_rows >= MAX_ORDER_ROWS {
             status = OpenPageStatus::Truncated;
             break;
         }
@@ -244,6 +244,7 @@ struct ClosedPages {
     cursor: Option<String>,
     seen_cursors: BTreeSet<String>,
     seen_ids: BTreeSet<BrokerOrderId>,
+    seen_rows: usize,
     valid_rows: Vec<ParsedOrder>,
     quality: ClosedRowQuality,
     terminal: ClosedTerminal,
@@ -321,10 +322,11 @@ impl ClosedPages {
             return AppendOutcome::EnvelopeError(ResponseMismatch::Validation);
         }
         for raw in page.orders {
-            if self.valid_rows.len() >= MAX_ORDER_ROWS {
+            if self.seen_rows >= MAX_ORDER_ROWS {
                 self.terminal = ClosedTerminal::RowLimit;
                 return AppendOutcome::RowLimit;
             }
+            self.seen_rows = self.seen_rows.saturating_add(1);
             self.push_closed_row(raw.get(), reader_master);
         }
         self.cursor = next_cursor;

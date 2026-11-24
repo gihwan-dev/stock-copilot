@@ -149,8 +149,9 @@ fn validate_query(
         return Err(NetPurchaseIncomplete::ObservationTooEarly);
     }
     if let Some(proof) = orders.completeness_proof() {
-        proof.verify_for_period(period)?;
-    } else if let ClosedOrderCompleteness::Incomplete(reason) = orders.completeness() {
+        return proof.verify_for_period(period);
+    }
+    if let ClosedOrderCompleteness::Incomplete(reason) = orders.completeness() {
         return Err(NetPurchaseIncomplete::Query(reason));
     }
     if orders.covered().start() > period.start() || orders.covered().end() < period.end() {

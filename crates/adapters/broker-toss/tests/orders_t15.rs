@@ -1212,6 +1212,39 @@ mod tests {
     }
 
     #[test]
+    fn closed_orders_row_limit_counts_rejected_rows_to_stop_pagination() {
+        let delisted = sample_closed_order(ClosedOrderFixture {
+            id: "synthetic-delisted-dup",
+            symbol: "000660",
+            currency: "KRW",
+            side: "BUY",
+            filled_amount: "70000",
+            ordered_at: "2026-03-28T09:30:00+09:00",
+            filled_at: "2026-03-28T09:31:00+09:00",
+        });
+        let page = json!({
+            "result": {
+                "orders": vec![delisted; 4097],
+                "hasNext": true,
+                "nextCursor": "never-fetched"
+            }
+        });
+        let server =
+            ScriptedHttpServer::start(vec![issued(), reply("200 OK", &page)]).expect("srv");
+        let clock = FixedClock::at("2026-03-28T15:30:00+09:00");
+        let reader = adapter_with(&server, clock, crate::support::time(), default_master());
+        let window = day_window("2026-03-28T09:00:00+09:00", "2026-03-28T15:00:00+09:00");
+        let stopped = run(reader.closed_orders(&AccountId::new(413), window)).expect("row limit");
+        assert_eq!(
+            stopped.completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
+        );
+        assert!(stopped.orders().is_empty());
+        let wire = String::from_utf8(server.finish().expect("finish")).expect("utf8");
+        assert!(!wire.contains("cursor=never-fetched"));
+    }
+
+    #[test]
     fn closed_orders_rejects_schema_only_page() {
         let bad_schema = json!({"result": {"orders": [{"orderId": 123_i32}], "nextCursor": null, "hasNext": false}});
         let server =
