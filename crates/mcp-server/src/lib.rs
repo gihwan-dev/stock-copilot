@@ -1,10 +1,17 @@
 mod handler;
+mod pagination;
 mod peer;
 mod server;
 mod socket;
 mod token;
+mod tools;
 
 pub use handler::{ConnectionEvent, ConnectionRejection};
+pub use pagination::{
+    CursorStore, DEFAULT_CURSOR_TTL_SECS, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_STORED_CURSORS,
+    MAX_TOOL_RESPONSE_CHARS, OpaqueCursor, PageLimit, PageRequest, PaginationContext,
+    paginate_items,
+};
 pub use peer::{PeerInspectorMode, PeerVerificationFailure, UserId, VerifiedPeer};
 pub use server::{
     DEFAULT_AUTH_TIMEOUT_SECS, DEFAULT_MAX_CONCURRENT_CONNECTIONS,
@@ -20,4 +27,10 @@ pub use token::{
     AUTH_LINE_PREFIX, AuthLineLimit, AuthRejection, DEFAULT_MAX_AUTH_LINE_BYTES,
     DEFAULT_TOKEN_TTL_SECONDS, MAX_AUTH_LINE_BYTES_CAP, MAX_TOKEN_TTL_SECONDS, MIN_AUTH_LINE_BYTES,
     RunAuthToken, TOKEN_HEX_BYTES, TOKEN_RANDOM_BYTES, TokenError, TokenTtl,
+};
+pub use tools::{
+    MAX_TOOL_ERROR_CHARS, McpTool, RetryPolicy, ToolAccessKind, ToolErrorCode, ToolErrorPayload,
+    ToolFuture, ToolInvocation, ToolLedgerMode, ToolRegistry, ToolRegistryError, ToolSpec,
+    UnconfiguredToolLedger, build_object_schema, make_cursor_store,
+    validate_arguments_against_schema,
 };

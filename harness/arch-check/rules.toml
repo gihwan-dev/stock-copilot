@@ -517,8 +517,20 @@ reason = "M-01: rmcp =3.9.0(server, transport-async-rw)이 tokio·schemars·serd
 [[external-location-exception]]
 crates = ["mcp-server"]
 externals = ["syn", "proc-macro2"]
+through = "serde"
+reason = "M-02: MCP 도구 입력·출력 직렬화(deny_unknown_fields)의 serde derive 절차 매크로 경로"
+
+[[external-location-exception]]
+crates = ["mcp-server"]
+externals = ["syn", "proc-macro2"]
 through = "serde_json"
-reason = "M-01: 개발 의존 serde_json이 작업 공간 serde derive 기능 통합으로 연결하는 syn·proc-macro2 절차 매크로 경로"
+reason = "M-01/M-02: MCP 도구 스키마·응답 직렬화 serde_json이 작업 공간 serde derive 기능 통합으로 연결하는 syn·proc-macro2 절차 매크로 경로"
+
+[[external-location-exception]]
+crates = ["mcp-server"]
+externals = ["syn", "proc-macro2"]
+through = "proptest"
+reason = "M-05: MCP 무작위 입력 주문 0건 고정 속성 테스트의 개발 의존 proptest 절차 매크로 경로"
 
 [[external-location-exception]]
 crates = ["ai-claude-code", "ai-codex"]
