@@ -127,6 +127,7 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/IconButton.tsx src/shared/ds/IconButton.tsx",
   "files src/shared/ds/Numbers.stories.tsx src/shared/ds/Numbers.stories.tsx",
   "files src/shared/ds/Numbers.tsx src/shared/ds/Numbers.tsx",
+  "files src/shared/ds/ScrollArea.tsx src/shared/ds/ScrollArea.tsx",
   "files src/shared/ds/SegmentedControl.stories.tsx src/shared/ds/SegmentedControl.stories.tsx",
   "files src/shared/ds/SegmentedControl.tsx src/shared/ds/SegmentedControl.tsx",
   "files src/shared/ds/Select.stories.tsx src/shared/ds/Select.stories.tsx",

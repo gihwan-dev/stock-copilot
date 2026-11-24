@@ -2,7 +2,7 @@ import { useState, type ReactElement } from "react";
 import { Checkbox as Base } from "@base-ui/react/checkbox";
 import type { UiText } from "../lib";
 import type { Availability } from "./control-types";
-import { Icon } from "./Icon";
+import { CheckMark } from "./Icon";
 type State = "unchecked" | "checked";
 type Props = {
   readonly label: UiText;
@@ -32,8 +32,8 @@ const control = (data: Control): ReactElement => {
         }}
         className="inline-grid place-items-center size-icon-sm rounded-sm border-hairline border-solid bg-primary border-primary cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus disabled:opacity-disabled disabled:cursor-not-allowed"
       >
-        <Base.Indicator>
-          <Icon name="check" />
+        <Base.Indicator className="inline-flex items-center justify-center">
+          <CheckMark />
         </Base.Indicator>
       </Base.Root>
     );
@@ -50,8 +50,8 @@ const control = (data: Control): ReactElement => {
       }}
       className="inline-grid place-items-center size-icon-sm rounded-sm border-hairline border-solid bg-surface border-line-strong cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus disabled:opacity-disabled disabled:cursor-not-allowed"
     >
-      <Base.Indicator>
-        <Icon name="check" />
+      <Base.Indicator className="inline-flex items-center justify-center">
+        <CheckMark />
       </Base.Indicator>
     </Base.Root>
   );

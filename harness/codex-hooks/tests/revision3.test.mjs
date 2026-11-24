@@ -116,8 +116,13 @@ test("R3 remote and local launch branches must match a valid brief branch", () =
           ", 브랜치 " +
           String.fromCharCode(96) +
           briefBranch +
-          String.fromCharCode(96),
-        modelSelection: { provider: "codex", model: "gpt-6.1-sol" },
+          String.fromCharCode(96) +
+          "\n- 역할: implementation",
+        modelSelection: {
+          provider: "antigravity",
+          model: "gemini-4-neon",
+          options: { thought_level: "xhigh" },
+        },
         workspaceStrategy: {
           type: "worktree",
           branch,

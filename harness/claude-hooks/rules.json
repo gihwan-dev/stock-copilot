@@ -116,6 +116,11 @@
       "GIT_COMMON_DIR",
       "GIT_EXEC_PATH",
       "GIT_TEMPLATE_DIR",
+      "GIT_SSH",
+      "GIT_SSH_COMMAND",
+      "GIT_PROXY_COMMAND",
+      "GIT_ASKPASS",
+      "GIT_GRAFT_FILE",
       "RUSTFLAGS",
       "CARGO_ENCODED_RUSTFLAGS",
       "CARGO_BUILD_RUSTFLAGS",
@@ -179,7 +184,9 @@
       "revert",
       "pull",
       "symbolic-ref",
-      "send-pack"
+      "send-pack",
+      "http-push",
+      "receive-pack"
     ],
     "options": [
       {
@@ -252,9 +259,14 @@
     ],
     "abortable": ["merge", "rebase", "cherry-pick", "revert"],
     "implementerMerge": {
-      "branches": ["master"],
+      "branches": ["master", "origin/master"],
       "options": ["--no-ff", "--no-edit"]
     },
+    "implementerPush": {
+      "remotes": ["origin"]
+    },
+    "remoteReadOnly": ["show", "get-url"],
+    "worktreeReadOnly": ["list"],
     "subagentOptions": [
       {
         "rule": "git-index-only",
@@ -271,7 +283,7 @@
       {
         "rule": "git-history",
         "subcommands": ["fetch"],
-        "long": ["--update-head-ok"],
+        "long": ["--update-head-ok", "--refmap"],
         "short": ["u"]
       },
       {
@@ -285,10 +297,16 @@
         "subcommands": ["switch"],
         "long": ["--force-create"],
         "short": ["C"]
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["branch"],
+        "long": ["--move", "--copy"],
+        "short": ["m", "M", "c", "C"]
       }
     ],
     "forcedBranch": {
-      "options": ["-f", "--force", "-M", "-D", "-C"],
+      "options": ["-f", "--force", "-m", "--move", "-M", "-D", "-C"],
       "branches": ["master", "main"]
     },
     "fetchRefspec": true,

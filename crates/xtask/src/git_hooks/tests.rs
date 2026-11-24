@@ -932,7 +932,7 @@ fn check_ends_with_the_new_disables_and_the_hook_installation() {
         recipe("push-check"),
         [
             "push-check:",
-            "base=\"$(cargo run --locked --quiet --package xtask -- push-base)\"; \"{{ just_executable() }}\" base=\"$base\" check-full"
+            "cargo run --locked --quiet --package xtask -- push-check \"{{ just_executable() }}\""
         ],
         "push-check recipe"
     );

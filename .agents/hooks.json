@@ -1,0 +1,35 @@
+{
+  "stock-copilot-harness": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'if common=$(/usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git rev-parse --path-format=absolute --git-common-dir); then main_root=\"${common%/*}\"; target=\"$main_root/harness/antigravity-hooks/dispatch.mjs\"; if [ ! -f \"$target\" ] && ! /usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git -C \"$main_root\" cat-file -e HEAD:harness/antigravity-hooks/dispatch.mjs 2>/dev/null && [ -f \"../harness/antigravity-hooks/dispatch.mjs\" ]; then target=\"../harness/antigravity-hooks/dispatch.mjs\"; fi; if [ -f \"$target\" ]; then if result=$(node \"$target\" '\\''PreToolUse'\\''); then if [ -n \"$result\" ]; then printf '\\''%s\\n'\\'' \"$result\"; exit 0; fi; fi; fi; fi; printf '\\''%s\\n'\\'' '\\''{\"decision\":\"deny\",\"reason\":\"Antigravity 하네스 시작 실패: Git 또는 Node를 확인하라\"}'\\''; printf '\\''%s\\n'\\'' '\\''Antigravity 하네스 시작 실패: Git 또는 Node를 확인하라'\\'' >&2; exit 0'",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'if common=$(/usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git rev-parse --path-format=absolute --git-common-dir); then main_root=\"${common%/*}\"; target=\"$main_root/harness/antigravity-hooks/dispatch.mjs\"; if [ ! -f \"$target\" ] && ! /usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git -C \"$main_root\" cat-file -e HEAD:harness/antigravity-hooks/dispatch.mjs 2>/dev/null && [ -f \"../harness/antigravity-hooks/dispatch.mjs\" ]; then target=\"../harness/antigravity-hooks/dispatch.mjs\"; fi; if [ -f \"$target\" ]; then if result=$(node \"$target\" '\\''PostToolUse'\\''); then if [ -n \"$result\" ]; then printf '\\''%s\\n'\\'' \"$result\"; exit 0; fi; fi; fi; fi; printf '\\''%s\\n'\\'' '\\''{}'\\''; printf '\\''%s\\n'\\'' '\\''Antigravity 하네스 시작 실패: Git 또는 Node를 확인하라'\\'' >&2; exit 0'",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "/bin/sh -c 'if common=$(/usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git rev-parse --path-format=absolute --git-common-dir); then main_root=\"${common%/*}\"; target=\"$main_root/harness/antigravity-hooks/dispatch.mjs\"; if [ ! -f \"$target\" ] && ! /usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git -C \"$main_root\" cat-file -e HEAD:harness/antigravity-hooks/dispatch.mjs 2>/dev/null && [ -f \"../harness/antigravity-hooks/dispatch.mjs\" ]; then target=\"../harness/antigravity-hooks/dispatch.mjs\"; fi; if [ -f \"$target\" ]; then if result=$(node \"$target\" '\\''Stop'\\''); then if [ -n \"$result\" ]; then printf '\\''%s\\n'\\'' \"$result\"; exit 0; fi; fi; fi; fi; printf '\\''%s\\n'\\'' '\\''{\"decision\":\"continue\",\"reason\":\"Antigravity 하네스 시작 실패: Git 또는 Node를 확인하라\"}'\\''; printf '\\''%s\\n'\\'' '\\''Antigravity 하네스 시작 실패: Git 또는 Node를 확인하라'\\'' >&2; exit 0'",
+        "timeout": 120
+      }
+    ]
+  }
+}
