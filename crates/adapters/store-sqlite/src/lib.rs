@@ -189,3 +189,8 @@ mod chat;
 pub use chat::ChatStore;
 #[cfg(test)]
 mod chat_tests;
+
+mod settings;
+pub use settings::{SettingsStore, TossSpecHash, TossSpecHashError};
+#[cfg(test)]
+mod settings_tests;
