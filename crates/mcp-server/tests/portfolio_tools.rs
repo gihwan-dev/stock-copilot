@@ -340,9 +340,15 @@ mod tests {
                 FixedPortfolioToolReads::default()
                     .with_performance(Ok(Some(performance_view(SampleSufficiency::Sufficient)))),
             ));
-            let full = call(&enough, "get_performance", json!({}))
+            assert_eq!(
+                call(&enough, "get_performance", json!({})).await,
+                Err(ToolErrorCode::UpstreamUnavailable),
+                "요청한 기간과 다른 저장 결과는 내보내지 않는다"
+            );
+            let full = call(&enough, "get_performance", json!({ "period": "3m" }))
                 .await
                 .expect("성공");
+            assert_eq!(full["period"], json!("3m"));
             assert_eq!(full["sample"], json!("sufficient"));
             assert_eq!(full["risk"]["max_drawdown"], json!("-0.08"));
             assert_eq!(
