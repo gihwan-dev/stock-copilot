@@ -36,6 +36,8 @@ use testkit_ports::{
             concurrent_cross_id_same_next_link_has_one_winner,
             concurrent_double_link_correction_has_one_winner,
             concurrent_double_retirement_correction_has_one_winner,
+            concurrent_link_and_ensure_next_has_one_winner,
+            concurrent_link_and_ensure_overlapping_next_has_one_winner,
             concurrent_link_and_retire_serializes_cleanly,
             concurrent_link_correction_vs_chained_link_serializes_cleanly,
             concurrent_same_previous_link_has_one_winner,
@@ -369,6 +371,16 @@ fn sqlite_store_passes_all_seven_two_connection_correction_races_and_reopen() {
     });
     run_sqlite_race(|left, right, rt| {
         concurrent_link_correction_vs_chained_link_serializes_cleanly(left, right, rt);
+    });
+}
+
+#[test]
+fn sqlite_store_passes_two_connection_link_and_ensure_races_and_reopen() {
+    run_sqlite_race(|left, right, rt| {
+        concurrent_link_and_ensure_next_has_one_winner(left, right, rt);
+    });
+    run_sqlite_race(|left, right, rt| {
+        concurrent_link_and_ensure_overlapping_next_has_one_winner(left, right, rt);
     });
 }
 

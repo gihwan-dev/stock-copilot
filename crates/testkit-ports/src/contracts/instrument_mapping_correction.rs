@@ -102,24 +102,30 @@ fn sec_disclosure(raw: &str) -> Option<DisclosureKey> {
         .map(|value| DisclosureKey::from_receipt(ReceiptNo::SecEdgar(value)))
 }
 
+fn assert_ok<T, E>(res: Result<T, E>, label: &str) -> Option<T> {
+    assert!(res.is_ok(), "{label}");
+    res.ok()
+}
+
 fn symbol_action(
     id: &InstrumentId,
     cal: CalendarDate,
     from: &str,
     to: &str,
 ) -> Option<CorporateAction> {
-    let from_sym = Symbol::try_new(from).ok()?;
-    let to_sym = Symbol::try_new(to).ok()?;
-    let action = CorporateAction::try_new(
-        CorporateActionId::new(id.clone()),
-        cal,
-        CorporateActionKind::SymbolChange {
-            from: from_sym,
-            to: to_sym,
-        },
-    );
-    assert!(action.is_ok(), "심볼 변경 기업행위 유효");
-    action.ok()
+    let from_sym = assert_ok(Symbol::try_new(from), "이전 심볼 유효")?;
+    let to_sym = assert_ok(Symbol::try_new(to), "이후 심볼 유효")?;
+    assert_ok(
+        CorporateAction::try_new(
+            CorporateActionId::new(id.clone()),
+            cal,
+            CorporateActionKind::SymbolChange {
+                from: from_sym,
+                to: to_sym,
+            },
+        ),
+        "심볼 변경 기업행위 유효",
+    )
 }
 
 fn split_action(
@@ -129,16 +135,17 @@ fn split_action(
     new_shares: u64,
 ) -> Option<CorporateAction> {
     let ratio = ShareRatio::new(
-        ShareCount::try_new(old_shares).ok()?,
-        ShareCount::try_new(new_shares).ok()?,
+        assert_ok(ShareCount::try_new(old_shares), "분할 이전 주수 유효")?,
+        assert_ok(ShareCount::try_new(new_shares), "분할 이후 주수 유효")?,
     );
-    let action = CorporateAction::try_new(
-        CorporateActionId::new(id.clone()),
-        cal,
-        CorporateActionKind::Split(ratio),
-    );
-    assert!(action.is_ok(), "분할 기업행위 유효");
-    action.ok()
+    assert_ok(
+        CorporateAction::try_new(
+            CorporateActionId::new(id.clone()),
+            cal,
+            CorporateActionKind::Split(ratio),
+        ),
+        "분할 기업행위 유효",
+    )
 }
 
 fn reverse_split_action(
@@ -148,16 +155,17 @@ fn reverse_split_action(
     new_shares: u64,
 ) -> Option<CorporateAction> {
     let ratio = ShareRatio::new(
-        ShareCount::try_new(old_shares).ok()?,
-        ShareCount::try_new(new_shares).ok()?,
+        assert_ok(ShareCount::try_new(old_shares), "병합 이전 주수 유효")?,
+        assert_ok(ShareCount::try_new(new_shares), "병합 이후 주수 유효")?,
     );
-    let action = CorporateAction::try_new(
-        CorporateActionId::new(id.clone()),
-        cal,
-        CorporateActionKind::ReverseSplit(ratio),
-    );
-    assert!(action.is_ok(), "병합 기업행위 유효");
-    action.ok()
+    assert_ok(
+        CorporateAction::try_new(
+            CorporateActionId::new(id.clone()),
+            cal,
+            CorporateActionKind::ReverseSplit(ratio),
+        ),
+        "병합 기업행위 유효",
+    )
 }
 
 fn kind_action(
@@ -165,34 +173,39 @@ fn kind_action(
     cal: CalendarDate,
     kind: CorporateActionKind,
 ) -> Option<CorporateAction> {
-    let action = CorporateAction::try_new(CorporateActionId::new(id.clone()), cal, kind);
-    assert!(action.is_ok(), "기업행위 유효");
-    action.ok()
+    assert_ok(
+        CorporateAction::try_new(CorporateActionId::new(id.clone()), cal, kind),
+        "기업행위 유효",
+    )
 }
 
 fn sample_receipt_transaction(cal: CalendarDate, symbol: &str, isin: &str) -> Option<Transaction> {
-    let zero = Money::parse(&NumericInput::try_new("0").ok()?, Currency::Krw).ok()?;
-    let receipt_tx = Transaction::try_new(TransactionData {
-        kind: TransactionKind::Buy,
-        market: Market::Kr,
-        currency: Currency::Krw,
-        symbol: Some(Symbol::try_new(symbol).ok()?),
-        asset_class: None,
-        isin: Some(IsinCode::try_new(isin).ok()?),
-        quantity: None,
-        filled_price: None,
-        amount: None,
-        commission: zero,
-        tax: zero,
-        net_amount: None,
-        exchange_rate: None,
-        settlement_date: cal,
-        settlement: Settlement::Settled,
-        transaction_time: None,
-        cancellation: Cancellation::Regular,
-    });
-    assert!(receipt_tx.is_ok(), "첨부 거래 유효");
-    receipt_tx.ok()
+    let raw_zero = assert_ok(NumericInput::try_new("0"), "0 금액 입력 유효")?;
+    let zero = assert_ok(Money::parse(&raw_zero, Currency::Krw), "0원 유효")?;
+    let parsed_symbol = assert_ok(Symbol::try_new(symbol), "첨부 거래 심볼 유효")?;
+    let parsed_isin = assert_ok(IsinCode::try_new(isin), "첨부 거래 ISIN 유효")?;
+    assert_ok(
+        Transaction::try_new(TransactionData {
+            kind: TransactionKind::Buy,
+            market: Market::Kr,
+            currency: Currency::Krw,
+            symbol: Some(parsed_symbol),
+            asset_class: None,
+            isin: Some(parsed_isin),
+            quantity: None,
+            filled_price: None,
+            amount: None,
+            commission: zero,
+            tax: zero,
+            net_amount: None,
+            exchange_rate: None,
+            settlement_date: cal,
+            settlement: Settlement::Settled,
+            transaction_time: None,
+            cancellation: Cancellation::Regular,
+        }),
+        "첨부 거래 유효",
+    )
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -733,9 +746,14 @@ fn build_bad_actions(
     witness: &ContractWitness,
     cal: CalendarDate,
 ) -> Option<[(CorporateAction, MappingTransitionError); 7]> {
-    let with_receipt = split_action(&witness.us_id, cal, 1, 2)?
-        .with_receipt(sample_receipt_transaction(cal, "005930", "KR7005930003")?)
-        .ok()?;
+    let with_receipt = assert_ok(
+        split_action(&witness.us_id, cal, 1, 2)?.with_receipt(sample_receipt_transaction(
+            cal,
+            "005930",
+            "KR7005930003",
+        )?),
+        "첨부 거래 결합 유효",
+    )?;
     Some([
         (
             split_action(&witness.kr_id, cal, 1, 2)?,
@@ -1486,34 +1504,33 @@ where
     Some(())
 }
 
+async fn run_correction_lifecycle_inner<P>(repo: &P) -> Option<()>
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+{
+    let mut witness = seed_and_verify_link_chains(repo).await?;
+    verify_link_origin_and_incomplete_evidence(repo, &witness).await?;
+    verify_link_bad_actions(repo, &witness).await?;
+    verify_link_conflict_rejections(repo, &witness).await?;
+    verify_retirement_correction_and_re_retire(repo, &mut witness).await?;
+    verify_link_correction_rejections(repo, &witness).await?;
+    verify_link_correction_unwind_two_hops(repo, &mut witness).await?;
+    verify_disjoint_unlink_reuse_and_relink(repo, &mut witness).await
+}
+
 pub async fn correction_lifecycle_and_conflict_rules_contract<P>(repo: &P)
 where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
 {
-    let Some(mut witness) = seed_and_verify_link_chains(repo).await else {
-        return;
-    };
-    let Some(()) = verify_link_origin_and_incomplete_evidence(repo, &witness).await else {
-        return;
-    };
-    let Some(()) = verify_link_bad_actions(repo, &witness).await else {
-        return;
-    };
-    let Some(()) = verify_link_conflict_rejections(repo, &witness).await else {
-        return;
-    };
-    let Some(()) = verify_retirement_correction_and_re_retire(repo, &mut witness).await else {
-        return;
-    };
-    let Some(()) = verify_link_correction_rejections(repo, &witness).await else {
-        return;
-    };
-    let Some(()) = verify_link_correction_unwind_two_hops(repo, &mut witness).await else {
-        return;
-    };
-    let _done = verify_disjoint_unlink_reuse_and_relink(repo, &mut witness).await;
+    let completed = run_correction_lifecycle_inner(repo).await;
+    assert!(
+        completed.is_some(),
+        "정정 생명주기·충돌 계약의 모든 단계가 완료되어야 함"
+    );
 }
 
 struct UnpolledSeed {
@@ -1654,22 +1671,18 @@ where
     Some(())
 }
 
-pub async fn unpolled_correction_writes_do_not_mutate_contract<P>(repo: &P)
+async fn run_unpolled_correction_inner<P>(repo: &P) -> Option<()>
 where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
 {
-    let (Some(first), Some(second), Some(cand), Some(disc), Some(note), Some(stamp)) = (
-        parse_source(KnownMarket::Us, "FB", "US30303M1027"),
-        parse_source(KnownMarket::Us, "META", "US30303M1027"),
-        issue_slot(0),
-        sec_disclosure("0001326801-26-000201"),
-        parse_reason("미폴링 확인"),
-        parse_ts(1_764_001_000, 0, 0),
-    ) else {
-        return;
-    };
+    let first = parse_source(KnownMarket::Us, "FB", "US30303M1027")?;
+    let second = parse_source(KnownMarket::Us, "META", "US30303M1027")?;
+    let cand = issue_slot(0)?;
+    let disc = sec_disclosure("0001326801-26-000201")?;
+    let note = parse_reason("미폴링 확인")?;
+    let stamp = parse_ts(1_764_001_000, 0, 0)?;
     let id = cand.as_instrument_id().clone();
     assert_eq!(
         repo.ensure(&first, cand).await,
@@ -1684,10 +1697,21 @@ where
         note,
         stamp,
     };
-    let Some(act) = check_unpolled_link_and_retire(repo, &seed).await else {
-        return;
-    };
-    let _done = check_unpolled_link_correction(repo, seed, act).await;
+    let act = check_unpolled_link_and_retire(repo, &seed).await?;
+    check_unpolled_link_correction(repo, seed, act).await
+}
+
+pub async fn unpolled_correction_writes_do_not_mutate_contract<P>(repo: &P)
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+{
+    let completed = run_unpolled_correction_inner(repo).await;
+    assert!(
+        completed.is_some(),
+        "미폴링 정정 쓰기 계약의 모든 단계가 완료되어야 함"
+    );
 }
 
 fn race_pair<L, R, A, B>(left_job: L, right_job: R) -> Option<(A, B)>
@@ -1877,26 +1901,20 @@ where
     Some(id)
 }
 
-pub fn concurrent_same_previous_link_has_one_winner<P, R>(left: &P, right: &P, runtime: &R)
+fn run_same_previous_link_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
 where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
     R: ContractRuntime,
 {
-    let (Some(origin_src), Some(target_a), Some(target_b), Some(disc), Some(note), Some(stamp)) = (
-        parse_source(KnownMarket::Us, "FB", "US30303M1027"),
-        parse_source(KnownMarket::Us, "META", "US30303M1027"),
-        parse_source(KnownMarket::Us, "METB", "US30303M1027"),
-        sec_disclosure("0001326801-26-000301"),
-        parse_reason("동시 연결 경쟁"),
-        parse_ts(1_764_002_000, 0, 0),
-    ) else {
-        return;
-    };
-    let Some(id) = seed_one_instrument(left, runtime, &origin_src) else {
-        return;
-    };
+    let origin_src = parse_source(KnownMarket::Us, "FB", "US30303M1027")?;
+    let target_a = parse_source(KnownMarket::Us, "META", "US30303M1027")?;
+    let target_b = parse_source(KnownMarket::Us, "METB", "US30303M1027")?;
+    let disc = sec_disclosure("0001326801-26-000301")?;
+    let note = parse_reason("동시 연결 경쟁")?;
+    let stamp = parse_ts(1_764_002_000, 0, 0)?;
+    let id = seed_one_instrument(left, runtime, &origin_src)?;
     let left_spec = SplitChangeSpec {
         id: &id,
         previous: &origin_src,
@@ -1913,11 +1931,8 @@ where
         note,
         stamp,
     };
-    let Some((first_outcome, second_outcome)) =
-        race_two_links(left, right, runtime, (left_spec, right_spec))
-    else {
-        return;
-    };
+    let (first_outcome, second_outcome) =
+        race_two_links(left, right, runtime, (left_spec, right_spec))?;
     let loser = Err(tr_err(MappingTransitionError::SourceNotActive));
     let winner = if first_outcome == Ok(id.clone()) && second_outcome == loser {
         Some(target_a)
@@ -1930,31 +1945,38 @@ where
         );
         None
     };
-    if let Some(winner_src) = winner {
-        assert_single_link_winner(left, right, runtime, &winner_src, &id);
-    }
+    let winner_src = winner?;
+    assert_single_link_winner(left, right, runtime, &winner_src, &id);
+    Some(())
 }
 
-pub fn concurrent_cross_id_same_next_link_has_one_winner<P, R>(left: &P, right: &P, runtime: &R)
+pub fn concurrent_same_previous_link_has_one_winner<P, R>(left: &P, right: &P, runtime: &R)
 where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
     R: ContractRuntime,
 {
-    let (Some(first_src), Some(second_src), Some(shared_next), Some(disc), Some(note), Some(stamp)) = (
-        parse_source(KnownMarket::Us, "AAA", "US0000000101"),
-        parse_source(KnownMarket::Us, "BBB", "US0000000102"),
-        parse_source(KnownMarket::Us, "TGT", "US0000000199"),
-        sec_disclosure("0001326801-26-000302"),
-        parse_reason("타 ID 동일 대상 경쟁"),
-        parse_ts(1_764_002_010, 0, 0),
-    ) else {
-        return;
-    };
-    let Some((id_a, id_b)) = seed_two_instruments(left, runtime, &first_src, &second_src) else {
-        return;
-    };
+    assert!(
+        run_same_previous_link_race(left, right, runtime).is_some(),
+        "동일 이전 원본 동시 연결 경쟁 계약 완료"
+    );
+}
+
+fn run_cross_id_same_next_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    let first_src = parse_source(KnownMarket::Us, "AAA", "US0000000101")?;
+    let second_src = parse_source(KnownMarket::Us, "BBB", "US0000000102")?;
+    let shared_next = parse_source(KnownMarket::Us, "TGT", "US0000000199")?;
+    let disc = sec_disclosure("0001326801-26-000302")?;
+    let note = parse_reason("타 ID 동일 대상 경쟁")?;
+    let stamp = parse_ts(1_764_002_010, 0, 0)?;
+    let (id_a, id_b) = seed_two_instruments(left, runtime, &first_src, &second_src)?;
     let left_spec = SplitChangeSpec {
         id: &id_a,
         previous: &first_src,
@@ -1971,11 +1993,8 @@ where
         note,
         stamp,
     };
-    let Some((first_outcome, second_outcome)) =
-        race_two_links(left, right, runtime, (left_spec, right_spec))
-    else {
-        return;
-    };
+    let (first_outcome, second_outcome) =
+        race_two_links(left, right, runtime, (left_spec, right_spec))?;
     let loser = Err(tr_err(MappingTransitionError::SourceBoundToOtherId));
     let winner_id = if first_outcome == Ok(id_a.clone()) && second_outcome == loser {
         Some(id_a)
@@ -1988,44 +2007,39 @@ where
         );
         None
     };
-    if let Some(winner) = winner_id {
-        assert_single_link_winner(left, right, runtime, &shared_next, &winner);
-    }
+    let winner = winner_id?;
+    assert_single_link_winner(left, right, runtime, &shared_next, &winner);
+    Some(())
 }
 
-pub fn concurrent_cross_id_overlapping_next_link_has_one_winner<P, R>(
-    left: &P,
-    right: &P,
-    runtime: &R,
-) where
+pub fn concurrent_cross_id_same_next_link_has_one_winner<P, R>(left: &P, right: &P, runtime: &R)
+where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
     R: ContractRuntime,
 {
-    let (
-        Some(first_src),
-        Some(second_src),
-        Some(next_a),
-        Some(next_b),
-        Some(disc),
-        Some(note),
-        Some(stamp),
-    ) = (
-        parse_source(KnownMarket::Us, "AAA", "US0000000201"),
-        parse_source(KnownMarket::Us, "BBB", "US0000000202"),
-        parse_source(KnownMarket::Us, "OVLP", "US0000000291"),
-        parse_source(KnownMarket::Us, "ovlp", "US0000000292"),
-        sec_disclosure("0001326801-26-000303"),
-        parse_reason("타 ID 부분 겹침 경쟁"),
-        parse_ts(1_764_002_020, 0, 0),
-    )
-    else {
-        return;
-    };
-    let Some((id_a, id_b)) = seed_two_instruments(left, runtime, &first_src, &second_src) else {
-        return;
-    };
+    assert!(
+        run_cross_id_same_next_race(left, right, runtime).is_some(),
+        "타 ID 동일 대상 경쟁 계약 완료"
+    );
+}
+
+fn run_cross_id_overlap_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    let first_src = parse_source(KnownMarket::Us, "AAA", "US0000000201")?;
+    let second_src = parse_source(KnownMarket::Us, "BBB", "US0000000202")?;
+    let next_a = parse_source(KnownMarket::Us, "OVLP", "US0000000291")?;
+    let next_b = parse_source(KnownMarket::Us, "ovlp", "US0000000292")?;
+    let disc = sec_disclosure("0001326801-26-000303")?;
+    let note = parse_reason("타 ID 부분 겹침 경쟁")?;
+    let stamp = parse_ts(1_764_002_020, 0, 0)?;
+    let (id_a, id_b) = seed_two_instruments(left, runtime, &first_src, &second_src)?;
     let left_spec = SplitChangeSpec {
         id: &id_a,
         previous: &first_src,
@@ -2042,11 +2056,8 @@ pub fn concurrent_cross_id_overlapping_next_link_has_one_winner<P, R>(
         note,
         stamp,
     };
-    let Some((first_outcome, second_outcome)) =
-        race_two_links(left, right, runtime, (left_spec, right_spec))
-    else {
-        return;
-    };
+    let (first_outcome, second_outcome) =
+        race_two_links(left, right, runtime, (left_spec, right_spec))?;
     let loser = Err(tr_err(MappingTransitionError::IdentityUncertain));
     let winner = if first_outcome == Ok(id_a.clone()) && second_outcome == loser {
         Some((next_a, id_a))
@@ -2059,9 +2070,25 @@ pub fn concurrent_cross_id_overlapping_next_link_has_one_winner<P, R>(
         );
         None
     };
-    if let Some((winner_src, winner_id)) = winner {
-        assert_single_link_winner(left, right, runtime, &winner_src, &winner_id);
-    }
+    let (winner_src, winner_id) = winner?;
+    assert_single_link_winner(left, right, runtime, &winner_src, &winner_id);
+    Some(())
+}
+
+pub fn concurrent_cross_id_overlapping_next_link_has_one_winner<P, R>(
+    left: &P,
+    right: &P,
+    runtime: &R,
+) where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    assert!(
+        run_cross_id_overlap_race(left, right, runtime).is_some(),
+        "타 ID 부분 겹침 경쟁 계약 완료"
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -2108,30 +2135,20 @@ fn assert_link_vs_retire_state<P, R>(
     }
 }
 
-pub fn concurrent_link_and_retire_serializes_cleanly<P, R>(left: &P, right: &P, runtime: &R)
+fn run_link_and_retire_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
 where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
     R: ContractRuntime,
 {
-    let (Some(first_src), Some(next_src), Some(cand), Some(disc), Some(note), Some(stamp)) = (
-        parse_source(KnownMarket::Kr, "005930", "KR7005930003"),
-        parse_source(KnownMarket::Kr, "005931", "KR7005930003"),
-        issue_slot(0),
-        dart_disclosure("20261111000304"),
-        parse_reason("연결 대 폐지 경쟁"),
-        parse_ts(1_764_002_030, 0, 32_400),
-    ) else {
-        return;
-    };
-    let id = cand.as_instrument_id().clone();
-    assert_eq!(
-        runtime.block_on(left.ensure(&first_src, cand)),
-        Ok(MappingAssignment::Issued(id.clone())),
-        "초기 등록"
-    );
-    let Some(req) = build_split_change(
+    let first_src = parse_source(KnownMarket::Kr, "005930", "KR7005930003")?;
+    let next_src = parse_source(KnownMarket::Kr, "005931", "KR7005930003")?;
+    let disc = dart_disclosure("20261111000304")?;
+    let note = parse_reason("연결 대 폐지 경쟁")?;
+    let stamp = parse_ts(1_764_002_030, 0, 32_400)?;
+    let id = seed_one_instrument(left, runtime, &first_src)?;
+    let req = build_split_change(
         runtime,
         SplitChangeSpec {
             id: &id,
@@ -2141,10 +2158,8 @@ where
             note,
             stamp,
         },
-    ) else {
-        return;
-    };
-    let Some((link_outcome, retire_outcome)) = race_pair(
+    )?;
+    let (link_outcome, retire_outcome) = race_pair(
         |barrier| {
             barrier.wait();
             runtime.block_on(left.link_confirmed_change(req))
@@ -2153,9 +2168,7 @@ where
             barrier.wait();
             runtime.block_on(right.retire(&first_src))
         },
-    ) else {
-        return;
-    };
+    )?;
     let link_won = link_outcome == Ok(id.clone())
         && retire_outcome == Err(map_err(InstrumentMappingError::Superseded));
     let retire_won = link_outcome == Err(tr_err(MappingTransitionError::SourceNotActive))
@@ -2170,33 +2183,34 @@ where
         LinkOrRetireWinner::Retire
     };
     assert_link_vs_retire_state(left, runtime, &id, (&first_src, &next_src), winner);
+    Some(())
 }
 
-pub fn concurrent_double_retirement_correction_has_one_winner<P, R>(
-    left: &P,
-    right: &P,
-    runtime: &R,
-) where
+pub fn concurrent_link_and_retire_serializes_cleanly<P, R>(left: &P, right: &P, runtime: &R)
+where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
     R: ContractRuntime,
 {
-    let (Some(target_src), Some(cand), Some(disc), Some(note), Some(stamp)) = (
-        parse_source(KnownMarket::Kr, "005930", "KR7005930003"),
-        issue_slot(0),
-        dart_disclosure("20261111000305"),
-        parse_reason("이중 폐지 정정 경쟁"),
-        parse_ts(1_764_002_040, 0, 32_400),
-    ) else {
-        return;
-    };
-    let id = cand.as_instrument_id().clone();
-    assert_eq!(
-        runtime.block_on(left.ensure(&target_src, cand)),
-        Ok(MappingAssignment::Issued(id.clone())),
-        "초기 등록"
+    assert!(
+        run_link_and_retire_race(left, right, runtime).is_some(),
+        "연결 대 폐지 경쟁 계약 완료"
     );
+}
+
+fn run_double_retirement_corr_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    let target_src = parse_source(KnownMarket::Kr, "005930", "KR7005930003")?;
+    let disc = dart_disclosure("20261111000305")?;
+    let note = parse_reason("이중 폐지 정정 경쟁")?;
+    let stamp = parse_ts(1_764_002_040, 0, 32_400)?;
+    let id = seed_one_instrument(left, runtime, &target_src)?;
     assert_eq!(
         runtime.block_on(left.retire(&target_src)),
         Ok(id.clone()),
@@ -2206,13 +2220,9 @@ pub fn concurrent_double_retirement_correction_has_one_winner<P, R>(
         disclosure: disc,
         note,
     };
-    let (Some(first_req), Some(second_req)) = (
-        runtime.block_on(confirm_retire_corr(&id, &target_src, ev.clone(), stamp)),
-        runtime.block_on(confirm_retire_corr(&id, &target_src, ev, stamp)),
-    ) else {
-        return;
-    };
-    let Some((first_outcome, second_outcome)) = race_pair(
+    let first_req = runtime.block_on(confirm_retire_corr(&id, &target_src, ev.clone(), stamp))?;
+    let second_req = runtime.block_on(confirm_retire_corr(&id, &target_src, ev, stamp))?;
+    let (first_outcome, second_outcome) = race_pair(
         |barrier| {
             barrier.wait();
             runtime.block_on(left.correct_retirement(first_req))
@@ -2221,9 +2231,7 @@ pub fn concurrent_double_retirement_correction_has_one_winner<P, R>(
             barrier.wait();
             runtime.block_on(right.correct_retirement(second_req))
         },
-    ) else {
-        return;
-    };
+    )?;
     let loser = Err(tr_err(MappingTransitionError::SourceNotRetired));
     let valid = (first_outcome == Ok(id.clone()) && second_outcome == loser)
         || (second_outcome == Ok(id.clone()) && first_outcome == loser);
@@ -2240,6 +2248,23 @@ pub fn concurrent_double_retirement_correction_has_one_winner<P, R>(
         runtime.block_on(left.history()).map(|events| events.len()),
         Ok(1),
         "사건 1건 기록"
+    );
+    Some(())
+}
+
+pub fn concurrent_double_retirement_correction_has_one_winner<P, R>(
+    left: &P,
+    right: &P,
+    runtime: &R,
+) where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    assert!(
+        run_double_retirement_corr_race(left, right, runtime).is_some(),
+        "이중 폐지 정정 경쟁 계약 완료"
     );
 }
 
@@ -2270,48 +2295,39 @@ fn assert_double_link_corr_state<P, R>(
     );
 }
 
-pub fn concurrent_double_link_correction_has_one_winner<P, R>(left: &P, right: &P, runtime: &R)
+fn run_double_link_corr_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
 where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
     R: ContractRuntime,
 {
-    let (Some(first_src), Some(second_src), Some(disc), Some(note), Some(stamp)) = (
-        parse_source(KnownMarket::Us, "AAA", "US0000000301"),
-        parse_source(KnownMarket::Us, "BBB", "US0000000302"),
-        sec_disclosure("0001326801-26-000306"),
-        parse_reason("이중 연결 정정 경쟁"),
-        parse_ts(1_764_002_050, 0, 0),
-    ) else {
-        return;
-    };
-    let Some(id) = seed_single_link(
+    let first_src = parse_source(KnownMarket::Us, "AAA", "US0000000301")?;
+    let second_src = parse_source(KnownMarket::Us, "BBB", "US0000000302")?;
+    let disc = sec_disclosure("0001326801-26-000306")?;
+    let note = parse_reason("이중 연결 정정 경쟁")?;
+    let stamp = parse_ts(1_764_002_050, 0, 0)?;
+    let id = seed_single_link(
         left,
         runtime,
         &first_src,
         &second_src,
         (&disc, &note, stamp),
-    ) else {
-        return;
-    };
+    )?;
     let ev = MappingCorrectionEvidence::DisclosureAndNote {
         disclosure: disc,
         note,
     };
-    let (Some(first_undo), Some(second_undo)) = (
-        runtime.block_on(confirm_link_corr(
-            &id,
-            &first_src,
-            &second_src,
-            ev.clone(),
-            stamp,
-        )),
-        runtime.block_on(confirm_link_corr(&id, &first_src, &second_src, ev, stamp)),
-    ) else {
-        return;
-    };
-    let Some((first_outcome, second_outcome)) = race_pair(
+    let first_undo = runtime.block_on(confirm_link_corr(
+        &id,
+        &first_src,
+        &second_src,
+        ev.clone(),
+        stamp,
+    ))?;
+    let second_undo =
+        runtime.block_on(confirm_link_corr(&id, &first_src, &second_src, ev, stamp))?;
+    let (first_outcome, second_outcome) = race_pair(
         |barrier| {
             barrier.wait();
             runtime.block_on(left.correct_link(first_undo))
@@ -2320,9 +2336,7 @@ where
             barrier.wait();
             runtime.block_on(right.correct_link(second_undo))
         },
-    ) else {
-        return;
-    };
+    )?;
     let loser = Err(tr_err(MappingTransitionError::Missing));
     let valid = (first_outcome == Ok(id.clone()) && second_outcome == loser)
         || (second_outcome == Ok(id.clone()) && first_outcome == loser);
@@ -2331,6 +2345,20 @@ where
         "이중 연결 정정 경쟁은 승자 1건과 Missing 1건이어야 함: {first_outcome:?}, {second_outcome:?}"
     );
     assert_double_link_corr_state(left, runtime, &id, &first_src, &second_src);
+    Some(())
+}
+
+pub fn concurrent_double_link_correction_has_one_winner<P, R>(left: &P, right: &P, runtime: &R)
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    assert!(
+        run_double_link_corr_race(left, right, runtime).is_some(),
+        "이중 연결 정정 경쟁 계약 완료"
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -2404,35 +2432,26 @@ fn verify_undo_vs_chain_outcomes<P, R>(
     assert_undo_vs_chain_state(repo, runtime, id, sources, winner);
 }
 
-pub fn concurrent_link_correction_vs_chained_link_serializes_cleanly<P, R>(
-    left: &P,
-    right: &P,
-    runtime: &R,
-) where
+fn run_undo_vs_chain_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
+where
     P: InstrumentMappingRepository
         + InstrumentMappingHistoryRepository
         + InstrumentMappingCorrectionRepository,
     R: ContractRuntime,
 {
-    let (Some(first_src), Some(second_src), Some(third_src), Some(disc), Some(note), Some(stamp)) = (
-        parse_source(KnownMarket::Us, "AAA", "US0000000401"),
-        parse_source(KnownMarket::Us, "BBB", "US0000000402"),
-        parse_source(KnownMarket::Us, "CCC", "US0000000403"),
-        sec_disclosure("0001326801-26-000307"),
-        parse_reason("연결 정정 대 후속 연결 경쟁"),
-        parse_ts(1_764_002_060, 0, 0),
-    ) else {
-        return;
-    };
-    let Some(id) = seed_single_link(
+    let first_src = parse_source(KnownMarket::Us, "AAA", "US0000000401")?;
+    let second_src = parse_source(KnownMarket::Us, "BBB", "US0000000402")?;
+    let third_src = parse_source(KnownMarket::Us, "CCC", "US0000000403")?;
+    let disc = sec_disclosure("0001326801-26-000307")?;
+    let note = parse_reason("연결 정정 대 후속 연결 경쟁")?;
+    let stamp = parse_ts(1_764_002_060, 0, 0)?;
+    let id = seed_single_link(
         left,
         runtime,
         &first_src,
         &second_src,
         (&disc, &note, stamp),
-    ) else {
-        return;
-    };
+    )?;
     let undo_ev = MappingCorrectionEvidence::DisclosureAndNote {
         disclosure: disc.clone(),
         note: note.clone(),
@@ -2445,19 +2464,15 @@ pub fn concurrent_link_correction_vs_chained_link_serializes_cleanly<P, R>(
         note,
         stamp,
     };
-    let (Some(undo_req), Some(chain_req)) = (
-        runtime.block_on(confirm_link_corr(
-            &id,
-            &first_src,
-            &second_src,
-            undo_ev,
-            stamp,
-        )),
-        build_split_change(runtime, chain_spec),
-    ) else {
-        return;
-    };
-    let Some(outcomes) = race_pair(
+    let undo_req = runtime.block_on(confirm_link_corr(
+        &id,
+        &first_src,
+        &second_src,
+        undo_ev,
+        stamp,
+    ))?;
+    let chain_req = build_split_change(runtime, chain_spec)?;
+    let outcomes = race_pair(
         |barrier| {
             barrier.wait();
             runtime.block_on(left.correct_link(undo_req))
@@ -2466,8 +2481,233 @@ pub fn concurrent_link_correction_vs_chained_link_serializes_cleanly<P, R>(
             barrier.wait();
             runtime.block_on(right.link_confirmed_change(chain_req))
         },
-    ) else {
-        return;
-    };
+    )?;
     verify_undo_vs_chain_outcomes(left, runtime, &id, (&first_src, &third_src), outcomes);
+    Some(())
+}
+
+pub fn concurrent_link_correction_vs_chained_link_serializes_cleanly<P, R>(
+    left: &P,
+    right: &P,
+    runtime: &R,
+) where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    assert!(
+        run_undo_vs_chain_race(left, right, runtime).is_some(),
+        "연결 정정 대 후속 연결 경쟁 계약 완료"
+    );
+}
+
+#[derive(Clone, Copy)]
+enum LinkOrEnsureWinner {
+    Link,
+    Ensure,
+}
+
+fn assert_link_vs_ensure_state<P, R>(
+    repo: &P,
+    runtime: &R,
+    ids: (&InstrumentId, &InstrumentId),
+    sources: (&InstrumentSource, &InstrumentSource),
+    winner: LinkOrEnsureWinner,
+) where
+    P: InstrumentMappingRepository + InstrumentMappingHistoryRepository,
+    R: ContractRuntime,
+{
+    match winner {
+        LinkOrEnsureWinner::Link => {
+            assert_eq!(
+                runtime.block_on(repo.resolve(sources.1)),
+                Ok(ids.0.clone()),
+                "연결 승자 시 다음 원본은 기존 ID에 귀속"
+            );
+            assert_eq!(
+                runtime.block_on(repo.resolve(sources.0)),
+                Err(map_err(InstrumentMappingError::Superseded)),
+                "연결 승자 시 이전 원본은 Superseded"
+            );
+            assert_eq!(
+                runtime.block_on(repo.for_id(ids.1)),
+                Err(map_err(InstrumentMappingError::Missing)),
+                "연결 승자 시 ensure 후보 ID는 미등록"
+            );
+            assert_eq!(
+                runtime.block_on(repo.history()).map(|events| events.len()),
+                Ok(1),
+                "연결 승자 사건 1건"
+            );
+        }
+        LinkOrEnsureWinner::Ensure => {
+            assert_eq!(
+                runtime.block_on(repo.resolve(sources.1)),
+                Ok(ids.1.clone()),
+                "ensure 승자 시 다음 원본은 신규 ID에 귀속"
+            );
+            assert_eq!(
+                runtime.block_on(repo.resolve(sources.0)),
+                Ok(ids.0.clone()),
+                "ensure 승자 시 기존 원본 활성 유지"
+            );
+            assert_eq!(
+                runtime.block_on(repo.history()).map(|events| events.len()),
+                Ok(0),
+                "ensure 승자 사건 0건"
+            );
+        }
+    }
+}
+
+fn run_link_and_ensure_next_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    let prev_src = parse_source(KnownMarket::Us, "FB", "US30303M1027")?;
+    let next_src = parse_source(KnownMarket::Us, "META", "US30303M9999")?;
+    let disc = sec_disclosure("0001326801-26-000308")?;
+    let note = parse_reason("연결 대 ensure 동일 대상 경쟁")?;
+    let stamp = parse_ts(1_764_002_070, 0, 0)?;
+    let id_a = seed_one_instrument(left, runtime, &prev_src)?;
+    let cand_b = issue_slot(1)?;
+    let id_b = cand_b.as_instrument_id().clone();
+    let req = build_split_change(
+        runtime,
+        SplitChangeSpec {
+            id: &id_a,
+            previous: &prev_src,
+            next: &next_src,
+            disc,
+            note,
+            stamp,
+        },
+    )?;
+    let (link_outcome, ensure_outcome) = race_pair(
+        |barrier| {
+            barrier.wait();
+            runtime.block_on(left.link_confirmed_change(req))
+        },
+        |barrier| {
+            barrier.wait();
+            runtime.block_on(right.ensure(&next_src, cand_b))
+        },
+    )?;
+    let link_won = link_outcome == Ok(id_a.clone())
+        && ensure_outcome == Ok(MappingAssignment::Existing(id_a.clone()));
+    let ensure_won = link_outcome == Err(tr_err(MappingTransitionError::SourceBoundToOtherId))
+        && ensure_outcome == Ok(MappingAssignment::Issued(id_b.clone()));
+    assert!(
+        link_won || ensure_won,
+        "연결 대 ensure 동일 대상 경쟁은 한쪽만 선점해야 함: {link_outcome:?}, {ensure_outcome:?}"
+    );
+    let winner = if link_won {
+        LinkOrEnsureWinner::Link
+    } else {
+        LinkOrEnsureWinner::Ensure
+    };
+    assert_link_vs_ensure_state(
+        left,
+        runtime,
+        (&id_a, &id_b),
+        (&prev_src, &next_src),
+        winner,
+    );
+    Some(())
+}
+
+pub fn concurrent_link_and_ensure_next_has_one_winner<P, R>(left: &P, right: &P, runtime: &R)
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    assert!(
+        run_link_and_ensure_next_race(left, right, runtime).is_some(),
+        "연결 대 ensure 동일 대상 경쟁 계약 완료"
+    );
+}
+
+fn run_link_and_ensure_overlap_race<P, R>(left: &P, right: &P, runtime: &R) -> Option<()>
+where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    let prev_src = parse_source(KnownMarket::Us, "FB", "US30303M1027")?;
+    let next_a = parse_source(KnownMarket::Us, "OVLP", "US0000000591")?;
+    let next_b = parse_source(KnownMarket::Us, "ovlp", "US0000000592")?;
+    let disc = sec_disclosure("0001326801-26-000309")?;
+    let note = parse_reason("연결 대 ensure 부분 겹침 경쟁")?;
+    let stamp = parse_ts(1_764_002_080, 0, 0)?;
+    let id_a = seed_one_instrument(left, runtime, &prev_src)?;
+    let cand_b = issue_slot(1)?;
+    let id_b = cand_b.as_instrument_id().clone();
+    let req = build_split_change(
+        runtime,
+        SplitChangeSpec {
+            id: &id_a,
+            previous: &prev_src,
+            next: &next_a,
+            disc,
+            note,
+            stamp,
+        },
+    )?;
+    let (link_outcome, ensure_outcome) = race_pair(
+        |barrier| {
+            barrier.wait();
+            runtime.block_on(left.link_confirmed_change(req))
+        },
+        |barrier| {
+            barrier.wait();
+            runtime.block_on(right.ensure(&next_b, cand_b))
+        },
+    )?;
+    let link_won = link_outcome == Ok(id_a.clone())
+        && ensure_outcome == Err(map_err(InstrumentMappingError::IdentityUncertain));
+    let ensure_won = link_outcome == Err(tr_err(MappingTransitionError::IdentityUncertain))
+        && ensure_outcome == Ok(MappingAssignment::Issued(id_b.clone()));
+    assert!(
+        link_won || ensure_won,
+        "연결 대 ensure 부분 겹침 경쟁은 승자 1건과 IdentityUncertain 1건이어야 함: {link_outcome:?}, {ensure_outcome:?}"
+    );
+    let (winner_src, winner_id, expected_events) = if link_won {
+        (&next_a, &id_a, 1_usize)
+    } else {
+        (&next_b, &id_b, 0_usize)
+    };
+    assert_eq!(
+        runtime.block_on(left.resolve(winner_src)),
+        Ok(winner_id.clone()),
+        "부분 겹침 경쟁 승자 원본 활성"
+    );
+    assert_eq!(
+        runtime.block_on(left.history()).map(|events| events.len()),
+        Ok(expected_events),
+        "부분 겹침 경쟁 사건 수 일치"
+    );
+    Some(())
+}
+
+pub fn concurrent_link_and_ensure_overlapping_next_has_one_winner<P, R>(
+    left: &P,
+    right: &P,
+    runtime: &R,
+) where
+    P: InstrumentMappingRepository
+        + InstrumentMappingHistoryRepository
+        + InstrumentMappingCorrectionRepository,
+    R: ContractRuntime,
+{
+    assert!(
+        run_link_and_ensure_overlap_race(left, right, runtime).is_some(),
+        "연결 대 ensure 부분 겹침 경쟁 계약 완료"
+    );
 }

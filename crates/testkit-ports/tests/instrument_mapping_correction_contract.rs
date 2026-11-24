@@ -25,6 +25,8 @@ mod tests {
                 concurrent_cross_id_same_next_link_has_one_winner,
                 concurrent_double_link_correction_has_one_winner,
                 concurrent_double_retirement_correction_has_one_winner,
+                concurrent_link_and_ensure_next_has_one_winner,
+                concurrent_link_and_ensure_overlapping_next_has_one_winner,
                 concurrent_link_and_retire_serializes_cleanly,
                 concurrent_link_correction_vs_chained_link_serializes_cleanly,
                 concurrent_same_previous_link_has_one_winner,
@@ -99,6 +101,16 @@ mod tests {
         });
         run_memory_race(|left, right, rt| {
             concurrent_link_correction_vs_chained_link_serializes_cleanly(left, right, rt);
+        });
+    }
+
+    #[test]
+    fn memory_store_passes_shared_concurrent_link_and_ensure_races() {
+        run_memory_race(|left, right, rt| {
+            concurrent_link_and_ensure_next_has_one_winner(left, right, rt);
+        });
+        run_memory_race(|left, right, rt| {
+            concurrent_link_and_ensure_overlapping_next_has_one_winner(left, right, rt);
         });
     }
 
