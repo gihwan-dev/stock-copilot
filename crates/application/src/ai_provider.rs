@@ -41,6 +41,10 @@ impl TokenCount {
     pub const fn as_u64(&self) -> &u64 {
         &self.0
     }
+    #[must_use]
+    pub const fn saturating_add(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenUsage {
@@ -50,6 +54,24 @@ pub struct TokenUsage {
     cache_creation: TokenCount,
 }
 impl TokenUsage {
+    #[must_use]
+    pub const fn zero() -> Self {
+        Self::new(
+            TokenCount::new(0),
+            TokenCount::new(0),
+            TokenCount::new(0),
+            TokenCount::new(0),
+        )
+    }
+    #[must_use]
+    pub const fn saturating_add(&self, other: &Self) -> Self {
+        Self::new(
+            self.input.saturating_add(other.input),
+            self.output.saturating_add(other.output),
+            self.cache_read.saturating_add(other.cache_read),
+            self.cache_creation.saturating_add(other.cache_creation),
+        )
+    }
     #[must_use]
     pub const fn new(
         input: TokenCount,

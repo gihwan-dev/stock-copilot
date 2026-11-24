@@ -1,8 +1,9 @@
 mod connection;
 pub(crate) mod migration;
 pub(crate) use connection::{
-    CIPHER_HMAC, CIPHER_MEMORY, FOREIGN_KEYS, JOURNAL, PAGE_SIZE, PROVIDER, QUERY_ONLY, SCHEMA,
-    SET_CIPHER_MEMORY, SET_FOREIGN_KEYS, SET_JOURNAL, SET_QUERY_ONLY, SET_SYNCHRONOUS,
+    CIPHER_HMAC, CIPHER_INTEGRITY, CIPHER_MEMORY, FOREIGN_KEYS, INCREMENTAL_VACUUM, JOURNAL,
+    PAGE_SIZE, PROVIDER, QUERY_ONLY, QUICK_CHECK, SCHEMA, SET_AUTO_VACUUM, SET_CIPHER_MEMORY,
+    SET_FOREIGN_KEYS, SET_JOURNAL, SET_JOURNAL_DELETE, SET_QUERY_ONLY, SET_SYNCHRONOUS,
     SET_TEMP_STORE, SYNCHRONOUS, TEMP_STORE,
 };
 #[cfg(test)]
@@ -67,3 +68,11 @@ pub(crate) mod chat_tests;
 pub(crate) mod settings;
 #[cfg(test)]
 pub(crate) mod settings_tests;
+
+pub(crate) mod order_rate;
+#[cfg(test)]
+pub(crate) mod order_rate_tests;
+
+pub(crate) mod status;
+#[cfg(test)]
+pub(crate) mod status_tests;

@@ -9,6 +9,14 @@ export const commands = {
     typedError<AppVersion, IpcError>(
       __TAURI_INVOKE("app_version", { request }),
     ),
+  getSettings: (request: GetSettingsRequest) =>
+    typedError<UiSettingsView, IpcError>(
+      __TAURI_INVOKE("get_settings", { request }),
+    ),
+  setOrderPermission: (request: SetOrderPermissionRequest) =>
+    typedError<UiOrderSwitchOutcome, IpcError>(
+      __TAURI_INVOKE("set_order_permission", { request }),
+    ),
   sendChatMessage: (
     request: SendChatMessageRequest_Deserialize,
     onChunk: Channel<ChatChunkEvent_Deserialize>,
@@ -427,6 +435,10 @@ export type GetChatHistoryResponse_Serialize = {
   active_turn: ActiveChatTurnDto | null;
 };
 
+export type GetSettingsRequest = {
+  scope: SettingsQueryScope;
+};
+
 export type IpcError = {
   kind: IpcErrorKind;
 };
@@ -506,6 +518,12 @@ export type SendChatMessageResponse_Serialize = {
   failure_reason: ChatFailureReasonDto | null;
 };
 
+export type SetOrderPermissionRequest = {
+  permission: UiOrderPermission;
+};
+
+export type SettingsQueryScope = "all";
+
 export type StoredChatEntryDto =
   StoredChatEntryDto_Serialize | StoredChatEntryDto_Deserialize;
 
@@ -540,6 +558,8 @@ export type UiBriefingId = {
 
 export type UiBriefingKind = "Morning" | "ClosingReview" | "PreUsMarket";
 
+export type UiConnectionState = "connected" | "needs-key";
+
 export type UiDataSource =
   | "KindDisclosure"
   | "DartDisclosureApi"
@@ -570,6 +590,7 @@ export type UiEvent =
   | "PortfolioSyncRecorded"
   | "TransactionsSyncRecorded"
   | ({ PriceUpdated: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -596,6 +617,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ PriceMoved: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -622,6 +644,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ DisclosureArrived: UiDisclosureKey } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureTriggerRecorded?: never;
@@ -648,6 +671,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ NewsActivityIncreased: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -674,6 +698,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalCreated: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -700,6 +725,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalExpired: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -726,6 +752,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalApproved: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -752,6 +779,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalRejected: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -778,6 +806,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ ProposalSkipped: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -804,6 +833,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ OrderSubmitted: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -830,6 +860,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ OrderOutcomeUnknown: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -861,6 +892,7 @@ export type UiEvent =
   | "OrderSwitchChanged"
   | "WatchlistChanged"
   | ({ ThesisUpdated: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -888,6 +920,7 @@ export type UiEvent =
     })
   | "SelfCheckChanged"
   | ({ MarketSessionChanged: UiMarket } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -914,6 +947,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ SignalRaised: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -940,6 +974,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ SignalCleared: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -966,6 +1001,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ EstimateSubmitted: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -992,6 +1028,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ EstimateResolved: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -1019,6 +1056,7 @@ export type UiEvent =
     })
   | "ValuationSnapshotTaken"
   | ({ OrderRejected: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -1045,6 +1083,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ OrderOutcomeResolved: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -1074,6 +1113,7 @@ export type UiEvent =
   | "OrderCancelled"
   | "OrderModified"
   | ({ CollectionFinished: UiInformationSource } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -1100,6 +1140,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ NewsClusterGrew: string } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -1129,6 +1170,7 @@ export type UiEvent =
   | "AccountSelectionChanged"
   | "StoredDataChanged"
   | ({ FxRateUpdated: UiFxPair } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -1155,6 +1197,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ DisclosureTriggerRecorded: UiDisclosureKey } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -1181,6 +1224,7 @@ export type UiEvent =
       ThesisUpdated?: never;
     })
   | ({ SourceStatusChanged: UiDataSource } & {
+      AiJobFinished?: never;
       BriefingFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
@@ -1206,7 +1250,35 @@ export type UiEvent =
       SignalRaised?: never;
       ThesisUpdated?: never;
     })
+  | ({ AiJobFinished: string } & {
+      BriefingFinished?: never;
+      CollectionFinished?: never;
+      DisclosureArrived?: never;
+      DisclosureTriggerRecorded?: never;
+      EstimateResolved?: never;
+      EstimateSubmitted?: never;
+      FxRateUpdated?: never;
+      MarketSessionChanged?: never;
+      NewsActivityIncreased?: never;
+      NewsClusterGrew?: never;
+      OrderOutcomeResolved?: never;
+      OrderOutcomeUnknown?: never;
+      OrderRejected?: never;
+      OrderSubmitted?: never;
+      PriceMoved?: never;
+      PriceUpdated?: never;
+      ProposalApproved?: never;
+      ProposalCreated?: never;
+      ProposalExpired?: never;
+      ProposalRejected?: never;
+      ProposalSkipped?: never;
+      SignalCleared?: never;
+      SignalRaised?: never;
+      SourceStatusChanged?: never;
+      ThesisUpdated?: never;
+    })
   | ({ BriefingFinished: UiBriefingId } & {
+      AiJobFinished?: never;
       CollectionFinished?: never;
       DisclosureArrived?: never;
       DisclosureTriggerRecorded?: never;
@@ -1235,6 +1307,9 @@ export type UiEvent =
 
 export type UiFxPair = "UsdKrw" | "KrwUsd";
 
+export type UiHorizon =
+  "hours" | "few-days" | "weeks-to-months" | "half-year-or-more";
+
 export type UiInformationSource =
   | "Web"
   | ({ News: UiNewsSource } & { Disclosure?: never })
@@ -1251,6 +1326,43 @@ export type UiNewsSource =
   | "FederalReserve"
   | "GoogleNews"
   | "YahooFinance";
+
+export type UiOptionalKeyState = "configured" | "unconfigured";
+
+export type UiOrderPermission = "off" | "on";
+
+export type UiOrderSwitchOutcome = {
+  kind: UiOrderSwitchOutcomeKind;
+  order_enabled: UiOrderPermission;
+};
+
+export type UiOrderSwitchOutcomeKind =
+  "changed" | "unchanged" | "denied" | "unavailable";
+
+export type UiRiskAppetite = "conservative" | "neutral" | "aggressive";
+
+export type UiSettingsView = {
+  toss_connection: UiConnectionState;
+  horizon: UiHorizon;
+  risk_appetite: UiRiskAppetite;
+  instrument_cap_percent: string;
+  instrument_warning_percent: string;
+  sector_cap_percent: string;
+  excluded_sector_count: number;
+  excluded_security_type_count: number;
+  order_enabled: UiOrderPermission;
+  ai_budget_percent: string;
+  dart_key: UiOptionalKeyState;
+  fred_key: UiOptionalKeyState;
+  allow_market_orders: UiToggleState;
+  allow_hours_horizon: UiToggleState;
+  card_expiry_minutes: number;
+  concentration_warning_threshold: number;
+  auto_start_at_login: UiToggleState;
+  account_count: number;
+};
+
+export type UiToggleState = "off" | "on";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(

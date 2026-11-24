@@ -232,16 +232,6 @@ impl ProvenClosedOrderSet {
     }
 }
 
-#[cfg(test)]
-pub(crate) fn assume_proven(orders: ClosedOrderSet) -> ProvenClosedOrderSet {
-    let proof = ClosedOrderCompletenessProof {
-        scope: ClosedOrderQueryScope::unfiltered(orders.account_id().clone(), orders.covered()),
-        exhaustion: OrderPageExhaustion::Exhausted,
-        completeness: orders.completeness(),
-    };
-    ProvenClosedOrderSet { orders, proof }
-}
-
 impl fmt::Debug for ProvenClosedOrderSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ProvenClosedOrderSet")
@@ -665,11 +655,12 @@ impl fmt::Debug for OpenOrderCollector {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{
-        ClosedOrderPageCollector, ClosedOrderQueryScope, OpenOrderCollector, OpenOrderQueryScope,
-        OrderDateFilter, OrderPageBoundary, OrderPageExhaustion, OrderQueryFilterState,
-        OrderRowIntake, OrderSymbolFilter, OrderedAtDateBounds,
+        ClosedOrderCompletenessProof, ClosedOrderPageCollector, ClosedOrderQueryScope,
+        OpenOrderCollector, OpenOrderQueryScope, OrderDateFilter, OrderPageBoundary,
+        OrderPageExhaustion, OrderQueryFilterState, OrderRowIntake, OrderSymbolFilter,
+        OrderedAtDateBounds, ProvenClosedOrderSet,
     };
     use crate::net_purchase::tests::{interval, money, row, time};
     use crate::{
@@ -679,6 +670,15 @@ mod tests {
         OpenOrderCoverage, OrderSide, Quantity, Symbol, net_purchase::net_purchase_amount,
     };
     use rust_decimal::Decimal;
+
+    pub(crate) fn assume_proven(orders: crate::ClosedOrderSet) -> ProvenClosedOrderSet {
+        let proof = ClosedOrderCompletenessProof {
+            scope: ClosedOrderQueryScope::unfiltered(orders.account_id().clone(), orders.covered()),
+            exhaustion: OrderPageExhaustion::Exhausted,
+            completeness: orders.completeness(),
+        };
+        ProvenClosedOrderSet { orders, proof }
+    }
 
     fn date(day: u8) -> CalendarDate {
         CalendarDate::from_parts(

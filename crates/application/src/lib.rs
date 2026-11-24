@@ -273,7 +273,8 @@ mod confirm_instrument_identity;
 pub use confirm_instrument_identity::{ConfirmInstrumentIdentity, IdentityConfirmationOutcome};
 mod audit_log;
 pub use audit_log::{
-    AuditEntry, AuditIntegrity, AuditKind, AuditLog, WebSearchAuditError, WebSearchAuditOutcome,
+    AuditChainHash, AuditEntry, AuditHead, AuditHeadAnchor, AuditHeadError, AuditIntegrity,
+    AuditKind, AuditLog, AuditSequence, WebSearchAuditError, WebSearchAuditOutcome,
     WebSearchAuditRecord, WebSearchQueryMode,
 };
 mod instrument_mapping;
@@ -330,6 +331,11 @@ pub use ai_request::{
     RunSpec, StoredUserMessage, UserMessageId, Utilization,
 };
 
+mod ai_job_record;
+pub use ai_job_record::{
+    AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
+    AiJobTimingError, AiJobUsageMeter, ListAiJobUsage, ListAiJobUsageError, RecordAiJobFinished,
+};
 mod ai_provider;
 pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
@@ -559,8 +565,13 @@ pub use news_data_settings::{
 
 mod deep_research;
 pub use deep_research::{
-    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchEvidenceSource,
-    ResearchWebCollector, ResearchWebOutcome, ResearchWebStore,
+    AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
+    DeepResearchRun, DeepResearchStages, DraftResearchCases, FinishResearch, FinishResearchError,
+    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchAnalyst,
+    ResearchCaseError, ResearchCases, ResearchCheckpoint, ResearchCheckpointStore,
+    ResearchConcluder, ResearchConclusion, ResearchEvidenceSource, ResearchModels, ResearchOutcome,
+    ResearchPrincipleCheck, ResearchStage, ResearchWebCollector, ResearchWebOutcome,
+    ResearchWebStore, RunDeepResearch, VerifyResearchClaims,
 };
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
@@ -600,6 +611,8 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod order_button;
+pub use order_button::ReadOrderButton;
 mod order_rate_limit;
 pub use order_rate_limit::{CheckOrderRateLimit, OrderRateRepository};
 
@@ -615,3 +628,5 @@ pub use warm_chat::{
     WarmChatProbe, WarmChatReadiness, WarmChatRejection, WarmChatRequest, WarmChatRuntime,
     WarmChatSession, WarmFreshness, WarmMatch,
 };
+mod database_restore;
+pub use database_restore::{RestoreOutcome, announce_restore};

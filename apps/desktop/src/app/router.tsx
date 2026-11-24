@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -8,151 +7,21 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
+import { useCallback, useState, type ReactElement } from "react";
+import type { ScreenSources } from "../shared/ipc";
+import type { AppRoutePath } from "../shared/lib";
 import {
-  createContext,
-  use,
-  useCallback,
-  useState,
-  type ReactElement,
-} from "react";
+  ScreenProviders,
+  type NavigateFn,
+  type SystemSettingsPresence,
+} from "./context";
 import {
-  AppShell,
-  Card,
-  EmptyState,
-  Page,
-  Section,
-  Skeleton,
-  Stack,
-  Text,
-} from "../shared/ds";
-import { ChatPanel } from "../features/chat";
-import { queryKeys, text, type AppRoutePath } from "../shared/lib";
-import { describeIpcFailure, useAppVersion } from "./query";
-import { SettingsSections } from "./settings";
-
-type NavigateFn = (path: AppRoutePath) => void;
-
-const NavigationContext = createContext<NavigateFn>((): void => undefined);
-
-const SidebarPlaceholder = (): ReactElement => (
-  <Stack gap="space-2">
-    <Text variant="caption" tone="ink-muted">
-      {text("app.stockListEmpty", "ko")}
-    </Text>
-  </Stack>
-);
-
-const ChatSlot = (): ReactElement => (
-  <Stack gap="space-2">
-    <Text variant="label">{text("shell.chat", "ko")}</Text>
-    <ChatPanel context={undefined} />
-  </Stack>
-);
-
-const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
-  const view = useAppVersion();
-  switch (view.status) {
-    case "loading":
-      return (
-        <Card title={text("app.loading", "ko")}>
-          <Skeleton variant="text" />
-        </Card>
-      );
-    case "error":
-      return (
-        <EmptyState
-          title={text("app.errorTitle", "ko")}
-          action={{ label: text("app.retry", "ko"), onPress: props.retry }}
-        >
-          {describeIpcFailure(view.failure)}
-        </EmptyState>
-      );
-    case "ready":
-      return (
-        <Card title={text("app.title", "ko")}>
-          <Text>{text("app.readySummary", "ko")}</Text>
-        </Card>
-      );
-  }
-};
-
-const HomeSkeletonView = (): ReactElement => {
-  const go = use(NavigationContext);
-  const queryClient = useQueryClient();
-  const openSettings = (): void => {
-    go("/settings");
-  };
-  const retry = (): void => {
-    queryClient.removeQueries({ queryKey: queryKeys.appVersion });
-  };
-  return (
-    <Page
-      title={text("app.homeTitle", "ko")}
-      actions={{ label: text("app.openSettings", "ko"), onPress: openSettings }}
-    >
-      <Section title={text("app.sectionOverview", "ko")}>
-        <HomeBody retry={retry} />
-      </Section>
-    </Page>
-  );
-};
-
-const TransactionsPlaceholder = (): ReactElement => {
-  const go = use(NavigationContext);
-  return (
-    <Page
-      title={text("app.transactionsTitle", "ko")}
-      actions={{
-        label: text("app.backToHome", "ko"),
-        onPress: (): void => {
-          go("/");
-        },
-      }}
-    >
-      <EmptyState title={text("app.ipcNoData", "ko")} />
-    </Page>
-  );
-};
-
-const SettingsPlaceholder = (): ReactElement => {
-  const go = use(NavigationContext);
-  return (
-    <Page
-      title={text("app.settingsTitle", "ko")}
-      actions={{
-        label: text("app.backToHome", "ko"),
-        onPress: (): void => {
-          go("/");
-        },
-      }}
-    >
-      <SettingsSections />
-    </Page>
-  );
-};
-
-const StatusPlaceholder = (): ReactElement => {
-  const go = use(NavigationContext);
-  return (
-    <Page
-      title={text("app.statusTitle", "ko")}
-      actions={{
-        label: text("app.openSettings", "ko"),
-        onPress: (): void => {
-          go("/settings");
-        },
-      }}
-    >
-      <EmptyState title={text("app.ipcNoData", "ko")} />
-    </Page>
-  );
-};
-
-const ShellLayout = (): ReactElement => (
-  <AppShell list={<SidebarPlaceholder />} chat={<ChatSlot />}>
-    <Outlet />
-  </AppShell>
-);
+  HomeView,
+  SettingsRouteView,
+  ShellLayout,
+  StatusView,
+  TransactionsView,
+} from "./views";
 
 const rootRoute = createRootRoute({
   component: (): ReactElement => <Outlet />,
@@ -167,25 +36,25 @@ const shellLayoutRoute = createRoute({
 const homeRoute = createRoute({
   getParentRoute: () => shellLayoutRoute,
   path: "/",
-  component: HomeSkeletonView,
+  component: HomeView,
 });
 
 const transactionsRoute = createRoute({
   getParentRoute: () => shellLayoutRoute,
   path: "/transactions",
-  component: TransactionsPlaceholder,
+  component: TransactionsView,
 });
 
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
-  component: SettingsPlaceholder,
+  component: SettingsRouteView,
 });
 
 const statusRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/status",
-  component: StatusPlaceholder,
+  component: StatusView,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -196,6 +65,8 @@ const routeTree = rootRoute.addChildren([
 
 export const AppRouter = (props: {
   readonly initialPath?: AppRoutePath | undefined;
+  readonly sources: ScreenSources;
+  readonly system: SystemSettingsPresence;
 }): ReactElement => {
   const [router] = useState(() =>
     createRouter({
@@ -213,8 +84,8 @@ export const AppRouter = (props: {
     [router],
   );
   return (
-    <NavigationContext value={go}>
+    <ScreenProviders go={go} sources={props.sources} system={props.system}>
       <RouterProvider router={router} />
-    </NavigationContext>
+    </ScreenProviders>
   );
 };

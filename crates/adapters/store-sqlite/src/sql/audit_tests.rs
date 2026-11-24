@@ -15,3 +15,5 @@ pub(crate) const UPDATE_HASH: &str = "UPDATE audit_log SET hash = '2222222222222
 pub(crate) const ROWS: &str = "SELECT seq, prev_hash, hash FROM audit_log ORDER BY seq";
 pub(crate) const INSERT_FIRST_FORGED: &str = "INSERT INTO audit_log(seq, at_payload, kind, payload, prev_hash, hash) VALUES (1, 'a', 'k', 'p', '0000000000000000000000000000000000000000000000000000000000000000', '1111111111111111111111111111111111111111111111111111111111111111')";
 pub(crate) const RESTORE_GUARDS: &str = "CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;\nCREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;";
+pub(crate) const DELETE_TAIL: &str = "DELETE FROM audit_log WHERE seq = 4";
+pub(crate) const DELETE_ALL: &str = "DELETE FROM audit_log";

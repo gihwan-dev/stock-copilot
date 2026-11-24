@@ -68,8 +68,8 @@ names = [
     "Emitter",
     "Listener",
 ]
-allowed-files = ["src/tests/ipc_contract.rs"]
-reason = "U-02 제품 조립의 모의 이벤트 발행 회귀만 허용한다. 제품 발행·구독 파일은 U-05가 등록한다"
+allowed-files = ["src/ipc/event_bridge.rs", "src/tests/ipc_contract.rs"]
+reason = "U-05 제품 이벤트 발행 다리(event_bridge.rs)와 U-02 모의 이벤트 회귀 테스트만 허용한다"
 
 [[api]]
 names = ["WebviewWindowBuilder"]
