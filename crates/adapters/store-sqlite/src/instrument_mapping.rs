@@ -1423,8 +1423,7 @@ fn correct_link_mapping(
             return Err(rusqlite::Error::InvalidQuery);
         }
     };
-    let latest_seq =
-        latest_active_link_seq(&stored_events).ok_or(rusqlite::Error::InvalidQuery)?;
+    let latest_seq = latest_active_link_seq(&stored_events).ok_or(rusqlite::Error::InvalidQuery)?;
     let seq = next_event_seq(transaction)?;
     insert_event(transaction, seq, &event)?;
     let deleted = transaction.execute(

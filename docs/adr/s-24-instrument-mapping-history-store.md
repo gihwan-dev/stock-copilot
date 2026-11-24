@@ -108,9 +108,9 @@ S-24는 D-55의 `UserIdentityConfirmation` 봉인 경계와 맞물려 있으므�
 
 마이그레이션 `0009` 추가에 따라 마이그레이션 원장 개수와 `sqlite_master` 스키마 객체 개수를 고정 상수로 단언하는 기존 테스트 2건(`migration_tests.rs` `8→9`, `tests.rs` `55→64`), 미래 마이그레이션 픽스처 상수 2줄(`sql/holdings_tests.rs` `GAP`/`FUTURE` `9→10`), 그리고 S-21 테스트 6건이 공유하는 `0009` 무제약 테이블·트리거 복구 픽스처 SQL 2상수(`sql/instrument_mapping_tests.rs` `RECREATE_UNCONSTRAINED_STRICT`·`RESTORE_GUARD_TRIGGERS`, `0009` 트리거 정의와 바이트 단위 일치)를 기계적으로 동기화했다(`crates/adapters/store-sqlite/src/instrument_mapping_tests.rs` 본체는 0줄 변경, 기존 단언 삭제·약화 0건).
 
-> 참고: 메인 지시대로 아래 2건의 승인 행은 구조 보존 규칙(`for`·`?`·클로저) 때문에 `approvals.toml`로 해소되지 않을 수 있으며, 메인이 병합 커밋에서 정확히 이 2건만 지적되는지 확인한다.
+> 참고: 아래 2건의 승인 행은 구조 보존 규칙(`for`·`?`·클로저) 때문에 `approvals.toml`로 해소되지 않을 수 있으며, H-62([docs/adr/0164-test-diff-approval-bundles.md](0164-test-diff-approval-bundles.md))가 `master`에 반영됨에 따라 메인이 `just test-diff-bundle-draft S-24 <기준 SHA> <대상 SHA> merge-head`로 `harness/test-diff/bundles/S-24.toml` 승인 묶음을 만들거나 병합 커밋에서 정확히 이 2건만 지적되는지 확인한다.
 
-| 파일 | 변경 내용 | 기준 SHA-256 (`6b8cabf3`) | 변경 후 SHA-256 | `test-diff-fast` 지적 문자열 |
+| 파일 | 변경 내용 | 기준 SHA-256 (`6b8cabf3`·`1c9fb859` 동일) | 변경 후 SHA-256 | `test-diff-fast` 지적 문자열 |
 |---|---|---|---|---|
 | `crates/adapters/store-sqlite/src/migration_tests.rs` | 마이그레이션 원장 개수 단언 `8` → `9` (1줄) | `d62952637a9c9e99a314ba9e8d229b89295351668e5c26d8004fd29f7160df8f` | `240cc894071421b0f04205cfba0dce04c67f4ff0880c5db44623c77330911a75` | `store-sqlite migration_tests::fresh_open_records_clock_and_reopen_preserves_ledger: test-diff:modified:store-sqlite migration_tests::fresh_open_records_clock_and_reopen_preserves_ledger` |
 | `crates/adapters/store-sqlite/src/tests.rs` | `sqlite_master` 스키마 객체 개수 단언 `55` → `64` (+9 = 이벤트 테이블 1 + 이벤트 명시 인덱스 1 + 이벤트 트리거 3 + 원장 부분 고유 인덱스 4, 1줄) | `1f82f383ed3a04d89cb8059535fcf6676146399c89db050429dea9fdf1ba30e0` | `306405fff3ab503eeaaec63e626300deb913f81321040c382e19e33b3f02ef50` | `store-sqlite tests::raw_key_is_independently_readable_and_debug_is_closed: test-diff:modified:store-sqlite tests::raw_key_is_independently_readable_and_debug_is_closed` |
@@ -143,22 +143,20 @@ assertion_change = true
 
 ## 실측 및 손 변형
 
-> 아래 표는 1단계 완료(`4c13d306` 기준) 실측치다. 2단계 합산(`6b8cabf3` 기준) 커버리지·손 변형·자동 변경분 변이(`just mutants-daily 6b8cabf3... 0/1`)는 메인 지시에 따라 2단계 리뷰가 모두 끝난 뒤 1회 수행해 아래에 합산 갱신한다.
-
-### 1단계 정적 검사·테스트·커버리지·자동 변이 (`4c13d306ed6190f2fbd970822a92ddf88f1a7529` 기준)
+### 1단계 + 2단계 합산 정적 검사·테스트·커버리지·자동 변이 (`1c9fb859cef006c6806b1303daa5f30a2654f28e` / `6b8cabf3b4cab2521f5489725ffc0c63de2c6e83` 기준)
 
 | 항목 | 실측 결과 |
 |---|---|
 | 정적 검사 (`just check-fast-static`) | 17종 전 항목 통과(`deny`·`gen-schema`·`fmt`·`arch-check`·`source-check`·`sql-check`·`sqlcipher`·`migration-check`·`capability-check`·`raw-types`·`disable-check`·`source-tree`·`config-files`·`claude-hooks/hashes`·`codex-hooks/config`·`workflow-policy`·`review-records` 위반 0건) |
-| 신규 검사 끄기 (`disable-report-fast`) | `4c13d306ed6190f2fbd970822a92ddf88f1a7529 이후 새 끄기 0건 (Rust 0건, TS 0건)` |
+| 신규 검사 끄기 (`disable-report-fast`) | `1c9fb859cef006c6806b1303daa5f30a2654f28e 이후 새 끄기 0건 (Rust 0건, TS 0건)` |
 | Clippy (`--all-targets -- -D warnings`) | `domain`·`application`·`testkit-ports`·`store-sqlite` 경고 0건 |
-| 테스트 (`cargo nextest run --locked`) | `domain`·`application`·`testkit-ports`·`store-sqlite` 전체 통과 |
-| 기존 테스트 변경 (`test-diff-fast`) | 위 표의 기계적 고정 개수 갱신 2건(`migration_tests.rs` `8→9`, `tests.rs` `55→64`)만 보고, 그 외 0건 |
-| 커버리지 (`cargo llvm-cov`) | `domain/src/disclosure.rs` 영역 237/237(100.00%)·함수 20/20(100.00%)·줄 165/165(100.00%); `domain/src/instrument_mapping.rs` 영역 816/816(100.00%)·함수 64/64(100.00%)·줄 617/617(100.00%); `domain/src/instrument_mapping_change.rs` 영역 198/198(100.00%)·함수 28/28(100.00%)·줄 224/224(100.00%); `adapters/store-sqlite/src/instrument_mapping.rs` 함수 98/98(100.00%)·줄 892/896(99.55%)·영역 1443/1526(94.56%) |
-| 자동 변경분 변이 (`just mutants-daily 4c13d306ed6190f2fbd970822a92ddf88f1a7529 0/1`) | `mutants: 선택 변이 158개` / `158 mutants tested in 51m: 120 caught, 38 unviable` / `mutants: 위반 없음` (생존 0건, 시간 초과 0건) |
-| 손 변형 (`target/S-24/work`) | 격리 사본에서 27건(M01~M27) 실제 컴파일·실행, **27/27 검출(생존 0건)** 후 `target/S-24` 삭제 확인 |
+| 테스트 (`cargo nextest run --locked`) | `domain`·`application`·`testkit-ports`·`store-sqlite` 전체 통과(2단계 컴파일 실패 프로브 7종, 공유 계약·거짓 통과 방지 4종·동시 경쟁 9종, 메모리↔SQLite 상태 기계 차등 48사례 포함) |
+| 기존 테스트 변경 (`test-diff-fast`) | 위 표의 1단계 기계적 고정 개수 갱신 2건(`migration_tests.rs` `8→9`, `tests.rs` `55→64`)만 보고(`domain`·`application`·`testkit-ports` 위반 0건, 2단계 추가 0건) |
+| 커버리지 (`cargo llvm-cov nextest`) | `domain/src/disclosure.rs` 영역 237/237(100.00%)·함수 20/20(100.00%)·줄 165/165(100.00%); `domain/src/instrument_mapping.rs` 영역 880/880(100.00%)·함수 70/70(100.00%)·줄 685/685(100.00%); `domain/src/instrument_mapping_change.rs` 영역 1263/1264(99.92%)·함수 88/88(100.00%)·줄 907/908(99.89%, 미실행 1줄은 인라인 `#[cfg(test)]` 내 방어 `panic!`, 운영 줄 100%); `adapters/store-sqlite/src/instrument_mapping.rs` 함수 126/126(100.00%)·줄 1267/1282(98.83%)·영역 1947/2055(94.74%) |
+| 자동 변경분 변이 (`just mutants-daily 6b8cabf3b4cab2521f5489725ffc0c63de2c6e83 0/1`) | 초기 236개 실행에서 `store-sqlite/src/instrument_mapping.rs` `latest_active_link_seq`의 도달 불가 매치 가드(`if instrument_id == id`, `EVENTS_FOR_ID`가 `WHERE instrument_id = ?1`로 선행 필터링) 2건 생존을 발견해 도달 불가 가드를 제거하고 재검증 완료 — `mutants: 선택 변이 230개` / `230 mutants tested in 2h: 170 caught, 60 unviable` / `mutants: 위반 없음` (생존 0건, 시간 초과 0건). 최신 `origin/master`(`1c9fb859`) 병합 후 `mutants --daily-plan 1c9fb859cef006c6806b1303daa5f30a2654f28e`에서도 동일하게 `mutants: 선택 변이 230개` / `mutants: 위반 없음` 확인 |
+| 손 변형 (`target/S-24/work`) | 격리 사본에서 누적 36건(1단계 M01~M27 + 2단계 M28~M36) 실제 컴파일·실행, **36/36 검출(생존 0건)** 후 `target/S-24` 삭제 확인 |
 
-### 손 변형 목록 (M01~M27, 격리 사본 실측)
+### 손 변형 목록 (M01~M36, 격리 사본 실측)
 
 | 번호 | 대상 파일 | 변형 내용 | 결과 및 검출 테스트 |
 |---|---|---|---|
@@ -189,3 +187,12 @@ assertion_change = true
 | M25 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `RecordSetValidator::observe`에서 `*counter > 1`을 `*counter < 1`로 변경 | 검출 (`store-sqlite::instrument_mapping_history_tests::lookup_rejects_multiple_terminal_records_for_same_id_in_partial_slice`) |
 | M26 | `migrations/0009_instrument_mapping_history.sql` + `src/sql/instrument_mapping.rs` | `note` CHECK의 `length(CAST(trim(...) AS BLOB)) > 0`을 `length(trim(...)) > 0`으로 되돌려 앞자리 NUL `UserReason` 거부 | 검출 (`store-sqlite::instrument_mapping_history_tests::history_roundtrips_user_reason_containing_nul_byte`) |
 | M27 | `migrations/0009_instrument_mapping_history.sql` + `src/sql/instrument_mapping.rs` | `note` CHECK 상한을 `BETWEEN 1 AND 512`에서 `BETWEEN 1 AND 511`로 축소 | 검출 (`store-sqlite::instrument_mapping_history_tests::history_roundtrips_512_byte_boundary_user_reasons`) |
+| M28 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `validate_owned_subset`에서 `terminal_count != 1`을 `terminal_count > 1`로 완화해 0-종단 고아 `superseded` 부분집합 허용 | 검출 (`store-sqlite::instrument_mapping_correction_tests::sqlite_correction_writes_reject_orphan_superseded_ledger`) |
+| M29 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `latest_active_link_seq`에서 `LinkCorrected` 시 `stack.pop()` 생략 | 검출 (`store-sqlite::instrument_mapping_correction_tests::sqlite_store_passes_shared_correction_lifecycle_and_reopen_roundtrip`) |
+| M30 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `next_event_seq`에서 `value > 0` 및 `checked_add(1)` 제거(`>= 0`, `wrapping_add(1)`) | 검출 (`store-sqlite::instrument_mapping_correction_tests::sqlite_correction_writes_reject_overflowing_and_non_positive_event_seq`) |
+| M31 | `crates/adapters/store-sqlite/src/sql/instrument_mapping.rs` | `RESTORE_SUPERSEDED`에서 `superseded_event_seq = ?5` 일치 조건 무력화 | 검출 (`store-sqlite::instrument_mapping_correction_tests::sqlite_correct_link_rolls_back_when_superseded_event_seq_drifted`) |
+| M32 | `crates/adapters/store-sqlite/src/sql/instrument_mapping.rs` | `BY_TWO_SOURCES_OR_ID`에서 `next`의 `upper(isin) = upper(?6)` 조회 조건 무력화 | 검출 (`store-sqlite::instrument_mapping_correction_tests::sqlite_store_passes_shared_correction_lifecycle_and_reopen_roundtrip`) |
+| M33 | `crates/adapters/store-sqlite/src/instrument_mapping.rs` | `correct_retirement_mapping`에서 `validate_owned_subset` 호출 생략 | 검출 (`store-sqlite::instrument_mapping_correction_tests::sqlite_correction_writes_reject_orphan_superseded_ledger`) |
+| M34 | `crates/domain/src/instrument_mapping.rs` | `plan_link_inner`에서 `if matches_latest` LIFO 검증 가드 제거 | 검출 (`domain::instrument_mapping_change::tests::plan_confirmed_link_correction_emits_event_and_propagates_error`) |
+| M35 | `crates/testkit-ports/src/memory.rs` | `MemoryInstrumentMappingStore::link_confirmed_change`를 `poll_fn` 이전에 즉시 실행해 미폴링 드롭 계약 위반 | 검출 (`testkit-ports::instrument_mapping_correction_contract::tests::memory_store_passes_shared_unpolled_correction_write_drop_contract`) |
+| M36 | `crates/testkit-ports/src/memory.rs` | `MemoryInstrumentMappingStore::history_for_id`에서 ID 필터 제거(전체 이력 반환) | 검출 (`testkit-ports::instrument_mapping_correction_contract::tests::memory_store_passes_shared_correction_lifecycle_and_conflict_rules`) |
