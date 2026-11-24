@@ -5,7 +5,7 @@ mod tests {
         MAX_UNTRUSTED_TEXT_CHARS, NormalizedUntrustedText, Truncation, UNTRUSTED_TEXT_FIELD,
         UntrustedTextLimit, UntrustedTextLimitError, is_removed_char, untrusted_text_value,
     };
-    use proptest::prelude::*;
+    use proptest::{prop_assert, prop_assert_eq, proptest, test_runner::Config};
     use serde_json::Value;
 
     fn normalize(raw: &str) -> String {
@@ -114,7 +114,7 @@ mod tests {
     }
 
     proptest! {
-        #![proptest_config(ProptestConfig::with_cases(testkit::property_cases()))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn normalized_text_never_contains_removed_characters_or_links(raw in "\\PC{0,200}|[\\u{0}-\\u{2070}\\u{FEFF}\\u{E0000}-\\u{E007F}:/w.\\[\\]()<>]{0,200}") {
             let limit = UntrustedTextLimit::try_new(64_usize).expect("한도");
