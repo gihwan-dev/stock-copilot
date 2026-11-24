@@ -116,6 +116,17 @@ pub struct ValuationDayResult {
     result: Result<ValuationSnapshot, SnapshotError>,
 }
 impl ValuationDayResult {
+    pub fn restore_from_saved_state(
+        date: CalendarDate,
+        result: Result<ValuationSnapshot, SnapshotError>,
+    ) -> Result<Self, SnapshotError> {
+        if let Ok(snapshot) = &result
+            && snapshot.settlement_date() != date
+        {
+            return Err(SnapshotError::WrongPeriod);
+        }
+        Ok(Self { date, result })
+    }
     #[must_use]
     pub const fn date(&self) -> CalendarDate {
         self.date

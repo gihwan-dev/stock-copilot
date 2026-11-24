@@ -1,3 +1,4 @@
+pub mod estimates;
 pub mod instrument_mapping;
 pub mod instrument_mapping_correction;
 pub mod scenarios;
