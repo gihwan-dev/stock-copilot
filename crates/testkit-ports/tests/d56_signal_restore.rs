@@ -1231,6 +1231,7 @@ mod tests {
             master: master.clone(),
             book,
             limits,
+            sellable_quantity: None,
         }
     }
 

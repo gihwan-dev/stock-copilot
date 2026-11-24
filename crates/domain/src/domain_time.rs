@@ -259,6 +259,7 @@ impl Timestamp {
 pub struct TimeSpan(SignedDuration);
 pub(crate) const BUYING_POWER_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 pub(crate) const SIGNAL_HOLDING_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
+pub(crate) const SELLABLE_QUANTITY_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 impl TimeSpan {
     #[must_use]
     pub fn as_parts(self) -> (SpanSeconds, Nanosecond) {

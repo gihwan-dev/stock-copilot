@@ -289,6 +289,8 @@ pub use storage_ports::{
 
 mod buy_limit_intent;
 pub use buy_limit_intent::{BuyLimitIntentError, buy_limit_intent};
+mod sell_limit_intent;
+pub use sell_limit_intent::{SellLimitIntentError, sell_limit_intent};
 mod draft_proposal;
 pub use draft_proposal::{
     DraftProposal, DraftProposalData, DraftProposalError, DraftProposalInputs,
