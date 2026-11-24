@@ -568,6 +568,10 @@ pub use news_data_settings::{
     SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
+mod candidate_discovery;
+pub use candidate_discovery::{
+    DiscoverCandidates, DiscoveryError, DiscoveryList, DiscoveryLists, DiscoveryReport,
+};
 mod deep_research;
 pub use deep_research::{
     AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
@@ -577,6 +581,10 @@ pub use deep_research::{
     ResearchConcluder, ResearchConclusion, ResearchEvidenceSource, ResearchModels, ResearchOutcome,
     ResearchPrincipleCheck, ResearchStage, ResearchWebCollector, ResearchWebOutcome,
     ResearchWebStore, RunDeepResearch, VerifyResearchClaims,
+};
+pub use deep_research::{
+    DeepResearchCycleError, DeepResearchCycleProgress, DeepResearchCycleReport, DeepResearchJob,
+    DeepResearchPause, DeepResearchTargetOutcome, RunDeepResearchCycle,
 };
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
