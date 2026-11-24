@@ -228,7 +228,9 @@ fn prompt_reference_round_trips_and_hash_comes_from_the_text() {
         &hasher,
     )
     .expect("로드");
-    let changed = PromptSource::new(&format!("{}\n", source.as_str()));
+    let mut changed_text = String::from(source.as_str());
+    changed_text.push('\n');
+    let changed = PromptSource::new(&changed_text);
     assert_ne!(
         hasher.digest(&changed),
         loaded.prompt_ref().digest().clone()
