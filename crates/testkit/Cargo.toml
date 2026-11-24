@@ -4,5 +4,13 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[[bin]]
+name = "fake_ai_cli"
+path = "src/bin/fake_ai_cli.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
 [lints]
 workspace = true

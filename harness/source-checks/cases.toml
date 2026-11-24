@@ -963,3 +963,8 @@ expect = ["clock-env:env"]
 example = "env-option-macro.rs"
 path = "crates/toss-smoke/src/main.rs"
 expect = ["clock-env:option_env"]
+
+[[source]]
+example = "macro-collect-functions.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:_collect_functions"]

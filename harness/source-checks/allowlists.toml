@@ -117,3 +117,15 @@ reason = "U-01 SystemClock의 운영체제 벽시계 읽기 한 곳"
 path = "crates/toss-smoke/src/main.rs"
 names = ["test-awareness:env::args_os", "clock-env:now"]
 reason = "T-12 연결 확인 CLI 진입점. 명령행 인자와 HTTP 제한기용 벽시계만 읽고 환경 변수 읽기는 전면 금지한다"
+
+[[clock-environment]]
+path = "crates/testkit/src/bin/fake_ai_cli.rs"
+names = [
+    "test-awareness:env::args_os",
+    "clock-env:var:STOCK_MCP_TOKEN",
+    "clock-env:var:ANTHROPIC_API_KEY",
+    "clock-env:var:OPENAI_API_KEY",
+    "clock-env:var:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    "clock-env:var:USER",
+]
+reason = "A-11 가짜 AI CLI 진입점. 프로세스 인자와 문서(architecture 2.3, tasks AI-03, R-03)에 명시된 환경 변수 키만 개별 읽기하며 전체 환경 열람을 허용하지 않는다"

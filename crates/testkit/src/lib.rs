@@ -70,3 +70,7 @@ pub use http_server::{ServeSequence, serve_sequence, serve_sequence_with_pending
 
 mod scripted_http_server;
 pub use scripted_http_server::{GateObservation, HoldPosition, ResponseGate, ScriptedHttpServer};
+
+pub mod fake_ai_cli;
+mod fake_ai_cli_replay;
+mod fake_mcp_client;
