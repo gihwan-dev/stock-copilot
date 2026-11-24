@@ -3,7 +3,7 @@ mod tests {
     use std::fs::{self, DirBuilder};
     use std::os::unix::fs::DirBuilderExt;
     use std::path::{Path, PathBuf};
-    use std::process::{Command, Output};
+    use std::process::Output;
     use std::sync::Arc;
 
     use application::{
@@ -225,16 +225,11 @@ mod tests {
         token: String,
     ) -> CliRun {
         let prepared = PreparedFakeAiCli::prepare(dir.path(), name, fake).expect("가짜 CLI 준비");
-        let executable = prepared.executable_path().to_path_buf();
-        let output = tokio::task::spawn_blocking(move || {
-            Command::new(executable)
-                .env_clear()
-                .env("STOCK_MCP_TOKEN", token)
-                .output()
-        })
-        .await
-        .expect("실행 대기")
-        .expect("가짜 CLI 실행");
+        let runner = prepared.clone();
+        let output = tokio::task::spawn_blocking(move || runner.run_with_mcp_token(&token))
+            .await
+            .expect("실행 대기")
+            .expect("가짜 CLI 실행");
         let record = prepared
             .read_invocations()
             .expect("호출 기록")
