@@ -637,6 +637,10 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod unknown_order_resolution;
+pub use unknown_order_resolution::{
+    UnknownOrderFacts, UnknownOrderResolution, resolve_unknown_order,
+};
 mod trade_cost_confirmation;
 pub use trade_cost_confirmation::{
     ConfirmedTradeCost, EstimatedTradeCost, TradeCostDisplay, trade_cost_display,

@@ -7,12 +7,13 @@ use crate::ports::{
     ExpiredProposalRedrafter, PreSubmitTransactionPort, ProposalContextPort, SymbolFreezePort,
 };
 use crate::prepare::{ApprovalContextPorts, ApprovalReadPorts, ApprovalStoragePorts};
+use crate::unknown::{UnknownOrderRetrier, UnknownRetryOutcome};
 use application::{
     AuditLog, BrokerRead, Clock, EventBus, MarketInfo, OrderRateRepository,
     ProposalConsumptionRepository, ProposalRepository, SettingsRepository,
     ValidationReportRepository, user_presence::UserPresence,
 };
-use domain::ProposalId;
+use domain::{ClientOrderId, ProposalId};
 use order_execution::BrokerTrade;
 use std::fmt;
 use std::future::Future;
@@ -136,6 +137,20 @@ impl<T: ApprovalServiceTypes> ApprovalService<T> {
             },
         );
         command.request_order_approval(proposal_id).await
+    }
+
+    pub async fn retry_unknown(&self, client_order_id: &ClientOrderId) -> UnknownRetryOutcome {
+        let parts = &self.parts;
+        UnknownOrderRetrier {
+            tx_port: parts.tx_port.as_ref(),
+            audit: parts.audit.as_ref(),
+            clock: parts.clock.as_ref(),
+            events: &parts.events,
+            trade: parts.trade.as_ref(),
+            vault: &self.vault,
+        }
+        .retry(client_order_id)
+        .await
     }
 }
 
