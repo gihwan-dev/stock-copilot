@@ -4,9 +4,9 @@ import type {
   Principles,
   SettingsClient,
 } from "../../../shared/ipc";
-import type { Result } from "../../../shared/lib";
+import { settingsKeys, type Result } from "../../../shared/lib";
 
-const principlesKey = ["principles"] as const;
+const principlesKey = settingsKeys.principles;
 
 type PrinciplesReply = Result<Principles, IpcFailure>;
 

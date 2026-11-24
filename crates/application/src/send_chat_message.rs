@@ -1,13 +1,15 @@
+use crate::chat_number_check::NO_NUMBER_EVIDENCE;
 use crate::{
     AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, AnalysisPrompt, ChatCard, ChatChunk,
-    ChatChunkSink, ChatExecutionMode, ChatFailureReason, ChatHistory, ChatQueueAcquisition,
-    ChatQueuePort, ChatRepository, ChatRunLedger, ChatRunLedgerEntry, ChatRunModelSpec,
-    ChatRunProfile, ChatRunTiming, ChatScreenContext, ChatSequence, ChatSessionId, ChatSignalState,
-    ChatSource, ChatSourceKind, ChatStopSignal, ChatTurnId, ChatTurnIdentity, ChatTurnMetrics,
-    ChatTurnStatus, ChatTurnSummary, Clock, InformationError, IsolationCheck, ModelName,
-    ModelSelection, PromptError, ReasoningEffort, ResetTime, RunInput, RunKind, RunPurpose,
-    RunSpec, StoredAssistantAttachments, StoredAssistantReply, StoredChatContent, StoredChatEntry,
-    StoredUserMessage, SystemFailure, TokenUsage, ToolStatus, UserMessageId,
+    ChatChunkSink, ChatExecutionMode, ChatFailureReason, ChatHistory, ChatNumberCheck,
+    ChatNumberEvidence, ChatNumberEvidenceSet, ChatQueueAcquisition, ChatQueuePort, ChatRepository,
+    ChatRunLedger, ChatRunLedgerEntry, ChatRunModelSpec, ChatRunProfile, ChatRunTiming,
+    ChatScreenContext, ChatSequence, ChatSessionId, ChatSignalState, ChatSource, ChatSourceKind,
+    ChatStopSignal, ChatTurnId, ChatTurnIdentity, ChatTurnMetrics, ChatTurnStatus, ChatTurnSummary,
+    Clock, InformationError, IsolationCheck, ModelName, ModelSelection, NoNumberEvidence,
+    PromptError, ReasoningEffort, ResetTime, RunInput, RunKind, RunPurpose, RunSpec,
+    StoredAssistantAttachments, StoredAssistantReply, StoredChatContent, StoredChatEntry,
+    StoredUserMessage, SystemFailure, TokenUsage, ToolStatus, UserMessageId, check_chat_numbers,
 };
 use domain::{HorizonSelection, KnownMarket, TimeSpan, Timestamp, UntrustedText};
 
@@ -180,6 +182,10 @@ impl AssistantTextBuffer {
     fn into_text(self) -> UntrustedText {
         self.0
     }
+
+    const fn text(&self) -> &UntrustedText {
+        &self.0
+    }
 }
 
 #[derive(Debug)]
@@ -270,16 +276,17 @@ struct FinalizeInput {
 }
 
 #[derive(Debug)]
-pub struct SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time> {
+pub struct SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time, Evidence = NoNumberEvidence> {
     provider: &'a Provider,
     repository: &'a Repo,
     ledger: &'a Ledger,
     queue: &'a Queue,
     clock: &'a Time,
+    evidence: &'a Evidence,
 }
 
 impl<'a, Provider, Repo, Ledger, Queue, Time>
-    SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time>
+    SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time, NoNumberEvidence>
 where
     Provider: AiProvider,
     Repo: ChatRepository,
@@ -301,9 +308,36 @@ where
             ledger,
             queue,
             clock,
+            evidence: &NO_NUMBER_EVIDENCE,
         }
     }
 
+    #[must_use]
+    pub const fn with_number_evidence<Evidence: ChatNumberEvidence>(
+        self,
+        evidence: &'a Evidence,
+    ) -> SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time, Evidence> {
+        SendChatMessage {
+            provider: self.provider,
+            repository: self.repository,
+            ledger: self.ledger,
+            queue: self.queue,
+            clock: self.clock,
+            evidence,
+        }
+    }
+}
+
+impl<'a, Provider, Repo, Ledger, Queue, Time, Evidence>
+    SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time, Evidence>
+where
+    Provider: AiProvider,
+    Repo: ChatRepository,
+    Ledger: ChatRunLedger,
+    Queue: ChatQueuePort,
+    Time: Clock,
+    Evidence: ChatNumberEvidence,
+{
     pub(crate) const fn provider(&self) -> &'a Provider {
         self.provider
     }
@@ -743,6 +777,9 @@ where
         let usage = input.accumulator.usage;
         let first_token_latency = input.accumulator.first_token_latency;
         let sources = input.accumulator.sources;
+        let number_check = self
+            .number_check(request, input.status, input.accumulator.text.text())
+            .await;
         let assistant_entry = StoredChatEntry::new(
             input.assistant_seq,
             finished_at,
@@ -758,14 +795,9 @@ where
                 },
             )),
         );
-        let final_status = match self
-            .repository
-            .append_entry(request.session_id(), &assistant_entry)
-            .await
-        {
-            Ok(_) => input.status,
-            Err(error) => ChatTurnStatus::Failed(ChatFailureReason::StorageError(error.failure())),
-        };
+        let final_status = self
+            .store_reply(request, &assistant_entry, input.status)
+            .await;
         self.record_ledger(
             request,
             ChatRunModelSpec {
@@ -782,17 +814,53 @@ where
             final_status,
         )
         .await;
-        let summary = ChatTurnSummary::new(
-            request.identity(),
-            input.mode,
-            ChatTurnMetrics {
-                actual_model,
-                usage,
-                first_token_latency,
-            },
-            finished_at,
-        );
-        emit_terminal_chunk(final_status, sources, summary, sink).await
+        let metrics = ChatTurnMetrics {
+            actual_model,
+            usage,
+            first_token_latency,
+        };
+        let summary = ChatTurnSummary::new(request.identity(), input.mode, metrics, finished_at);
+        emit_terminal_chunk(
+            final_status,
+            sources,
+            attach_check(summary, number_check),
+            sink,
+        )
+        .await
+    }
+
+    async fn store_reply(
+        &self,
+        request: &SendChatRequest,
+        entry: &StoredChatEntry,
+        status: ChatTurnStatus,
+    ) -> ChatTurnStatus {
+        match self
+            .repository
+            .append_entry(request.session_id(), entry)
+            .await
+        {
+            Ok(_) => status,
+            Err(error) => ChatTurnStatus::Failed(ChatFailureReason::StorageError(error.failure())),
+        }
+    }
+
+    async fn number_check(
+        &self,
+        request: &SendChatRequest,
+        status: ChatTurnStatus,
+        answer: &UntrustedText,
+    ) -> Option<ChatNumberCheck> {
+        if status != ChatTurnStatus::Completed {
+            return None;
+        }
+        match self.evidence.evidence_for_run(request.run_id()).await {
+            Ok(ChatNumberEvidenceSet::NotConfigured) => None,
+            Ok(ChatNumberEvidenceSet::Payloads(payloads)) => {
+                Some(check_chat_numbers(answer, &payloads))
+            }
+            Err(_unavailable) => Some(ChatNumberCheck::Unverified),
+        }
     }
 
     async fn record_ledger(
@@ -828,6 +896,13 @@ struct ToolCallInfo {
     server: UntrustedText,
     tool: UntrustedText,
     status: ToolStatus,
+}
+
+fn attach_check(summary: ChatTurnSummary, check: Option<ChatNumberCheck>) -> ChatTurnSummary {
+    match check {
+        Some(found) => summary.with_number_check(found),
+        None => summary,
+    }
 }
 
 async fn emit_terminal_chunk<Sink: ChatChunkSink>(

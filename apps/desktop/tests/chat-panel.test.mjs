@@ -357,7 +357,7 @@ test("chat panel replays stored turns and resubscribes to a running one", async 
   }
 });
 
-test("chat panel marks a finished reply without sources as having no source", async () => {
+test("chat panel marks unverified numbers and a reply without sources", async () => {
   const bundle = await screenDom(mountSource);
   try {
     const w = bundle.open();
@@ -368,6 +368,11 @@ test("chat panel marks a finished reply without sources as having no source", as
           sequence: 1,
           turn_id: request.turn_id,
           chunk: { TextDelta: { text: "근거 없는 답" } },
+        });
+        onChunk.onmessage({
+          sequence: 2,
+          turn_id: request.turn_id,
+          chunk: { NumberCheck: { status: "Unverified" } },
         });
         return turnResponse(request, "Completed");
       },
@@ -381,6 +386,7 @@ test("chat panel marks a finished reply without sources as having no source", as
       "no source",
     );
     assert.ok(view.container.textContent.includes("근거 없는 답"));
+    assert.ok(view.container.textContent.includes("검증 안 됨"));
   } finally {
     bundle.close();
   }

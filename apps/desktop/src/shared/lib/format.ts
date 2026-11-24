@@ -1,4 +1,13 @@
-import type { ChartDecimal, FormattedNumber, UiText } from "./brand";
+import type {
+  ChartDecimal,
+  Count,
+  EntityId,
+  FormattedNumber,
+  FreeText,
+  Ticker,
+  Timestamp,
+  UiText,
+} from "./brand";
 import type { Money, Price, Quantity, PercentDisplay } from "./money";
 import { readDecimalForNumberDisplay } from "./money";
 import { text, type MessageKey } from "./messages";
@@ -168,3 +177,16 @@ export const formatPriceChange = (
     text: `${money.text}${text("number.openRate", "ko")}${percent.text}${text("number.closeRate", "ko")}` as FormattedNumber,
   };
 };
+
+export type DataDisplayInput =
+  FreeText | Ticker | Timestamp | EntityId | Count | ChartDecimal | UiText;
+
+export const formatDataValue = (value: DataDisplayInput): FormattedNumber =>
+  (typeof value === "number"
+    ? group(value.toString())
+    : value) as FormattedNumber;
+
+export const formatTimestampValue = (value: Timestamp): FormattedNumber =>
+  (value.length >= 16 && value.charAt(10) === "T"
+    ? `${value.slice(0, 10)} ${value.slice(11, 16)}`
+    : value) as FormattedNumber;

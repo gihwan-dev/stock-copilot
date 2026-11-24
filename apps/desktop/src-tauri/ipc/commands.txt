@@ -1,6 +1,8 @@
 app_version
 cancel_chat_turn
 get_chat_history
+get_settings
 open_external
 resubscribe_chat_turn
 send_chat_message
+set_order_permission

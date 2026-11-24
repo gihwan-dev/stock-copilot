@@ -19,6 +19,9 @@ use crate::tools::{
 };
 
 const DEFAULT_CANDLE_DAYS: u16 = 60_u16;
+const DEFAULT_LIST_LIMIT: usize = 50_usize;
+const MAX_LIST_LIMIT: u64 = 100_u64;
+const MAX_FLOW_DAYS: usize = 60_usize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MarketToolKind {
@@ -109,10 +112,12 @@ impl MarketToolKind {
                     }),
                 );
                 props.insert(String::from("market"), market);
+                props.insert(String::from("limit"), list_limit_schema());
                 &["kind"]
             }
             Self::Sectors => {
                 props.insert(String::from("market"), market);
+                props.insert(String::from("limit"), list_limit_schema());
                 &[]
             }
             Self::InvestorFlow => {
@@ -125,6 +130,25 @@ impl MarketToolKind {
             }
         };
         build_object_schema(props, required)
+    }
+}
+
+fn list_limit_schema() -> Value {
+    json!({ "type": "integer", "minimum": 1_i64, "maximum": 100_i64 })
+}
+
+fn parse_list_limit(raw: Option<&Value>) -> Result<usize, ToolErrorPayload> {
+    match raw.and_then(Value::as_u64) {
+        None => Ok(DEFAULT_LIST_LIMIT),
+        Some(value) if (1_u64..=MAX_LIST_LIMIT).contains(&value) => {
+            usize::try_from(value).map_err(|_overflow| {
+                ToolErrorPayload::invalid_input(Some("limit"), "limit must be between 1 and 100")
+            })
+        }
+        Some(_out_of_range) => Err(ToolErrorPayload::invalid_input(
+            Some("limit"),
+            "limit must be between 1 and 100",
+        )),
     }
 }
 
@@ -164,13 +188,15 @@ impl<M: MarketToolReads + 'static, C: Clock + 'static> McpTool for MarketTool<M,
                 MarketToolKind::Rankings => {
                     let kind = parse_ranking_kind(args.get("kind"))?;
                     let market = parse_market(args.get("market"))?;
+                    let limit = parse_list_limit(args.get("limit"))?;
                     let view = require(self.reads.rankings(kind, market).await)?;
-                    Ok(render_rankings(&view))
+                    Ok(render_rankings(&view, limit))
                 }
                 MarketToolKind::Sectors => {
                     let market = parse_market(args.get("market"))?;
+                    let limit = parse_list_limit(args.get("limit"))?;
                     let view = require(self.reads.sectors(market).await)?;
-                    Ok(render_sectors(&view))
+                    Ok(render_sectors(&view, limit))
                 }
                 MarketToolKind::InvestorFlow => {
                     let symbol = parse_symbol(args.get("symbol"))?;
@@ -417,10 +443,11 @@ fn render_overview(view: &MarketOverviewToolView) -> Value {
     ])
 }
 
-fn render_rankings(view: &RankingsToolView) -> Value {
+fn render_rankings(view: &RankingsToolView, limit: usize) -> Value {
     let lines: Vec<Value> = view
         .lines
         .iter()
+        .take(limit)
         .zip(1_u64..)
         .map(|(line, rank)| {
             object(vec![
@@ -444,10 +471,11 @@ fn render_rankings(view: &RankingsToolView) -> Value {
     ])
 }
 
-fn render_sectors(view: &SectorsToolView) -> Value {
+fn render_sectors(view: &SectorsToolView, limit: usize) -> Value {
     let lines: Vec<Value> = view
         .lines
         .iter()
+        .take(limit)
         .zip(1_u64..)
         .map(|(line, rank)| {
             object(vec![
@@ -477,6 +505,7 @@ fn render_investor_flow(view: &application::InvestorFlowToolView) -> Value {
     });
     let values: Vec<Value> = lines
         .iter()
+        .take(MAX_FLOW_DAYS)
         .map(|line| {
             object(vec![
                 ("trading_date", timestamp(line.trading_date)),

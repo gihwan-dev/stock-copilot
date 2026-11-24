@@ -107,6 +107,41 @@ pub fn display_change(change: &MoneyChange, precision: DisplayPrecision) -> Disp
     }
 }
 
+#[must_use]
+pub fn display_percent(ratio: &crate::Ratio, precision: DisplayPrecision) -> DisplayDigits {
+    display_digits(percent_of(ratio.as_decimal()), precision)
+}
+
+#[must_use]
+pub fn display_quotient_percent(
+    quotient: &crate::RatioQuotient,
+    precision: DisplayPrecision,
+) -> (DisplayDigits, DisplayDirection) {
+    let (decimal, direction) = match quotient {
+        crate::RatioQuotient::Exact(ratio) => {
+            let value = ratio.as_decimal();
+            let dir = match value.cmp(&Decimal::ZERO) {
+                std::cmp::Ordering::Greater => DisplayDirection::Up,
+                std::cmp::Ordering::Less => DisplayDirection::Down,
+                std::cmp::Ordering::Equal => DisplayDirection::Flat,
+            };
+            (value, dir)
+        }
+        crate::RatioQuotient::Approximate(ratio) => {
+            (ratio.as_decimal(), ratio.original_direction())
+        }
+    };
+    (display_digits(percent_of(decimal), precision), direction)
+}
+
+fn percent_of(decimal: Decimal) -> Amount {
+    match crate::exact_arithmetic::multiply(Amount::new(decimal), Amount::new(Decimal::ONE_HUNDRED))
+    {
+        Ok(scaled) => scaled,
+        Err(_) => Amount::new(Decimal::ZERO),
+    }
+}
+
 fn display_digits(amount: Amount, precision: DisplayPrecision) -> DisplayDigits {
     let value = amount.as_decimal();
     let rounded = value.round_dp_with_strategy(

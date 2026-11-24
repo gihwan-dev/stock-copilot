@@ -13,6 +13,7 @@ mod untrusted;
 mod contract_tests;
 
 pub use catalog::market::register_market_tools;
+pub use catalog::news::register_news_tools;
 pub use catalog::portfolio::register_portfolio_tools;
 pub use catalog::{AnalysisCatalogPorts, build_analysis_catalog};
 pub use estimate_input::{

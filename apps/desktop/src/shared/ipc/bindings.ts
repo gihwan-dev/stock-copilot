@@ -9,6 +9,14 @@ export const commands = {
     typedError<AppVersion, IpcError>(
       __TAURI_INVOKE("app_version", { request }),
     ),
+  getSettings: (request: GetSettingsRequest) =>
+    typedError<UiSettingsView, IpcError>(
+      __TAURI_INVOKE("get_settings", { request }),
+    ),
+  setOrderPermission: (request: SetOrderPermissionRequest) =>
+    typedError<UiOrderSwitchOutcome, IpcError>(
+      __TAURI_INVOKE("set_order_permission", { request }),
+    ),
   sendChatMessage: (
     request: SendChatMessageRequest_Deserialize,
     onChunk: Channel<ChatChunkEvent_Deserialize>,
@@ -91,6 +99,7 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       ToolCallFinished?: never;
@@ -105,6 +114,7 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -120,6 +130,7 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -133,6 +144,7 @@ export type ChatChunkDto_Deserialize =
     } & {
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -147,7 +159,22 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
+      TextDelta?: never;
+      ToolCallFinished?: never;
+      ToolCallStarted?: never;
+    })
+  | ({
+      NumberCheck: {
+        status: ChatNumberCheckDto;
+      };
+    } & {
+      Card?: never;
+      Done?: never;
+      Failed?: never;
+      RateLimited?: never;
+      Sources?: never;
       TextDelta?: never;
       ToolCallFinished?: never;
       ToolCallStarted?: never;
@@ -165,6 +192,7 @@ export type ChatChunkDto_Deserialize =
     } & {
       Card?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -181,6 +209,7 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       Sources?: never;
       TextDelta?: never;
       ToolCallFinished?: never;
@@ -193,6 +222,7 @@ export type ChatChunkDto_Deserialize =
     } & {
       Card?: never;
       Done?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -209,6 +239,7 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       ToolCallFinished?: never;
@@ -223,6 +254,7 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -238,6 +270,7 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -251,6 +284,7 @@ export type ChatChunkDto_Serialize =
     } & {
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -265,7 +299,22 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
+      TextDelta?: never;
+      ToolCallFinished?: never;
+      ToolCallStarted?: never;
+    })
+  | ({
+      NumberCheck: {
+        status: ChatNumberCheckDto;
+      };
+    } & {
+      Card?: never;
+      Done?: never;
+      Failed?: never;
+      RateLimited?: never;
+      Sources?: never;
       TextDelta?: never;
       ToolCallFinished?: never;
       ToolCallStarted?: never;
@@ -283,6 +332,7 @@ export type ChatChunkDto_Serialize =
     } & {
       Card?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -299,6 +349,7 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       Sources?: never;
       TextDelta?: never;
       ToolCallFinished?: never;
@@ -311,6 +362,7 @@ export type ChatChunkDto_Serialize =
     } & {
       Card?: never;
       Done?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -363,6 +415,8 @@ export type ChatModelSelectionDto =
         name: string;
       };
     };
+
+export type ChatNumberCheckDto = "NoNumbers" | "Verified" | "Unverified";
 
 export type ChatReasoningEffortDto =
   "Default" | "Low" | "Medium" | "High" | "XHigh" | "Max";
@@ -425,6 +479,10 @@ export type GetChatHistoryResponse_Serialize = {
   session_id: string;
   entries: StoredChatEntryDto_Serialize[];
   active_turn: ActiveChatTurnDto | null;
+};
+
+export type GetSettingsRequest = {
+  scope: SettingsQueryScope;
 };
 
 export type IpcError = {
@@ -506,6 +564,12 @@ export type SendChatMessageResponse_Serialize = {
   failure_reason: ChatFailureReasonDto | null;
 };
 
+export type SetOrderPermissionRequest = {
+  permission: UiOrderPermission;
+};
+
+export type SettingsQueryScope = "all";
+
 export type StoredChatEntryDto =
   StoredChatEntryDto_Serialize | StoredChatEntryDto_Deserialize;
 
@@ -539,6 +603,8 @@ export type UiBriefingId = {
 };
 
 export type UiBriefingKind = "Morning" | "ClosingReview" | "PreUsMarket";
+
+export type UiConnectionState = "connected" | "needs-key";
 
 export type UiDataSource =
   | "KindDisclosure"
@@ -1287,6 +1353,9 @@ export type UiEvent =
 
 export type UiFxPair = "UsdKrw" | "KrwUsd";
 
+export type UiHorizon =
+  "hours" | "few-days" | "weeks-to-months" | "half-year-or-more";
+
 export type UiInformationSource =
   | "Web"
   | ({ News: UiNewsSource } & { Disclosure?: never })
@@ -1303,6 +1372,43 @@ export type UiNewsSource =
   | "FederalReserve"
   | "GoogleNews"
   | "YahooFinance";
+
+export type UiOptionalKeyState = "configured" | "unconfigured";
+
+export type UiOrderPermission = "off" | "on";
+
+export type UiOrderSwitchOutcome = {
+  kind: UiOrderSwitchOutcomeKind;
+  order_enabled: UiOrderPermission;
+};
+
+export type UiOrderSwitchOutcomeKind =
+  "changed" | "unchanged" | "denied" | "unavailable";
+
+export type UiRiskAppetite = "conservative" | "neutral" | "aggressive";
+
+export type UiSettingsView = {
+  toss_connection: UiConnectionState;
+  horizon: UiHorizon;
+  risk_appetite: UiRiskAppetite;
+  instrument_cap_percent: string;
+  instrument_warning_percent: string;
+  sector_cap_percent: string;
+  excluded_sector_count: number;
+  excluded_security_type_count: number;
+  order_enabled: UiOrderPermission;
+  ai_budget_percent: string;
+  dart_key: UiOptionalKeyState;
+  fred_key: UiOptionalKeyState;
+  allow_market_orders: UiToggleState;
+  allow_hours_horizon: UiToggleState;
+  card_expiry_minutes: number;
+  concentration_warning_threshold: number;
+  auto_start_at_login: UiToggleState;
+  account_count: number;
+};
+
+export type UiToggleState = "off" | "on";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(
