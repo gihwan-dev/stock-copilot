@@ -23,3 +23,5 @@
 | M-04 | 시장 도구의 자료원 | M-03과 같은 방식으로 `application::MarketToolReads` 포트와 보기 레코드(`QuoteToolView` 등, 모두 `collected_at` 필수)를 두고 `mcp-server`는 검증·정렬·렌더링만 한다. 포트 구현(`GetMarketOverview`·`read_queries` 조립)은 U-01에 인계 | 도구가 `MarketOverview`·`MarketIndicatorQuote`를 직접 렌더링 |
 | M-04 | 근사·공식 표시 | 항목마다 `provenance`(official·approximate). 토스 미국 ETF로만 얻는 S&P 500·나스닥 100·원유·금·달러 지수는 포트 값과 무관하게 `approximate`로 고정(공식 값으로 잘못 표시되는 쪽을 닫음). 미 국채 금리는 재무부·FRED 값이라 포트 표시를 따른다 | 포트 표시를 그대로 믿음 |
 | M-04 | 인자 범위 | `market`은 KR·US(생략 시 KR), `get_investor_flow`는 KR만, `get_candles`는 `days` 1~250(기본 60)과 `limit`·`cursor` 페이지, `get_rankings`의 `kind`는 거래대금·상승·하락·외국인 순매수·기관 순매수. 지수·금리 값은 단위(`unit`)를 붙인 십진 문자열 | 미국 수급 허용, 일봉 한 번에 전부 |
+| M-03 | 거래 커서 | 위치 기반 커서를 유지한다. 쪽 사이에 새 거래가 맨 앞에 들어오면 다음 쪽에 중복이 생길 수 있으나 커서 TTL 10분·질의 지문 범위 안의 표시 문제라 받아들인다 | 시점 고정 스냅샷 커서(저장소 버전 필요) |
+| 묶음 | 리뷰 위임 경로 | 세션 훅이 기본 `Agent` 리뷰를 막아 T3 `delegate_task`(별도 작업 사본, `role: review`, 기준 커밋·브랜치·대상 커밋 줄)로만 위임 | 기본 Agent |
