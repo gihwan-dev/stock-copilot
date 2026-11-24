@@ -16,7 +16,8 @@ use testkit_ports::ScriptedPresence;
 use testkit_ports::memory::MemoryReply;
 
 use super::fixture::{
-    AuditMode, GATE_HELD, GATE_OPEN, HourlyState, LedgerMode, Options, PROPOSAL, fixture_with,
+    AuditMode, GATE_HELD, GATE_OPEN, HourlyState, LedgerMode, Options, OrderSize, PROPOSAL,
+    ReplyKind, fixture_with,
 };
 use super::{LOCAL, approval, response_of, run_with};
 use crate::platform::scheduling::AppPortfolioSync;
@@ -278,4 +279,46 @@ fn e_every_registered_scheduler_job_runs_without_presence_or_orders() {
             assert_eq!(observed_path.trade.sent(), vec![], "(e) 주문 0건");
         },
     );
+}
+
+#[test]
+fn o09_high_value_order_is_confirmed_once_and_never_resent_after_rejection() {
+    let presence = Arc::new(ScriptedPresence::new([OrderConfirmation::Confirmed], []));
+    let path = Arc::new(fixture_with(
+        Arc::clone(&presence),
+        "BRK-O09",
+        Options {
+            size: OrderSize::HighValue,
+            reply: ReplyKind::RejectHighValue,
+            ..Options::default()
+        },
+    ));
+    let observed = Arc::clone(&presence);
+    let observed_path = Arc::clone(&path);
+    run_with(&presence, &path, move |handle| {
+        assert_eq!(
+            response_of(handle, "request_order_approval", LOCAL, approval(PROPOSAL)),
+            Ok(serde_json::json!({"status": "broker-rejected", "reason": "high-value-rejected"})),
+            "토스 고액 거절은 실패와 한 문장 사유"
+        );
+        assert_eq!(
+            response_of(handle, "request_order_approval", LOCAL, approval(PROPOSAL)),
+            Ok(serde_json::json!({"status": "rejected", "reason": "already-consumed"})),
+            "같은 제안은 다시 보내지 않음"
+        );
+        let sent = observed_path.trade.sent();
+        assert_eq!(sent.len(), 1, "재전송 0건");
+        assert_eq!(
+            sent[0].large_order,
+            domain::LargeOrderConfirmation::Required,
+            "처음부터 고액 확인을 붙여 보냄"
+        );
+        let shown = observed.order_calls();
+        assert_eq!(shown.len(), 1, "본인 확인 1회");
+        assert_eq!(
+            shown[0].expected_amount.confirmation(),
+            domain::LargeOrderConfirmation::Required,
+            "확인 창에 보인 요약이 고액 판정"
+        );
+    });
 }

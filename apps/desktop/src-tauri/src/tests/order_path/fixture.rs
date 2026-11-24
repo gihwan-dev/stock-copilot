@@ -124,7 +124,7 @@ fn volatility(master: &MasterInstrument) -> Volatility {
     Volatility::calculate(&candles).expect("변동성")
 }
 
-fn draft(master: &MasterInstrument) -> Proposal<Draft> {
+fn draft(master: &MasterInstrument, size: OrderSize) -> Proposal<Draft> {
     let client_id = ClientOrderId::try_new(PROPOSAL).expect("주문 키");
     let obs = master
         .price_observation(price("35000"), now())
@@ -144,7 +144,7 @@ fn draft(master: &MasterInstrument) -> Proposal<Draft> {
         client_id.clone(),
         OrderTerms::KrLimit {
             side: OrderSide::Buy,
-            quantity: WholeOrderQuantity::try_new(quantity("2")).expect("정수 수량"),
+            quantity: WholeOrderQuantity::try_new(quantity(size.quantity())).expect("정수 수량"),
             price: KrOrderPrice::try_new(price("35000")).expect("지정가"),
         },
     )
@@ -159,10 +159,10 @@ fn draft(master: &MasterInstrument) -> Proposal<Draft> {
     .expect("초안")
 }
 
-fn context(master: &MasterInstrument) -> OrderGatePolicyContext {
+fn context(master: &MasterInstrument, size: OrderSize) -> OrderGatePolicyContext {
     let portfolio = Portfolio::new(
         Vec::new(),
-        BuyingPower::new(money("5000000", Currency::Krw), now()),
+        BuyingPower::new(money(size.cash(), Currency::Krw), now()),
         BuyingPower::new(money("0", Currency::Usd), now()),
     )
     .expect("포트폴리오")
@@ -231,6 +231,7 @@ fn push_gate_round(
     market: &ScriptedMarketInfo,
     master: &MasterInstrument,
     quoted: &str,
+    size: OrderSize,
 ) {
     broker
         .script_quotes()
@@ -278,9 +279,10 @@ fn push_gate_round(
             .expect("요율"),
             CommissionValidity::try_new(None, None).expect("기간"),
         )));
-    broker
-        .script_buying_power()
-        .push(Ok(BuyingPower::new(money("5000000", Currency::Krw), now())));
+    broker.script_buying_power().push(Ok(BuyingPower::new(
+        money(size.cash(), Currency::Krw),
+        now(),
+    )));
     broker
         .script_stock_warnings()
         .push(Ok(StockWarnings::from_lookup_result(
@@ -501,6 +503,36 @@ pub(crate) struct Options {
     pub(crate) audit: AuditMode,
     pub(crate) ledger: LedgerMode,
     pub(crate) gate: Arc<AtomicU8>,
+    pub(crate) size: OrderSize,
+    pub(crate) reply: ReplyKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OrderSize {
+    Small,
+    HighValue,
+}
+
+impl OrderSize {
+    const fn quantity(self) -> &'static str {
+        match self {
+            Self::Small => "2",
+            Self::HighValue => "2300",
+        }
+    }
+
+    const fn cash(self) -> &'static str {
+        match self {
+            Self::Small => "5000000",
+            Self::HighValue => "1000000000",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReplyKind {
+    Accept,
+    RejectHighValue,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -518,6 +550,8 @@ impl Default for Options {
             audit: AuditMode::Writable,
             ledger: LedgerMode::Atomic,
             gate: Arc::new(AtomicU8::new(GATE_OPEN)),
+            size: OrderSize::Small,
+            reply: ReplyKind::Accept,
         }
     }
 }
@@ -559,19 +593,13 @@ fn rates(state: HourlyState) -> FixedRates {
     }
 }
 
-pub(crate) fn fixture_with(
-    presence: Arc<ScriptedPresence>,
-    accept: &str,
-    options: Options,
-) -> PathFixture {
-    let master = master();
-    let proposal = draft(&master);
-    let id = proposal.id().clone();
-    let broker = Arc::new(ScriptedBrokerRead::default());
-    let market = Arc::new(ScriptedMarketInfo::default());
-    broker.script_quotes().push(Ok(vec![quote(&master)]));
-    push_gate_round(&broker, &market, &master, "35000");
-    push_gate_round(&broker, &market, &master, options.post_presence_price);
+type Storage = (
+    Arc<MemoryProposalConsumptionRepository>,
+    Arc<MemoryValidationReportRepository>,
+    Arc<MemoryAuditLog>,
+);
+
+fn storage(mode: AuditMode) -> Storage {
     let consumption = Arc::new(MemoryProposalConsumptionRepository::default());
     let reports = Arc::new(MemoryValidationReportRepository::default());
     let audit = Arc::new(MemoryAuditLog::default());
@@ -579,7 +607,7 @@ pub(crate) fn fixture_with(
         consumption.script_status().push(MemoryReply::Memory);
         consumption.script_consume().push(MemoryReply::Memory);
         reports.script_append().push(MemoryReply::Memory);
-        audit.script_append().push(match options.audit {
+        audit.script_append().push(match mode {
             AuditMode::Writable => MemoryReply::Memory,
             AuditMode::Broken => MemoryReply::Return(Err(SystemPortError::new(
                 application::SystemPort::AuditLog,
@@ -587,9 +615,34 @@ pub(crate) fn fixture_with(
             ))),
         });
     }
-    let trade = Arc::new(RecordingBroker::with_replies([BrokerReply::Accept(
-        BrokerOrderId::try_new(accept).expect("주문번호"),
-    )]));
+    (consumption, reports, audit)
+}
+
+pub(crate) fn fixture_with(
+    presence: Arc<ScriptedPresence>,
+    accept: &str,
+    options: Options,
+) -> PathFixture {
+    let master = master();
+    let proposal = draft(&master, options.size);
+    let id = proposal.id().clone();
+    let broker = Arc::new(ScriptedBrokerRead::default());
+    let market = Arc::new(ScriptedMarketInfo::default());
+    broker.script_quotes().push(Ok(vec![quote(&master)]));
+    push_gate_round(&broker, &market, &master, "35000", options.size);
+    push_gate_round(
+        &broker,
+        &market,
+        &master,
+        options.post_presence_price,
+        options.size,
+    );
+    let (consumption, reports, audit) = storage(options.audit);
+    let reply = match options.reply {
+        ReplyKind::Accept => BrokerReply::Accept(BrokerOrderId::try_new(accept).expect("주문번호")),
+        ReplyKind::RejectHighValue => BrokerReply::high_value_confirmation_required(),
+    };
+    let trade = Arc::new(RecordingBroker::with_replies([reply]));
     let tx = Arc::new(LedgerTx {
         mode: options.ledger,
         consumption: Arc::clone(&consumption),
@@ -606,7 +659,7 @@ pub(crate) fn fixture_with(
         reports,
         audit,
         contexts: Arc::new(FixedContexts {
-            contexts: BTreeMap::from([(id, context(&master))]),
+            contexts: BTreeMap::from([(id, context(&master, options.size))]),
             gate: options.gate,
         }),
         redrafter: Arc::new(NoRedraft),

@@ -58,6 +58,13 @@ pub enum BrokerReply {
     Unknown(OrderUnknownCause),
 }
 
+impl BrokerReply {
+    #[must_use]
+    pub const fn high_value_confirmation_required() -> Self {
+        Self::Reject(OrderRejectionReason::ConfirmHighValueRequired)
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct RecordingBroker {
     replies: RwLock<VecDeque<BrokerReply>>,
