@@ -1,0 +1,18 @@
+task = "S-24"
+base_commit = "64e58007bad9ef3e611e76ebd250391a4a93c879"
+merge_head = "bf5f2bf2ff007742292fa7e0d3a9ca6b370ab745"
+reason = "S-24 adds migration 0009 for the instrument mapping history, so the fixed migration ledger count moves from 8 to 9 and the fixed schema object count from 55 to 64; one line each, no assertion removed, reviewed by the main agent"
+findings = [
+  "test-diff:modified:store-sqlite migration_tests::fresh_open_records_clock_and_reopen_preserves_ledger",
+  "test-diff:modified:store-sqlite tests::raw_key_is_independently_readable_and_debug_is_closed",
+]
+
+[[file]]
+path = "crates/adapters/store-sqlite/src/migration_tests.rs"
+before_sha256 = "d62952637a9c9e99a314ba9e8d229b89295351668e5c26d8004fd29f7160df8f"
+after_sha256 = "240cc894071421b0f04205cfba0dce04c67f4ff0880c5db44623c77330911a75"
+
+[[file]]
+path = "crates/adapters/store-sqlite/src/tests.rs"
+before_sha256 = "1f82f383ed3a04d89cb8059535fcf6676146399c89db050429dea9fdf1ba30e0"
+after_sha256 = "306405fff3ab503eeaaec63e626300deb913f81321040c382e19e33b3f02ef50"

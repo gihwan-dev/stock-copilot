@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"session-fixture-003","cwd":"/tmp/empty","tools":["mcp__app__get_portfolio"],"mcp_servers":[{"name":"app","status":"connected"}],"model":"claude-opus-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy"}],"apiKeySource":"none","claude_code_version":"2.1.322"}
+{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1794394800,"rateLimitType":"seven_day","overageStatus":"rejected","isUsingOverage":false,"unifiedWindows":{"seven_day":{"utilization":1,"resetsAt":1794394800,"status":"rejected","surpassedThreshold":1}}}}
+{"type":"assistant","error":"rate_limit","message":{"model":"<synthetic>","content":[{"type":"text","text":"You've hit your weekly limit"}]}}
+{"type":"result","subtype":"success","is_error":true,"api_error_status":429,"api_error":"usage_limit_reached","terminal_reason":"api_error"}

@@ -1,5 +1,10 @@
-CREATE UNIQUE INDEX instrument_mappings_isin_key ON instrument_mappings(upper(isin));
-CREATE UNIQUE INDEX instrument_mappings_symbol_key ON instrument_mappings(market, upper(symbol));
+CREATE INDEX instrument_mapping_events_instrument_seq ON instrument_mapping_events(instrument_id, seq);
+CREATE UNIQUE INDEX instrument_mappings_active_retired_id_key ON instrument_mappings(instrument_id) WHERE status IN ('active', 'retired');
+CREATE UNIQUE INDEX instrument_mappings_active_retired_isin_key ON instrument_mappings(upper(isin)) WHERE status IN ('active', 'retired');
+CREATE UNIQUE INDEX instrument_mappings_active_retired_symbol_key ON instrument_mappings(market, upper(symbol)) WHERE status IN ('active', 'retired');
+CREATE INDEX instrument_mappings_isin_key ON instrument_mappings(upper(isin));
+CREATE UNIQUE INDEX instrument_mappings_superseded_event_key ON instrument_mappings(superseded_event_seq) WHERE superseded_event_seq IS NOT NULL;
+CREATE INDEX instrument_mappings_symbol_key ON instrument_mappings(market, upper(symbol));
 CREATE INDEX proposal_validation_reports_lookup ON proposal_validation_reports(proposal_id, id);
 CREATE INDEX transaction_entries_account_id ON transaction_entries(account, id);
 CREATE TABLE holdings_snapshots (
@@ -36,13 +41,42 @@ CREATE TABLE instrument_id_issuer (
     slot INTEGER PRIMARY KEY CHECK (slot = 1),
     last_issued TEXT NOT NULL CHECK (instr(last_issued, char(0)) = 0 AND length(last_issued) = 16 AND last_issued NOT GLOB '*[^0-9a-f]*' AND last_issued != '0000000000000000')
 ) STRICT;
+CREATE TABLE instrument_mapping_events (
+    seq INTEGER PRIMARY KEY CHECK (seq > 0),
+    event_kind TEXT NOT NULL CHECK (event_kind IN ('identifier_changed', 'retirement_corrected', 'link_corrected')),
+    instrument_id TEXT NOT NULL CHECK (instr(instrument_id, char(0)) = 0 AND length(instrument_id) BETWEEN 1 AND 64 AND instrument_id NOT GLOB '*[^!-~]*'),
+    market TEXT NOT NULL CHECK (market IN ('KR', 'US')),
+    prev_symbol TEXT NOT NULL CHECK (instr(prev_symbol, char(0)) = 0 AND length(prev_symbol) BETWEEN 1 AND 32 AND prev_symbol GLOB '[A-Za-z0-9]*' AND prev_symbol NOT GLOB '*[^A-Za-z0-9.-]*'),
+    prev_isin TEXT NOT NULL CHECK (instr(prev_isin, char(0)) = 0 AND length(prev_isin) BETWEEN 1 AND 64 AND prev_isin NOT GLOB '*[^!-~]*'),
+    next_symbol TEXT CHECK (next_symbol IS NULL OR (instr(next_symbol, char(0)) = 0 AND length(next_symbol) BETWEEN 1 AND 32 AND next_symbol GLOB '[A-Za-z0-9]*' AND next_symbol NOT GLOB '*[^A-Za-z0-9.-]*')),
+    next_isin TEXT CHECK (next_isin IS NULL OR (instr(next_isin, char(0)) = 0 AND length(next_isin) BETWEEN 1 AND 64 AND next_isin NOT GLOB '*[^!-~]*')),
+    disclosure_source TEXT NOT NULL CHECK (disclosure_source IN ('DART', 'KIND', 'SEC_EDGAR')),
+    disclosure_receipt_no TEXT NOT NULL CHECK (instr(disclosure_receipt_no, char(0)) = 0),
+    action_kind TEXT CHECK (action_kind IS NULL OR action_kind IN ('symbol_change', 'split', 'reverse_split')),
+    action_year INTEGER CHECK (action_year IS NULL OR action_year BETWEEN 1 AND 9999),
+    action_month INTEGER CHECK (action_month IS NULL OR action_month BETWEEN 1 AND 12),
+    action_day INTEGER CHECK (action_day IS NULL OR action_day BETWEEN 1 AND 31),
+    action_from_symbol TEXT CHECK (action_from_symbol IS NULL OR (instr(action_from_symbol, char(0)) = 0 AND length(action_from_symbol) BETWEEN 1 AND 32 AND action_from_symbol GLOB '[A-Za-z0-9]*' AND action_from_symbol NOT GLOB '*[^A-Za-z0-9.-]*')),
+    action_to_symbol TEXT CHECK (action_to_symbol IS NULL OR (instr(action_to_symbol, char(0)) = 0 AND length(action_to_symbol) BETWEEN 1 AND 32 AND action_to_symbol GLOB '[A-Za-z0-9]*' AND action_to_symbol NOT GLOB '*[^A-Za-z0-9.-]*')),
+    action_from_count TEXT CHECK (action_from_count IS NULL OR (instr(action_from_count, char(0)) = 0 AND length(action_from_count) BETWEEN 1 AND 20 AND action_from_count NOT GLOB '*[^0-9]*' AND action_from_count NOT GLOB '0*')),
+    action_to_count TEXT CHECK (action_to_count IS NULL OR (instr(action_to_count, char(0)) = 0 AND length(action_to_count) BETWEEN 1 AND 20 AND action_to_count NOT GLOB '*[^0-9]*' AND action_to_count NOT GLOB '0*')),
+    note TEXT NOT NULL CHECK (length(CAST(note AS BLOB)) BETWEEN 1 AND 512 AND length(CAST(trim(note, ' ' || char(9) || char(10) || char(13)) AS BLOB)) > 0),
+    recorded_seconds INTEGER NOT NULL CHECK (recorded_seconds BETWEEN -62135596800 AND 253402300799),
+    recorded_nanos INTEGER NOT NULL CHECK (recorded_nanos >= 0 AND recorded_nanos < 1000000000),
+    recorded_offset INTEGER NOT NULL CHECK (recorded_offset BETWEEN -86340 AND 86340 AND recorded_offset % 60 = 0),
+    CHECK ((disclosure_source IN ('DART', 'KIND') AND length(disclosure_receipt_no) = 14 AND disclosure_receipt_no NOT GLOB '*[^0-9]*') OR (disclosure_source = 'SEC_EDGAR' AND length(disclosure_receipt_no) = 20 AND disclosure_receipt_no GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]')),
+    CHECK ((event_kind = 'identifier_changed' AND next_symbol IS NOT NULL AND next_isin IS NOT NULL AND NOT (upper(prev_symbol) = upper(next_symbol) AND upper(prev_isin) = upper(next_isin)) AND action_kind IS NOT NULL AND action_year IS NOT NULL AND action_month IS NOT NULL AND action_day IS NOT NULL AND ((action_kind = 'symbol_change' AND action_from_symbol IS NOT NULL AND action_to_symbol IS NOT NULL AND upper(action_from_symbol) != upper(action_to_symbol) AND upper(action_from_symbol) = upper(prev_symbol) AND upper(action_to_symbol) = upper(next_symbol) AND action_from_count IS NULL AND action_to_count IS NULL) OR (action_kind = 'split' AND action_from_symbol IS NULL AND action_to_symbol IS NULL AND action_from_count IS NOT NULL AND action_to_count IS NOT NULL AND (length(action_to_count) > length(action_from_count) OR (length(action_to_count) = length(action_from_count) AND action_to_count > action_from_count))) OR (action_kind = 'reverse_split' AND action_from_symbol IS NULL AND action_to_symbol IS NULL AND action_from_count IS NOT NULL AND action_to_count IS NOT NULL AND (length(action_from_count) > length(action_to_count) OR (length(action_from_count) = length(action_to_count) AND action_from_count > action_to_count))))) OR (event_kind = 'retirement_corrected' AND next_symbol IS NULL AND next_isin IS NULL AND action_kind IS NULL AND action_year IS NULL AND action_month IS NULL AND action_day IS NULL AND action_from_symbol IS NULL AND action_to_symbol IS NULL AND action_from_count IS NULL AND action_to_count IS NULL) OR (event_kind = 'link_corrected' AND next_symbol IS NOT NULL AND next_isin IS NOT NULL AND NOT (upper(prev_symbol) = upper(next_symbol) AND upper(prev_isin) = upper(next_isin)) AND action_kind IS NULL AND action_year IS NULL AND action_month IS NULL AND action_day IS NULL AND action_from_symbol IS NULL AND action_to_symbol IS NULL AND action_from_count IS NULL AND action_to_count IS NULL))
+) STRICT;
 CREATE TABLE instrument_mappings (
-    instrument_id TEXT PRIMARY KEY CHECK (instr(instrument_id, char(0)) = 0 AND length(instrument_id) BETWEEN 1 AND 64 AND instrument_id NOT GLOB '*[^!-~]*'),
+    instrument_id TEXT NOT NULL CHECK (instr(instrument_id, char(0)) = 0 AND length(instrument_id) BETWEEN 1 AND 64 AND instrument_id NOT GLOB '*[^!-~]*'),
     market TEXT NOT NULL CHECK (market IN ('KR', 'US')),
     symbol TEXT NOT NULL CHECK (instr(symbol, char(0)) = 0 AND length(symbol) BETWEEN 1 AND 32 AND symbol GLOB '[A-Za-z0-9]*' AND symbol NOT GLOB '*[^A-Za-z0-9.-]*'),
     isin TEXT NOT NULL CHECK (instr(isin, char(0)) = 0 AND length(isin) BETWEEN 1 AND 64 AND isin NOT GLOB '*[^!-~]*'),
-    status TEXT NOT NULL CHECK (status IN ('active', 'retired')),
-    UNIQUE (market, symbol, isin)
+    status TEXT NOT NULL CHECK (status IN ('active', 'superseded', 'retired')),
+    superseded_event_seq INTEGER REFERENCES instrument_mapping_events(seq),
+    PRIMARY KEY (instrument_id, market, symbol, isin),
+    UNIQUE (market, symbol, isin),
+    CHECK ((status = 'superseded' AND superseded_event_seq IS NOT NULL) OR (status IN ('active', 'retired') AND superseded_event_seq IS NULL))
 ) STRICT;
 CREATE TABLE market_candles (
     instrument TEXT NOT NULL,
@@ -195,10 +229,13 @@ CREATE TABLE transaction_sources (
 CREATE TRIGGER instrument_id_issuer_monotonic BEFORE UPDATE ON instrument_id_issuer WHEN NEW.slot != OLD.slot OR NEW.last_issued <= OLD.last_issued BEGIN SELECT RAISE(ABORT, 'instrument id issuer cursor must advance monotonically'); END;
 CREATE TRIGGER instrument_id_issuer_no_delete BEFORE DELETE ON instrument_id_issuer BEGIN SELECT RAISE(ABORT, 'instrument id issuer cursor cannot be deleted'); END;
 CREATE TRIGGER instrument_id_issuer_single_insert BEFORE INSERT ON instrument_id_issuer WHEN EXISTS (SELECT 1 FROM instrument_id_issuer) BEGIN SELECT RAISE(ABORT, 'instrument id issuer cursor already exists'); END;
-CREATE TRIGGER instrument_mappings_insert_active_only BEFORE INSERT ON instrument_mappings WHEN NEW.status != 'active' BEGIN SELECT RAISE(ABORT, 'instrument mapping must start active'); END;
-CREATE TRIGGER instrument_mappings_no_delete BEFORE DELETE ON instrument_mappings BEGIN SELECT RAISE(ABORT, 'instrument mappings cannot be deleted'); END;
-CREATE TRIGGER instrument_mappings_no_replace BEFORE INSERT ON instrument_mappings WHEN EXISTS (SELECT 1 FROM instrument_mappings WHERE instrument_id = NEW.instrument_id OR (market = NEW.market AND upper(symbol) = upper(NEW.symbol)) OR upper(isin) = upper(NEW.isin)) BEGIN SELECT RAISE(ABORT, 'instrument mapping cannot replace existing history'); END;
-CREATE TRIGGER instrument_mappings_retire_only BEFORE UPDATE ON instrument_mappings WHEN OLD.status != 'active' OR NEW.status != 'retired' OR NEW.instrument_id != OLD.instrument_id OR NEW.market != OLD.market OR NEW.symbol != OLD.symbol OR NEW.isin != OLD.isin BEGIN SELECT RAISE(ABORT, 'instrument mapping can only transition from active to retired'); END;
+CREATE TRIGGER instrument_mapping_events_monotonic_seq BEFORE INSERT ON instrument_mapping_events WHEN NEW.seq != coalesce((SELECT max(seq) FROM instrument_mapping_events), 0) + 1 BEGIN SELECT RAISE(ABORT, 'instrument mapping event sequence must advance monotonically without gaps'); END;
+CREATE TRIGGER instrument_mapping_events_no_delete BEFORE DELETE ON instrument_mapping_events BEGIN SELECT RAISE(ABORT, 'instrument mapping events are append only'); END;
+CREATE TRIGGER instrument_mapping_events_no_update BEFORE UPDATE ON instrument_mapping_events BEGIN SELECT RAISE(ABORT, 'instrument mapping events are append only'); END;
+CREATE TRIGGER instrument_mappings_insert_active_only BEFORE INSERT ON instrument_mappings WHEN NEW.status != 'active' OR NEW.superseded_event_seq IS NOT NULL BEGIN SELECT RAISE(ABORT, 'instrument mapping must start active'); END;
+CREATE TRIGGER instrument_mappings_no_delete BEFORE DELETE ON instrument_mappings WHEN OLD.status != 'active' OR NOT EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'link_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND next_symbol = OLD.symbol AND next_isin = OLD.isin) BEGIN SELECT RAISE(ABORT, 'instrument mappings cannot be deleted'); END;
+CREATE TRIGGER instrument_mappings_no_replace BEFORE INSERT ON instrument_mappings WHEN EXISTS (SELECT 1 FROM instrument_mappings WHERE market = NEW.market AND upper(symbol) = upper(NEW.symbol) AND instrument_id != NEW.instrument_id) OR EXISTS (SELECT 1 FROM instrument_mappings WHERE upper(isin) = upper(NEW.isin) AND instrument_id != NEW.instrument_id) OR EXISTS (SELECT 1 FROM instrument_mappings WHERE instrument_id = NEW.instrument_id AND (status IN ('active', 'retired') OR market != NEW.market OR (upper(symbol) = upper(NEW.symbol) AND upper(isin) = upper(NEW.isin)))) OR (EXISTS (SELECT 1 FROM instrument_mappings WHERE instrument_id = NEW.instrument_id) AND NOT EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = NEW.instrument_id) AND event_kind = 'identifier_changed' AND instrument_id = NEW.instrument_id AND market = NEW.market AND next_symbol = NEW.symbol AND next_isin = NEW.isin)) BEGIN SELECT RAISE(ABORT, 'instrument mapping cannot replace existing history'); END;
+CREATE TRIGGER instrument_mappings_retire_only BEFORE UPDATE ON instrument_mappings WHEN NEW.instrument_id != OLD.instrument_id OR NEW.market != OLD.market OR NEW.symbol != OLD.symbol OR NEW.isin != OLD.isin OR NOT ((OLD.status = 'active' AND NEW.status = 'retired' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NULL) OR (OLD.status = 'active' AND NEW.status = 'superseded' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NOT NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = NEW.superseded_event_seq AND seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'identifier_changed' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin)) OR (OLD.status = 'retired' AND NEW.status = 'active' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'retirement_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin)) OR (OLD.status = 'superseded' AND NEW.status = 'active' AND OLD.superseded_event_seq IS NOT NULL AND NEW.superseded_event_seq IS NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'link_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin))) BEGIN SELECT RAISE(ABORT, 'instrument mapping transition is not permitted'); END;
 CREATE TRIGGER proposal_consumptions_no_delete BEFORE DELETE ON proposal_consumptions BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
 CREATE TRIGGER proposal_consumptions_no_replace BEFORE INSERT ON proposal_consumptions WHEN EXISTS (SELECT 1 FROM proposal_consumptions WHERE proposal_id = NEW.proposal_id) BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
 CREATE TRIGGER proposal_consumptions_no_update BEFORE UPDATE ON proposal_consumptions BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
