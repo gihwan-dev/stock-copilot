@@ -1,3 +1,4 @@
+pub mod catalog;
 mod handler;
 mod pagination;
 mod peer;
