@@ -578,6 +578,11 @@ pub use weekly_review::{
     WeeklyReviewCard, WeeklyReviewCards, WeeklyReviewError, WeeklyReviewInputs,
     WeeklyReviewNarrator, WeeklyReviewRun, WeeklyReviewSource,
 };
+mod paired_comparison;
+pub use paired_comparison::{
+    ComparisonArm, ComparisonArmResult, ComparisonArmRunner, PairedComparison, PairedComparisonLog,
+    PairingError, PairingRun, RunPairedComparison,
+};
 mod deep_research;
 pub use deep_research::{
     AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,

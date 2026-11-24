@@ -719,6 +719,9 @@ pub use candidate_discovery::{
 mod weekly_review;
 pub use weekly_review::{WeeklyReviewSlot, weekly_review_slot};
 
+mod paired_comparison;
+pub use paired_comparison::{PairingDecision, PairingRate, PairingRateError, paired_sample};
+
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
 
