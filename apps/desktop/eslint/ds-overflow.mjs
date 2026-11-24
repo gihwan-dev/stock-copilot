@@ -63,6 +63,7 @@ export const LENGTH_EXCEPTIONS = [
       "h-chart-height-lg",
     ],
   ],
+  ["src/shared/ds/CandleChart.tsx", ["h-chart-height"]],
   [
     "src/shared/ds/Page.tsx",
     ["min-h-toolbar-height", "max-w-content-max", "wrap-slot"],

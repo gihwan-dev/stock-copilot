@@ -1,5 +1,6 @@
 use std::ffi::OsString;
 use std::io::{self, IsTerminal, Write};
+use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -9,6 +10,7 @@ use broker_toss::{TokioRequestWait, TossEndpoint};
 use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
 use toss_smoke::RuntimeContext;
 use toss_smoke::cli::{Command, parse_args, usage_text};
+use toss_smoke::deidentify::{DEIDENTIFY_USAGE, deidentify_files};
 use toss_smoke::exit_code::SmokeExitCode;
 use toss_smoke::input::StdinKind;
 use toss_smoke::lock::{APP_DATA_DIR_NAME, LOCK_FILE_NAME};
@@ -89,8 +91,33 @@ fn write_stderr_line(text: &str) {
     }
 }
 
+fn deidentify(rest: &[OsString]) -> ExitCode {
+    let [input, output] = rest else {
+        write_stderr_line(DEIDENTIFY_USAGE);
+        return ExitCode::from(SmokeExitCode::UsageError.as_u8());
+    };
+    match deidentify_files(Path::new(input), Path::new(output)) {
+        Ok(count) => {
+            let mut stdout = io::stdout().lock();
+            match writeln!(stdout, "픽스처 {count}개를 만들었습니다.") {
+                Ok(()) => ExitCode::from(SmokeExitCode::Success.as_u8()),
+                Err(_) => ExitCode::from(SmokeExitCode::RuntimeError.as_u8()),
+            }
+        }
+        Err(message) => {
+            write_stderr_line(message);
+            ExitCode::from(SmokeExitCode::RecordWriteFailed.as_u8())
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if let Some((first, rest)) = args.split_first()
+        && first == "deidentify"
+    {
+        return deidentify(rest);
+    }
     match parse_args(&args) {
         Ok(Command::Usage) => {
             let mut stdout = io::stdout().lock();

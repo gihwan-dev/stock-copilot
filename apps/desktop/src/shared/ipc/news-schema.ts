@@ -2,7 +2,7 @@ import { z } from "zod";
 import { toggleSchema } from "./ai-schema";
 import { aliasSchema, contactSchema, tickerSchema } from "./schema";
 
-export const newsSources = [
+const newsSources = [
   "KindDisclosure",
   "DartDisclosureApi",
   "DartDisclosureRss",

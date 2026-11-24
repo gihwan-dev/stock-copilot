@@ -39,14 +39,14 @@ export type TossKeys = {
   readonly secret: SecretText;
 };
 
-export type SetupClient = {
+type SetupClient = {
   readonly checkTossConnection: () => Reply<TossConnection>;
   readonly submitTossKeys: (keys: TossKeys) => Reply<TossConnection>;
   readonly publicIp: () => Reply<PublicIp>;
   readonly copyText: (value: IpAddressText) => Reply<CopyResult>;
 };
 
-export type SystemClient = {
+type SystemClient = {
   readonly accountSelection: () => Reply<AccountSelection>;
   readonly selectAccount: (id: AccountRef) => Reply<AccountSelection>;
   readonly backupNow: () => Reply<BackupResult>;
@@ -54,7 +54,7 @@ export type SystemClient = {
   readonly deleteAllData: () => Reply<DeleteResult>;
 };
 
-export type AiClient = {
+type AiClient = {
   readonly aiSettings: () => Reply<AiSettings>;
   readonly setTaskModel: (setting: AiTaskSetting) => Reply<AiSettings>;
   readonly setBudgetPercent: (percent: BudgetPercent) => Reply<AiSettings>;
@@ -67,7 +67,7 @@ export type AiClient = {
   ) => Reply<ScheduledJobs>;
 };
 
-export type NewsClient = {
+type NewsClient = {
   readonly newsSettings: () => Reply<NewsSettings>;
   readonly setNewsSource: (setting: SourceSetting) => Reply<NewsSettings>;
   readonly setOptionalKey: (

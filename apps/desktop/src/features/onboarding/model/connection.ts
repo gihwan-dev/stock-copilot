@@ -41,7 +41,7 @@ const viewOfState = (state: ConnectionState): GateView => {
   }
 };
 
-export const gateView = (data: ConnectionReply): GateView => {
+const gateView = (data: ConnectionReply): GateView => {
   if (data === undefined) return { screen: "loading" };
   if (data.kind === "err") return { screen: "ready" };
   return viewOfState(data.value.state);
