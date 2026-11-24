@@ -82,6 +82,20 @@ pub enum FlowDay {
     Confirmed(ConfirmedFlowDay),
     Uncertain(FlowUncertainty),
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SavedExternalFlow {
+    pub date: CalendarDate,
+    pub transaction_time: Option<Timestamp>,
+    pub exchange_rate: Option<Ratio>,
+    pub direction: FlowDirection,
+    pub amount: Money,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedConfirmedFlowPeriod {
+    pub window: SettlementWindow,
+    pub currency: Currency,
+    pub flows: Vec<SavedExternalFlow>,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfirmedFlowPeriod {
     window: SettlementWindow,
@@ -89,6 +103,49 @@ pub struct ConfirmedFlowPeriod {
     flows: Vec<ExternalFlow>,
 }
 impl ConfirmedFlowPeriod {
+    #[must_use]
+    pub fn saved_state(&self) -> SavedConfirmedFlowPeriod {
+        SavedConfirmedFlowPeriod {
+            window: self.window,
+            currency: self.currency,
+            flows: self
+                .flows
+                .iter()
+                .map(|flow| SavedExternalFlow {
+                    date: flow.date,
+                    transaction_time: flow.transaction_time,
+                    exchange_rate: flow.exchange_rate,
+                    direction: flow.direction,
+                    amount: flow.amount,
+                })
+                .collect(),
+        }
+    }
+    pub fn restore_from_saved_state(
+        saved: SavedConfirmedFlowPeriod,
+    ) -> Result<Self, crate::SnapshotError> {
+        let mut flows = Vec::with_capacity(saved.flows.len());
+        for flow in saved.flows {
+            if flow.amount.currency() != saved.currency {
+                return Err(crate::SnapshotError::CalendarMismatch);
+            }
+            if flow.date < saved.window.from() || flow.date > saved.window.to() {
+                return Err(crate::SnapshotError::OutsideConfirmedPeriod);
+            }
+            flows.push(ExternalFlow {
+                date: flow.date,
+                transaction_time: flow.transaction_time,
+                exchange_rate: flow.exchange_rate,
+                direction: flow.direction,
+                amount: flow.amount,
+            });
+        }
+        Ok(Self {
+            window: saved.window,
+            currency: saved.currency,
+            flows,
+        })
+    }
     #[must_use]
     pub const fn window(&self) -> SettlementWindow {
         self.window

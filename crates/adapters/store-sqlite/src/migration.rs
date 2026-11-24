@@ -40,6 +40,10 @@ pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
         "0009_instrument_mapping_history.sql",
         crate::sql::instrument_mapping::MIGRATE_0009,
     ),
+    (
+        "0010_estimates_and_valuations.sql",
+        crate::sql::estimates::CREATE,
+    ),
 ];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {

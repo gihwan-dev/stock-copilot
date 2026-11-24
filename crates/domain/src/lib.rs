@@ -143,7 +143,7 @@ pub use candle::{
     CandleTime, Ohlcv, PriceAdjustment,
 };
 pub use quote::{ClockAlignment, Quote, QuoteError};
-pub use volatility::{Volatility, VolatilityError, VolatilitySamples};
+pub use volatility::{SavedVolatility, Volatility, VolatilityError, VolatilitySamples};
 pub use volatility_arithmetic::{AnnualVolatility, DailyVolatility};
 mod proposal;
 mod volatility_display;
@@ -220,7 +220,10 @@ pub use corporate_action::{
     LotListing, LotTaxStatus,
 };
 pub use cost_basis::{CostBasisMethod, LotCost, LotUnitPrice};
-pub use lot::{Lot, LotBook, LotCostCurrency, LotError, LotIdentity};
+pub use lot::{
+    Lot, LotBook, LotCostCurrency, LotError, LotIdentity, SavedCorporateDelivery, SavedCostPool,
+    SavedFractionalEntitlement, SavedLot, SavedLotBook, SavedLotRealization,
+};
 mod cost_basis_arithmetic;
 pub use cost_basis_arithmetic::{IntegerText, QuantityShape, ShareQuantity};
 
@@ -250,7 +253,7 @@ pub use calibration::{
     CalibrationEvidence, CalibrationFact, CalibrationInstant, CalibrationInterval, CalibrationKey,
     CalibrationLedgerHead, CalibrationModel, CalibrationOutcome, CalibrationPosition,
     CalibrationReadiness, CalibrationSnapshot, CalibrationTable, ConservativeCalibration,
-    EligibleCalibration, ModelIdentityPart,
+    EligibleCalibration, ModelIdentityPart, SavedCalibrationFact,
 };
 
 mod policy;
@@ -267,19 +270,22 @@ pub use policy_settings::{
 mod base_probability;
 mod estimate_task;
 pub use base_probability::{BaseProbability, EstimateDistance};
-pub use estimate_task::{EstimateContext, EstimateTask, NoEstimateTask};
+pub use estimate_task::{EstimateContext, EstimateTask, NoEstimateTask, SavedEstimateTask};
 
 mod estimate_outcome;
 mod estimate_outcome_arithmetic;
 pub use estimate_outcome::{
     EstimateOutcome, OutcomeAdjustment, OutcomeCorporateAction, OutcomeEvidence, OutcomeFailed,
     OutcomeFailure, OutcomePending, OutcomeState, OutcomeSuccess, OutcomeUnavailable,
+    SavedEstimateOutcome, SavedOutcomeAdjustment, SavedOutcomeEvidence,
 };
 mod thresholds;
 mod thresholds_arithmetic;
 mod trade_cost;
 mod trade_cost_arithmetic;
-pub use thresholds::{Margin, NoThresholds, ThresholdDisplay, ThresholdKind, Thresholds};
+pub use thresholds::{
+    Margin, NoThresholds, SavedCostEligibleTask, ThresholdDisplay, ThresholdKind, Thresholds,
+};
 pub use trade_cost::{CommissionRateFact, CostRate, TradeCost, TradeCostError, TradeTaxFact};
 
 mod trade_cost_period;
@@ -294,7 +300,7 @@ pub use cash_ledger::{
 };
 pub use external_flow::{
     ConfirmedFlowDay, ConfirmedFlowPeriod, ExternalFlow, ExternalFlows, FlowCalendar, FlowDay,
-    FlowDirection, FlowPeriod, FlowUncertainty,
+    FlowDirection, FlowPeriod, FlowUncertainty, SavedConfirmedFlowPeriod, SavedExternalFlow,
 };
 
 mod cash_ledger_evidence;
@@ -331,7 +337,10 @@ pub use daily_profit::{
 };
 pub use daily_profit_account::{AccountChange, AccountCurrencyChange, AccountKrwChange};
 pub use valuation_snapshot::{ObservedCloseEvidence, ObservedCloseRequirement};
-pub use valuation_snapshot::{SnapshotInstrumentHistory, SnapshotPosition, ValuationSnapshot};
+pub use valuation_snapshot::{
+    SavedSnapshotPosition, SavedValuationSnapshot, SnapshotInstrumentHistory, SnapshotPosition,
+    ValuationSnapshot,
+};
 pub use valuation_snapshot_calendar::regular_session_candle_status;
 pub use valuation_snapshot_calendar::{
     SnapshotCalendar, SnapshotDates, SnapshotError, SnapshotObservation, SnapshotPriceBasis,
@@ -401,7 +410,8 @@ pub use known_market::{KnownMarket, UnknownKnownMarket};
 pub use master_instrument::{
     CommonShare, KoreanMasterDetail, LiquidationTrading, ListingStatus, MasterCode,
     MasterInstrument, MasterInstrumentError, MasterInstrumentFacts, MasterInstrumentRow,
-    MasterSecurityType, NxtTrading, QuoteInstrument, SecurityTypeKnowledge, TradingSuspension,
+    MasterSecurityType, NxtTrading, QuoteInstrument, SavedQuoteInstrument, SecurityTypeKnowledge,
+    TradingSuspension,
 };
 mod master_order_gate;
 pub use master_order_gate::{MasterOrderGateFacts, NxtSupport};
@@ -622,7 +632,7 @@ pub use settled_row_set::recent_transaction_window;
 mod estimate_assignment;
 pub use estimate_assignment::{
     EstimateAssignmentError, EstimateAssignments, EstimateConsumption, IssuedEstimateTask,
-    IssuedEstimateTaskId,
+    IssuedEstimateTaskId, SavedIssuedEstimateTask,
 };
 mod estimate_record;
 pub use estimate_record::{

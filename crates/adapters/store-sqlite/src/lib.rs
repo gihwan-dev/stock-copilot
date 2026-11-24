@@ -169,3 +169,8 @@ mod instrument_mapping_correction_tests;
 mod instrument_mapping_history_tests;
 #[cfg(test)]
 mod instrument_mapping_tests;
+
+mod estimates;
+pub use estimates::{EstimateStore, ValuationStore};
+#[cfg(test)]
+mod estimates_tests;

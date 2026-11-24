@@ -47,3 +47,7 @@ pub(crate) mod instrument_mapping;
 pub(crate) mod instrument_mapping_history_tests;
 #[cfg(test)]
 pub(crate) mod instrument_mapping_tests;
+
+pub(crate) mod estimates;
+#[cfg(test)]
+pub(crate) mod estimates_tests;

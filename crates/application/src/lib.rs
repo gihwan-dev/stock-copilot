@@ -382,8 +382,8 @@ pub use transaction_schedule::{
 
 mod submit_estimate;
 pub use submit_estimate::{
-    EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository, SubmitEstimate,
-    SubmitEstimateError,
+    EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository,
+    EstimateTaskRepository, SubmitEstimate, SubmitEstimateError,
 };
 
 mod transaction_observation;
