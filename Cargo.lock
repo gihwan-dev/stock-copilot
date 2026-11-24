@@ -32,6 +32,8 @@ dependencies = [
  "proptest",
  "serde_json",
  "testkit",
+ "testkit-ports",
+ "tokio",
 ]
 
 [[package]]
