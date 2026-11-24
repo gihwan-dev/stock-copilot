@@ -635,3 +635,157 @@ fn reexported_paste_macros_and_trait_arg_macros_are_blocked() {
         BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
     );
 }
+
+#[test]
+fn r3_fn_datatype_paste_brackets_serde_literals_and_assoc_types_are_blocked() {
+    let tauri = "apps/desktop/src-tauri/src/lib.rs";
+    for bad in [
+        "pub fn f() { specta::function::fn_datatype!(#[ [<cf g>] (any()) ] domain::[<User IdentityConfirmation>]::[<issue_after _user_confirmation>]); }",
+        "pub fn f() { specta::function::_fn_datatype_internal!(x); }",
+        "use specta::function::fn_datatype as fd; pub fn f() { fd!(x); }",
+        "use specta::function::*;",
+        "pub fn f() { custom_macro!([<User IdentityConfirmation>]); }",
+    ] {
+        assert_eq!(
+            scan("src-tauri", tauri, bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+    let broker = "crates/adapters/broker-toss/src/lib.rs";
+    for bad in [
+        "#[derive(serde::Deserialize)] pub struct Forge { #[serde(skip_deserializing, default = \"domain::UserIdentityConfirmation::issue_after_user_confirmation\")] seal: domain::UserIdentityConfirmation }",
+        "#[derive(serde::Deserialize)] pub struct Escaped { #[serde(default = \"domain::UserIdentityConfirmation::\\x69ssue_after_user_confirmation\")] seal: domain::UserIdentityConfirmation }",
+        "#[derive(serde::Deserialize)] pub struct UnicodeEsc { #[serde(default = \"domain::UserIdentityConfirmation::\\u{69}ssue_after_user_confirmation\")] seal: domain::UserIdentityConfirmation }",
+        "pub fn f() { custom_macro!(\"domain::UserIdentityConfirmation::issue_after_user_confirmation\"); }",
+    ] {
+        assert_eq!(
+            scan("broker-toss", broker, bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+    assert!(
+        scan(
+            "xtask",
+            "crates/xtask/src/some_test.rs",
+            "fn f() { let _ = format!(\"issue_after_user_confirmation\"); }",
+        )
+        .is_empty()
+    );
+    let defining = "crates/domain/src/instrument_mapping_change.rs";
+    let base = "#[derive(Debug, PartialEq, Eq)] struct UserIdentityConfirmationSeal;\n#[derive(Debug, PartialEq, Eq)] pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);\nimpl UserIdentityConfirmation { #[must_use] pub const fn issue_after_user_confirmation() -> Self { Self(UserIdentityConfirmationSeal) } }";
+    for bad in [
+        format!(
+            "{base}\ntrait SealForge {{ type Seal; type Out; fn mint() -> Self::Out; }} pub struct ForgeHandle; impl SealForge for ForgeHandle {{ type Seal = UserIdentityConfirmationSeal; type Out = UserIdentityConfirmation; fn mint() -> Self::Out {{ Self::Out {{ 0: Self::Seal {{}} }} }} }}"
+        ),
+        format!("{base}\npub struct Smuggle(UserIdentityConfirmationSeal);"),
+        format!(
+            "{base}\ntrait OutAlias {{ type Out; }} pub struct Handle; impl OutAlias for Handle {{ type Out = UserIdentityConfirmation; }}"
+        ),
+        format!("{base}\ntrait TraitAssoc {{ type Out = UserIdentityConfirmation; }}"),
+    ] {
+        assert_eq!(
+            scan("domain", defining, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationIssuance]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn r3_prompt_defining_file_rejects_tampering() {
+    let prompt_file = "crates/application/src/identity_confirmation_prompt.rs";
+    let valid_head = "use domain::{IdentityChangeEvidence, InstrumentId, InstrumentSource, MappingCorrectionEvidence};
+use std::future::Future;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] pub enum IdentityConfirmationDecision { Confirmed, Denied, Unavailable }
+#[derive(Debug, Clone, PartialEq, Eq)] pub struct IdentifierChangePrompt { instrument_id: InstrumentId }
+#[derive(Debug, Clone, PartialEq, Eq)] pub struct RetirementCorrectionPrompt { instrument_id: InstrumentId }
+#[derive(Debug, Clone, PartialEq, Eq)] pub struct LinkCorrectionPrompt { instrument_id: InstrumentId }";
+    let valid_trait = "pub trait IdentityConfirmationPrompt: Send + Sync {
+    fn confirm_identifier_change(&self, request: &IdentifierChangePrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send;
+    fn confirm_retirement_correction(&self, request: &RetirementCorrectionPrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send;
+    fn confirm_link_correction(&self, request: &LinkCorrectionPrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send;
+}";
+    assert!(
+        scan(
+            "application",
+            prompt_file,
+            &format!("{valid_head}\n{valid_trait}")
+        )
+        .is_empty()
+    );
+    assert_eq!(
+        scan(
+            "application",
+            prompt_file,
+            &format!(
+                "{valid_head}\npub trait AutoAffirm {{}}\npub use self::AutoAffirm as IdentityConfirmationPrompt;"
+            ),
+        ),
+        BTreeSet::from([
+            Rule::IdentityConfirmationPromptAlias,
+            Rule::IdentityConfirmationPromptImpl,
+            Rule::IdentityConfirmationPromptReexport,
+        ])
+    );
+    for bad in [
+        format!(
+            "{valid_head}\npub trait IdentityConfirmationPrompt: Send + Sync {{ fn confirm_identifier_change(&self, request: &IdentifierChangePrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send {{ async {{ IdentityConfirmationDecision::Confirmed }} }} fn confirm_retirement_correction(&self, request: &RetirementCorrectionPrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send; fn confirm_link_correction(&self, request: &LinkCorrectionPrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send; }}"
+        ),
+        format!(
+            "{valid_head}\npub trait IdentityConfirmationPrompt {{ fn confirm_identifier_change(&self, request: &IdentifierChangePrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send; fn confirm_retirement_correction(&self, request: &RetirementCorrectionPrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send; fn confirm_link_correction(&self, request: &LinkCorrectionPrompt) -> impl Future<Output = IdentityConfirmationDecision> + Send; }}"
+        ),
+        format!(
+            "#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)] pub enum IdentityConfirmationDecision {{ #[default] Confirmed, Denied, Unavailable }}\n{valid_trait}"
+        ),
+        format!("{valid_head}\n#[custom_attr]\n{valid_trait}"),
+        format!("{valid_head}\n{valid_trait}\npub struct AutoPrompt;"),
+        String::from(valid_head),
+    ] {
+        assert_eq!(
+            scan("application", prompt_file, &bad),
+            BTreeSet::from([Rule::IdentityConfirmationPromptImpl]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn r3_as_prompt_trait_alias_and_non_expr_macro_are_blocked() {
+    assert_eq!(
+        scan(
+            "application",
+            "crates/application/src/identity_confirmation_prompt/sneak.rs",
+            "pub fn sneak() {}",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationIssuance])
+    );
+    assert_eq!(
+        scan(
+            "broker-toss",
+            "crates/adapters/broker-toss/src/lib.rs",
+            "trait Fake {} use self::Fake as IdentityConfirmationPrompt;",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationPromptAlias])
+    );
+    assert_eq!(
+        scan(
+            "broker-toss",
+            "crates/adapters/broker-toss/src/lib.rs",
+            "pub trait Fake {} pub use self::Fake as IdentityConfirmationPrompt;",
+        ),
+        BTreeSet::from([
+            Rule::IdentityConfirmationPromptAlias,
+            Rule::IdentityConfirmationPromptReexport,
+        ])
+    );
+    assert_eq!(
+        scan(
+            "store-sqlite",
+            "crates/adapters/store-sqlite/src/lib.rs",
+            "pub fn f() { custom_macro!(AutoPrompt => IdentityConfirmationPrompt); }",
+        ),
+        BTreeSet::from([Rule::IdentityConfirmationPromptImpl])
+    );
+}

@@ -889,3 +889,19 @@ name = "identity-confirmation-empty-struct-tampering-fail"
 findings = [
     { rule = "identity-confirmation-issuance", subject = "crates/domain/src/instrument_mapping_change.rs" },
 ]
+
+[[case]]
+name = "identity-confirmation-r3-bypasses-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/fn_datatype.rs" },
+    { rule = "identity-confirmation-issuance", subject = "apps/desktop/src-tauri/src/paste_brackets.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/adapters/broker-toss/src/serde_default.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/adapters/broker-toss/src/serde_escaped.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/application/src/identity_confirmation_prompt/sneak.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/domain/src/instrument_mapping_change.rs" },
+    { rule = "identity-confirmation-prompt-alias", subject = "crates/adapters/broker-toss/src/as_prompt_trait.rs" },
+    { rule = "identity-confirmation-prompt-alias", subject = "crates/application/src/identity_confirmation_prompt.rs" },
+    { rule = "identity-confirmation-prompt-impl", subject = "crates/adapters/store-sqlite/src/lib.rs" },
+    { rule = "identity-confirmation-prompt-impl", subject = "crates/application/src/identity_confirmation_prompt.rs" },
+    { rule = "identity-confirmation-prompt-reexport", subject = "crates/application/src/identity_confirmation_prompt.rs" },
+]

@@ -1,10 +1,11 @@
+mod prompt_def;
 #[cfg(test)]
 mod tests;
 mod use_case;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use proc_macro2::{TokenStream, TokenTree};
+use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use quote::ToTokens;
 use syn::ext::IdentExt;
 use syn::parse::Parser;
@@ -12,9 +13,9 @@ use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
 use syn::{
     Attribute, Expr, ExprAsync, ExprCall, ExprClosure, ExprForLoop, ExprLoop, ExprMatch, ExprPath,
-    ExprStruct, ExprWhile, Fields, ImplItem, ImplItemFn, Item, ItemExternCrate, ItemImpl, ItemMod,
-    ItemStruct, ItemType, ItemUse, Macro, Pat, Path, PathArguments, Stmt, Token, Type, UseRename,
-    Visibility,
+    ExprStruct, ExprWhile, Fields, ImplItem, ImplItemFn, ImplItemType, Item, ItemExternCrate,
+    ItemImpl, ItemMod, ItemStruct, ItemType, ItemUse, LitByteStr, LitCStr, LitStr, Macro, Pat,
+    Path, PathArguments, Stmt, Token, TraitItemType, Type, TypePath, UseRename, Visibility,
 };
 
 use super::super::rules::IdentityConfirmationRules;
@@ -25,8 +26,15 @@ const ALLOWED_DERIVES: [&str; 3] = ["Debug", "PartialEq", "Eq"];
 const DEFINING_MACRO_BANNED: [&str; 8] = [
     "impl", "struct", "mod", "fn", "const", "static", "type", "use",
 ];
-const BANNED_PASTE_MACROS: [&str; 2] = ["paste", "_tauri_specta_paste"];
+const BANNED_PASTE_MACROS: [&str; 5] = [
+    "paste",
+    "_tauri_specta_paste",
+    "fn_datatype",
+    "_fn_datatype",
+    "_fn_datatype_internal",
+];
 const PASTE_REEXPORT_CRATES: [&str; 2] = ["tauri_specta", "specta"];
+const PASTE_REEXPORT_MODULES: [&str; 2] = ["internal", "function"];
 const USE_CASE_STRUCT: &str = "ConfirmInstrumentIdentity";
 const DECISION_ENUM: &str = "IdentityConfirmationDecision";
 const CONFIRMED_VARIANT: &str = "Confirmed";
@@ -103,6 +111,28 @@ fn stream_contains_ident(tokens: TokenStream, needle: &str) -> bool {
     })
 }
 
+fn literal_text(raw: &str) -> Option<String> {
+    if let Ok(text) = syn::parse_str::<LitStr>(raw) {
+        Some(text.value())
+    } else if let Ok(text) = syn::parse_str::<LitByteStr>(raw) {
+        Some(String::from_utf8_lossy(&text.value()).into_owned())
+    } else if let Ok(text) = syn::parse_str::<LitCStr>(raw) {
+        Some(text.value().to_string_lossy().into_owned())
+    } else {
+        None
+    }
+}
+
+fn stream_literal_contains(tokens: TokenStream, needle: &str) -> bool {
+    tokens.into_iter().any(|token| match token {
+        TokenTree::Group(group) => stream_literal_contains(group.stream(), needle),
+        TokenTree::Literal(literal) => {
+            literal_text(&literal.to_string()).is_some_and(|value| value.contains(needle))
+        }
+        TokenTree::Ident(_) | TokenTree::Punct(_) => false,
+    })
+}
+
 fn is_cfg_test_mod(item: &ItemMod) -> bool {
     item.ident.unraw() == "tests"
         && private(&item.vis)
@@ -140,10 +170,12 @@ fn is_unauthorized_child_file(rules: &IdentityConfirmationRules, relative: &str)
     });
     let in_use_case_dir = child_directory_prefix(&rules.use_case_file)
         .is_some_and(|prefix| relative.starts_with(&prefix));
+    let in_prompt_dir = child_directory_prefix(&prompt_def::prompt_defining_file(rules))
+        .is_some_and(|prefix| relative.starts_with(&prefix));
     let in_allowed_dir = rules.issuance_allowed_files.iter().any(|allowed| {
         child_directory_prefix(allowed).is_some_and(|prefix| relative.starts_with(&prefix))
     });
-    in_defining_dir || in_use_case_dir || in_allowed_dir
+    in_defining_dir || in_use_case_dir || in_prompt_dir || in_allowed_dir
 }
 
 fn has_non_private_impl_item(item: &ImplItem) -> bool {
@@ -329,11 +361,12 @@ impl PromptCheck<'_> {
             imported == self.rules.prompt_module || self.aliases.module_aliases.contains(imported);
         let sensitive = imported == self.rules.prompt_trait || touches_prompt_module;
         match &entry.kind {
-            UseKind::Rename(_) => {
-                if imported == self.rules.prompt_trait {
+            UseKind::Rename(alias) => {
+                if imported == self.rules.prompt_trait || alias == &self.rules.prompt_trait {
                     self.findings.insert(Rule::IdentityConfirmationPromptAlias);
                 }
-                if exposed == Exposure::Exported && sensitive {
+                if exposed == Exposure::Exported && (sensitive || alias == &self.rules.prompt_trait)
+                {
                     self.findings
                         .insert(Rule::IdentityConfirmationPromptReexport);
                 }
@@ -352,13 +385,15 @@ impl PromptCheck<'_> {
     fn check_macro_tokens(&mut self, tokens: TokenStream) {
         let mut idents = Vec::new();
         token_idents(tokens, &mut idents);
-        if idents.iter().any(|ident| ident == &self.rules.prompt_trait)
-            && idents.iter().any(|ident| ident == "impl")
-            && !self.impl_allowed()
-        {
+        let has_prompt = idents.iter().any(|ident| ident == &self.rules.prompt_trait);
+        let is_use_only = idents.iter().any(|ident| ident == "use")
+            && !idents.iter().any(|ident| ident == "impl");
+        if has_prompt && !is_use_only && !self.impl_allowed() {
             self.findings.insert(Rule::IdentityConfirmationPromptImpl);
         }
-        if has_pair(&idents, &self.rules.prompt_trait, "as").is_some() {
+        if has_pair(&idents, &self.rules.prompt_trait, "as").is_some()
+            || has_pair(&idents, "as", &self.rules.prompt_trait).is_some()
+        {
             self.findings.insert(Rule::IdentityConfirmationPromptAlias);
         }
         if idents.iter().any(|ident| ident == "pub")
@@ -376,6 +411,15 @@ impl PromptCheck<'_> {
 }
 
 impl<'ast> Visit<'ast> for PromptCheck<'_> {
+    fn visit_attribute(&mut self, i: &'ast Attribute) {
+        if !self.impl_allowed()
+            && stream_literal_contains(i.to_token_stream(), &self.rules.prompt_trait)
+        {
+            self.findings.insert(Rule::IdentityConfirmationPromptImpl);
+        }
+        visit::visit_attribute(self, i);
+    }
+
     fn visit_item_use(&mut self, i: &'ast ItemUse) {
         let exposed = exposure(&i.vis);
         for entry in use_entries(&i.tree) {
@@ -419,10 +463,30 @@ impl<'ast> Visit<'ast> for PromptCheck<'_> {
 struct UnauthorizedFileCheck<'a> {
     rules: &'a IdentityConfirmationRules,
     in_domain: bool,
+    in_xtask: bool,
     findings: &'a mut BTreeSet<Rule>,
 }
 
 impl<'ast> Visit<'ast> for UnauthorizedFileCheck<'_> {
+    fn visit_attribute(&mut self, i: &'ast Attribute) {
+        if stream_literal_contains(i.to_token_stream(), &self.rules.issuer_function)
+            || stream_literal_contains(i.to_token_stream(), &self.rules.seal_type)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_attribute(self, i);
+    }
+
+    fn visit_macro(&mut self, i: &'ast Macro) {
+        if !self.in_xtask
+            && (stream_literal_contains(i.tokens.clone(), &self.rules.issuer_function)
+                || stream_literal_contains(i.tokens.clone(), &self.rules.seal_type))
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_macro(self, i);
+    }
+
     fn visit_item_impl(&mut self, i: &'ast ItemImpl) {
         if type_last_name(&i.self_ty).is_some_and(|name| {
             name == self.rules.confirmation_type || name == self.rules.seal_type
@@ -508,6 +572,7 @@ struct DefiningFileCheck<'a> {
     scope: Scope,
     target: DefiningTarget,
     in_canonical_issuer: bool,
+    in_canonical_seal_field: bool,
     confirmation_struct_count: usize,
     seal_struct_count: usize,
     canonical_impl_count: usize,
@@ -528,6 +593,16 @@ impl DefiningFileCheck<'_> {
 }
 
 impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
+    fn visit_attribute(&mut self, i: &'ast Attribute) {
+        if self.scope == Scope::Product
+            && (stream_literal_contains(i.to_token_stream(), &self.rules.issuer_function)
+                || stream_literal_contains(i.to_token_stream(), &self.rules.seal_type))
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_attribute(self, i);
+    }
+
     fn visit_item(&mut self, i: &'ast Item) {
         let outer = self.in_canonical_issuer;
         self.in_canonical_issuer = false;
@@ -544,6 +619,7 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
 
     fn visit_item_struct(&mut self, i: &'ast ItemStruct) {
         let name = unraw(&i.ident);
+        let outer_seal_field = self.in_canonical_seal_field;
         if name == self.rules.confirmation_type {
             self.confirmation_struct_count = self.confirmation_struct_count.saturating_add(1);
             let valid = self.scope == Scope::Product
@@ -553,7 +629,9 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
                 && i.generics.where_clause.is_none()
                 && i.attrs.iter().all(is_allowed_derive)
                 && has_single_private_seal_field(&i.fields, &self.rules.seal_type);
-            if !valid {
+            if valid {
+                self.in_canonical_seal_field = true;
+            } else {
                 self.findings.insert(Rule::IdentityConfirmationIssuance);
             }
         } else if name == self.rules.seal_type {
@@ -570,6 +648,39 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
             }
         }
         visit::visit_item_struct(self, i);
+        self.in_canonical_seal_field = outer_seal_field;
+    }
+
+    fn visit_type_path(&mut self, i: &'ast TypePath) {
+        if self.scope == Scope::Product
+            && !self.in_canonical_seal_field
+            && segment_names(&i.path)
+                .iter()
+                .any(|name| name == &self.rules.seal_type)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_type_path(self, i);
+    }
+
+    fn visit_impl_item_type(&mut self, i: &'ast ImplItemType) {
+        if self.scope == Scope::Product
+            && (tokens_contain(i, &self.rules.confirmation_type)
+                || tokens_contain(i, &self.rules.seal_type))
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_impl_item_type(self, i);
+    }
+
+    fn visit_trait_item_type(&mut self, i: &'ast TraitItemType) {
+        if self.scope == Scope::Product
+            && (tokens_contain(i, &self.rules.confirmation_type)
+                || tokens_contain(i, &self.rules.seal_type))
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_trait_item_type(self, i);
     }
 
     fn visit_item_impl(&mut self, i: &'ast ItemImpl) {
@@ -959,9 +1070,20 @@ impl<'ast> Visit<'ast> for ProtectedFakeCheck<'_> {
         visit::visit_expr_path(self, i);
     }
 
+    fn visit_attribute(&mut self, i: &'ast Attribute) {
+        if stream_literal_contains(i.to_token_stream(), &self.rules.issuer_function)
+            || stream_literal_contains(i.to_token_stream(), &self.rules.seal_type)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_attribute(self, i);
+    }
+
     fn visit_macro(&mut self, i: &'ast Macro) {
         if stream_contains_ident(i.tokens.clone(), &self.rules.issuer_function)
             || stream_contains_ident(i.tokens.clone(), &self.rules.seal_type)
+            || stream_literal_contains(i.tokens.clone(), &self.rules.issuer_function)
+            || stream_literal_contains(i.tokens.clone(), &self.rules.seal_type)
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -978,7 +1100,36 @@ pub(super) struct CheckContext<'a> {
     pub(super) tokens: &'a TokenStream,
 }
 
+fn is_paste_bracket_group(group: &proc_macro2::Group) -> bool {
+    if group.delimiter() != Delimiter::Bracket {
+        return false;
+    }
+    let items: Vec<TokenTree> = group.stream().into_iter().collect();
+    matches_punct(items.first(), '<') && matches_punct(items.last(), '>')
+}
+
+fn stream_has_paste_brackets(tokens: TokenStream) -> bool {
+    for tree in tokens {
+        if let TokenTree::Group(group) = tree
+            && (is_paste_bracket_group(&group) || stream_has_paste_brackets(group.stream()))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn matches_punct(tree: Option<&TokenTree>, expected: char) -> bool {
+    let Some(TokenTree::Punct(punct)) = tree else {
+        return false;
+    };
+    punct.as_char() == expected
+}
+
 fn stream_has_paste_macro_call(tokens: TokenStream) -> bool {
+    if stream_has_paste_brackets(tokens.clone()) {
+        return true;
+    }
     let flat: Vec<TokenTree> = tokens.into_iter().collect();
     for (index, tree) in flat.iter().enumerate() {
         match tree {
@@ -989,12 +1140,14 @@ fn stream_has_paste_macro_call(tokens: TokenStream) -> bool {
             }
             TokenTree::Ident(ident) => {
                 let name = unraw(ident);
-                if name == "_tauri_specta_paste" {
+                if name == "_tauri_specta_paste"
+                    || name == "_fn_datatype"
+                    || name == "_fn_datatype_internal"
+                {
                     return true;
                 }
-                if name == "paste"
-                    && let Some(TokenTree::Punct(punct)) = flat.get(index.saturating_add(1))
-                    && punct.as_char() == '!'
+                if (name == "paste" || name == "fn_datatype")
+                    && matches_punct(flat.get(index.saturating_add(1)), '!')
                 {
                     return true;
                 }
@@ -1064,11 +1217,14 @@ struct ReexportedPasteCheck<'a> {
 }
 
 impl ReexportedPasteCheck<'_> {
-    fn touches_internal_module(&self, segments: &[String]) -> bool {
+    fn touches_paste_reexport_module(&self, segments: &[String]) -> bool {
         segments
             .iter()
             .zip(segments.iter().skip(1))
-            .any(|(root, child)| self.crate_aliases.contains(root) && child == "internal")
+            .any(|(root, child)| {
+                self.crate_aliases.contains(root)
+                    && PASTE_REEXPORT_MODULES.contains(&child.as_str())
+            })
     }
 }
 
@@ -1076,7 +1232,7 @@ impl<'ast> Visit<'ast> for ReexportedPasteCheck<'_> {
     fn visit_item_use(&mut self, i: &'ast ItemUse) {
         for entry in use_entries(&i.tree) {
             if BANNED_PASTE_MACROS.contains(&entry.imported())
-                || self.touches_internal_module(&entry.path)
+                || self.touches_paste_reexport_module(&entry.path)
             {
                 self.findings.insert(Rule::IdentityConfirmationIssuance);
             }
@@ -1090,7 +1246,7 @@ impl<'ast> Visit<'ast> for ReexportedPasteCheck<'_> {
             .last()
             .is_some_and(|name| BANNED_PASTE_MACROS.contains(&name.as_str()));
         if banned_callee
-            || self.touches_internal_module(&names)
+            || self.touches_paste_reexport_module(&names)
             || stream_has_paste_macro_call(i.tokens.clone())
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
@@ -1099,7 +1255,7 @@ impl<'ast> Visit<'ast> for ReexportedPasteCheck<'_> {
     }
 
     fn visit_expr_path(&mut self, i: &'ast ExprPath) {
-        if self.touches_internal_module(&segment_names(&i.path)) {
+        if self.touches_paste_reexport_module(&segment_names(&i.path)) {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_expr_path(self, i);
@@ -1117,12 +1273,18 @@ fn may_touch_identity_confirmation(
         || ctx.text.contains(&rules.prompt_module)
         || ctx.text.contains("paste")
         || ctx.text.contains("internal")
+        || ctx.text.contains("fn_datatype")
+        || ctx.text.contains("[<")
+        || ctx.text.contains("specta")
+        || ctx.text.contains('\\')
     {
         return true;
     }
     let defining_crate = rules.prompt_defining_crate.replace('-', "_");
     ctx.source_aliases.iter().any(|(alias, targets)| {
-        targets.iter().any(|target| target == &defining_crate) && ctx.text.contains(alias)
+        targets.iter().any(|target| {
+            target == &defining_crate || PASTE_REEXPORT_CRATES.contains(&target.as_str())
+        }) && ctx.text.contains(alias)
     })
 }
 
@@ -1160,9 +1322,35 @@ fn check_unauthorized_file(
     let mut scan = UnauthorizedFileCheck {
         rules,
         in_domain: ctx.crate_name.as_str() == "domain",
+        in_xtask: ctx.crate_name.as_str() == "xtask",
         findings,
     };
     scan.visit_file(ctx.file);
+}
+
+fn check_defining_file(
+    rules: &IdentityConfirmationRules,
+    ctx: &CheckContext<'_>,
+    findings: &mut BTreeSet<Rule>,
+) {
+    let mut scan = DefiningFileCheck {
+        rules,
+        scope: Scope::Product,
+        target: DefiningTarget::Other,
+        in_canonical_issuer: false,
+        in_canonical_seal_field: false,
+        confirmation_struct_count: 0,
+        seal_struct_count: 0,
+        canonical_impl_count: 0,
+        findings,
+    };
+    scan.visit_file(ctx.file);
+    if scan.confirmation_struct_count != 1
+        || scan.seal_struct_count != 1
+        || scan.canonical_impl_count != 1
+    {
+        findings.insert(Rule::IdentityConfirmationIssuance);
+    }
 }
 
 pub(super) fn check(rules: &IdentityConfirmationRules, ctx: &CheckContext<'_>) -> BTreeSet<Rule> {
@@ -1173,10 +1361,12 @@ pub(super) fn check(rules: &IdentityConfirmationRules, ctx: &CheckContext<'_>) -
         findings.insert(Rule::IdentityConfirmationIssuance);
     }
 
+    let prompt_file = prompt_def::prompt_defining_file(rules);
     let is_special = unauthorized_child
         || ctx.relative == rules.defining_file
         || ctx.relative == rules.defining_test_file
         || ctx.relative == rules.use_case_file
+        || ctx.relative == prompt_file
         || rules.issuance_allowed_files.contains(ctx.relative);
     if !is_special && !may_touch_identity_confirmation(rules, ctx) {
         return findings;
@@ -1198,24 +1388,12 @@ pub(super) fn check(rules: &IdentityConfirmationRules, ctx: &CheckContext<'_>) -
     };
     prompt_check.visit_file(ctx.file);
 
+    if ctx.relative == prompt_file {
+        prompt_def::check_prompt_defining_file(rules, ctx, &mut findings);
+    }
+
     if ctx.relative == rules.defining_file {
-        let mut scan = DefiningFileCheck {
-            rules,
-            scope: Scope::Product,
-            target: DefiningTarget::Other,
-            in_canonical_issuer: false,
-            confirmation_struct_count: 0,
-            seal_struct_count: 0,
-            canonical_impl_count: 0,
-            findings: &mut findings,
-        };
-        scan.visit_file(ctx.file);
-        if scan.confirmation_struct_count != 1
-            || scan.seal_struct_count != 1
-            || scan.canonical_impl_count != 1
-        {
-            findings.insert(Rule::IdentityConfirmationIssuance);
-        }
+        check_defining_file(rules, ctx, &mut findings);
     } else if ctx.relative == rules.defining_test_file {
         check_defining_test_file(rules, ctx.file, ctx.tokens, &mut findings);
     } else if ctx.relative == rules.use_case_file {

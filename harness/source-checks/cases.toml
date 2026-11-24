@@ -908,3 +908,18 @@ expect = ["macro:_tauri_specta_paste"]
 example = "macro-tauri-specta-paste-use-alias.rs"
 path = "apps/desktop/src-tauri/src/lib.rs"
 expect = ["macro:_tauri_specta_paste"]
+
+[[source]]
+example = "macro-fn-datatype.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:fn_datatype"]
+
+[[source]]
+example = "macro-underscore-fn-datatype.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:_fn_datatype"]
+
+[[source]]
+example = "macro-fn-datatype-internal.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["macro:_fn_datatype_internal"]

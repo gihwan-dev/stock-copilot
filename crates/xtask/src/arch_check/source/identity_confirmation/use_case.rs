@@ -872,9 +872,12 @@ impl UseCaseFileCheck<'_> {
 
     fn check_struct_item(&mut self, structure: &ItemStruct) {
         self.seen_struct = self.seen_struct.saturating_add(1);
+        let clean_attrs = structure.attrs.iter().all(is_allowed_derive)
+            && structure.fields.iter().all(|field| field.attrs.is_empty());
         if unraw(&structure.ident) != USE_CASE_STRUCT
             || self.seen_struct > 1
             || self.params.is_none()
+            || !clean_attrs
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -905,6 +908,7 @@ impl UseCaseFileCheck<'_> {
             }
         }
         let mut nested = NestedItemBan {
+            rules: self.rules,
             findings: self.findings,
         };
         nested.visit_item_impl(impl_item);
@@ -919,6 +923,11 @@ impl UseCaseFileCheck<'_> {
             }
             if stream_contains_ident(module.to_token_stream(), &self.rules.issuer_function)
                 || stream_contains_ident(module.to_token_stream(), &self.rules.seal_type)
+                || super::stream_literal_contains(
+                    module.to_token_stream(),
+                    &self.rules.issuer_function,
+                )
+                || super::stream_literal_contains(module.to_token_stream(), &self.rules.seal_type)
             {
                 self.findings.insert(Rule::IdentityConfirmationIssuance);
             }
@@ -929,6 +938,7 @@ impl UseCaseFileCheck<'_> {
 }
 
 struct NestedItemBan<'a> {
+    rules: &'a IdentityConfirmationRules,
     findings: &'a mut BTreeSet<Rule>,
 }
 
@@ -941,6 +951,15 @@ impl<'ast> Visit<'ast> for NestedItemBan<'_> {
     fn visit_macro(&mut self, i: &'ast Macro) {
         self.findings.insert(Rule::IdentityConfirmationIssuance);
         visit::visit_macro(self, i);
+    }
+
+    fn visit_attribute(&mut self, i: &'ast syn::Attribute) {
+        if super::stream_literal_contains(i.to_token_stream(), &self.rules.issuer_function)
+            || super::stream_literal_contains(i.to_token_stream(), &self.rules.seal_type)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_attribute(self, i);
     }
 }
 
@@ -956,6 +975,12 @@ pub(super) fn check_use_case_file(
             findings.insert(Rule::IdentityConfirmationIssuance);
         }
         return;
+    }
+    if ctx.file.attrs.iter().any(|attr| {
+        super::stream_literal_contains(attr.to_token_stream(), &rules.issuer_function)
+            || super::stream_literal_contains(attr.to_token_stream(), &rules.seal_type)
+    }) {
+        findings.insert(Rule::IdentityConfirmationIssuance);
     }
     let params = inspect_use_case_struct(ctx.file);
     let mut scan = UseCaseFileCheck {
