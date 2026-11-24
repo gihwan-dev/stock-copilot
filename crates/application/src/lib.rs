@@ -394,6 +394,12 @@ pub use submit_estimate::{
     SubmitEstimateError,
 };
 
+mod analysis_tools;
+pub use analysis_tools::{
+    GetProfile, GetScorecard, GetScorecardError, ProfileView, ScorecardObservationRepository,
+    ScorecardSelection, ScorecardView,
+};
+
 mod submit_estimate_tool;
 pub use submit_estimate_tool::{
     EstimateRunContext, EstimateToolArguments, SubmitEstimateTool, SubmitEstimateToolError,
