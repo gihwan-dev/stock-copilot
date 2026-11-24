@@ -554,6 +554,14 @@ impl CommandPlan {
         keys
     }
 
+    #[must_use]
+    pub fn wrapped_in_sandbox(mut self, layer: &crate::sandbox::SandboxLayer) -> Self {
+        let (executable, args) = layer.wrap(&self.executable, &self.args);
+        self.executable = executable;
+        self.args = args;
+        self
+    }
+
     pub(crate) fn into_parts(
         self,
     ) -> (

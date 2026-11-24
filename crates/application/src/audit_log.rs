@@ -150,3 +150,78 @@ pub trait AuditLog: Send + Sync {
     ) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send;
     fn verify(&self) -> impl Future<Output = Result<AuditIntegrity, SystemPortError>> + Send;
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuditHeadError {
+    ZeroSequence,
+    InvalidHash,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AuditSequence(u64);
+
+impl AuditSequence {
+    pub const fn try_new(value: u64) -> Result<Self, AuditHeadError> {
+        if value == 0 {
+            return Err(AuditHeadError::ZeroSequence);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn as_u64(&self) -> &u64 {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditChainHash(String);
+
+impl AuditChainHash {
+    pub fn try_new(value: &str) -> Result<Self, AuditHeadError> {
+        if value.len() != 64
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(AuditHeadError::InvalidHash);
+        }
+        Ok(Self(value.to_owned()))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditHead {
+    sequence: AuditSequence,
+    hash: AuditChainHash,
+}
+
+impl AuditHead {
+    #[must_use]
+    pub const fn new(sequence: AuditSequence, hash: AuditChainHash) -> Self {
+        Self { sequence, hash }
+    }
+
+    #[must_use]
+    pub const fn sequence(&self) -> AuditSequence {
+        self.sequence
+    }
+
+    #[must_use]
+    pub const fn hash(&self) -> &AuditChainHash {
+        &self.hash
+    }
+}
+
+pub trait AuditHeadAnchor: Send + Sync {
+    fn load_head(&self) -> impl Future<Output = Result<Option<AuditHead>, SystemPortError>> + Send;
+    fn store_head(
+        &self,
+        head: &AuditHead,
+    ) -> impl Future<Output = Result<crate::WriteCompleted, SystemPortError>> + Send;
+}

@@ -1,4 +1,5 @@
 mod chat_session;
+mod collection;
 mod command;
 mod decoder;
 mod discovery;
@@ -9,12 +10,16 @@ mod process;
 mod provider;
 mod queue;
 mod quota;
+mod sandbox;
 
 pub use chat_session::{
     ChatProcessReuse, ChatTurnConfig, ChatTurnOutput, CliRecordCleanup, PersistentChatSession,
     cleanup_cli_project_records, encode_claude_project_dir_name,
 };
 
+pub use collection::{
+    ClaudeWebCollectionRunner, MAX_WEB_FINDINGS, WEB_COLLECTION_JSON_SCHEMA, parse_web_findings,
+};
 pub use command::{
     ALLOWED_HOST_ENV_KEYS, ApiKeyEnvState, CommandBuildError, CommandPlan, CommandPlanInput,
     FORBIDDEN_API_KEY_ENV_KEYS, HostEnvironment, MCP_TOKEN_ENV_KEY, McpBridgeConfig,
@@ -44,4 +49,8 @@ pub use quota::{
     BudgetSummaryKind, DEFAULT_SCHEDULED_CAP_PERCENT, DEFAULT_UNKNOWN_RESET_COOLDOWN_SECONDS,
     QuotaConfigError, QuotaDecision, QuotaPolicy, QuotaState, QuotaTracker, QuotaTransition,
     ResetSource, WorkCategory, utilization_from_percent,
+};
+pub use sandbox::{
+    ProbeExit, SYSTEM_SANDBOX_EXEC, SandboxLayer, SandboxProbeOutcome, SandboxProfile,
+    SandboxProfileError, classify_sandbox_probe, probe_sandbox_layer,
 };
