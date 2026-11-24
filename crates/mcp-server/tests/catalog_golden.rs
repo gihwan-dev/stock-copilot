@@ -3,8 +3,10 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
-    use application::{ArticleFetchFailure, WebResearchToolOutcome};
-    use domain::{Nanosecond, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText};
+    use application::{ArticleFetchFailure, ThesisRunMetadata, WebResearchToolOutcome};
+    use domain::{
+        InstrumentId, Nanosecond, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText,
+    };
     use mcp_server::{
         AnalysisCatalogPorts, ToolRegistry, build_analysis_catalog, make_cursor_store,
     };
@@ -12,7 +14,7 @@ mod tests {
     use testkit_ports::SteppedClock;
     use testkit_ports::tool_read_fakes::{
         FixedArticleToolPort, FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
-        FixedWebResearchToolPort,
+        FixedThesisToolPort, FixedWebResearchToolPort, LatestThesisRepository,
     };
 
     fn research_fake() -> FixedWebResearchToolPort {
@@ -64,6 +66,18 @@ mod tests {
                 Vec::new(),
                 Err(ArticleFetchFailure::NotFound),
             )),
+            thesis: Arc::new(FixedThesisToolPort::new(
+                vec![(
+                    Symbol::try_new("005930").expect("종목"),
+                    InstrumentId::try_new("KR7005930003").expect("종목 ID"),
+                )],
+                Vec::new(),
+                ThesisRunMetadata {
+                    model: UntrustedText::try_new("model-x").expect("모델"),
+                    prompt_version: UntrustedText::try_new("p1").expect("프롬프트"),
+                },
+            )),
+            thesis_repository: Arc::new(LatestThesisRepository::default()),
         };
         build_analysis_catalog(&ports, &clock, &cursors).expect("제품 카탈로그 조립")
     }
