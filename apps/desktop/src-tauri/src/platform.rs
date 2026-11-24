@@ -1,4 +1,5 @@
 pub mod autostart;
+pub mod background;
 pub mod notifier;
 pub mod process_cleanup;
 pub mod residency;

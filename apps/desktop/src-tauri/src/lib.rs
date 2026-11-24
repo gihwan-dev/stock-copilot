@@ -78,7 +78,13 @@ fn prepare_process_shutdown_hook<R: Runtime>(
     }
     let runtime = app.state::<platform::process_cleanup::ProcessRuntime>();
     let _startup_cleanup = tauri::async_runtime::block_on(runtime.cleanup_orphans_on_startup());
-    runtime.shutdown_hook()
+    let background = app
+        .try_state::<Arc<platform::background::BackgroundRuntime>>()
+        .map(|state| Arc::clone(&state));
+    Arc::new(platform::background::BackgroundAwareShutdownHook::new(
+        background,
+        runtime.shutdown_hook(),
+    ))
 }
 
 fn ensure_default_runtimes<R: Runtime>(app: &App<R>) {

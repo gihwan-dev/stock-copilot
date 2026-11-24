@@ -9,6 +9,7 @@ mod lifecycle;
 mod notifier;
 mod process_cleanup;
 mod residency;
+mod responsiveness;
 mod startup;
 mod support;
 
