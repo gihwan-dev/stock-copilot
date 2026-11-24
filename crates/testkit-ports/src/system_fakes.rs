@@ -3,7 +3,7 @@ use application::{
     AuditEntry, AuditIntegrity, AuditLog, CollectedUrlCatalog, ExternalUrlOpened,
     ExternalUrlOpener, ExternalUrlOpenerError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId, RecordOutcome, SecretKey, SecretStore, SecretValue,
-    SystemPortError, WriteCompleted,
+    SystemPortError, ToolCallLedger, ToolCallRecord, WriteCompleted,
 };
 use domain::{AuthorizedExternalUrl, NormalizedUrl, ParsedExternalUrl};
 use std::sync::Arc;
@@ -275,5 +275,63 @@ impl ScriptedPeerProcessInspector {
 impl PeerProcessInspector for ScriptedPeerProcessInspector {
     async fn inspect(&self, pid: ProcessId) -> Result<PeerProcessInfo, PeerProcessLookupError> {
         self.inspect.run(pid).await
+    }
+}
+
+pub type MemoryToolCallLedgerScript =
+    Script<ToolCallRecord, MemoryReply<Result<RecordOutcome, SystemPortError>>>;
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum AutoRecordMode {
+    #[default]
+    Scripted,
+    RecordAll,
+}
+
+#[derive(Debug, Default)]
+pub struct MemoryToolCallLedger {
+    record: MemoryToolCallLedgerScript,
+    records: State<Vec<ToolCallRecord>>,
+    mode: AutoRecordMode,
+}
+
+impl MemoryToolCallLedger {
+    #[must_use]
+    pub fn recording() -> Self {
+        Self {
+            record: MemoryToolCallLedgerScript::default(),
+            records: State::default(),
+            mode: AutoRecordMode::RecordAll,
+        }
+    }
+
+    #[must_use]
+    pub fn script_record(&self) -> &MemoryToolCallLedgerScript {
+        &self.record
+    }
+
+    #[must_use]
+    pub fn records(&self) -> Vec<ToolCallRecord> {
+        self.records.write().clone()
+    }
+}
+
+impl ToolCallLedger for MemoryToolCallLedger {
+    async fn record_call(&self, record: &ToolCallRecord) -> Result<RecordOutcome, SystemPortError> {
+        match self.mode {
+            AutoRecordMode::RecordAll => {
+                let mut entries = self.records.write();
+                entries.push(record.clone());
+                Ok(RecordOutcome::Recorded)
+            }
+            AutoRecordMode::Scripted => match self.record.run(record.clone()).await {
+                MemoryReply::Return(value) => value,
+                MemoryReply::Memory => {
+                    let mut entries = self.records.write();
+                    entries.push(record.clone());
+                    Ok(RecordOutcome::Recorded)
+                }
+            },
+        }
     }
 }

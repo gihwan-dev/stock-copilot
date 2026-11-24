@@ -1,0 +1,30 @@
+{
+  "session_id": "session-ipc-1",
+  "entries": [
+    {
+      "sequence": 1,
+      "at_unix_seconds": "91",
+      "turn_id": "turn-1",
+      "role": "User",
+      "text": "삼성전자 현황 알려 줘",
+      "status": null,
+      "cards": [],
+      "sources": []
+    },
+    {
+      "sequence": 2,
+      "at_unix_seconds": "91",
+      "turn_id": "turn-1",
+      "role": "Assistant",
+      "text": "보유 종목을 확인했습니다.",
+      "status": "Completed",
+      "cards": [],
+      "sources": []
+    }
+  ],
+  "active_turn": {
+    "turn_id": "turn-1",
+    "last_sequence": 3,
+    "state": "Finished"
+  }
+}

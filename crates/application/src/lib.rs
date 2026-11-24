@@ -363,6 +363,11 @@ pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
 mod change_risk_settings;
 pub use change_risk_settings::{ChangeRiskSettings, RiskSettingsChangeOutcome};
 
+mod update_investor_profile;
+pub use update_investor_profile::{
+    InvestorProfileRequest, UpdateInvestorProfile, profile_confirmations,
+};
+
 mod market_overview;
 pub use market_overview::{
     GetMarketOverview, MarketOverview, OverviewData, OverviewEntry, OverviewError,
@@ -477,8 +482,26 @@ pub use send_chat_message::{
     AnalysisToolAllowance, ChatModelConfig, SendChatMessage, SendChatOutcome, SendChatRequest,
     build_chat_prompt, check_analysis_tool,
 };
+
+mod chat_web_research;
+pub use chat_web_research::{
+    ChatWebResearch, ChatWebResearchFailure, ChatWebResearchFindings, ChatWebResearchRequest,
+};
+
 mod peer_process;
 pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
+};
+mod tool_call_ledger;
+pub use tool_call_ledger::{
+    ToolCallLedger, ToolCallOutcome, ToolCallRecord, ToolCallRecordInput, ToolLedgerError,
+    ToolName, ToolPayloadJson, ToolProtocolVersion, ToolRequestId,
+};
+
+mod warm_chat;
+pub use warm_chat::{
+    McpConnectionState, PrewarmChat, PrewarmChatOutcome, SendWarmChatMessage, WarmChatId,
+    WarmChatProbe, WarmChatReadiness, WarmChatRejection, WarmChatRequest, WarmChatRuntime,
+    WarmChatSession, WarmFreshness, WarmMatch,
 };

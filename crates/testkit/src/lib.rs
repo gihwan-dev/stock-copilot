@@ -66,6 +66,10 @@ pub use http_server::{
 pub fn test_executable() -> std::io::Result<std::path::PathBuf> {
     std::env::current_exe()
 }
+
+pub fn canonical_temp_dir() -> std::io::Result<std::path::PathBuf> {
+    std::fs::canonicalize(std::env::temp_dir())
+}
 pub use http_server::{ServeSequence, serve_sequence, serve_sequence_with_pending_first};
 
 mod scripted_http_server;

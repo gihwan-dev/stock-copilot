@@ -5,7 +5,8 @@ use application::{
     ChatRunLedgerEntry, ChatSequence, ChatSessionId, ChatSessionRecord, ChatSessionSummary,
     ChatSignalState, ChatSinkClosed, ChatStopSignal, InformationError, IsolationCheck,
     RecordOutcome, RunKind, RunSpec, StoredChatEntry, StoredUserMessage, SystemFailure, SystemPort,
-    SystemPortError, UserMessageId, WriteCompleted,
+    SystemPortError, UserMessageId, WarmChatId, WarmChatProbe, WarmChatRequest, WarmChatRuntime,
+    WarmChatSession, WriteCompleted,
 };
 use domain::{TimeSpan, Timestamp, UntrustedText};
 use std::collections::BTreeMap;
@@ -488,5 +489,158 @@ impl ChatStopSignal for ScriptedStopSignal {
             Some(next) => next,
             None => guard.default_state,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WarmChatRuntimeCall {
+    Prewarm(WarmChatRequest),
+    StoreReady(WarmChatId),
+    TakeReady,
+    SendOnWarm {
+        session_id: WarmChatId,
+        spec: RunSpec,
+        history: ChatHistory,
+        message: UntrustedText,
+    },
+    Discard(WarmChatId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptedPrewarmReply {
+    pub wait_before_ready: Option<TimeSpan>,
+    pub result: Result<WarmChatProbe, InformationError>,
+}
+
+#[derive(Debug, Default)]
+struct WarmRuntimeSlot {
+    ready: Option<WarmChatSession>,
+    fail_store: Option<SystemPortError>,
+    calls: Vec<WarmChatRuntimeCall>,
+}
+
+#[derive(Debug, Default)]
+pub struct ScriptedWarmChatRuntime {
+    prewarm: Script<WarmChatRequest, ScriptedPrewarmReply>,
+    send_on_warm: Script<
+        (WarmChatSession, RunSpec, ChatHistory, UntrustedText),
+        Result<ScriptedAiEventStream, InformationError>,
+    >,
+    discard: Script<WarmChatId, Result<(), InformationError>>,
+    slot: State<WarmRuntimeSlot>,
+    clock: Option<Arc<SteppedClock>>,
+}
+
+impl ScriptedWarmChatRuntime {
+    #[must_use]
+    pub fn with_clock(clock: Arc<SteppedClock>) -> Self {
+        Self {
+            prewarm: Script::default(),
+            send_on_warm: Script::default(),
+            discard: Script::default(),
+            slot: State::default(),
+            clock: Some(clock),
+        }
+    }
+
+    #[must_use]
+    pub fn script_prewarm(&self) -> &Script<WarmChatRequest, ScriptedPrewarmReply> {
+        &self.prewarm
+    }
+
+    #[must_use]
+    pub fn script_send_on_warm(
+        &self,
+    ) -> &Script<
+        (WarmChatSession, RunSpec, ChatHistory, UntrustedText),
+        Result<ScriptedAiEventStream, InformationError>,
+    > {
+        &self.send_on_warm
+    }
+
+    #[must_use]
+    pub fn script_discard(&self) -> &Script<WarmChatId, Result<(), InformationError>> {
+        &self.discard
+    }
+
+    pub fn fail_next_store(&self, error: SystemPortError) {
+        self.slot.write().fail_store = Some(error);
+    }
+
+    #[must_use]
+    pub fn ready_session(&self) -> Option<WarmChatSession> {
+        self.slot.write().ready.clone()
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<WarmChatRuntimeCall> {
+        self.slot.write().calls.clone()
+    }
+}
+
+impl WarmChatRuntime for ScriptedWarmChatRuntime {
+    type Stream = ScriptedAiEventStream;
+
+    async fn prewarm(&self, request: WarmChatRequest) -> Result<WarmChatProbe, InformationError> {
+        self.slot
+            .write()
+            .calls
+            .push(WarmChatRuntimeCall::Prewarm(request.clone()));
+        let reply = self.prewarm.run(request).await;
+        if let (Some(step), Some(clock)) = (reply.wait_before_ready, &self.clock) {
+            let _advanced = clock.advance_by(step);
+        }
+        reply.result
+    }
+
+    fn store_ready(
+        &self,
+        session: WarmChatSession,
+    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+        let mut slot = self.slot.write();
+        slot.calls
+            .push(WarmChatRuntimeCall::StoreReady(session.id().clone()));
+        if let Some(error) = slot.fail_store.take() {
+            return ready(Err(error));
+        }
+        slot.ready = Some(session);
+        ready(Ok(WriteCompleted))
+    }
+
+    fn take_ready(
+        &self,
+    ) -> impl Future<Output = Result<Option<WarmChatSession>, SystemPortError>> + Send {
+        let mut slot = self.slot.write();
+        slot.calls.push(WarmChatRuntimeCall::TakeReady);
+        ready(Ok(slot.ready.take()))
+    }
+
+    async fn send_on_warm(
+        &self,
+        session: WarmChatSession,
+        spec: RunSpec,
+        history: ChatHistory,
+        message: UntrustedText,
+    ) -> Result<Self::Stream, InformationError> {
+        self.slot
+            .write()
+            .calls
+            .push(WarmChatRuntimeCall::SendOnWarm {
+                session_id: session.id().clone(),
+                spec: spec.clone(),
+                history: history.clone(),
+                message: message.clone(),
+            });
+        self.send_on_warm
+            .run((session, spec, history, message))
+            .await
+    }
+
+    async fn discard(&self, id: &WarmChatId) -> Result<(), InformationError> {
+        self.slot
+            .write()
+            .calls
+            .push(WarmChatRuntimeCall::Discard(id.clone()));
+        self.discard.run(id.clone()).await
     }
 }
