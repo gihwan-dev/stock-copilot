@@ -429,3 +429,8 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
+mod order_gate;
+pub use order_gate::{
+    OrderGateCollectedFacts, OrderGateError, OrderGateOutcome, OrderGatePolicyContext,
+    ValidateOrderProposal,
+};

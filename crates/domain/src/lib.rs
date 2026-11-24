@@ -691,3 +691,5 @@ pub use order_query_proof::{
     OrderPageExhaustion, OrderQueryFilterState, OrderRowIntake, OrderSymbolFilter,
     OrderedAtDateBounds, ProvenClosedOrderSet,
 };
+mod order_gate;
+pub use order_gate::{OrderGateFacts, validate_proposal};
