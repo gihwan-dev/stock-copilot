@@ -10,6 +10,7 @@ mod news_rss;
 mod rate_limiter;
 mod registry;
 mod rss;
+mod us_sources;
 
 pub use article_reader::{ArticleReadError, ArticleReader};
 pub use dart_corp_map::{
@@ -52,4 +53,10 @@ pub use registry::{
 };
 pub use rss::{
     ParsedFeedItem, collapse_whitespace, parse_feed, parse_feed_timestamp, strip_html_tags,
+};
+pub use us_sources::{
+    SecCik, SecCompanyTickerRecord, SecEdgarClient, SecEdgarCurrentAtomFeed,
+    SecEdgarSubmissionsFeed, SecFilingEntry, SecTickerCikMap, YahooFinanceFeed,
+    build_sec_current_atom_url, build_yahoo_headline_url, parse_company_submissions_json,
+    parse_company_tickers_json, parse_sec_current_atom,
 };
