@@ -450,6 +450,8 @@ mod order_gate;
 pub use order_gate::{
     IntentRecheckOutcome, OrderGateCollectedFacts, OrderGateError, OrderGateOutcome,
     OrderGatePolicyContext, ValidateOrderProposal,
+    OrderGateCollectedFacts, OrderGateError, OrderGateOutcome, OrderGatePolicyContext,
+    ValidateOrderProposal,
 };
 
 mod chat_types;
