@@ -22,6 +22,7 @@ pub const CODEX_ALLOWED_ENV_KEYS: [&str; 3] = ["HOME", "PATH", "USER"];
 pub const CODEX_FORBIDDEN_ENV_KEYS: [&str; 2] = ["OPENAI_API_KEY", "CODEX_API_KEY"];
 const MAX_LINE_BYTES: usize = 65_536_usize;
 const STOP_GRACE_STEPS: u32 = 200_u32;
+const STREAM_IDLE_LIMIT: std::time::Duration = std::time::Duration::from_secs(300);
 
 static WORKSPACE_SEQUENCE: AtomicU64 = AtomicU64::new(1_u64);
 
@@ -97,14 +98,22 @@ impl CodexHostEnvironment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CodexAnalysisProfile {
     pub expected_mcp_server: String,
     pub analysis_tools: BTreeSet<String>,
     pub mcp_server_config: Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl fmt::Debug for CodexAnalysisProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CodexAnalysisProfile")
+            .field("expected_mcp_server", &self.expected_mcp_server)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct CodexProviderConfig {
     executable: PathBuf,
     work_root: PathBuf,
@@ -115,6 +124,17 @@ pub struct CodexProviderConfig {
     mcp_server_config: Value,
     model: ModelName,
     allowed_cli_versions: Option<BTreeSet<String>>,
+}
+
+impl fmt::Debug for CodexProviderConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CodexProviderConfig")
+            .field("executable", &self.executable)
+            .field("activation", &self.activation)
+            .field("analysis_tool_count", &self.analysis_tools.len())
+            .field("model", &self.model)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CodexProviderConfig {
@@ -183,6 +203,12 @@ impl CodexProviderConfig {
             "hooks",
             "--disable",
             "multi_agent",
+            "--disable",
+            "shell_tool",
+            "--disable",
+            "unified_exec",
+            "-c",
+            "history.persistence=\"none\"",
             "-c",
             "agents.enabled=false",
             "-c",
@@ -399,7 +425,7 @@ impl CodexEventStream {
         if self.closed == StreamClosed::Yes {
             return Ok(None);
         }
-        match self.rx.recv() {
+        match self.rx.recv_timeout(STREAM_IDLE_LIMIT) {
             Ok(ReaderMessage::Event(event)) => Ok(Some(event)),
             Ok(ReaderMessage::End) => {
                 self.closed = StreamClosed::Yes;
@@ -409,7 +435,12 @@ impl CodexEventStream {
                 self.closed = StreamClosed::Yes;
                 Err(error)
             }
-            Err(_disconnected) => {
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                self.closed = StreamClosed::Yes;
+                send_signal(self.pgid, "KILL");
+                Err(InformationError::Unavailable(ResetTime::NotProvided))
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
                 self.closed = StreamClosed::Yes;
                 Err(InformationError::Unavailable(ResetTime::NotProvided))
             }

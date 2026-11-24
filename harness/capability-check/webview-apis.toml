@@ -78,8 +78,8 @@ reason = "제품 주 창은 탐색 차단과 함께 만들고 U-01·U-18 테스�
 
 [[api]]
 names = ["invoke_key"]
-allowed-files = ["src/tests/ipc_contract.rs", "src/tests/responsiveness.rs"]
-reason = "U-02 실제 명령 역직렬화 회귀와 U-31 비차단 IPC 응답성 회귀의 InvokeRequest에 Tauri 모의 런타임의 고정 키를 넣는다. 제품 IPC 통로를 추가하지 않는다"
+allowed-files = ["src/tests/ipc_contract.rs", "src/tests/order_path.rs", "src/tests/responsiveness.rs"]
+reason = "U-02 실제 명령 역직렬화 회귀, O-13 주문 경로 고정 시험, U-31 비차단 IPC 응답성 회귀의 InvokeRequest에 Tauri 모의 런타임의 고정 키를 넣는다. 제품 IPC 통로를 추가하지 않는다"
 
 [[api]]
 names = ["Channel"]
