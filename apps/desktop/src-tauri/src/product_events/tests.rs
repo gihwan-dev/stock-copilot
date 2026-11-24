@@ -65,7 +65,7 @@ fn audit_entries_reach_the_log_in_enqueue_order() {
     }
     let sink = FlushingAuditSink::new(AuditEventQueue::default(), Arc::clone(&audit));
     for symbol in ["kr-1", "kr-2", "kr-3"] {
-        sink.enqueue(entry(symbol)).expect("큐");
+        sink.enqueue(entry(symbol)).expect("기록 대기");
     }
     let _flushed = tauri::async_runtime::block_on(sink.flush()).expect("기록");
     assert_eq!(
