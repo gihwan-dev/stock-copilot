@@ -3,6 +3,7 @@ use src_tauri::platform::notifier::{
     FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
 };
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
+use src_tauri::sqlite_ports::{SharedDatabase, SqliteRepositories};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
     database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
@@ -32,27 +33,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let shared_clock = Arc::new(clock);
     let (events, scheduler_events) = product_event_bus();
+    let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
     let ports = Ports::<ProductPorts> {
         broker_read: Arc::new(Unavailable),
         market_info: Arc::new(Unavailable),
         macro_series: Arc::new(Unavailable),
         fundamentals: Arc::new(Unavailable),
         ai_provider: Arc::new(Unavailable),
-        chat_repository: Arc::new(Unavailable),
-        chat_ledger: Arc::new(Unavailable),
+        chat_repository: Arc::clone(&repositories),
+        chat_ledger: Arc::clone(&repositories),
         chat_queue: Arc::new(Unavailable),
         warm_chat: Arc::new(Unavailable),
         portfolios: Arc::new(Unavailable),
-        transactions: Arc::new(Unavailable),
-        market_data: Arc::new(Unavailable),
-        news: Arc::new(Unavailable),
-        theses: Arc::new(Unavailable),
-        estimates: Arc::new(Unavailable),
-        signals: Arc::new(Unavailable),
-        proposals: Arc::new(Unavailable),
-        valuations: Arc::new(Unavailable),
-        settings: Arc::new(Unavailable),
-        audit: Arc::new(Unavailable),
+        transactions: Arc::clone(&repositories),
+        market_data: Arc::clone(&repositories),
+        news: Arc::clone(&repositories),
+        theses: Arc::clone(&repositories),
+        estimates: Arc::clone(&repositories),
+        signals: Arc::clone(&repositories),
+        proposals: Arc::clone(&repositories),
+        valuations: Arc::clone(&repositories),
+        settings: Arc::clone(&repositories),
+        audit: Arc::clone(&repositories),
         secrets: Arc::new(Unavailable),
         notifier: Arc::new(FilteredNotifier::new(
             UnavailableNotificationDelivery,
@@ -65,7 +67,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(shared_clock)),
     };
-    let app = build_app(product_builder(scheduler_events), ports, context)?;
+    let app = build_app(
+        product_builder(scheduler_events, repositories.shared().clone()),
+        ports,
+        context,
+    )?;
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
             .app_data_dir()?
@@ -85,6 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn product_builder(
     scheduler_events: Arc<scheduler::SchedulerEventBridge>,
+    shared_database: SharedDatabase,
 ) -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .manage(ExternalLinkRuntime::new(
@@ -92,6 +99,7 @@ fn product_builder(
             Arc::new(Unavailable),
         ))
         .manage(scheduler_events)
+        .manage(shared_database)
 }
 
 fn product_event_bus() -> (application::EventBus, Arc<scheduler::SchedulerEventBridge>) {
