@@ -1,8 +1,12 @@
 use crate::{Script, memory::MemoryReply, script::State};
 use application::{
-    AuditEntry, AuditIntegrity, AuditLog, RecordOutcome, SecretKey, SecretStore, SecretValue,
+    AuditEntry, AuditIntegrity, AuditLog, CollectedUrlCatalog, ExternalUrlOpened,
+    ExternalUrlOpener, ExternalUrlOpenerError, RecordOutcome, SecretKey, SecretStore, SecretValue,
+    AuditEntry, AuditIntegrity, AuditLog, PeerProcessInfo, PeerProcessInspector,
+    PeerProcessLookupError, ProcessId, RecordOutcome, SecretKey, SecretStore, SecretValue,
     SystemPortError, WriteCompleted,
 };
+use domain::{AuthorizedExternalUrl, NormalizedUrl, ParsedExternalUrl};
 use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditCall {
@@ -144,3 +148,133 @@ pub type MemorySecretStoreRemoveScript =
 
 pub type MemorySecretStoreStoreScript =
     Script<(SecretKey, Arc<SecretValue>), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CollectedUrlCatalogCall {
+    FindCollected(ParsedExternalUrl),
+}
+
+#[derive(Debug, Default)]
+pub struct MemoryCollectedUrlCatalog {
+    find_collected: MemoryCollectedUrlCatalogFindScript,
+    entries: State<Vec<NormalizedUrl>>,
+    calls: State<Vec<CollectedUrlCatalogCall>>,
+}
+
+impl MemoryCollectedUrlCatalog {
+    pub fn insert(&self, url: NormalizedUrl) {
+        self.entries.write().push(url);
+    }
+
+    #[must_use]
+    pub fn script_find_collected(&self) -> &MemoryCollectedUrlCatalogFindScript {
+        &self.find_collected
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<CollectedUrlCatalogCall> {
+        self.calls.write().clone()
+    }
+}
+
+impl CollectedUrlCatalog for MemoryCollectedUrlCatalog {
+    async fn find_collected(
+        &self,
+        url: &ParsedExternalUrl,
+    ) -> Result<Option<NormalizedUrl>, SystemPortError> {
+        self.calls
+            .write()
+            .push(CollectedUrlCatalogCall::FindCollected(url.clone()));
+        match self.find_collected.run(url.clone()).await {
+            MemoryReply::Return(value) => value,
+            MemoryReply::Memory => Ok(self
+                .entries
+                .write()
+                .iter()
+                .find(|stored| ParsedExternalUrl::from_collected(stored).ok().as_ref() == Some(url))
+                .cloned()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExternalUrlOpenerCall {
+    Open(AuthorizedExternalUrl),
+}
+
+#[derive(Debug, Default)]
+pub struct ScriptedExternalUrlOpener {
+    open: ScriptedExternalUrlOpenerScript,
+    calls: State<Vec<ExternalUrlOpenerCall>>,
+}
+
+impl ScriptedExternalUrlOpener {
+    #[must_use]
+    pub fn script_open(&self) -> &ScriptedExternalUrlOpenerScript {
+        &self.open
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<ExternalUrlOpenerCall> {
+        self.calls.write().clone()
+    }
+
+    #[must_use]
+    pub fn opened_urls(&self) -> Vec<String> {
+        self.calls
+            .write()
+            .iter()
+            .map(|ExternalUrlOpenerCall::Open(url)| url.canonical_url().as_str().to_owned())
+            .collect()
+    }
+}
+
+impl ExternalUrlOpener for ScriptedExternalUrlOpener {
+    async fn open(
+        &self,
+        url: &AuthorizedExternalUrl,
+    ) -> Result<ExternalUrlOpened, ExternalUrlOpenerError> {
+        self.calls
+            .write()
+            .push(ExternalUrlOpenerCall::Open(url.clone()));
+        self.open.run(url.clone()).await
+    }
+}
+
+pub type MemoryCollectedUrlCatalogFindScript =
+    Script<ParsedExternalUrl, MemoryReply<Result<Option<NormalizedUrl>, SystemPortError>>>;
+pub type ScriptedExternalUrlOpenerScript =
+    Script<AuthorizedExternalUrl, Result<ExternalUrlOpened, ExternalUrlOpenerError>>;
+pub type PeerProcessInspectorScript =
+    Script<ProcessId, Result<PeerProcessInfo, PeerProcessLookupError>>;
+
+#[derive(Debug, Default)]
+pub struct ScriptedPeerProcessInspector {
+    inspect: PeerProcessInspectorScript,
+}
+
+impl ScriptedPeerProcessInspector {
+    pub fn new<Replies: IntoIterator<Item = Result<PeerProcessInfo, PeerProcessLookupError>>>(
+        replies: Replies,
+    ) -> Self {
+        Self {
+            inspect: Script::new(replies),
+        }
+    }
+
+    #[must_use]
+    pub fn script(&self) -> &PeerProcessInspectorScript {
+        &self.inspect
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<ProcessId> {
+        self.inspect.calls()
+    }
+}
+
+impl PeerProcessInspector for ScriptedPeerProcessInspector {
+    async fn inspect(&self, pid: ProcessId) -> Result<PeerProcessInfo, PeerProcessLookupError> {
+        self.inspect.run(pid).await
+    }
+}
