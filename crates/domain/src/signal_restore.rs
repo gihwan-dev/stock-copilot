@@ -268,6 +268,30 @@ impl HistoricalSignal {
     pub fn threshold_display(&self, kind: ThresholdKind) -> Result<ThresholdDisplay, NoThresholds> {
         self.estimate().thresholds().display(kind)
     }
+    pub(crate) fn sell_signal(&self) -> Option<&crate::SellSignal> {
+        match self {
+            Self::Buy(_) => None,
+            Self::Sell(value) => Some(&value.0),
+        }
+    }
+    #[must_use]
+    pub fn matches_live(&self, live: &RaisedSignal) -> crate::CheckResult {
+        match (self, live) {
+            (Self::Buy(_), RaisedSignal::Buy(_)) => {
+                if Self::from_signal(live) == *self {
+                    crate::CheckResult::Passed
+                } else {
+                    crate::CheckResult::Failed
+                }
+            }
+            (Self::Sell(stored), RaisedSignal::Sell(fresh)) => {
+                crate::sell_signal_matches_reassessed(&stored.0, fresh)
+            }
+            (Self::Buy(_) | Self::Sell(_), RaisedSignal::Buy(_) | RaisedSignal::Sell(_)) => {
+                crate::CheckResult::Failed
+            }
+        }
+    }
     #[must_use]
     pub fn display_facts(&self) -> SignalDisplayFacts {
         SignalDisplayFacts::from_signal(&self.to_internal_signal())
@@ -1013,5 +1037,138 @@ mod tests {
             restored.display_facts(),
             SignalDisplayFacts::from_signal(&signal)
         );
+    }
+    fn held_valuation_for(
+        master: &MasterInstrument,
+        qty_str: &str,
+        obs: Timestamp,
+    ) -> crate::PortfolioValuation {
+        let held = crate::Holding::new(
+            master.order_instrument().expect("종목"),
+            Quantity::parse(&NumericInput::try_new(qty_str).expect("입력")).expect("수량"),
+            crate::AcquisitionPrice::try_new(
+                Money::parse(&NumericInput::try_new("90").expect("입력"), Currency::Usd)
+                    .expect("매입가"),
+            )
+            .expect("매입"),
+            crate::HoldingObservation::new(Some(price("100")), None, obs),
+        )
+        .expect("보유");
+        Portfolio::new(
+            vec![held],
+            BuyingPower::new(
+                Money::parse(
+                    &NumericInput::try_new("1000000").expect("입력"),
+                    Currency::Krw,
+                )
+                .expect("원화"),
+                obs,
+            ),
+            BuyingPower::new(
+                Money::parse(&NumericInput::try_new("0").expect("입력"), Currency::Usd)
+                    .expect("달러"),
+                obs,
+            ),
+        )
+        .expect("포트")
+        .evaluate(None)
+    }
+
+    fn low_probability_estimate(
+        base: &EligibleFixture,
+        model: &EligibleModelFixture,
+    ) -> SignalEstimate {
+        let low_prob =
+            AiProbability::parse(&AiProbabilityInput::try_new("1").expect("입력")).expect("확률");
+        let low_sub = SignalSubmission::create(
+            SignalTaskKey::from_task(&base.eligible),
+            model.key.clone(),
+            low_prob,
+            Some(model.source.clone()),
+            at(61, -18_000),
+        )
+        .expect("제출");
+        let low_cal =
+            calibrate_signal_submission(Some(&model.snapshot), &model.head, low_sub).expect("보정");
+        SignalEstimate::create(&base.eligible, &low_cal, model.margin).expect("판정")
+    }
+
+    fn richer_valuation(at_time: Timestamp) -> crate::PortfolioValuation {
+        Portfolio::new(
+            vec![],
+            BuyingPower::new(
+                Money::parse(
+                    &NumericInput::try_new("2000000").expect("입력"),
+                    Currency::Krw,
+                )
+                .expect("원화"),
+                at_time,
+            ),
+            BuyingPower::new(
+                Money::parse(&NumericInput::try_new("0").expect("입력"), Currency::Usd)
+                    .expect("달러"),
+                at_time,
+            ),
+        )
+        .expect("포트")
+        .evaluate(None)
+    }
+
+    #[test]
+    fn historical_signal_matches_live_checks_buy_sell_and_cross_direction() {
+        let base = eligible_task_fixture();
+        let model = eligible_model_fixture(&base);
+        let (portfolio, assignments, security, calendars, target, historical) =
+            eligible_context(&base.master, model.item.clone(), model.head.clone());
+        let ledger = SignalSourceLedger::new(std::slice::from_ref(&model.item), &[], &[]);
+        let t0 = at(61, -18_000);
+        let t5 = shifted(61, 5);
+        let t10 = shifted(61, 10);
+        let assess = |est: &SignalEstimate, val: &crate::PortfolioValuation, now: Timestamp| {
+            let facts = SignalAssessmentFacts::new(
+                SignalTiming::new(now, &calendars),
+                Some(target.clone()),
+                Some(model.head.clone()),
+            );
+            let context = SignalContext::new(
+                Some(val),
+                &historical.policy,
+                (&assignments, &security),
+                &ledger,
+                facts,
+            );
+            SignalDecision::assess(est, &context)
+                .into_signal()
+                .expect("신호")
+        };
+        let buy_one = assess(&model.estimate, &portfolio.evaluate(None), t0);
+        let hist_buy = crate::HistoricalSignal::from_signal(&buy_one);
+        assert_eq!(hist_buy.matches_live(&buy_one), crate::CheckResult::Passed);
+        assert_eq!(
+            hist_buy.matches_live(&assess(&model.estimate, &richer_valuation(t0), t0)),
+            crate::CheckResult::Failed
+        );
+
+        let sell_est = low_probability_estimate(&base, &model);
+        let sell_t5 = assess(&sell_est, &held_valuation_for(&base.master, "10", t5), t5);
+        let sell_newer = assess(&sell_est, &held_valuation_for(&base.master, "10", t10), t10);
+        let sell_older = assess(&sell_est, &held_valuation_for(&base.master, "10", t0), t10);
+        let sell_qty = assess(&sell_est, &held_valuation_for(&base.master, "9", t10), t10);
+        let hist_sell = crate::HistoricalSignal::from_signal(&sell_t5);
+        assert_eq!(hist_sell.matches_live(&sell_t5), crate::CheckResult::Passed);
+        assert_eq!(
+            hist_sell.matches_live(&sell_newer),
+            crate::CheckResult::Passed
+        );
+        assert_eq!(
+            hist_sell.matches_live(&sell_older),
+            crate::CheckResult::Failed
+        );
+        assert_eq!(
+            hist_sell.matches_live(&sell_qty),
+            crate::CheckResult::Failed
+        );
+        assert_eq!(hist_buy.matches_live(&sell_t5), crate::CheckResult::Failed);
+        assert_eq!(hist_sell.matches_live(&buy_one), crate::CheckResult::Failed);
     }
 }
