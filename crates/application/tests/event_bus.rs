@@ -135,6 +135,15 @@ mod tests {
             DomainEvent::DisclosureArrived(disclosure.clone()),
             DomainEvent::DisclosureTriggerRecorded(disclosure),
             DomainEvent::SourceStatusChanged(domain::DataSource::KindDisclosure),
+            DomainEvent::BriefingFinished(domain::BriefingId::new(
+                domain::BriefingKind::Morning,
+                domain::CalendarDate::from_parts(
+                    domain::CalendarYear::new(2026),
+                    domain::MonthNumber::new(11),
+                    domain::DayNumber::new(25),
+                )
+                .expect("가짜 날짜"),
+            )),
         ]
     }
     fn events() -> Vec<DomainEvent> {
@@ -192,6 +201,7 @@ mod tests {
             DomainEvent::FxRateUpdated(_) => DomainEventKind::FxRateUpdated,
             DomainEvent::DisclosureTriggerRecorded(_) => DomainEventKind::DisclosureTriggerRecorded,
             DomainEvent::SourceStatusChanged(_) => DomainEventKind::SourceStatusChanged,
+            DomainEvent::BriefingFinished(_) => DomainEventKind::BriefingFinished,
         }
     }
 
@@ -218,7 +228,7 @@ mod tests {
         for event in &published {
             assert_eq!(bus.publish(event.clone()), DeliveryReport::default());
         }
-        assert_eq!(receivers.len(), 39);
+        assert_eq!(receivers.len(), 40);
         for (kind, receiver) in receivers {
             let expected: Vec<_> = published
                 .iter()
@@ -385,7 +395,7 @@ mod tests {
         #[test]
         fn arbitrary_publications_equal_each_subscribers_filtered_sequence(
             published in proptest::collection::vec(proptest::sample::select(events()),0..64),
-            filters in proptest::collection::vec(proptest::collection::btree_set(proptest::sample::select(kinds().into_iter().collect::<Vec<_>>()),0..=39),0..8),
+            filters in proptest::collection::vec(proptest::collection::btree_set(proptest::sample::select(kinds().into_iter().collect::<Vec<_>>()),0..=40),0..8),
         ) {
             let mut builder=EventBusBuilder::default();
             let receivers:Vec<_>=filters.iter().map(|filter| {

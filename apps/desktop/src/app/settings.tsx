@@ -4,6 +4,14 @@ import {
   AiSettingsSection,
 } from "../features/settings-ai";
 import {
+  NewsSettingsClientProvider,
+  NewsSettingsSection,
+} from "../features/settings-news";
+import {
+  PrinciplesSettingsClientProvider,
+  PrinciplesSettingsSection,
+} from "../features/settings-principles";
+import {
   SystemSettingsClientProvider,
   SystemSettingsSection,
 } from "../features/settings-system";
@@ -16,7 +24,11 @@ export const SettingsClients = (props: {
 }): ReactElement => (
   <SystemSettingsClientProvider client={props.client}>
     <AiSettingsClientProvider client={props.client}>
-      {props.children}
+      <NewsSettingsClientProvider client={props.client}>
+        <PrinciplesSettingsClientProvider client={props.client}>
+          {props.children}
+        </PrinciplesSettingsClientProvider>
+      </NewsSettingsClientProvider>
     </AiSettingsClientProvider>
   </SystemSettingsClientProvider>
 );
@@ -24,6 +36,8 @@ export const SettingsClients = (props: {
 export const SettingsSections = (): ReactElement => (
   <Stack gap="space-8">
     <AiSettingsSection />
+    <NewsSettingsSection />
+    <PrinciplesSettingsSection />
     <SystemSettingsSection />
   </Stack>
 );

@@ -440,7 +440,12 @@ pub use valuation_gap::{
     ValuationDayInputSource, ValuationDayRepository, ValuationDaySuccessSource, ValuationGapError,
     ValuationInputError,
 };
+mod briefing;
 mod run_full_inspection;
+pub use briefing::{
+    BriefingContext, BriefingContextSource, BriefingFailure, BriefingOutcome, BriefingRecord,
+    BriefingRepository, BriefingRunError, BriefingRunReport, BriefingSource, RunBriefing,
+};
 pub use run_full_inspection::{
     FullInspectionReport, FullInspectionRun, FullInspectionRunError, RunFullInspection,
 };
