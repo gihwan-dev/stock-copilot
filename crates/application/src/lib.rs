@@ -272,7 +272,10 @@ pub use identity_confirmation_prompt::{
 mod confirm_instrument_identity;
 pub use confirm_instrument_identity::{ConfirmInstrumentIdentity, IdentityConfirmationOutcome};
 mod audit_log;
-pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
+pub use audit_log::{
+    AuditEntry, AuditIntegrity, AuditKind, AuditLog, WebSearchAuditError, WebSearchAuditOutcome,
+    WebSearchAuditRecord, WebSearchQueryMode,
+};
 mod instrument_mapping;
 pub use instrument_mapping::{
     InstrumentIdIssuer, InstrumentMappingCorrectionRepository, InstrumentMappingHistoryRepository,
@@ -434,3 +437,12 @@ pub use open_external::{
     CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
     OpenExternalError, OpenExternalOutcome, OpenExternalUrl,
 };
+
+mod source_status;
+pub use source_status::{
+    GetSourceStatuses, RecordSourceStatus, SourceAttemptOutcome, SourceState, SourceStatus,
+    SourceStatusError, SourceStatusReport, SourceStatusRepository,
+};
+
+mod web_search_guard;
+pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};

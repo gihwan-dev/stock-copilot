@@ -270,5 +270,30 @@ mod tests {
                 .is_none(),
             "원격 출처 거부"
         );
+    fn composition_root_constructs_sources_client_without_broker_credentials_or_hosts() {
+        let clock = std::sync::Arc::new(testkit_ports::SteppedClock::new(
+            broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
+                .expect("clock")
+                .into_domain(),
+        ));
+        let client = sources::SourceHttpClient::new(
+            sources::SourceEndpoint::live(),
+            clock,
+            std::sync::Arc::new(sources::TokioSourceWait),
+            None,
+        )
+        .expect("live sources client");
+        assert_eq!(format!("{client:?}"), "SourceHttpClient(<redacted>)");
+        for spec in sources::SourceRegistry::all() {
+            for host in spec.allowed_hosts() {
+                assert!(!host.to_ascii_lowercase().contains("toss"), "{host}");
+            }
+            match spec.credential() {
+                sources::CredentialRequirement::None
+                | sources::CredentialRequirement::Optional(
+                    application::CredentialSource::Dart | application::CredentialSource::Fred,
+                ) => {}
+            }
+        }
     }
 }
