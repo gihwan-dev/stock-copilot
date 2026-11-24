@@ -8,14 +8,14 @@ use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use application::{AiRunId, Clock, RunKind};
+use application::{AiRunId, Clock, RunKind, ToolCallLedger};
 use rmcp::ErrorData as McpError;
 use rmcp::ServerHandler;
 use rmcp::model::{
     CallToolRequestMethod, CallToolRequestParams, CallToolResponse, CompleteRequestParams,
     CompleteResult, DiscoverResult, Implementation, InitializeRequestParams, InitializeResult,
-    ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, ListToolsResult,
-    PaginatedRequestParams, ProtocolVersion, ServerCapabilities, ServerConfig,
+    JsonObject, ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult,
+    ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities, ServerConfig,
 };
 use rmcp::service::{RequestContext, RoleServer, RunningService, ServiceExt};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
@@ -24,6 +24,7 @@ use zeroize::Zeroizing;
 
 use crate::peer::PeerVerificationFailure;
 use crate::token::{AuthLineLimit, AuthRejection, AuthenticatedRun, RunAuthBinding, TokenStatus};
+use crate::tools::{DispatchCallInput, ToolRuntime, UnconfiguredToolLedger, dispatch_tool_call};
 
 const SERVER_NAME: &str = "stock-copilot-mcp";
 const SERVER_VERSION: &str = "0.1.0";
@@ -202,12 +203,17 @@ impl<W: AsyncWrite + Unpin, C: Clock + 'static> AsyncWrite for ExpiryGuardedWrit
     }
 }
 
-pub(crate) struct McpSkeletonHandler<C: Clock + 'static> {
+pub(crate) struct McpSkeletonHandler<
+    C: Clock + 'static,
+    L: ToolCallLedger + 'static = UnconfiguredToolLedger,
+> {
     auth: Arc<RunAuthBinding<C>>,
     stop_tx: watch::Sender<SessionStopSignal>,
+    tools: Option<ToolRuntime<L>>,
+    negotiated_protocol: RwLock<ProtocolVersion>,
 }
 
-impl<C: Clock + 'static> fmt::Debug for McpSkeletonHandler<C> {
+impl<C: Clock + 'static, L: ToolCallLedger + 'static> fmt::Debug for McpSkeletonHandler<C, L> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("McpSkeletonHandler")
             .field("run_id", self.auth.run_id())
@@ -216,13 +222,34 @@ impl<C: Clock + 'static> fmt::Debug for McpSkeletonHandler<C> {
     }
 }
 
-impl<C: Clock + 'static> McpSkeletonHandler<C> {
+impl<C: Clock + 'static, L: ToolCallLedger + 'static> McpSkeletonHandler<C, L> {
     #[must_use]
-    pub(crate) fn new(
+    pub(crate) fn with_optional_tools(
         auth: Arc<RunAuthBinding<C>>,
         stop_tx: watch::Sender<SessionStopSignal>,
+        tools: Option<ToolRuntime<L>>,
     ) -> Self {
-        Self { auth, stop_tx }
+        Self {
+            auth,
+            stop_tx,
+            tools,
+            negotiated_protocol: RwLock::new(ProtocolVersion::V_2026_07_28),
+        }
+    }
+
+    fn resolve_protocol_version(&self, context: &RequestContext<RoleServer>) -> String {
+        if let Some(meta_version) = context
+            .meta
+            .get("io.modelcontextprotocol/protocolVersion")
+            .and_then(serde_json::Value::as_str)
+        {
+            return meta_version.to_owned();
+        }
+        let guard = match self.negotiated_protocol.read() {
+            Ok(locked) => locked,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        guard.to_string()
     }
 
     fn ensure_active(&self) -> Result<(), McpError> {
@@ -252,7 +279,7 @@ impl<C: Clock + 'static> McpSkeletonHandler<C> {
     }
 }
 
-impl<C: Clock + 'static> ServerHandler for McpSkeletonHandler<C> {
+impl<C: Clock + 'static, L: ToolCallLedger + 'static> ServerHandler for McpSkeletonHandler<C, L> {
     fn get_info(&self) -> ServerConfig {
         let mut config = ServerConfig::new(ServerCapabilities::builder().enable_tools().build());
         config.protocol_version = ProtocolVersion::V_2026_07_28;
@@ -278,7 +305,13 @@ impl<C: Clock + 'static> ServerHandler for McpSkeletonHandler<C> {
     ) -> impl Future<Output = Result<InitializeResult, McpError>> + Send + '_ {
         let result = self.ensure_active().and_then(|()| {
             context.peer.set_peer_info(request.clone());
-            self.negotiate_initialize(&request)
+            let negotiated = self.negotiate_initialize(&request)?;
+            let mut guard = match self.negotiated_protocol.write() {
+                Ok(locked) => locked,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            *guard = negotiated.protocol_version.clone();
+            Ok(negotiated)
         });
         ready(result)
     }
@@ -339,46 +372,58 @@ impl<C: Clock + 'static> ServerHandler for McpSkeletonHandler<C> {
         _: Option<PaginatedRequestParams>,
         _: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
-        ready(self.ensure_active().map(|()| ListToolsResult::default()))
-    }
-
-    fn call_tool(
-        &self,
-        _: CallToolRequestParams,
-        _: RequestContext<RoleServer>,
-    ) -> impl Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
-        let result = self
-            .ensure_active()
-            .and_then(|()| Err(McpError::method_not_found::<CallToolRequestMethod>()));
+        let result = self.ensure_active().map(|()| {
+            let mut list = ListToolsResult::default();
+            if let Some(runtime) = &self.tools {
+                list.tools = runtime.registry.list_rmcp_tools();
+            }
+            list
+        });
         ready(result)
     }
-}
 
-pub(crate) struct StreamAuthParams<C: Clock + 'static> {
-    auth: Arc<RunAuthBinding<C>>,
-    auth_line_limit: AuthLineLimit,
-    auth_timeout: Duration,
-    shutdown_rx: watch::Receiver<ShutdownSignal>,
-    events: Arc<ConnectionEventLog>,
-}
-
-impl<C: Clock + 'static> StreamAuthParams<C> {
-    #[must_use]
-    pub(crate) fn new(
-        auth: Arc<RunAuthBinding<C>>,
-        auth_line_limit: AuthLineLimit,
-        auth_timeout: Duration,
-        shutdown_rx: watch::Receiver<ShutdownSignal>,
-        events: Arc<ConnectionEventLog>,
-    ) -> Self {
-        Self {
-            auth,
-            auth_line_limit,
-            auth_timeout,
-            shutdown_rx,
-            events,
-        }
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResponse, McpError> {
+        self.ensure_active()?;
+        let Some(runtime) = &self.tools else {
+            return Err(McpError::method_not_found::<CallToolRequestMethod>());
+        };
+        let request_id = context.id.to_string();
+        let protocol_version = self.resolve_protocol_version(&context);
+        let empty_args = JsonObject::new();
+        let arguments = match &request.arguments {
+            Some(args) => args,
+            None => &empty_args,
+        };
+        let call_result = dispatch_tool_call(
+            runtime,
+            &self.auth,
+            DispatchCallInput {
+                request_id_raw: &request_id,
+                protocol_version_raw: &protocol_version,
+                raw_tool_name: request.name.as_ref(),
+                arguments,
+            },
+        )
+        .await;
+        self.ensure_active()?;
+        Ok(CallToolResponse::from(call_result))
     }
+}
+
+pub(crate) struct StreamAuthParams<
+    C: Clock + 'static,
+    L: ToolCallLedger + 'static = UnconfiguredToolLedger,
+> {
+    pub(crate) auth: Arc<RunAuthBinding<C>>,
+    pub(crate) auth_line_limit: AuthLineLimit,
+    pub(crate) auth_timeout: Duration,
+    pub(crate) shutdown_rx: watch::Receiver<ShutdownSignal>,
+    pub(crate) events: Arc<ConnectionEventLog>,
+    pub(crate) tools: Option<ToolRuntime<L>>,
 }
 
 pub(crate) enum RaceOutcome<A, B> {
@@ -548,14 +593,15 @@ async fn read_bounded_auth_line<R: AsyncRead + Unpin>(
         .map_err(|_elapsed| ConnectionRejection::AuthTimeout)?
 }
 
-async fn read_and_verify_auth<R, C>(
+async fn read_and_verify_auth<R, C, L>(
     reader: &mut R,
-    params: &mut StreamAuthParams<C>,
+    params: &mut StreamAuthParams<C, L>,
     revoke_rx: &mut watch::Receiver<TokenStatus>,
 ) -> Result<AuthenticatedRun, ConnectionRejection>
 where
     R: AsyncRead + Unpin,
     C: Clock + 'static,
+    L: ToolCallLedger + 'static,
 {
     let stop = wait_for_pre_session_stop(&mut params.shutdown_rx, revoke_rx, &params.auth);
     let read_auth = read_bounded_auth_line(reader, params.auth_line_limit, params.auth_timeout);
@@ -569,9 +615,9 @@ where
         .map_err(ConnectionRejection::Auth)
 }
 
-async fn drive_running_mcp_service<C: Clock + 'static>(
-    running: RunningService<RoleServer, McpSkeletonHandler<C>>,
-    params: &mut StreamAuthParams<C>,
+async fn drive_running_mcp_service<C: Clock + 'static, L: ToolCallLedger + 'static>(
+    running: RunningService<RoleServer, McpSkeletonHandler<C, L>>,
+    params: &mut StreamAuthParams<C, L>,
     revoke_rx: &mut watch::Receiver<TokenStatus>,
     stop_rx: &mut watch::Receiver<SessionStopSignal>,
     run_id: &AiRunId,
@@ -607,16 +653,17 @@ async fn drive_running_mcp_service<C: Clock + 'static>(
     });
 }
 
-async fn start_and_run_mcp_service<R, W, C>(
+async fn start_and_run_mcp_service<R, W, C, L>(
     reader: R,
     writer: W,
-    params: &mut StreamAuthParams<C>,
+    params: &mut StreamAuthParams<C, L>,
     revoke_rx: &mut watch::Receiver<TokenStatus>,
     run_id: &AiRunId,
 ) where
     R: AsyncRead + Send + Unpin + 'static,
     W: AsyncWrite + Send + Unpin + 'static,
     C: Clock + 'static,
+    L: ToolCallLedger + 'static,
 {
     let (stop_tx, mut stop_rx) = watch::channel(SessionStopSignal::Active);
     let guarded_reader = ExpiryGuardedReader {
@@ -629,7 +676,11 @@ async fn start_and_run_mcp_service<R, W, C>(
         auth: Arc::clone(&params.auth),
         stop_tx: stop_tx.clone(),
     };
-    let handler = McpSkeletonHandler::new(Arc::clone(&params.auth), stop_tx);
+    let handler = McpSkeletonHandler::with_optional_tools(
+        Arc::clone(&params.auth),
+        stop_tx,
+        params.tools.clone(),
+    );
 
     let running = match race(
         wait_for_session_stop(
@@ -661,14 +712,15 @@ async fn start_and_run_mcp_service<R, W, C>(
     drive_running_mcp_service(running, params, revoke_rx, &mut stop_rx, run_id).await;
 }
 
-pub(crate) async fn authenticate_and_serve_stream<R, W, C>(
+pub(crate) async fn authenticate_and_serve_stream<R, W, C, L>(
     mut reader: R,
     writer: W,
-    mut params: StreamAuthParams<C>,
+    mut params: StreamAuthParams<C, L>,
 ) where
     R: AsyncRead + Send + Unpin + 'static,
     W: AsyncWrite + Send + Unpin + 'static,
     C: Clock + 'static,
+    L: ToolCallLedger + 'static,
 {
     let run_id = params.auth.run_id().clone();
     let mut revoke_rx = params.auth.subscribe_revocation();
@@ -772,7 +824,8 @@ mod tests {
             .expect("발급"),
         );
         let (stop_tx, _stop_rx) = watch::channel(SessionStopSignal::Active);
-        let handler = McpSkeletonHandler::new(Arc::clone(&binding), stop_tx);
+        let handler: McpSkeletonHandler<SteppedClock> =
+            McpSkeletonHandler::with_optional_tools(Arc::clone(&binding), stop_tx, None);
         let versions = handler.supported_protocol_versions();
         assert!(
             versions.contains(&ProtocolVersion::V_2026_07_28),
@@ -839,26 +892,23 @@ mod tests {
         runtime().block_on(async {
             let clock = Arc::new(SteppedClock::new(timestamp_at(1_700_000_000_i64)));
             let run_id = AiRunId::try_new("run-duplex-1").expect("실행 ID");
+            let ttl = TokenTtl::try_from_seconds(60_u64).expect("TTL");
             let binding = Arc::new(
-                RunAuthBinding::issue(
-                    run_id.clone(),
-                    RunKind::Analysis,
-                    Arc::clone(&clock),
-                    TokenTtl::try_from_seconds(60_u64).expect("TTL"),
-                )
-                .expect("발급"),
+                RunAuthBinding::issue(run_id.clone(), RunKind::Analysis, Arc::clone(&clock), ttl)
+                    .expect("발급"),
             );
             let events = Arc::new(ConnectionEventLog::new());
             let (shutdown_tx, shutdown_rx) = watch::channel(ShutdownSignal::Running);
             let (client, server) = duplex(16_384_usize);
             let (server_read, server_write) = tokio::io::split(server);
-            let params = StreamAuthParams::new(
-                Arc::clone(&binding),
-                AuthLineLimit::default_limit(),
-                Duration::from_secs(2_u64),
+            let params: StreamAuthParams<SteppedClock> = StreamAuthParams {
+                auth: Arc::clone(&binding),
+                auth_line_limit: AuthLineLimit::default_limit(),
+                auth_timeout: Duration::from_secs(2_u64),
                 shutdown_rx,
-                Arc::clone(&events),
-            );
+                events: Arc::clone(&events),
+                tools: None,
+            };
             let task = tokio::spawn(authenticate_and_serve_stream(
                 server_read,
                 server_write,
@@ -885,9 +935,7 @@ mod tests {
             .expect("만료 후 연결 종료 대기")
             .expect("만료 후 읽기");
             assert_eq!(after_count, 0_usize, "만료 뒤 ping은 연결을 닫는다");
-            match shutdown_tx.send(ShutdownSignal::Stopped) {
-                Ok(()) | Err(_) => {}
-            }
+            let _closed = shutdown_tx.send(ShutdownSignal::Stopped).is_err();
             task.await.expect("서버 태스크 종료");
             let recorded = events.snapshot();
             assert!(
@@ -918,13 +966,14 @@ mod tests {
             let (shutdown_tx, shutdown_rx) = watch::channel(ShutdownSignal::Running);
             let (client, server) = duplex(1024_usize);
             let (server_read, server_write) = tokio::io::split(server);
-            let params = StreamAuthParams::new(
-                Arc::clone(&binding),
-                AuthLineLimit::default_limit(),
-                Duration::from_secs(5_u64),
+            let params: StreamAuthParams<SteppedClock> = StreamAuthParams {
+                auth: Arc::clone(&binding),
+                auth_line_limit: AuthLineLimit::default_limit(),
+                auth_timeout: Duration::from_secs(5_u64),
                 shutdown_rx,
-                Arc::clone(&events),
-            );
+                events: Arc::clone(&events),
+                tools: None,
+            };
             let task = tokio::spawn(authenticate_and_serve_stream(
                 server_read,
                 server_write,
@@ -965,13 +1014,14 @@ mod tests {
             let (_tx, rx) = watch::channel(ShutdownSignal::Running);
             let (client, server) = duplex(1024_usize);
             let (sr, sw) = tokio::io::split(server);
-            let params = StreamAuthParams::new(
-                Arc::clone(&binding),
-                AuthLineLimit::default_limit(),
-                Duration::from_secs(5_u64),
-                rx,
-                Arc::clone(&events),
-            );
+            let params: StreamAuthParams<SteppedClock> = StreamAuthParams {
+                auth: Arc::clone(&binding),
+                auth_line_limit: AuthLineLimit::default_limit(),
+                auth_timeout: Duration::from_secs(5_u64),
+                shutdown_rx: rx,
+                events: Arc::clone(&events),
+                tools: None,
+            };
             let task = tokio::spawn(authenticate_and_serve_stream(sr, sw, params));
             binding.revoke();
             task.await.expect("폐기 중 인증 취소 완료");

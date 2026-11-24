@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use application::{AiRunId, Clock, ExecutablePath, PeerProcessInspector, ProcessId, RunKind};
+use application::{
+    AiRunId, Clock, ExecutablePath, PeerProcessInspector, ProcessId, RunKind, ToolCallLedger,
+};
 use domain::Timestamp;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
@@ -21,6 +23,7 @@ use crate::peer::{
 };
 use crate::socket::{BoundRunSocket, RunSocketSpec, SocketCleanupGuard, SocketSetupError};
 use crate::token::{AuthLineLimit, RunAuthBinding, RunAuthToken, TokenError, TokenTtl};
+use crate::tools::{ToolLedgerMode, ToolRegistry, ToolRuntime, UnconfiguredToolLedger};
 
 pub const DEFAULT_AUTH_TIMEOUT_SECS: u64 = 5_u64;
 pub const MAX_AUTH_TIMEOUT_SECS: u64 = 30_u64;
@@ -178,13 +181,14 @@ impl PeerProcessTarget {
     }
 }
 
-pub struct RunServerDeps<C, P> {
+pub struct RunServerDeps<C, P, L = UnconfiguredToolLedger> {
     clock: Arc<C>,
     peer_inspector: PeerInspectorMode<P>,
     config: McpServerConfig,
+    tools: Option<ToolRuntime<L>>,
 }
 
-impl<C, P> fmt::Debug for RunServerDeps<C, P> {
+impl<C, P, L> fmt::Debug for RunServerDeps<C, P, L> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RunServerDeps")
             .field("config", &self.config)
@@ -192,7 +196,7 @@ impl<C, P> fmt::Debug for RunServerDeps<C, P> {
     }
 }
 
-impl<C, P> RunServerDeps<C, P> {
+impl<C, P> RunServerDeps<C, P, UnconfiguredToolLedger> {
     #[must_use]
     pub fn new(
         clock: Arc<C>,
@@ -203,18 +207,33 @@ impl<C, P> RunServerDeps<C, P> {
             clock,
             peer_inspector,
             config,
+            tools: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_tools<L>(
+        self,
+        registry: Arc<ToolRegistry>,
+        ledger: ToolLedgerMode<L>,
+    ) -> RunServerDeps<C, P, L> {
+        RunServerDeps {
+            clock: self.clock,
+            peer_inspector: self.peer_inspector,
+            config: self.config,
+            tools: Some(ToolRuntime { registry, ledger }),
         }
     }
 }
 
-pub struct RunServerRequest<C, P> {
+pub struct RunServerRequest<C, P, L = UnconfiguredToolLedger> {
     identity: RunIdentity,
     socket_spec: RunSocketSpec,
     peer_target: PeerProcessTarget,
-    deps: RunServerDeps<C, P>,
+    deps: RunServerDeps<C, P, L>,
 }
 
-impl<C, P> fmt::Debug for RunServerRequest<C, P> {
+impl<C, P, L> fmt::Debug for RunServerRequest<C, P, L> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RunServerRequest")
             .field("identity", &self.identity)
@@ -225,13 +244,13 @@ impl<C, P> fmt::Debug for RunServerRequest<C, P> {
     }
 }
 
-impl<C, P> RunServerRequest<C, P> {
+impl<C, P, L> RunServerRequest<C, P, L> {
     #[must_use]
     pub fn new(
         identity: RunIdentity,
         socket_spec: RunSocketSpec,
         peer_target: PeerProcessTarget,
-        deps: RunServerDeps<C, P>,
+        deps: RunServerDeps<C, P, L>,
     ) -> Self {
         Self {
             identity,
@@ -266,8 +285,8 @@ impl<C: Clock + 'static> fmt::Debug for McpServerHandle<C> {
 }
 
 impl<C: Clock + 'static> McpServerHandle<C> {
-    pub fn start<P: PeerProcessInspector + 'static>(
-        request: RunServerRequest<C, P>,
+    pub fn start<P: PeerProcessInspector + 'static, L: ToolCallLedger + 'static>(
+        request: RunServerRequest<C, P, L>,
     ) -> Result<Self, McpServerError> {
         let runtime = tokio::runtime::Handle::try_current()
             .map_err(|_error| McpServerError::RuntimeUnavailable)?;
@@ -305,6 +324,7 @@ impl<C: Clock + 'static> McpServerHandle<C> {
             config: request.deps.config,
             semaphore,
             events: Arc::clone(&events),
+            tools: request.deps.tools,
         };
         let accept_task = runtime.spawn(run_accept_loop(listener, shutdown_rx, loop_state));
 
@@ -424,19 +444,24 @@ fn classify_accept_error(kind: ErrorKind) -> AcceptErrorAction {
     }
 }
 
-struct AcceptLoopState<C: Clock + 'static, P> {
+struct AcceptLoopState<C: Clock + 'static, P, L> {
     auth: Arc<RunAuthBinding<C>>,
     expected_peer: Arc<ExpectedPeerPolicy>,
     inspector: PeerInspectorMode<P>,
     config: McpServerConfig,
     semaphore: Arc<Semaphore>,
     events: Arc<ConnectionEventLog>,
+    tools: Option<ToolRuntime<L>>,
 }
 
-async fn run_accept_loop<C: Clock + 'static, P: PeerProcessInspector + 'static>(
+async fn run_accept_loop<
+    C: Clock + 'static,
+    P: PeerProcessInspector + 'static,
+    L: ToolCallLedger + 'static,
+>(
     listener: UnixListener,
     mut shutdown_rx: watch::Receiver<ShutdownSignal>,
-    state: AcceptLoopState<C, P>,
+    state: AcceptLoopState<C, P, L>,
 ) {
     let mut active_tasks: Vec<JoinHandle<()>> = Vec::new();
     accept_until_shutdown(listener, &mut shutdown_rx, &state, &mut active_tasks).await;
@@ -472,10 +497,14 @@ async fn handle_accept_error(
     }
 }
 
-async fn accept_until_shutdown<C: Clock + 'static, P: PeerProcessInspector + 'static>(
+async fn accept_until_shutdown<
+    C: Clock + 'static,
+    P: PeerProcessInspector + 'static,
+    L: ToolCallLedger + 'static,
+>(
     listener: UnixListener,
     shutdown_rx: &mut watch::Receiver<ShutdownSignal>,
-    state: &AcceptLoopState<C, P>,
+    state: &AcceptLoopState<C, P, L>,
     active_tasks: &mut Vec<JoinHandle<()>>,
 ) {
     loop {
@@ -500,9 +529,13 @@ async fn accept_until_shutdown<C: Clock + 'static, P: PeerProcessInspector + 'st
     }
 }
 
-fn dispatch_connection<C: Clock + 'static, P: PeerProcessInspector + 'static>(
+fn dispatch_connection<
+    C: Clock + 'static,
+    P: PeerProcessInspector + 'static,
+    L: ToolCallLedger + 'static,
+>(
     stream: UnixStream,
-    state: &AcceptLoopState<C, P>,
+    state: &AcceptLoopState<C, P, L>,
     shutdown_rx: &watch::Receiver<ShutdownSignal>,
 ) -> Option<JoinHandle<()>> {
     let Ok(permit) = Arc::clone(&state.semaphore).try_acquire_owned() else {
@@ -519,25 +552,31 @@ fn dispatch_connection<C: Clock + 'static, P: PeerProcessInspector + 'static>(
         config: state.config,
         shutdown_rx: shutdown_rx.clone(),
         events: Arc::clone(&state.events),
+        tools: state.tools.clone(),
     };
     Some(tokio::spawn(async move {
         handle_unix_connection(stream, permit, context).await;
     }))
 }
 
-struct ConnectionContext<C: Clock + 'static, P> {
+struct ConnectionContext<C: Clock + 'static, P, L> {
     auth: Arc<RunAuthBinding<C>>,
     expected_peer: Arc<ExpectedPeerPolicy>,
     inspector: PeerInspectorMode<P>,
     config: McpServerConfig,
     shutdown_rx: watch::Receiver<ShutdownSignal>,
     events: Arc<ConnectionEventLog>,
+    tools: Option<ToolRuntime<L>>,
 }
 
-async fn handle_unix_connection<C: Clock + 'static, P: PeerProcessInspector>(
+async fn handle_unix_connection<
+    C: Clock + 'static,
+    P: PeerProcessInspector,
+    L: ToolCallLedger + 'static,
+>(
     stream: UnixStream,
     _permit: OwnedSemaphorePermit,
-    mut context: ConnectionContext<C, P>,
+    mut context: ConnectionContext<C, P, L>,
 ) {
     let run_id = context.auth.run_id().clone();
     let observed = match stream.peer_cred() {
@@ -578,13 +617,14 @@ async fn handle_unix_connection<C: Clock + 'static, P: PeerProcessInspector>(
     }
 
     let (read_half, write_half) = stream.into_split();
-    let params = StreamAuthParams::new(
-        context.auth,
-        context.config.auth_line_limit(),
-        context.config.auth_timeout(),
-        context.shutdown_rx,
-        context.events,
-    );
+    let params = StreamAuthParams {
+        auth: context.auth,
+        auth_line_limit: context.config.auth_line_limit(),
+        auth_timeout: context.config.auth_timeout(),
+        shutdown_rx: context.shutdown_rx,
+        events: context.events,
+        tools: context.tools,
+    };
     Box::pin(authenticate_and_serve_stream(read_half, write_half, params)).await;
 }
 

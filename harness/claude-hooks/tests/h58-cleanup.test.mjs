@@ -320,6 +320,8 @@ test("실제 Claude 진입 훅은 소유한 작업 사본에서만 정리를 허
           env: { ...process.env, CLAUDE_PROJECT_DIR: fixture.worktree },
           input: JSON.stringify({
             cwd: fixture.worktree,
+            agent_type: "adversarial-reviewer",
+            agent_id: "r1",
             tool_input: { command },
           }),
           encoding: "utf8",
