@@ -19,6 +19,7 @@ import type {
   ScorecardScreenView,
   SignalsView,
   ThesisView,
+  WatchlistChange,
 } from "./estimate-views";
 import type { IpcFailure } from "./schema";
 
@@ -174,6 +175,8 @@ export const pendingScreenSources: ScreenSources = {
   thesis: pending<ThesisView>(),
   requestOrderApproval: pending<"requested">(),
   skipSignal: pending<"recorded">(),
+  addWatchlist: pending<WatchlistChange>(),
+  removeWatchlist: pending<WatchlistChange>(),
   portfolio: pending<PortfolioView>(),
   allocation: pending<AllocationView>(),
   transactions: pending<TransactionsView>(),

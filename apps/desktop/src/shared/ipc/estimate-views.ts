@@ -166,6 +166,12 @@ export type EstimateSources = {
   readonly requestOrderApproval: (
     proposal: EntityId,
   ) => Promise<Result<"requested", IpcFailure>>;
+  readonly addWatchlist: (
+    ticker: Ticker,
+  ) => Promise<Result<WatchlistChange, IpcFailure>>;
+  readonly removeWatchlist: (
+    instrument: EntityId,
+  ) => Promise<Result<WatchlistChange, IpcFailure>>;
   readonly skipSignal: (
     card: EntityId,
     reason: InputValue,

@@ -234,7 +234,7 @@ test("E-10 skip records a one-line reason through the skip action only", async (
     const w = bundle.open();
     const view = w.mount([w.card({ orderSwitch: "off" })]);
     await w.waitText(view, "넘기기");
-    w.type(view.getByRole("textbox"), "지금은 비싸다");
+    w.type(view.getByLabelText("넘기는 이유 (선택)"), "지금은 비싸다");
     w.click(view.getByRole("button", { name: "넘기기" }));
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(w.calls.skipped.length, 1);

@@ -1,8 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "@tanstack/react-router";
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { AboutSection } from "../features/about";
 import { ChatPanel } from "../features/chat";
+import { InstrumentDetail, InstrumentList } from "../features/instruments";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
 import { SettingsScreen } from "../features/settings";
@@ -18,19 +19,11 @@ import {
   Stack,
   Text,
 } from "../shared/ds";
-import { queryKeys, text } from "../shared/lib";
+import { queryKeys, text, type EntityId } from "../shared/lib";
 import { detach } from "../shared/platform";
 import { useNavigate, useSources, useSystemSettings } from "./context";
 import { SettingsSections } from "./settings";
 import { describeIpcFailure, useAppVersion } from "./query";
-
-const SidebarPlaceholder = (): ReactElement => (
-  <Stack gap="space-2">
-    <Text variant="caption" tone="ink-muted">
-      {text("app.stockListEmpty", "ko")}
-    </Text>
-  </Stack>
-);
 
 const ChatSlot = (): ReactElement => (
   <Stack gap="space-2">
@@ -45,20 +38,33 @@ const ChatSlot = (): ReactElement => (
 export const ShellLayout = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
+  const [shown, setShown] = useState<EntityId | undefined>(undefined);
   return (
     <AppShell
-      list={<SidebarPlaceholder />}
+      list={<InstrumentList sources={sources} onSelect={setShown} />}
       chat={<ChatSlot />}
       status={
         <SelfCheckBar
           load={sources.selfCheck}
           onOpenSettings={(): void => {
+            setShown(undefined);
             go("/settings");
           }}
         />
       }
     >
-      <Outlet />
+      {shown === undefined ? (
+        <Outlet />
+      ) : (
+        <InstrumentDetail
+          key={shown}
+          sources={sources}
+          instrument={shown}
+          onClose={(): void => {
+            setShown(undefined);
+          }}
+        />
+      )}
     </AppShell>
   );
 };
