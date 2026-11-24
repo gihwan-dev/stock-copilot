@@ -7,6 +7,7 @@ default-run = "src-tauri"
 
 [dependencies]
 application = { path = "../../../crates/application" }
+approval-command = { path = "../../../crates/approval-command" }
 domain = { path = "../../../crates/domain" }
 platform-macos = { path = "../../../crates/adapters/platform-macos" }
 store-sqlite = { path = "../../../crates/adapters/store-sqlite" }
@@ -30,3 +31,4 @@ workspace = true
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
 testkit-ports = { path = "../../../crates/testkit-ports" }
+trade-fakes = { path = "../../../crates/trade-fakes" }

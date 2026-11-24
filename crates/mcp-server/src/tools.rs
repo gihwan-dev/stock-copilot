@@ -34,6 +34,7 @@ pub enum ToolErrorCode {
     DataUnavailable,
     UpstreamUnavailable,
     ForbiddenOperation,
+    RateLimited,
     InternalError,
 }
 
@@ -169,6 +170,20 @@ pub enum ToolRegistryError {
     ForbiddenToolName,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolReach {
+    AppDataOnly,
+    OpenWorld,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResultRetention {
+    RecordInLedger,
+    OmitFromLedger,
+}
+
+const OMITTED_RESULT_JSON: &str = "{\"omitted\":\"tool result is delivered once and not stored\"}";
+
 #[derive(Debug, Clone)]
 pub struct ToolSpec {
     name: ToolName,
@@ -176,6 +191,8 @@ pub struct ToolSpec {
     access: ToolAccessKind,
     input_schema: JsonObject,
     output_schema: Option<JsonObject>,
+    retention: ResultRetention,
+    reach: ToolReach,
 }
 
 impl ToolSpec {
@@ -202,7 +219,26 @@ impl ToolSpec {
             access,
             input_schema,
             output_schema,
+            retention: ResultRetention::RecordInLedger,
+            reach: ToolReach::AppDataOnly,
         })
+    }
+
+    #[must_use]
+    pub const fn with_result_omitted_from_ledger(mut self) -> Self {
+        self.retention = ResultRetention::OmitFromLedger;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_open_world(mut self) -> Self {
+        self.reach = ToolReach::OpenWorld;
+        self
+    }
+
+    #[must_use]
+    pub const fn retention(&self) -> ResultRetention {
+        self.retention
     }
 
     #[must_use]
@@ -222,17 +258,21 @@ impl ToolSpec {
 
     #[must_use]
     pub fn to_rmcp_tool(&self) -> Tool {
+        let open_world = match self.reach {
+            ToolReach::AppDataOnly => false,
+            ToolReach::OpenWorld => true,
+        };
         let annotations = match self.access {
             ToolAccessKind::ReadOnly => ToolAnnotations::new()
                 .read_only(true)
                 .destructive(false)
                 .idempotent(true)
-                .open_world(false),
+                .open_world(open_world),
             ToolAccessKind::StateChanging => ToolAnnotations::new()
                 .read_only(false)
                 .destructive(false)
                 .idempotent(false)
-                .open_world(false),
+                .open_world(open_world),
         };
         let mut tool = Tool::new(
             Cow::Owned(self.name.as_str().to_owned()),
@@ -778,6 +818,31 @@ pub(crate) struct DispatchCallInput<'a> {
     pub(crate) arguments: &'a JsonObject,
 }
 
+fn ledger_result_text(
+    registry: &ToolRegistry,
+    recorded_name: &Result<ToolName, ToolErrorPayload>,
+    outcome: ToolCallOutcome,
+    result_text: String,
+) -> String {
+    let retention = recorded_name
+        .as_ref()
+        .ok()
+        .and_then(|name| registry.get(name))
+        .map_or(ResultRetention::RecordInLedger, |(spec, _tool)| {
+            spec.retention()
+        });
+    match (retention, outcome) {
+        (ResultRetention::OmitFromLedger, ToolCallOutcome::Succeeded) => {
+            String::from(OMITTED_RESULT_JSON)
+        }
+        (
+            ResultRetention::OmitFromLedger,
+            ToolCallOutcome::ToolError | ToolCallOutcome::Rejected,
+        )
+        | (ResultRetention::RecordInLedger, _) => result_text,
+    }
+}
+
 pub(crate) async fn dispatch_tool_call<C: Clock, L: ToolCallLedger>(
     runtime: &ToolRuntime<L>,
     auth: &RunAuthBinding<C>,
@@ -797,7 +862,13 @@ pub(crate) async fn dispatch_tool_call<C: Clock, L: ToolCallLedger>(
         Ok(encoded) => auth.redact_token(&encoded),
         Err(_error) => String::from("{}"),
     };
-    let redacted_result = auth.redact_token(&result_text);
+    let ledger_result = ledger_result_text(
+        &runtime.registry,
+        &recorded_name_result,
+        outcome,
+        result_text,
+    );
+    let redacted_result = auth.redact_token(&ledger_result);
     let record_build = (|| -> Result<ToolCallRecord, ToolErrorPayload> {
         Ok(ToolCallRecord::new(ToolCallRecordInput {
             run_id: auth.run_id().clone(),

@@ -25,3 +25,15 @@ ADR 0173 경량 절차. 2행마다 리뷰 전용 하위 에이전트(Claude Opus
 | 5 | 사소 | 포트 호출 변형 `match`가 동어반복, 섹터 이름 보존 미단언 | 고침. 동어반복 `match`를 지우고 도구별 도달 단언으로 대체, 섹터 이름 단언 추가 |
 
 `check-lite` 중 arch-check가 `fake_cli_end_to_end.rs`의 프로세스 실행(`mcp-server`는 프로세스 실행 금지 crate)을 잡아, 가짜 CLI 실행을 `testkit::PreparedFakeAiCli::run_with_mcp_token`으로 옮겼다(arch-check 위반 0).
+
+## 회차 3 (N-18 90c50625, M-06 5a74babb)
+
+| 번호 | 등급 | 지적 | 처리 |
+|---|---|---|---|
+| 1 | 중요 | `request_web_research`가 종목 순서를 AI가 준 그대로 포트에 넘겨 순서로 최대 약 7비트를 더 실을 수 있음 | 고침. 종목을 코드순 정렬·중복 제거 뒤 넘기고 테스트로 고정 |
+| 2 | 사소 | 추적 실행 64개를 넘으면 사전순 첫 실행을 지워 그 실행의 상한이 다시 열림 | 고침. 지우지 않고 새 실행을 `rate_limited`로 거부(닫힌 실패) |
+| 3 | 사소 | 분석 실행도 `user_message` 모드를 부를 수 있고 채팅 실행 한정 책임이 문서에 없음 | 고침. `RunKind`에 채팅 구분이 없어 포트 책임으로 두고 `WebResearchToolFailure::ModeNotAllowed`(→`forbidden_operation`)를 추가, 결정 표에 명시 |
+| 4 | 사소 | 연합뉴스 거부가 도메인 목록 공백 때문에 걸려 `is_never_readable` 변이가 살아남음 | 고침. 연합뉴스 도메인(`yna.co.kr`)을 표에 넣어 설정이 켜진 가짜에서도 `is_never_readable`만이 막게 함 |
+| 5 | 사소 | M-05에서 `read_article` 본문 경로가 한 번도 돌지 않음 | 고침. 읽을 수 있는 수집 항목을 가짜에 넣고 본문 요청이 한 번 이상 일어났는지 단언. 구조화된 `forbidden_operation`은 도달로 셈 |
+| 6 | 사소 | 외부 웹에 닿는 두 도구가 `openWorldHint:false` | 고침. `ToolSpec::with_open_world`로 `request_web_research`·`read_article`만 `true` |
+| 7 | 사소 | 종목 5개 초과를 조용히 자름 | 고침. 초과 시 `invalid_input` |

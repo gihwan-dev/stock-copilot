@@ -1,5 +1,6 @@
 mod assignments;
 pub(crate) mod codec;
+mod scorecard;
 pub(crate) mod valuation_codec;
 
 use crate::{Database, migration::digest, sql::estimates as sql};

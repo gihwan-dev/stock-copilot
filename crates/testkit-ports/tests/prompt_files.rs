@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use application::{PromptFile, PromptFileError};
+    use application::{PromptFile, PromptFileError, PromptSource};
 
     fn estimate() -> String {
         std::fs::read_to_string("../../prompts/estimate/v1.md").expect("추정 프롬프트")
@@ -19,10 +19,10 @@ mod tests {
             for file in std::fs::read_dir(&task).expect("버전 목록") {
                 let path = file.expect("파일").path();
                 let source = std::fs::read_to_string(&path).expect("프롬프트");
-                let prompt = PromptFile::parse(&source).expect("형식");
+                let prompt = PromptFile::parse(&PromptSource::new(&source)).expect("형식");
                 assert_eq!(
                     path.file_stem().and_then(|stem| stem.to_str()),
-                    Some(prompt.version())
+                    Some(prompt.version().as_str())
                 );
                 checked.push(path);
             }
@@ -32,16 +32,16 @@ mod tests {
 
     #[test]
     fn estimate_prompt_passes_the_file_format() {
-        let prompt = PromptFile::parse(&estimate()).expect("형식");
-        assert_eq!(prompt.id(), "estimate");
-        assert_eq!(prompt.version(), "v1");
-        assert_eq!(prompt.task(), "estimate");
+        let prompt = PromptFile::parse(&PromptSource::new(&estimate())).expect("형식");
+        assert_eq!(prompt.id().as_str(), "estimate");
+        assert_eq!(prompt.version().as_str(), "v1");
+        assert_eq!(prompt.task().as_str(), "estimate");
     }
 
     #[test]
     fn estimate_prompt_shows_the_base_probability_before_moving_it() {
-        let prompt = PromptFile::parse(&estimate()).expect("형식");
-        let body = prompt.body();
+        let prompt = PromptFile::parse(&PromptSource::new(&estimate())).expect("형식");
+        let body = prompt.body().as_str();
         assert!(position(body, "기준 확률 p₀") < position(body, "근거가 있을 때만"));
         assert!(body.contains("근거가 없으면 p₀를 그대로 낸다"));
         assert!(body.contains("반대 논거를 하나 이상"));
@@ -93,7 +93,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                PromptFile::parse(&source).map(|_file| ()),
+                PromptFile::parse(&PromptSource::new(&source)).map(|_file| ()),
                 Err(error),
                 "{source}"
             );

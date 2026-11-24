@@ -3,15 +3,45 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
-    use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
+    use application::{ArticleFetchFailure, ThesisRunMetadata, WebResearchToolOutcome};
+    use application::{EventBusBuilder, RetryDelay, SystemFailure, SystemPort, SystemPortError};
+    use domain::EstimateAssignments;
+    use domain::{
+        InstrumentId, Nanosecond, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText,
+    };
     use mcp_server::{
-        AnalysisCatalogPorts, ToolRegistry, build_analysis_catalog, make_cursor_store,
+        AnalysisCatalogPorts, EstimateToolPorts, ToolRegistry, build_analysis_catalog,
+        make_cursor_store,
     };
     use serde_json::Value;
     use testkit_ports::SteppedClock;
+    use testkit_ports::memory::MemoryEstimateLedger;
+    use testkit_ports::system_fakes::MemoryToolCallLedger;
     use testkit_ports::tool_read_fakes::{
-        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
+        FixedArticleToolPort, FixedEstimateAssignments, FixedEstimateRunContext,
+        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads, FixedProfileSource,
+        FixedScorecardObservations, FixedThesisToolPort, FixedWebResearchToolPort,
+        LatestThesisRepository,
     };
+
+    fn research_fake() -> FixedWebResearchToolPort {
+        let known: Vec<Symbol> = ["005930", "000660", "AAPL", "035420"]
+            .into_iter()
+            .map(|code| Symbol::try_new(code).expect("종목"))
+            .collect();
+        FixedWebResearchToolPort::new(
+            Ok(known),
+            Ok(WebResearchToolOutcome {
+                summary: UntrustedText::try_new("조사 요약").expect("요약"),
+                collected_at: Timestamp::from_parts(
+                    UnixSeconds::new(1_764_000_000_i64),
+                    Nanosecond::new(0_u32),
+                    OffsetSeconds::new(0_i32),
+                )
+                .expect("시각"),
+            }),
+        )
+    }
 
     fn golden_text() -> String {
         let exe = testkit::test_executable().expect("test executable");
@@ -32,13 +62,46 @@ mod tests {
             )
             .expect("시각"),
         ));
-        let cursors = make_cursor_store(clock);
+        let cursors = make_cursor_store(Arc::clone(&clock));
         let ports = AnalysisCatalogPorts {
             portfolio: Arc::new(FixedPortfolioToolReads::default()),
             market: Arc::new(FixedMarketToolReads::default()),
             news: Arc::new(FixedNewsToolReads::default()),
+            research: Arc::new(research_fake()),
+            article: Arc::new(FixedArticleToolPort::new(
+                Vec::new(),
+                Vec::new(),
+                Err(ArticleFetchFailure::NotFound),
+            )),
+            thesis: Arc::new(FixedThesisToolPort::new(
+                vec![(
+                    Symbol::try_new("005930").expect("종목"),
+                    InstrumentId::try_new("KR7005930003").expect("종목 ID"),
+                )],
+                Vec::new(),
+                ThesisRunMetadata {
+                    model: UntrustedText::try_new("model-x").expect("모델"),
+                    prompt_version: UntrustedText::try_new("p1").expect("프롬프트"),
+                },
+            )),
+            thesis_repository: Arc::new(LatestThesisRepository::default()),
+            estimates: Arc::new(EstimateToolPorts {
+                assignments: Arc::new(
+                    FixedEstimateAssignments::new(EstimateAssignments::default()),
+                ),
+                submissions: Arc::new(MemoryEstimateLedger::new()),
+                history: Arc::new(MemoryToolCallLedger::recording()),
+                context: Arc::new(FixedEstimateRunContext(Err(SystemPortError::new(
+                    SystemPort::Repository,
+                    SystemFailure::Unavailable(RetryDelay::Unknown),
+                )))),
+                settings: Arc::new(FixedProfileSource(Ok(None))),
+                observations: Arc::new(FixedScorecardObservations(Ok(Vec::new()))),
+                clock: Arc::clone(&clock),
+                events: Arc::new(EventBusBuilder::default().build()),
+            }),
         };
-        build_analysis_catalog(&ports, &cursors).expect("제품 카탈로그 조립")
+        build_analysis_catalog(&ports, &clock, &cursors).expect("제품 카탈로그 조립")
     }
 
     #[test]

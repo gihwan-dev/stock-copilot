@@ -1,0 +1,14 @@
+use application::ProposalRepository;
+use domain::{DraftRestoreEvidence, MasterInstrument, Proposal, ProposalId, Validated};
+use store_sqlite::SignalStore;
+pub async fn cannot_store(store: &SignalStore<'_>, value: &Proposal<Validated>, evidence: &DraftRestoreEvidence, master: &MasterInstrument) {
+    let _saved = store.store_draft(value, evidence, master).await;
+}
+pub async fn cannot_restore(store: &SignalStore<'_>, id: &ProposalId, master: &MasterInstrument) {
+    let _loaded: Option<Proposal<Validated>> = store.draft(id, master).await.expect("load");
+}
+pub async fn no_validated_methods(store: &SignalStore<'_>, value: &Proposal<Validated>, id: &ProposalId) {
+    let _saved = store.store_validated(value).await;
+    let _loaded = store.validated(id).await;
+}
+fn main() {}
