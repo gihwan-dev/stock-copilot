@@ -74,6 +74,16 @@ impl<'a> PreparedApproval<'a> {
     pub fn into_confirmation(self) -> (PendingOrderConfirmation, DialogLease<'a>) {
         (self.confirmation, self.lease)
     }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        PendingOrderConfirmation,
+        OrderGatePolicyContext,
+        DialogLease<'a>,
+    ) {
+        (self.confirmation, self.policy_context, self.lease)
+    }
 }
 
 #[derive(Debug)]

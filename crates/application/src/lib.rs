@@ -448,8 +448,8 @@ mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 mod order_gate;
 pub use order_gate::{
-    OrderGateCollectedFacts, OrderGateError, OrderGateOutcome, OrderGatePolicyContext,
-    ValidateOrderProposal,
+    IntentRecheckOutcome, OrderGateCollectedFacts, OrderGateError, OrderGateOutcome,
+    OrderGatePolicyContext, ValidateOrderProposal,
 };
 
 mod chat_types;

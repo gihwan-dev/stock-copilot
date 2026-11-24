@@ -30,6 +30,12 @@ pub struct OrderGateFacts<'a> {
     pub order_fx_rates: OrderFxRates,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GateCheckDecision {
+    Passed,
+    Rejected,
+}
+
 pub fn validate_proposal(
     proposal: Proposal<Draft>,
     now: Timestamp,
@@ -37,6 +43,51 @@ pub fn validate_proposal(
     facts: &OrderGateFacts<'_>,
 ) -> Result<Proposal<Validated>, ValidationReport> {
     proposal.validate_with_facts(now, current, facts)
+}
+
+#[must_use]
+pub fn recheck_intent_gate(
+    intent: &OrderIntent,
+    now: Timestamp,
+    current: &PriceObservation,
+    facts: &OrderGateFacts<'_>,
+) -> (GateCheckDecision, ValidationReport) {
+    let base_obs = current.check(intent.instrument(), now);
+    let price_observation = check_observation_identity(base_obs, current, facts.master);
+    let results = ValidationReportResults {
+        instrument: check_instrument(intent, facts.master),
+        market_hours: check_market_hours(intent, facts.calendars, now),
+        available_funds_or_quantity: check_available_funds_or_quantity(intent, current, now, facts),
+        opposite_pending_order: check_opposite_pending_order(intent, facts.open_orders),
+        buy_warnings: check_buy_warnings(intent, facts.stock_warnings),
+        principles: check_principles(intent, current, now, facts),
+        order_price: check_order_price(intent, current, facts.master, facts.price_limits),
+        market_order_permission: check_market_order_permission(intent, facts.market_order_policy),
+        account_match: check_account_match(intent, facts.accounts),
+        price_observation,
+        expiry: CheckResult::Passed,
+        price_range: CheckResult::Passed,
+    };
+    let passed = [
+        results.instrument,
+        results.market_hours,
+        results.available_funds_or_quantity,
+        results.opposite_pending_order,
+        results.buy_warnings,
+        results.principles,
+        results.order_price,
+        results.market_order_permission,
+        results.account_match,
+        results.price_observation,
+    ]
+    .into_iter()
+    .all(|item| item == CheckResult::Passed);
+    let decision = if passed {
+        GateCheckDecision::Passed
+    } else {
+        GateCheckDecision::Rejected
+    };
+    (decision, ValidationReport::from_results(results))
 }
 
 pub(crate) fn evaluate_report(

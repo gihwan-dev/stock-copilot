@@ -712,7 +712,7 @@ pub use external_url::{
     ExternalUrlScheme, FixedExternalUrl, ParsedExternalUrl,
 };
 mod order_gate;
-pub use order_gate::{OrderGateFacts, validate_proposal};
+pub use order_gate::{GateCheckDecision, OrderGateFacts, recheck_intent_gate, validate_proposal};
 mod order_rate_limit;
 pub use order_rate_limit::{
     HourlyOrderLimit, HourlyOrderLimitError, OrderCount, OrderRateDecision,
