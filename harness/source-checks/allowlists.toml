@@ -100,8 +100,8 @@ reason = "D-29 날짜 묶음 재표본과 독립 정수 유리수 기준값의 �
 
 [[clock-environment]]
 path = "crates/testkit/src/lib.rs"
-names = ["clock-env:var:STOCK_COPILOT_PROPTEST_CASES", "test-awareness:env::current_exe"]
-reason = "H-46 속성 테스트 도우미. 전용 상수 키만 읽고 전체 레시피에서4096을 강제한다"
+names = ["clock-env:var:STOCK_COPILOT_PROPTEST_CASES", "test-awareness:env::current_exe", "clock-env:temp_dir"]
+reason = "H-46 속성 테스트 도우미 및 통합 테스트용 정규화 임시 폴더 제공. 전용 상수 키만 읽고 전체 레시피에서 4096을 강제한다"
 
 [[clock-environment]]
 path = "crates/adapters/store-sqlite/src/tests.rs"
@@ -112,6 +112,16 @@ reason = "S-01: 새 동시 쓰기 회귀에서 실행 스레드 동일성과 호
 path = "crates/adapters/platform-macos/src/system_clock.rs"
 names = ["clock-env:now"]
 reason = "U-01 SystemClock의 운영체제 벽시계 읽기 한 곳"
+
+[[clock-environment]]
+path = "crates/mcp-bridge/src/main.rs"
+names = ["test-awareness:env::args_os", "clock-env:var:STOCK_MCP_TOKEN"]
+reason = "M-07: stdio 브리지 진입점이 --socket 인자와 STOCK_MCP_TOKEN 환경 변수 하나만 읽는다. 전체 환경 열람이나 argv 토큰 전달을 허용하지 않는다"
+
+[[clock-environment]]
+path = "crates/mcp-bridge/tests/bridge_socket.rs"
+names = ["clock-env:temp_dir"]
+reason = "M-07: 브리지 Unix 도메인 소켓 테스트가 macOS sun_path 104바이트 한도 안의 짧은 임시 경로를 쓰기 위해 temp_dir을 읽는다"
 
 [[clock-environment]]
 path = "crates/toss-smoke/src/main.rs"

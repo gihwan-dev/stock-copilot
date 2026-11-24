@@ -243,6 +243,23 @@ impl<C: Clock> RunAuthBinding<C> {
     }
 
     #[must_use]
+    pub(crate) const fn clock(&self) -> &Arc<C> {
+        &self.clock
+    }
+
+    #[must_use]
+    pub(crate) fn redact_token(&self, text: &str) -> String {
+        let Ok(raw_token) = std::str::from_utf8(self.token.as_exposed_bytes()) else {
+            return text.to_owned();
+        };
+        if text.contains(raw_token) {
+            text.replace(raw_token, "[redacted]")
+        } else {
+            text.to_owned()
+        }
+    }
+
+    #[must_use]
     pub(crate) fn status(&self) -> TokenStatus {
         match self.state.load(Ordering::Acquire) {
             TOKEN_STATE_ACTIVE => TokenStatus::Active,

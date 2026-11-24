@@ -304,6 +304,18 @@ where
         }
     }
 
+    pub(crate) const fn provider(&self) -> &'a Provider {
+        self.provider
+    }
+
+    pub(crate) const fn queue(&self) -> &'a Queue {
+        self.queue
+    }
+
+    pub(crate) const fn clock(&self) -> &'a Time {
+        self.clock
+    }
+
     pub async fn execute<Sink: ChatChunkSink, Stop: ChatStopSignal>(
         &self,
         request: SendChatRequest,

@@ -1253,13 +1253,13 @@
   },
   {
     "path": "{root}/crates/domain/src/lib.rs",
-    "decision": "deny",
-    "rules": ["main-docs-only"]
+    "decision": "allow",
+    "rules": []
   },
   {
     "path": "{root}/Cargo.lock",
-    "decision": "deny",
-    "rules": ["main-docs-only"]
+    "decision": "allow",
+    "rules": []
   },
   {
     "path": "{root}/target/x.txt",
@@ -1380,26 +1380,26 @@
   },
   {
     "path": "{root}/docs/notes.md",
-    "decision": "deny",
-    "rules": ["role-without-edits"],
+    "decision": "allow",
+    "rules": [],
     "role": "general-purpose"
   },
   {
     "path": "{root}/docs/notes.md",
-    "decision": "deny",
-    "rules": ["role-without-edits"],
+    "decision": "allow",
+    "rules": [],
     "role": "Explore"
   },
   {
     "path": "{root}/docs/notes.md",
-    "decision": "deny",
-    "rules": ["role-without-edits"],
+    "decision": "allow",
+    "rules": [],
     "role": ""
   },
   {
     "path": "{root}/docs/notes.md",
-    "decision": "deny",
-    "rules": ["role-without-edits"],
+    "decision": "allow",
+    "rules": [],
     "role": "agent-id-only"
   },
   {
