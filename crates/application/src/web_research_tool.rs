@@ -34,6 +34,7 @@ pub struct WebResearchToolOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WebResearchToolFailure {
     QueryRejected,
+    ModeNotAllowed,
     UserMessageMissing,
     CollectionFailed,
     Unavailable(SystemPortError),

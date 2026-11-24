@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use application::{
-    ArticleToolPort, Clock, MarketToolReads, NewsToolReads, PortfolioToolReads, WebResearchToolPort,
+    ArticleToolPort, Clock, MarketToolReads, NewsToolReads, PortfolioToolReads, ThesisRepository,
+    ThesisToolPort, WebResearchToolPort,
 };
 
 use crate::pagination::CursorStore;
@@ -14,18 +15,21 @@ pub mod news;
 pub mod portfolio;
 mod render;
 pub mod research;
+pub mod thesis;
 
 #[derive(Debug)]
-pub struct AnalysisCatalogPorts<P, M, N, W, A> {
+pub struct AnalysisCatalogPorts<P, M, N, W, A, T, R> {
     pub portfolio: Arc<P>,
     pub market: Arc<M>,
     pub news: Arc<N>,
     pub research: Arc<W>,
     pub article: Arc<A>,
+    pub thesis: Arc<T>,
+    pub thesis_repository: Arc<R>,
 }
 
-pub fn build_analysis_catalog<P, M, N, W, A, C>(
-    ports: &AnalysisCatalogPorts<P, M, N, W, A>,
+pub fn build_analysis_catalog<P, M, N, W, A, T, R, C>(
+    ports: &AnalysisCatalogPorts<P, M, N, W, A, T, R>,
     clock: &Arc<C>,
     cursors: &Arc<CursorStore<C>>,
 ) -> Result<ToolRegistry, ToolRegistryError>
@@ -35,6 +39,8 @@ where
     N: NewsToolReads + 'static,
     W: WebResearchToolPort + 'static,
     A: ArticleToolPort + 'static,
+    T: ThesisToolPort + 'static,
+    R: ThesisRepository + 'static,
     C: Clock + 'static,
 {
     let mut registry = ToolRegistry::new();
@@ -43,5 +49,6 @@ where
     news::register_news_tools(&mut registry, &ports.news, cursors)?;
     research::register_web_research_tool(&mut registry, &ports.research, clock)?;
     article::register_read_article_tool(&mut registry, &ports.article)?;
+    thesis::register_thesis_tools(&mut registry, &ports.thesis, &ports.thesis_repository)?;
     Ok(registry)
 }
