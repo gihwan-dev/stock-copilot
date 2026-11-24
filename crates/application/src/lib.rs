@@ -553,6 +553,8 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod order_button;
+pub use order_button::ReadOrderButton;
 mod order_rate_limit;
 pub use order_rate_limit::{CheckOrderRateLimit, OrderRateRepository};
 
