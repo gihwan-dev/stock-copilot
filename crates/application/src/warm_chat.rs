@@ -1,9 +1,9 @@
 use crate::{
     AiEventStream, AiProvider, AiRunId, ChatChunkSink, ChatExecutionMode, ChatHistory,
-    ChatModelConfig, ChatQueuePort, ChatRepository, ChatRunLedger, ChatStopSignal, Clock,
-    IdentifierError, InformationError, IsolationCheck, IsolationFailure, ModelSelection,
-    ReasoningEffort, RunKind, RunSpec, SendChatMessage, SendChatOutcome, SendChatRequest,
-    SystemFailure, SystemPortError, WriteCompleted,
+    ChatModelConfig, ChatNumberEvidence, ChatQueuePort, ChatRepository, ChatRunLedger,
+    ChatStopSignal, Clock, IdentifierError, InformationError, IsolationCheck, IsolationFailure,
+    ModelSelection, NoNumberEvidence, ReasoningEffort, RunKind, RunSpec, SendChatMessage,
+    SendChatOutcome, SendChatRequest, SystemFailure, SystemPortError, WriteCompleted,
     send_chat_message::{IsolationPhase, PreparedChatTurn, StreamExecutionContext},
 };
 use domain::{Nanosecond, SpanSeconds, TimeSpan, Timestamp, UntrustedText};
@@ -359,14 +359,23 @@ struct WarmTurnInput<'a> {
 }
 
 #[derive(Debug)]
-pub struct SendWarmChatMessage<'a, Provider, Warm, Repo, Ledger, Queue, Time> {
-    sender: SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time>,
+pub struct SendWarmChatMessage<
+    'a,
+    Provider,
+    Warm,
+    Repo,
+    Ledger,
+    Queue,
+    Time,
+    Evidence = NoNumberEvidence,
+> {
+    sender: SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time, Evidence>,
     warm: &'a Warm,
     max_age: TimeSpan,
 }
 
-impl<'a, Provider, Warm, Repo, Ledger, Queue, Time>
-    SendWarmChatMessage<'a, Provider, Warm, Repo, Ledger, Queue, Time>
+impl<'a, Provider, Warm, Repo, Ledger, Queue, Time, Evidence>
+    SendWarmChatMessage<'a, Provider, Warm, Repo, Ledger, Queue, Time, Evidence>
 where
     Provider: AiProvider,
     Warm: WarmChatRuntime,
@@ -374,10 +383,11 @@ where
     Ledger: ChatRunLedger,
     Queue: ChatQueuePort,
     Time: Clock,
+    Evidence: ChatNumberEvidence,
 {
     #[must_use]
     pub const fn new(
-        sender: SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time>,
+        sender: SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time, Evidence>,
         warm: &'a Warm,
         max_age: TimeSpan,
     ) -> Self {
@@ -390,7 +400,7 @@ where
 
     #[must_use]
     pub fn with_default_max_age(
-        sender: SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time>,
+        sender: SendChatMessage<'a, Provider, Repo, Ledger, Queue, Time, Evidence>,
         warm: &'a Warm,
     ) -> Self {
         Self::new(sender, warm, WarmChatSession::default_max_age())

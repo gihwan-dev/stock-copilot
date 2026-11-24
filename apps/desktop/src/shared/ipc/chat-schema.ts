@@ -93,6 +93,11 @@ const sourceSchema = z
   }));
 
 const tool = z.object({ server: z.string(), tool: topicSchema });
+const numberChecks = {
+  NoNumbers: "no-numbers",
+  Verified: "verified",
+  Unverified: "unverified",
+} as const;
 const chunk = (content: ChatContentChunk): ChatStreamChunk => ({
   kind: "content",
   content,
@@ -127,6 +132,18 @@ const chunkSchema = z.union([
   z
     .strictObject({ Sources: z.object({ items: z.array(sourceSchema) }) })
     .transform((v) => chunk({ kind: "sources", items: v.Sources.items })),
+  z
+    .strictObject({
+      NumberCheck: z.object({
+        status: z.enum(["NoNumbers", "Verified", "Unverified"]),
+      }),
+    })
+    .transform((v) =>
+      chunk({
+        kind: "number-check",
+        check: numberChecks[v.NumberCheck.status],
+      }),
+    ),
   z
     .strictObject({ Done: z.looseObject({}) })
     .transform(() => end({ kind: "done" })),

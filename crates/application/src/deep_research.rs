@@ -19,3 +19,8 @@ pub use run::{
     DeepResearchStages, ResearchCheckpoint, ResearchCheckpointStore, ResearchStage,
     RunDeepResearch,
 };
+mod schedule;
+pub use schedule::{
+    DeepResearchCycleError, DeepResearchCycleProgress, DeepResearchCycleReport, DeepResearchJob,
+    DeepResearchPause, DeepResearchTargetOutcome, RunDeepResearchCycle,
+};

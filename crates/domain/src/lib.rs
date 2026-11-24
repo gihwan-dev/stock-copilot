@@ -445,6 +445,10 @@ pub use domain_event::{DomainEvent, DomainEventKind};
 mod buy_quantity;
 mod buy_quantity_arithmetic;
 mod buy_signal_history;
+mod investment_principles;
+pub use investment_principles::{
+    CashFloor, ConcentrationFloor, InvestmentPrinciples, PrincipleNote, PrincipleNoteError,
+};
 mod concentration_policy;
 pub use buy_quantity::{
     BuyQuantityConstraint, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, NoBuyQuantity,
@@ -710,6 +714,15 @@ mod deep_research_review;
 pub use deep_research_review::{
     ResearchCount, ResearchSourceWarning, ResearchTally, research_source_warnings,
     tally_research_claims,
+};
+
+mod deep_research_window;
+pub use deep_research_window::{DeepResearchWindow, deep_research_window};
+
+mod candidate_discovery;
+pub use candidate_discovery::{
+    CapBand, DiscoveryCandidate, DiscoveryInput, DiscoveryQuota, DiscoverySeed, DiscoverySlots,
+    DiscoverySource, select_discovery_candidates,
 };
 
 mod valuation_day_inputs;

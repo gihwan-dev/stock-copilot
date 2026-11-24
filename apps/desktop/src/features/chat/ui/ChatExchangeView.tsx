@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Markdown, Stack, Text } from "../../../shared/ds";
+import { Badge, Inline, Markdown, Stack, Text } from "../../../shared/ds";
 import type { ExternalUrl, UiText } from "../../../shared/lib";
 import { useOpenLink } from "../model/queries";
 import { chatText } from "../messages";
@@ -69,6 +69,16 @@ const Reply = (props: {
         <ChatCardView key={`${card.kind}-${card.id}`} card={card} />
       ))}
     </Stack>
+    {props.reply.numbers === "unverified" ? (
+      <Inline gap="space-2" wrap="wrap">
+        <Badge tone="alert">{chatText("chat.unverified", "ko")}</Badge>
+        <Text variant="caption" tone="ink-muted">
+          {chatText("chat.unverifiedBody", "ko")}
+        </Text>
+      </Inline>
+    ) : (
+      <Stack gap="space-1">{[]}</Stack>
+    )}
     {props.reply.phase === "done" ? (
       <ChatSources sources={props.reply.sources} />
     ) : (
