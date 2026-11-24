@@ -1,0 +1,11 @@
+{
+  "session_id": "session-ipc-1",
+  "turn_id": "turn-1",
+  "run_id": "run-1",
+  "status": "Completed",
+  "mode": "FreshAnalysis",
+  "actual_model": "claude-sonnet-5-5",
+  "first_token_latency_ms": 420,
+  "resets_at_unix_seconds": null,
+  "failure_reason": null
+}
