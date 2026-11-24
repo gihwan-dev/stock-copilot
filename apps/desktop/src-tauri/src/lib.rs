@@ -6,6 +6,7 @@ pub mod ipc;
 pub mod lifecycle;
 pub mod platform;
 pub mod ports;
+pub mod product_events;
 pub mod product_ports;
 mod security;
 pub mod sqlite_ports;
@@ -129,6 +130,9 @@ fn prepare_process_shutdown_hook<R: Runtime>(
 }
 
 fn ensure_default_runtimes<R: Runtime>(app: &App<R>) {
+    if let Some(slot) = app.try_state::<Arc<product_events::UiEventSlot<R>>>() {
+        let _binding = slot.bind(ipc::event_bridge::UiEventBridge::new(app.handle().clone()));
+    }
     if app
         .try_state::<ipc::open_external::ExternalLinkRuntime>()
         .is_none()
