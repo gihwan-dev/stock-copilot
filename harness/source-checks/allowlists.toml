@@ -114,6 +114,11 @@ names = ["clock-env:now"]
 reason = "U-01 SystemClock의 운영체제 벽시계 읽기 한 곳"
 
 [[clock-environment]]
+path = "crates/toss-smoke/src/main.rs"
+names = ["test-awareness:env::args_os", "clock-env:now"]
+reason = "T-12 연결 확인 CLI 진입점. 명령행 인자와 HTTP 제한기용 벽시계만 읽고 환경 변수 읽기는 전면 금지한다"
+
+[[clock-environment]]
 path = "crates/testkit/src/bin/fake_ai_cli.rs"
 names = [
     "test-awareness:env::args_os",

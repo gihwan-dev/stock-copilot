@@ -4299,6 +4299,16 @@ checksum = "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a"
 [[package]]
 name = "toss-smoke"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "broker-toss",
+ "dirs",
+ "domain",
+ "serde_json",
+ "testkit",
+ "testkit-ports",
+ "tokio",
+]
 
 [[package]]
 name = "tower"
