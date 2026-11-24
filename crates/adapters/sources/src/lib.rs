@@ -11,6 +11,7 @@ mod news_rss;
 mod rate_limiter;
 mod registry;
 mod rss;
+mod us_macro;
 mod us_sources;
 
 pub use article_reader::{ArticleReadError, ArticleReader};
@@ -58,6 +59,10 @@ pub use registry::{
 };
 pub use rss::{
     ParsedFeedItem, collapse_whitespace, parse_feed, parse_feed_timestamp, strip_html_tags,
+};
+pub use us_macro::{
+    FredSeries, TreasuryTenor, UsMacroClient, build_fred_observations_url,
+    build_treasury_yield_url, parse_fred_observations_json, parse_treasury_yield_xml,
 };
 pub use us_sources::{
     SecCik, SecCompanyTickerRecord, SecEdgarClient, SecEdgarCurrentAtomFeed,
