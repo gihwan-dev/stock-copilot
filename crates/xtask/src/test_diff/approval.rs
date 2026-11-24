@@ -42,7 +42,7 @@ struct Group {
     after: String,
 }
 
-fn git(root: &Path, args: &[&str]) -> Option<String> {
+pub(super) fn git(root: &Path, args: &[&str]) -> Option<String> {
     let mut command = git_base::git(root);
     command
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -54,16 +54,16 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&result.stdout).trim().to_owned())
 }
 
-fn is_ancestor(root: &Path, base: &str, head: &str) -> bool {
+pub(super) fn is_ancestor(root: &Path, base: &str, head: &str) -> bool {
     git(root, &["merge-base", "--is-ancestor", base, head]).is_some()
 }
 
-fn first_parent_ancestor(root: &Path, ancestor: &str, head: &str) -> bool {
+pub(super) fn first_parent_ancestor(root: &Path, ancestor: &str, head: &str) -> bool {
     git(root, &["rev-list", "--first-parent", head])
         .is_some_and(|history| history.lines().any(|revision| revision == ancestor))
 }
 
-fn commit(root: &Path, reference: &str) -> Option<String> {
+pub(super) fn commit(root: &Path, reference: &str) -> Option<String> {
     let resolved = git(
         root,
         &[
@@ -76,7 +76,7 @@ fn commit(root: &Path, reference: &str) -> Option<String> {
     git_base::is_commit_id(&resolved).then_some(resolved)
 }
 
-fn pending_master_merge(root: &Path, head: &str, authority: &str) -> bool {
+pub(super) fn pending_master_merge(root: &Path, head: &str, authority: &str) -> bool {
     if head != authority
         || git(root, &["symbolic-ref", "--quiet", "HEAD"]).as_deref() != Some("refs/heads/master")
     {
@@ -95,7 +95,7 @@ fn pending_master_merge(root: &Path, head: &str, authority: &str) -> bool {
     git_base::is_commit_id(incoming) && commit(root, incoming).as_deref() == Some(*incoming)
 }
 
-fn trusted_authority(root: &Path, head: &str) -> Option<String> {
+pub(super) fn trusted_authority(root: &Path, head: &str) -> Option<String> {
     let master = commit(root, MASTER)?;
     let branch = git(root, &["symbolic-ref", "--quiet", "HEAD"]);
     if master == head
@@ -110,7 +110,12 @@ fn trusted_authority(root: &Path, head: &str) -> Option<String> {
     }
 }
 
-fn same_entry(root: &Path, revision: &str, parent: Option<&str>, path: &str) -> Option<bool> {
+pub(super) fn same_entry(
+    root: &Path,
+    revision: &str,
+    parent: Option<&str>,
+    path: &str,
+) -> Option<bool> {
     let current = git(root, &["ls-tree", revision, "--", path])?;
     let previous = match parent {
         Some(ancestor) => git(root, &["ls-tree", ancestor, "--", path])?,
@@ -173,14 +178,14 @@ fn text<'a>(table: &'a toml::Table, key: &str) -> Result<&'a str, String> {
         .ok_or_else(|| format!("{APPROVAL_FILE}: {key}가 없다"))
 }
 
-fn valid_hash(value: &str) -> bool {
+pub(super) fn valid_hash(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn valid_task(task: &str) -> bool {
+pub(super) fn valid_task(task: &str) -> bool {
     task.split_once('-').is_some_and(|(prefix, number)| {
         !prefix.is_empty()
             && prefix.bytes().all(|byte| byte.is_ascii_uppercase())
@@ -189,7 +194,7 @@ fn valid_task(task: &str) -> bool {
     })
 }
 
-fn valid_path(path: &str) -> bool {
+pub(super) fn valid_path(path: &str) -> bool {
     Path::new(path)
         .extension()
         .is_some_and(|extension| extension == "rs")
@@ -269,7 +274,7 @@ fn parse(contents: &str) -> Result<BTreeMap<Group, ApprovedFindings>, String> {
     Ok(groups)
 }
 
-fn digest(bytes: &[u8]) -> String {
+pub(super) fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
@@ -1468,7 +1473,7 @@ fn diagnostic_trusted(
         && trusted_history(root, authority, head, groups)
 }
 
-fn approvable_rule(rule: &Rule) -> bool {
+pub(super) fn approvable_rule(rule: &Rule) -> bool {
     match rule {
         Rule::Modified(_) | Rule::SupportModified(_) => true,
         Rule::Removed(_)
@@ -1766,6 +1771,55 @@ pub(super) fn apply(
     apply_to(
         root,
         (before, current),
+        findings,
+        base_use,
+        &mut std::io::stderr().lock(),
+    )
+}
+
+pub(super) fn apply_for_base_to(
+    context: (&Path, &str),
+    files: (&Files, &Files),
+    findings: Findings,
+    base_use: BaseUse,
+    output: &mut impl Write,
+) -> Result<Findings, String> {
+    let (root, base) = context;
+    if findings.is_empty() {
+        return Ok(findings);
+    }
+    let raw_findings = findings.clone();
+    let mut approval_notes = Vec::new();
+    let remaining = apply_to(root, files, findings, base_use, &mut approval_notes)?;
+    if remaining.is_empty() {
+        return Ok(remaining);
+    }
+    let mut bundle_notes = Vec::new();
+    match super::bundle::apply_to(root, base, files, &raw_findings, &mut bundle_notes)? {
+        super::bundle::Outcome::Approved => Ok(BTreeSet::new()),
+        super::bundle::Outcome::Rejected => {
+            if output.write_all(&approval_notes).is_ok() && output.write_all(&bundle_notes).is_err()
+            {
+                return Ok(remaining);
+            }
+            Ok(remaining)
+        }
+    }
+}
+
+pub(super) fn apply_for_base(
+    root: &Path,
+    base: &str,
+    files: (&Files, &Files),
+    findings: Findings,
+    base_use: BaseUse,
+) -> Result<Findings, String> {
+    if !super::bundle::has_candidate_bundle(root, files.1) {
+        return apply(root, files.0, files.1, findings, base_use);
+    }
+    apply_for_base_to(
+        (root, base),
+        files,
         findings,
         base_use,
         &mut std::io::stderr().lock(),

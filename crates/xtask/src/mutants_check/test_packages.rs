@@ -6,16 +6,25 @@ const COMPANION: (&str, &str, &str) = (
     "crates/testkit-ports",
 );
 
+const DECLARATIONS: [(&str, &str, Option<&str>); 4] = [
+    ("crates/domain", "domain", None),
+    (COMPANION.0, "application", Some(COMPANION.1)),
+    ("crates/order-execution", "order-execution", None),
+    ("crates/adapters/store-sqlite", "store-sqlite", None),
+];
+
+pub(super) fn package_of_file(path: &str) -> Result<&'static str, String> {
+    DECLARATIONS
+        .iter()
+        .find(|(directory, _, _)| path.starts_with(&format!("{directory}/src/")))
+        .map(|(_, package, _)| *package)
+        .ok_or_else(|| format!("변이 테스트 소유 선언이 없다: {path}"))
+}
+
 pub(super) fn selected(globs: &[String]) -> Result<BTreeSet<String>, String> {
-    let declarations = [
-        ("crates/domain", "domain", None),
-        (COMPANION.0, "application", Some(COMPANION.1)),
-        ("crates/order-execution", "order-execution", None),
-        ("crates/adapters/store-sqlite", "store-sqlite", None),
-    ];
     let mut packages = BTreeSet::new();
     for glob in globs {
-        let (_, package, companion) = declarations
+        let (_, package, companion) = DECLARATIONS
             .iter()
             .find(|(directory, _, _)| glob.starts_with(&format!("{directory}/src/")))
             .ok_or_else(|| format!("변이 테스트 소유 선언이 없다: {glob}"))?;

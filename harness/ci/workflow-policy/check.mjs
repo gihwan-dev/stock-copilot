@@ -93,6 +93,53 @@ const eventFindings = (on, policy) => {
   });
 };
 
+const EXPECTED_CI_PUSH_BRANCHES = ["master", "merge/**"];
+const EXPECTED_SIGNATURES_PUSH_BRANCHES = ["**"];
+
+const pushBranchSpec = (path, policy) => {
+  if (path === ".github/workflows/ci.yml") {
+    return {
+      literal: EXPECTED_CI_PUSH_BRANCHES,
+      configured: policy.ciPushBranches,
+    };
+  }
+  if (path === ".github/workflows/signatures.yml") {
+    return {
+      literal: EXPECTED_SIGNATURES_PUSH_BRANCHES,
+      configured: policy.signaturesPushBranches,
+    };
+  }
+  return undefined;
+};
+
+const pushBranchMatches = (on, spec) =>
+  isDeepStrictEqual(spec.configured, spec.literal) &&
+  isDeepStrictEqual(on?.push?.branches, spec.configured);
+
+const pushBranchFindings = (path, on, jobs, policy) => {
+  const spec = pushBranchSpec(path, policy);
+  if (spec === undefined) {
+    return [];
+  }
+  const applies =
+    path === ".github/workflows/ci.yml"
+      ? "linux" in jobs || "macos" in jobs || "macos-branch" in jobs
+      : "signatures" in jobs;
+  return applies && !pushBranchMatches(on, spec)
+    ? [finding("event", "push.branches")]
+    : [];
+};
+
+const repositoryPushBranchIssues = (path, workflow, policy) => {
+  const spec = pushBranchSpec(path, policy);
+  if (spec === undefined || !isObject(workflow)) {
+    return [];
+  }
+  return pushBranchMatches(workflow.on, spec)
+    ? []
+    : [finding("event", "push.branches")];
+};
+
 const stepFindings = (job, step, policy, toolSpec) => {
   const where = `jobs.${job}.steps`;
   if (!isObject(step)) {
@@ -103,14 +150,6 @@ const stepFindings = (job, step, policy, toolSpec) => {
     ...("uses" in step === "run" in step ? [finding("step-shape", job)] : []),
     ...(step.if === undefined ||
     policy.conditions.includes(step.if) ||
-    (["macos", "macos-branch"].includes(job) &&
-      step.name === "diff mutants timeout" &&
-      step.run === "node harness/ci/diff-mutants-verdict.mjs" &&
-      step.if === "steps.mutation.outputs.status == 'deadline'") ||
-    (["macos", "macos-branch"].includes(job) &&
-      step.name === "diff mutants budget" &&
-      step.run === "node harness/ci/diff-mutants-verdict.mjs" &&
-      step.if === "steps.mutation.outputs.status == 'budget'") ||
     (step.if === "always()" &&
       policy.alwaysSteps.some(
         (allowed) =>
@@ -129,7 +168,16 @@ const stepFindings = (job, step, policy, toolSpec) => {
       step["timeout-minutes"] === 330) ||
     (job === "daily-plan" &&
       step.name === "daily plan" &&
-      step["timeout-minutes"] === 15)
+      step["timeout-minutes"] === 15) ||
+    (job === "diff-mutants-plan" &&
+      step.name === "diff mutants plan" &&
+      step["timeout-minutes"] === 20) ||
+    (job === "diff-mutants-linux" &&
+      step.name === "diff mutants shard" &&
+      step["timeout-minutes"] === 90) ||
+    (job === "diff-mutants-macos" &&
+      step.name === "diff mutants shard" &&
+      step["timeout-minutes"] === 150)
       ? []
       : [finding("timeout", job)]),
     ...valueFindings(step.env, policy, job),
@@ -173,18 +221,41 @@ const stepFindings = (job, step, policy, toolSpec) => {
   return found;
 };
 
-const mutationStrategyMatches = (name, strategy, policy) => {
-  const expected =
-    name === "mutants" ? policy.mutationStrategy : policy.dailyMutationStrategy;
+const mutationStrategySpec = (path, name, policy) => {
+  if (path === ".github/workflows/nightly.yml") {
+    if (name === "mutants") {
+      return { expected: policy.mutationStrategy, cap: 2 };
+    }
+    if (name === "mutants-daily") {
+      return { expected: policy.dailyMutationStrategy, cap: 2 };
+    }
+  }
+  if (path === ".github/workflows/ci.yml") {
+    if (name === "diff-mutants-linux") {
+      return { expected: policy.diffLinuxMutationStrategy, cap: 4 };
+    }
+    if (name === "diff-mutants-macos") {
+      return { expected: policy.diffMacosMutationStrategy, cap: 2 };
+    }
+  }
+  return undefined;
+};
+
+const mutationStrategyMatches = (path, name, strategy, policy) => {
+  const spec = mutationStrategySpec(path, name, policy);
+  if (spec === undefined) {
+    return false;
+  }
+  const { expected, cap } = spec;
   const maximum = strategy?.["max-parallel"];
   return (
     isObject(strategy) &&
     isObject(expected) &&
-    expected["max-parallel"] === 2 &&
+    expected["max-parallel"] === cap &&
     Number.isInteger(maximum) &&
     maximum > 0 &&
-    maximum <= 2 &&
-    isDeepStrictEqual({ ...strategy, "max-parallel": 2 }, expected)
+    maximum <= cap &&
+    isDeepStrictEqual({ ...strategy, "max-parallel": cap }, expected)
   );
 };
 
@@ -194,13 +265,15 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
   }
   const expected = policy.jobPermissions[`${path}#${name}`];
   const timeout = job["timeout-minutes"];
-  const isMutationJob =
-    path === ".github/workflows/nightly.yml" &&
-    ["mutants", "mutants-daily"].includes(name);
+  const isMutationJob = mutationStrategySpec(path, name, policy) !== undefined;
   const expectedJobConcurrency =
     policy.expected[path]?.jobs?.[name]?.concurrency;
   const requireJobConcurrency =
-    isMutationJob && "mutants" in jobs && "mutants-daily" in jobs;
+    (path === ".github/workflows/nightly.yml" &&
+      ["mutants", "mutants-daily"].includes(name) &&
+      "mutants" in jobs &&
+      "mutants-daily" in jobs) ||
+    (path === ".github/workflows/ci.yml" && name === "diff-mutants-macos");
   const allowedJobKeys = [
     ...policy.jobKeys,
     ...(isMutationJob ? ["strategy"] : []),
@@ -215,7 +288,8 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
     ...(requireJobConcurrency && !("concurrency" in job)
       ? [finding("missing-key", `jobs.${name}.concurrency`)]
       : []),
-    ...(!isMutationJob || mutationStrategyMatches(name, job.strategy, policy)
+    ...(!isMutationJob ||
+    mutationStrategyMatches(path, name, job.strategy, policy)
       ? []
       : [finding("strategy", name)]),
     ...(isDeepStrictEqual(job.permissions, expected)
@@ -278,6 +352,7 @@ export const workflowFindings = (path, text, policy, toolSpec) => {
       ? [finding("missing-key", "top.concurrency")]
       : []),
     ...eventFindings(parsed.on, policy),
+    ...pushBranchFindings(path, parsed.on, jobs, policy),
     ...(isDeepStrictEqual(parsed.permissions, policy.permissions)
       ? []
       : [finding("permissions")]),
@@ -297,11 +372,59 @@ const filesUnder = (root, relative) =>
     },
   );
 
+const sharedMacosSlotFindings = (ci, nightly) => {
+  if (!isObject(ci) || !isObject(nightly)) {
+    return [];
+  }
+  const ciSlot = ci.jobs?.["diff-mutants-macos"]?.concurrency;
+  const weeklySlot = nightly.jobs?.mutants?.concurrency;
+  const dailySlot = nightly.jobs?.["mutants-daily"]?.concurrency;
+  const shared =
+    isObject(ciSlot) &&
+    isObject(weeklySlot) &&
+    isObject(dailySlot) &&
+    isDeepStrictEqual(ciSlot, weeklySlot) &&
+    isDeepStrictEqual(ciSlot, dailySlot) &&
+    typeof ciSlot.group === "string" &&
+    !ciSlot.group.includes("github.workflow");
+  return shared
+    ? []
+    : [
+        {
+          path: ".github/workflows/ci.yml",
+          rule: finding("strategy", "shared-macos-mutants-slot"),
+        },
+      ];
+};
+
+const readJsonOrUndefined = (filePath) => {
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8"));
+  } catch {
+    return undefined;
+  }
+};
+
 export const repositoryFindings = (root, policy, toolSpec) => {
   const files = Object.keys(policy.expected).sort();
   const present = existsSync(join(root, GITHUB_DIRECTORY))
     ? filesUnder(root, GITHUB_DIRECTORY).sort()
     : [];
+  const ciPath = ".github/workflows/ci.yml";
+  const nightlyPath = ".github/workflows/nightly.yml";
+  const expectedSlotIssues = sharedMacosSlotFindings(
+    policy.expected[ciPath],
+    policy.expected[nightlyPath],
+  );
+  const diskSlotIssues =
+    expectedSlotIssues.length === 0 &&
+    present.includes(ciPath) &&
+    present.includes(nightlyPath)
+      ? sharedMacosSlotFindings(
+          readJsonOrUndefined(join(root, ciPath)),
+          readJsonOrUndefined(join(root, nightlyPath)),
+        )
+      : [];
   return [
     ...present
       .filter((path) => !files.includes(path))
@@ -315,13 +438,27 @@ export const repositoryFindings = (root, policy, toolSpec) => {
         const text = readFileSync(join(root, path), "utf8");
         const expected = `${JSON.stringify(policy.expected[path], undefined, 2)}\n`;
         return [
-          ...workflowFindings(path, text, policy, toolSpec),
-          ...workflowFindings(path, expected, policy, toolSpec).map(
-            (rule) => `policy-expected:${rule}`,
-          ),
-          ...(text === expected ? [] : [finding("expected")]),
+          ...new Set([
+            ...workflowFindings(path, text, policy, toolSpec),
+            ...repositoryPushBranchIssues(
+              path,
+              readJsonOrUndefined(join(root, path)),
+              policy,
+            ),
+            ...workflowFindings(path, expected, policy, toolSpec).map(
+              (rule) => `policy-expected:${rule}`,
+            ),
+            ...repositoryPushBranchIssues(
+              path,
+              policy.expected[path],
+              policy,
+            ).map((rule) => `policy-expected:${rule}`),
+            ...(text === expected ? [] : [finding("expected")]),
+          ]),
         ].map((rule) => ({ path, rule }));
       }),
+    ...expectedSlotIssues,
+    ...diskSlotIssues,
   ];
 };
 

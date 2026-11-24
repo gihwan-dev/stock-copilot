@@ -1,6 +1,61 @@
-use super::Scope;
+use super::{Scope, test_packages};
 use std::collections::BTreeSet;
 use std::path::Path;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TargetPlatform {
+    All,
+    Linux,
+    Macos,
+}
+
+impl TargetPlatform {
+    pub(super) fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "all" => Ok(Self::All),
+            "linux" => Ok(Self::Linux),
+            "macos" => Ok(Self::Macos),
+            _ => Err(format!(
+                "변이 대상 플랫폼은 all, linux, macos 중 하나여야 한다: {value}"
+            )),
+        }
+    }
+
+    pub(super) const fn as_str(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Linux => "linux",
+            Self::Macos => "macos",
+        }
+    }
+}
+
+pub(super) fn filter_platform(
+    root: &Path,
+    files: BTreeSet<String>,
+    platform: TargetPlatform,
+) -> Result<BTreeSet<String>, String> {
+    if platform == TargetPlatform::All {
+        for file in &files {
+            let _package = test_packages::package_of_file(file)?;
+        }
+        return Ok(files);
+    }
+    let excluded = crate::test_diff::linux_excluded_crates(root)?;
+    let mut selected = BTreeSet::new();
+    for file in files {
+        let package = test_packages::package_of_file(&file)?;
+        let keep = match platform {
+            TargetPlatform::Linux => !excluded.contains(package),
+            TargetPlatform::Macos => excluded.contains(package),
+            TargetPlatform::All => true,
+        };
+        if keep {
+            selected.insert(file);
+        }
+    }
+    Ok(selected)
+}
 
 pub(super) fn matches_target(glob: &str, file: &str) -> bool {
     glob.strip_suffix("/**/*.rs").map_or_else(
