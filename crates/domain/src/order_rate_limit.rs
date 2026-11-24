@@ -10,8 +10,8 @@ impl OrderCount {
     }
 
     #[must_use]
-    pub const fn as_u32(self) -> u32 {
-        self.0
+    pub const fn as_u32(&self) -> &u32 {
+        &self.0
     }
 }
 
@@ -25,18 +25,14 @@ pub struct HourlyOrderLimit(OrderCount);
 
 impl Default for HourlyOrderLimit {
     fn default() -> Self {
-        Self(OrderCount::new(Self::DEFAULT_VALUE))
+        Self(OrderCount::new(10))
     }
 }
 
 impl HourlyOrderLimit {
-    const MIN_VALUE: u32 = 1;
-    const DEFAULT_VALUE: u32 = 10;
-    const MAX_VALUE: u32 = 30;
-
     pub fn try_new(count: OrderCount) -> Result<Self, HourlyOrderLimitError> {
-        let raw = count.as_u32();
-        if !(Self::MIN_VALUE..=Self::MAX_VALUE).contains(&raw) {
+        let raw = *count.as_u32();
+        if !(1_u32..=30_u32).contains(&raw) {
             return Err(HourlyOrderLimitError::OutOfRange);
         }
         Ok(Self(count))
@@ -87,7 +83,7 @@ pub fn evaluate_hourly_order_limit(
             };
         }
     }
-    let cap = limit.limit().as_u32();
+    let cap = *limit.limit().as_u32();
     if recent_count >= cap {
         let Some(earliest) = earliest_in_window else {
             return OrderRateDecision::ClockRollback;

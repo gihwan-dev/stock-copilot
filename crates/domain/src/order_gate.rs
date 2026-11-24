@@ -96,26 +96,45 @@ fn check_instrument(intent: &OrderIntent, master: &MasterInstrument) -> CheckRes
     }
 }
 
-fn requires_us_regular_cutoff(terms: &OrderTerms) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RegularCutoffRequirement {
+    Required,
+    NotRequired,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OrderExecutionKind {
+    Limit,
+    Market,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BuyTotalOverflow;
+
+fn requires_us_regular_cutoff(terms: &OrderTerms) -> RegularCutoffRequirement {
     match terms {
-        OrderTerms::UsMarketAmountBuy { .. } => true,
+        OrderTerms::UsMarketAmountBuy { .. } => RegularCutoffRequirement::Required,
         OrderTerms::UsMarketSell { quantity } => {
-            quantity.quantity().as_decimal().normalize().scale() > 0
+            if quantity.quantity().as_decimal().normalize().scale() > 0 {
+                RegularCutoffRequirement::Required
+            } else {
+                RegularCutoffRequirement::NotRequired
+            }
         }
         OrderTerms::KrLimit { .. }
         | OrderTerms::KrMarket { .. }
         | OrderTerms::UsLimit { .. }
-        | OrderTerms::UsMarketBuy { .. } => false,
+        | OrderTerms::UsMarketBuy { .. } => RegularCutoffRequirement::NotRequired,
     }
 }
 
-fn is_market_order(terms: &OrderTerms) -> bool {
+fn order_execution_kind(terms: &OrderTerms) -> OrderExecutionKind {
     match terms {
-        OrderTerms::KrLimit { .. } | OrderTerms::UsLimit { .. } => false,
+        OrderTerms::KrLimit { .. } | OrderTerms::UsLimit { .. } => OrderExecutionKind::Limit,
         OrderTerms::KrMarket { .. }
         | OrderTerms::UsMarketBuy { .. }
         | OrderTerms::UsMarketSell { .. }
-        | OrderTerms::UsMarketAmountBuy { .. } => true,
+        | OrderTerms::UsMarketAmountBuy { .. } => OrderExecutionKind::Market,
     }
 }
 
@@ -161,13 +180,15 @@ fn check_market_hours(
         MarketTradingStatus::Unknown => CheckResult::Unknown,
         MarketTradingStatus::Closed => CheckResult::Failed,
         MarketTradingStatus::Open => {
-            if requires_us_regular_cutoff(intent.terms()) {
+            if requires_us_regular_cutoff(intent.terms()) == RegularCutoffRequirement::Required {
                 if state != MarketState::RegularMarket {
                     return CheckResult::Failed;
                 }
                 return check_us_regular_cutoff(calendars, now);
             }
-            if is_market_order(intent.terms()) && state != MarketState::RegularMarket {
+            if order_execution_kind(intent.terms()) == OrderExecutionKind::Market
+                && state != MarketState::RegularMarket
+            {
                 return CheckResult::Failed;
             }
             CheckResult::Passed
@@ -240,7 +261,7 @@ fn required_buy_total(
     notional: Money,
     now: Timestamp,
     commission: Option<&CommissionRateFact>,
-) -> Result<Money, ()> {
+) -> Result<Money, BuyTotalOverflow> {
     let Some(rate_fact) = commission else {
         return Ok(notional);
     };
@@ -250,8 +271,10 @@ fn required_buy_total(
         return Ok(notional);
     }
     match rate_fact.estimate_amount(intent.client_order_id().clone(), notional) {
-        Ok(confirmed) => notional.checked_add(&confirmed.money()).map_err(|_err| ()),
-        Err(TradeCostError::Arithmetic(_)) => Err(()),
+        Ok(confirmed) => notional
+            .checked_add(&confirmed.money())
+            .map_err(|_err| BuyTotalOverflow),
+        Err(TradeCostError::Arithmetic(_)) => Err(BuyTotalOverflow),
         Err(_) => Ok(notional),
     }
 }
@@ -455,7 +478,7 @@ fn check_order_price(
 }
 
 fn check_market_order_permission(intent: &OrderIntent, policy: &MarketOrderPolicy) -> CheckResult {
-    if !is_market_order(intent.terms()) {
+    if order_execution_kind(intent.terms()) != OrderExecutionKind::Market {
         return CheckResult::Passed;
     }
     match policy.setting() {
