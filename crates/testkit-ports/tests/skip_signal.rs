@@ -181,7 +181,7 @@ mod tests {
             std::future::ready(Ok(WriteCompleted))
         }
     }
-    fn reason(value: &str) -> Option<SkipReason> {
+    fn reason(value: &str) -> SkipReason {
         SkipReason::try_new(value).expect("사유")
     }
 
@@ -201,7 +201,7 @@ mod tests {
         let before = run(GetEstimateTask::new(&store).execute(&run_id, &input)).expect("과제");
         let clock = SteppedClock::new(day(61));
         let skip = run(SkipSignal::new(&store, &clock)
-            .execute(id("sample-a"), reason("유일한사유문구 지금은 비싸다")))
+            .execute(id("sample-a"), Some(reason("유일한사유문구 지금은 비싸다"))))
         .expect("넘기기");
         assert_eq!(*store.skips.read().expect("잠금"), vec![skip.clone()]);
         assert_eq!(skip.skipped_at, day(61));
@@ -212,9 +212,9 @@ mod tests {
 
     #[test]
     fn skip_reason_is_optional_and_one_line() {
-        assert_eq!(SkipReason::try_new("  "), Ok(None));
+        assert_eq!(SkipReason::try_new("  "), Err(SkipReasonError::Empty));
         assert_eq!(
-            reason(" 비싸다 ").map(|value| value.as_str().to_owned()),
+            Some(reason(" 비싸다 ").as_str().to_owned()),
             Some(String::from("비싸다"))
         );
         assert_eq!(
@@ -226,8 +226,8 @@ mod tests {
             Err(SkipReasonError::TooLong)
         );
         assert_eq!(
-            SkipReason::try_new(&"가".repeat(200)).map(|value| value.is_some()),
-            Ok(true)
+            SkipReason::try_new(&"가".repeat(200)).map(|value| value.as_str().chars().count()),
+            Ok(200)
         );
     }
 }

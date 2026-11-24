@@ -4,10 +4,9 @@ use domain::{InstrumentId, Timestamp};
 
 use crate::{Clock, SystemPortError, WriteCompleted};
 
-const MAX_SKIP_REASON_CHARS: usize = 200_usize;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkipReasonError {
+    Empty,
     MultipleLines,
     TooLong,
 }
@@ -16,18 +15,18 @@ pub enum SkipReasonError {
 pub struct SkipReason(String);
 
 impl SkipReason {
-    pub fn try_new(value: &str) -> Result<Option<Self>, SkipReasonError> {
+    pub fn try_new(value: &str) -> Result<Self, SkipReasonError> {
         if value.contains(['\n', '\r']) {
             return Err(SkipReasonError::MultipleLines);
         }
         let trimmed = value.trim();
-        if trimmed.chars().count() > MAX_SKIP_REASON_CHARS {
+        if trimmed.chars().count() > 200_usize {
             return Err(SkipReasonError::TooLong);
         }
         if trimmed.is_empty() {
-            return Ok(None);
+            return Err(SkipReasonError::Empty);
         }
-        Ok(Some(Self(trimmed.to_owned())))
+        Ok(Self(trimmed.to_owned()))
     }
 
     #[must_use]

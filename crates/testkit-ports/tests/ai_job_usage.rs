@@ -71,7 +71,7 @@ mod tests {
         assert_eq!(timing.started_at(), at(1_000));
         assert_eq!(timing.finished_at(), at(1_042));
         assert_eq!(
-            timing.elapsed(),
+            timing.span(),
             TimeSpan::try_new(SpanSeconds::new(42), Nanosecond::new(0)).expect("간격")
         );
     }
@@ -83,7 +83,7 @@ mod tests {
         let (timing, tokens) = meter.clone().finish(at(500)).expect("같은 시각");
         assert_eq!(tokens, TokenUsage::zero());
         assert_eq!(
-            timing.elapsed(),
+            timing.span(),
             TimeSpan::try_new(SpanSeconds::new(0), Nanosecond::new(0)).expect("0")
         );
         assert_eq!(
@@ -117,7 +117,7 @@ mod tests {
         let newest = listed.first().expect("첫 행");
         assert_eq!(newest.tokens(), &usage(1, 2, 0, 0));
         assert_eq!(
-            newest.timing().elapsed(),
+            newest.timing().span(),
             TimeSpan::try_new(SpanSeconds::new(30), Nanosecond::new(0)).expect("간격")
         );
     }
