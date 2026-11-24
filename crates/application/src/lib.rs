@@ -444,6 +444,14 @@ pub use source_status::{
     SourceStatusError, SourceStatusReport, SourceStatusRepository,
 };
 
+mod collection_schedule;
+pub use collection_schedule::{
+    CatchUpItems, CollectionCadence, CollectionConditions, CollectionInputs, CollectionMinutes,
+    CollectionMinutesError, CollectionPhase, CollectionPlan, CollectionScheduler, CollectionTarget,
+    DartCallCount, DartDailyUsage, DartKeyState, DartQuotaLevel, FomcDay, PlanCollectionSchedule,
+    PlannedCollection, StartupCatchUp, collection_cadence, collection_phase, startup_catch_up,
+};
+
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
