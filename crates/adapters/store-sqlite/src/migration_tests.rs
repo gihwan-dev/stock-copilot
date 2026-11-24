@@ -27,7 +27,7 @@ fn fresh_open_records_clock_and_reopen_preserves_ledger() {
                 assert_eq!(
                     connection.query_row(crate::sql::tests::LEDGER_COUNT, [], |row| row
                         .get::<_, i64>(0))?,
-                    15
+                    16
                 );
                 Ok(())
             }))

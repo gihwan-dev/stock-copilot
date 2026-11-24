@@ -243,6 +243,11 @@ CREATE TABLE migration_ledger (
     sha256 TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
     applied_at INTEGER NOT NULL
 ) STRICT;
+CREATE TABLE news_data_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    schema_version INTEGER NOT NULL CHECK (schema_version >= 1),
+    payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE order_rate_limit (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     hourly_limit INTEGER NOT NULL CHECK (hourly_limit BETWEEN 1 AND 30)
@@ -341,6 +346,14 @@ CREATE TABLE snapshot_holdings (
     PRIMARY KEY (snapshot, position),
     UNIQUE (snapshot, symbol, currency),
     CHECK ((valuation IS NULL AND profit IS NULL AND return_rate IS NULL AND daily_profit IS NULL AND daily_rate IS NULL) OR (valuation IS NOT NULL AND profit IS NOT NULL AND return_rate IS NOT NULL AND ((daily_profit IS NULL AND daily_rate IS NULL) OR (daily_profit IS NOT NULL AND daily_rate IS NOT NULL))))
+) STRICT;
+CREATE TABLE source_statuses (
+    source TEXT PRIMARY KEY CHECK (source IN ('kind_disclosure', 'dart_disclosure_api', 'dart_disclosure_rss', 'dart_fundamentals', 'kind_corp_list', 'hankyung', 'maekyung', 'yonhap', 'edaily', 'google_news', 'web_search', 'yahoo_finance', 'sec_edgar', 'bank_of_korea', 'federal_reserve', 'us_treasury', 'fred')),
+    payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE spec_status_records (
+    id INTEGER PRIMARY KEY,
+    payload TEXT NOT NULL
 ) STRICT;
 CREATE TABLE thesis_history (
     instrument TEXT NOT NULL REFERENCES thesis_notes(instrument),
@@ -452,6 +465,7 @@ CREATE TRIGGER instrument_mappings_insert_active_only BEFORE INSERT ON instrumen
 CREATE TRIGGER instrument_mappings_no_delete BEFORE DELETE ON instrument_mappings WHEN OLD.status != 'active' OR NOT EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'link_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND next_symbol = OLD.symbol AND next_isin = OLD.isin) BEGIN SELECT RAISE(ABORT, 'instrument mappings cannot be deleted'); END;
 CREATE TRIGGER instrument_mappings_no_replace BEFORE INSERT ON instrument_mappings WHEN EXISTS (SELECT 1 FROM instrument_mappings WHERE market = NEW.market AND upper(symbol) = upper(NEW.symbol) AND instrument_id != NEW.instrument_id) OR EXISTS (SELECT 1 FROM instrument_mappings WHERE upper(isin) = upper(NEW.isin) AND instrument_id != NEW.instrument_id) OR EXISTS (SELECT 1 FROM instrument_mappings WHERE instrument_id = NEW.instrument_id AND (status IN ('active', 'retired') OR market != NEW.market OR (upper(symbol) = upper(NEW.symbol) AND upper(isin) = upper(NEW.isin)))) OR (EXISTS (SELECT 1 FROM instrument_mappings WHERE instrument_id = NEW.instrument_id) AND NOT EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = NEW.instrument_id) AND event_kind = 'identifier_changed' AND instrument_id = NEW.instrument_id AND market = NEW.market AND next_symbol = NEW.symbol AND next_isin = NEW.isin)) BEGIN SELECT RAISE(ABORT, 'instrument mapping cannot replace existing history'); END;
 CREATE TRIGGER instrument_mappings_retire_only BEFORE UPDATE ON instrument_mappings WHEN NEW.instrument_id != OLD.instrument_id OR NEW.market != OLD.market OR NEW.symbol != OLD.symbol OR NEW.isin != OLD.isin OR NOT ((OLD.status = 'active' AND NEW.status = 'retired' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NULL) OR (OLD.status = 'active' AND NEW.status = 'superseded' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NOT NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = NEW.superseded_event_seq AND seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'identifier_changed' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin)) OR (OLD.status = 'retired' AND NEW.status = 'active' AND OLD.superseded_event_seq IS NULL AND NEW.superseded_event_seq IS NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'retirement_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin)) OR (OLD.status = 'superseded' AND NEW.status = 'active' AND OLD.superseded_event_seq IS NOT NULL AND NEW.superseded_event_seq IS NULL AND EXISTS (SELECT 1 FROM instrument_mapping_events WHERE seq = (SELECT max(seq) FROM instrument_mapping_events WHERE instrument_id = OLD.instrument_id) AND event_kind = 'link_corrected' AND instrument_id = OLD.instrument_id AND market = OLD.market AND prev_symbol = OLD.symbol AND prev_isin = OLD.isin))) BEGIN SELECT RAISE(ABORT, 'instrument mapping transition is not permitted'); END;
+CREATE TRIGGER news_data_settings_no_delete BEFORE DELETE ON news_data_settings BEGIN SELECT RAISE(ABORT, 'news data settings are replaced, not deleted'); END;
 CREATE TRIGGER order_rate_limit_no_delete BEFORE DELETE ON order_rate_limit BEGIN SELECT RAISE(ABORT, 'order rate limit is replaced, not deleted'); END;
 CREATE TRIGGER order_submissions_no_delete BEFORE DELETE ON order_submissions BEGIN SELECT RAISE(ABORT, 'order submissions are append only'); END;
 CREATE TRIGGER order_submissions_no_update BEFORE UPDATE ON order_submissions BEGIN SELECT RAISE(ABORT, 'order submissions are append only'); END;
@@ -467,6 +481,9 @@ CREATE TRIGGER signal_discarded_submissions_no_update BEFORE UPDATE ON signal_di
 CREATE TRIGGER signal_occurrences_no_delete BEFORE DELETE ON signal_occurrences BEGIN SELECT RAISE(ABORT, 'signal occurrences are append only'); END;
 CREATE TRIGGER signal_occurrences_no_replace BEFORE INSERT ON signal_occurrences WHEN EXISTS (SELECT 1 FROM signal_occurrences WHERE occurrence_id = NEW.occurrence_id) BEGIN SELECT RAISE(ABORT, 'signal occurrences are append only'); END;
 CREATE TRIGGER signal_occurrences_no_update BEFORE UPDATE ON signal_occurrences BEGIN SELECT RAISE(ABORT, 'signal occurrences are append only'); END;
+CREATE TRIGGER source_statuses_no_delete BEFORE DELETE ON source_statuses BEGIN SELECT RAISE(ABORT, 'source statuses are replaced, not deleted'); END;
+CREATE TRIGGER spec_status_records_no_delete BEFORE DELETE ON spec_status_records BEGIN SELECT RAISE(ABORT, 'spec status records are append only'); END;
+CREATE TRIGGER spec_status_records_no_update BEFORE UPDATE ON spec_status_records BEGIN SELECT RAISE(ABORT, 'spec status records are append only'); END;
 CREATE TRIGGER thesis_history_no_delete BEFORE DELETE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
 CREATE TRIGGER thesis_history_no_replace BEFORE INSERT ON thesis_history WHEN EXISTS (SELECT 1 FROM thesis_history WHERE instrument = NEW.instrument AND sequence = NEW.sequence) BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
 CREATE TRIGGER thesis_history_no_update BEFORE UPDATE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;

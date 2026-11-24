@@ -72,3 +72,7 @@ pub(crate) mod settings_tests;
 pub(crate) mod order_rate;
 #[cfg(test)]
 pub(crate) mod order_rate_tests;
+
+pub(crate) mod status;
+#[cfg(test)]
+pub(crate) mod status_tests;

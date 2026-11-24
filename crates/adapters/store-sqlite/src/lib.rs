@@ -220,3 +220,8 @@ mod order_rate;
 pub use order_rate::OrderRateStore;
 #[cfg(test)]
 mod order_rate_tests;
+
+mod status;
+pub use status::{NewsDataSettingsStore, SourceStatusStore, SpecStatusStore};
+#[cfg(test)]
+mod status_tests;

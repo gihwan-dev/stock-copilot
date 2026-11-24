@@ -291,7 +291,7 @@ fn raw_key_is_independently_readable_and_debug_is_closed() {
         connection
             .query_row(sql::SCHEMA, [], |row| row.get::<_, i64>(0))
             .expect("schema"),
-        172
+        180
     );
     for length in [0_usize, 31, 33, 64] {
         assert_eq!(
