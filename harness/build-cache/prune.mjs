@@ -155,6 +155,10 @@ export const pruneCache = ({
   let remainingBytes = beforeBytes;
   let removedEntries = 0;
   if (clear) {
+    const metaRoot = join(cacheDir, "meta");
+    if (existsSync(metaRoot)) {
+      rmSync(metaRoot, { recursive: true, force: true });
+    }
     for (const entry of entries) {
       if (safeTrashDelete(cacheDir, entry.dir)) {
         remainingBytes -= entry.bytes;

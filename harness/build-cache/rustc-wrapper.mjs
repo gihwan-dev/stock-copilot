@@ -938,8 +938,55 @@ const publishToCache = (
   }
 };
 
+const childEnvWithoutJobserver = (env) => {
+  const copy = { ...env };
+  delete copy.CARGO_MAKEFLAGS;
+  delete copy.MAKEFLAGS;
+  return copy;
+};
+
+const readRustcVersion = (rustc, cacheDir, childEnv) => {
+  const rustcReal = safeRealpath(rustc) ?? resolve(rustc);
+  let metaPath;
+  try {
+    const st = statSync(rustcReal);
+    const verKey = sha256Buffer(
+      Buffer.from(`${rustcReal}\0${st.size}\0${st.mtimeMs}`),
+    );
+    metaPath = join(cacheDir, "meta", `rustc-${verKey}.txt`);
+    if (existsSync(metaPath)) {
+      const cached = readFileSync(metaPath, "utf8").trim();
+      if (cached.length > 0) {
+        return cached;
+      }
+    }
+  } catch {
+    ignoreBestEffortError();
+  }
+  const versionRun = spawnSync(rustc, ["-vV"], {
+    encoding: "utf8",
+    env: childEnv,
+  });
+  if (versionRun.status !== 0) {
+    return undefined;
+  }
+  const rustcVersion = versionRun.stdout.trim();
+  if (metaPath !== undefined && rustcVersion.length > 0) {
+    try {
+      mkdirSync(dirname(metaPath), { recursive: true });
+      writeArtifactAtomic(metaPath, `${rustcVersion}\n`, 0o644);
+    } catch {
+      ignoreBestEffortError();
+    }
+  }
+  return rustcVersion;
+};
+
 const execDirect = (rustc, args) => {
-  const result = spawnSync(rustc, args, { stdio: "inherit" });
+  const result = spawnSync(rustc, args, {
+    stdio: "inherit",
+    env: childEnvWithoutJobserver(process.env),
+  });
   if (result.error !== undefined) {
     process.stderr.write(`rustc-wrapper: ${result.error.message}\n`);
     return 1;
@@ -957,13 +1004,13 @@ const runWrapper = (argv) => {
   if (parsed === undefined) {
     return execDirect(rustc, args);
   }
-  const versionRun = spawnSync(rustc, ["-vV"], { encoding: "utf8" });
-  if (versionRun.status !== 0) {
+  const childEnv = childEnvWithoutJobserver(process.env);
+  const cacheDir = resolveCacheDir(process.env, policy);
+  const rustcVersion = readRustcVersion(rustc, cacheDir, childEnv);
+  if (rustcVersion === undefined) {
     return execDirect(rustc, args);
   }
-  const rustcVersion = versionRun.stdout.trim();
   const key = cacheKeyFor(rustcVersion, parsed);
-  const cacheDir = resolveCacheDir(process.env, policy);
   const restored = tryRestoreFromCache(
     cacheDir,
     key,
@@ -1000,6 +1047,7 @@ const runWrapper = (argv) => {
     const compiled = spawnSync(rustc, stagedArgs, {
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
+      env: childEnv,
     });
     const stdout = compiled.stdout ?? "";
     const stderr = compiled.stderr ?? "";
