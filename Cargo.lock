@@ -76,6 +76,13 @@ dependencies = [
 [[package]]
 name = "approval-command"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "order-execution",
+ "testkit",
+ "testkit-ports",
+]
 
 [[package]]
 name = "arrayvec"
@@ -253,6 +260,18 @@ dependencies = [
 [[package]]
 name = "broker-toss-trade"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "broker-toss",
+ "domain",
+ "order-execution",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "testkit",
+ "testkit-ports",
+ "tokio",
+]
 
 [[package]]
 name = "bs58"
@@ -2000,6 +2019,9 @@ dependencies = [
 [[package]]
 name = "mcp-bridge"
 version = "0.1.0"
+dependencies = [
+ "zeroize",
+]
 
 [[package]]
 name = "mcp-server"
@@ -2008,7 +2030,9 @@ dependencies = [
  "application",
  "domain",
  "getrandom 0.4.3",
+ "proptest",
  "rmcp",
+ "serde",
  "serde_json",
  "subtle",
  "testkit",
