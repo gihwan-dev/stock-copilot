@@ -24,7 +24,7 @@
   ".claude/hooks/lib/post-edit.mjs": "de28825a77a247360f64890449781b10985e239f639c6fee170c4c11a60f528f",
   ".claude/hooks/lib/project.mjs": "a7aa2823918dc0638f5cc1c110f84a20f5b4e54f31ae8027e85a6b0d3d29fc68",
   ".claude/hooks/lib/reviewer-guard.mjs": "61209ec8c591c52837ec7ae0f0c92ede6f3ea3e13d58a2d956c39b5c37658938",
-  ".claude/hooks/lib/roles.mjs": "b32d79289617a4744acb5aba0f9c3c01c22b4e8ff9c3c55596f7687bdc22bf73",
+  ".claude/hooks/lib/roles.mjs": "bd5988821b3f18db8f1ddc4266061cb446d444f5582bd95bf0f099618b745c99",
   ".claude/hooks/lib/sandbox-glob.mjs": "5f22d3a69875e09a9e6f5d5228aee4229cde4b386cdc68b86c893e19d908dd85",
   ".claude/hooks/lib/session-role.mjs": "15fe8c61c4a64c2438c785a622fd1b7187310e18e4439bc66d18d10070cef4f4",
   ".claude/hooks/lib/shell.mjs": "a081854257f0cc0c56047819e28d727f5445d23fa5dd92b58dcce3a6e4db9185",

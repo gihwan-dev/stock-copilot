@@ -1,3 +1,3 @@
 @AGENTS.md
 
-메인 Claude는 오케스트레이션과 `docs/**` 편집을 한다. 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(thought_level `high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`)가 한다. Codex(gpt 계열)는 쓰지 않는다. 구현자 보고를 리뷰어와 비판자에게 넘기지 않는다.
+구현·수정·리뷰는 T3 Claude Opus 5.5(effort medium)가 한다(2026-11-25 사용자 결정, ADR 0173). 최상위 Claude 세션은 구현 담당으로 일할 수 있다. 묶음 작업은 `docs/agents/bundle-rules.md`를 따른다. Antigravity·Codex는 쓰지 않는다.
