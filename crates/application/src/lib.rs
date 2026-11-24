@@ -432,7 +432,6 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
-
 mod source_status;
 pub use source_status::{
     GetSourceStatuses, RecordSourceStatus, SourceAttemptOutcome, SourceState, SourceStatus,
@@ -441,3 +440,9 @@ pub use source_status::{
 
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
+
+mod open_external;
+pub use open_external::{
+    CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
+    OpenExternalError, OpenExternalOutcome, OpenExternalUrl,
+};

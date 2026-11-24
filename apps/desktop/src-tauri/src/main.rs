@@ -53,7 +53,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         database: Arc::new(database_factory(shared_clock)),
     };
     run_app(
-        build_app(tauri::Builder::default(), ports, context)?,
+        build_app(
+            tauri::Builder::default().manage(
+                src_tauri::ipc::open_external::ExternalLinkRuntime::new(
+                    Arc::new(Unavailable),
+                    Arc::new(Unavailable),
+                ),
+            ),
+            ports,
+            context,
+        )?,
         |handle, code| handle.exit(code.as_i32()),
     );
     Ok(())
@@ -261,5 +270,33 @@ mod tests {
                 ) => {}
             }
         }
+    }
+
+    #[test]
+    fn product_acl_allows_open_external_only_from_main_local_origin() {
+        let mut context = super::product_context();
+        let authority = context.runtime_authority_mut();
+        let local = tauri::ipc::Origin::Local;
+        let remote = tauri::ipc::Origin::Remote {
+            url: "https://example.com".parse().expect("원격 출처"),
+        };
+        assert!(
+            authority
+                .resolve_access("open_external", "main", "main", &local)
+                .is_some(),
+            "main 로컬 출처 허용"
+        );
+        assert!(
+            authority
+                .resolve_access("open_external", "other", "other", &local)
+                .is_none(),
+            "다른 창 거부"
+        );
+        assert!(
+            authority
+                .resolve_access("open_external", "main", "main", &remote)
+                .is_none(),
+            "원격 출처 거부"
+        );
     }
 }
