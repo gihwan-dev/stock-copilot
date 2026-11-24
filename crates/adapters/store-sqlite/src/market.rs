@@ -469,3 +469,59 @@ impl MarketDataRepository for MarketStore<'_> {
             .await
     }
 }
+
+fn close_evidence(
+    connection: &Connection,
+    market: &domain::Market,
+    symbol: &Symbol,
+    date: domain::CalendarDate,
+    as_of: Timestamp,
+) -> rusqlite::Result<Vec<domain::ObservedCloseEvidence>> {
+    let (known, tag, currency) = match market {
+        domain::Market::Kr => (domain::KnownMarket::Kr, "KR", Currency::Krw),
+        domain::Market::Us => (domain::KnownMarket::Us, "US", Currency::Usd),
+        domain::Market::Unknown(_unknown) => return Ok(Vec::new()),
+    };
+    let mapping = connection
+        .query_row(
+            sql::ACTIVE_MAPPING_BY_SYMBOL,
+            params![tag, symbol.as_str()],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()?;
+    let Some((raw_id, raw_symbol)) = mapping else {
+        return Ok(Vec::new());
+    };
+    let instrument_id = InstrumentId::try_new(&raw_id).map_err(invalid)?;
+    let quote = domain::QuoteInstrument::restore_from_saved_state(domain::SavedQuoteInstrument {
+        market: known,
+        currency,
+        symbol: Symbol::try_new(&raw_symbol).map_err(invalid)?,
+        instrument_id: instrument_id.clone(),
+    })
+    .map_err(invalid)?;
+    Ok(load_candles(connection, &instrument_id)?
+        .into_iter()
+        .filter(|candle| {
+            candle.time().period() == CandlePeriod::Daily
+                && candle.time().date() == date
+                && candle.collected_at() <= as_of
+        })
+        .map(|candle| domain::ObservedCloseEvidence::new(quote.clone(), candle))
+        .collect())
+}
+
+impl application::ValuationCloseEvidenceRepository for MarketStore<'_> {
+    async fn observed_close_evidence(
+        &self,
+        instrument: &domain::ResolvedOrderInstrument,
+        date: domain::CalendarDate,
+        as_of: Timestamp,
+    ) -> Result<Vec<domain::ObservedCloseEvidence>, SystemPortError> {
+        let market = instrument.market();
+        let symbol = instrument.symbol().clone();
+        self.database
+            .read(move |connection| close_evidence(connection, &market, &symbol, date, as_of))
+            .await
+    }
+}

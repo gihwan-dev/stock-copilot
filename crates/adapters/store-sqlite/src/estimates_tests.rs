@@ -69,7 +69,7 @@ fn quantity(value: &str) -> Quantity {
 fn ratio(value: &str) -> Ratio {
     Ratio::parse(&NumericInput::try_new(value).expect("input")).expect("ratio")
 }
-fn master_for(instrument_id: &str, symbol: &str) -> MasterInstrument {
+pub(crate) fn master_for(instrument_id: &str, symbol: &str) -> MasterInstrument {
     MasterInstrument::try_new(MasterInstrumentRow {
         listing_market: MasterCode::try_new("KOSPI").expect("market"),
         instrument_id: InstrumentId::try_new(instrument_id).expect("instrument"),
