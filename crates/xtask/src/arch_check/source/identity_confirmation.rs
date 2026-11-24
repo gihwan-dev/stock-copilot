@@ -13,10 +13,11 @@ use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
 use syn::{
     Attribute, Expr, ExprAsync, ExprCall, ExprClosure, ExprForLoop, ExprLoop, ExprMatch, ExprPath,
-    ExprStruct, ExprWhile, Fields, FnArg, ImplItem, ImplItemFn, ImplItemType, Item, ItemEnum,
-    ItemExternCrate, ItemFn, ItemImpl, ItemMod, ItemStruct, ItemType, ItemUse, LitByteStr, LitCStr,
-    LitStr, Macro, Pat, Path, PathArguments, ReturnType, Signature, Stmt, Token, TraitItemType,
-    Type, TypePath, TypeReference, UseRename, Visibility,
+    ExprStruct, ExprWhile, Fields, FnArg, ImplItem, ImplItemFn, ImplItemType, Item, ItemConst,
+    ItemEnum, ItemExternCrate, ItemFn, ItemImpl, ItemMod, ItemStatic, ItemStruct, ItemTrait,
+    ItemType, ItemUse, LitByteStr, LitCStr, LitStr, Macro, Pat, Path, PathArguments, ReturnType,
+    Signature, Stmt, Token, TraitItemType, Type, TypeBareFn, TypeImplTrait, TypePath,
+    TypeReference, TypeTraitObject, UseRename, Visibility,
 };
 
 use super::super::rules::IdentityConfirmationRules;
@@ -34,12 +35,25 @@ const CONFIRMED_WRAPPER_TYPES: [&str; 5] = [
     "ConfirmedRetirementCorrection",
     "ConfirmedLinkCorrection",
 ];
+const OUTER_CONFIRMED_TYPES: [&str; 3] = [
+    "ConfirmedIdentifierChange",
+    "ConfirmedRetirementCorrection",
+    "ConfirmedLinkCorrection",
+];
+const INNER_CONFIRMATION_WRAPPERS: [&str; 2] = [
+    "IdentityChangeConfirmation",
+    "MappingCorrectionConfirmation",
+];
 const ORIGIN_ENUM_TYPE: &str = "IdentityConfirmationOrigin";
-const EXTRACTED_CONFIRMATION_TYPES: [&str; 4] = [
+const ALL_CONFIRMATION_TYPES: [&str; 8] = [
     "UserIdentityConfirmation",
+    "UserIdentityConfirmationSeal",
     "IdentityConfirmationOrigin",
     "IdentityChangeConfirmation",
     "MappingCorrectionConfirmation",
+    "ConfirmedIdentifierChange",
+    "ConfirmedRetirementCorrection",
+    "ConfirmedLinkCorrection",
 ];
 const BANNED_PASTE_MACROS: [&str; 6] = [
     "paste",
@@ -600,12 +614,12 @@ fn all_fields_private(fields: &Fields) -> bool {
     }
 }
 
-fn tokens_contain_extracted_confirmation(value: &impl ToTokens) -> bool {
+fn tokens_contain_any_confirmation(value: &impl ToTokens) -> bool {
     let mut idents = Vec::new();
     token_idents(value.to_token_stream(), &mut idents);
     idents
         .iter()
-        .any(|ident| EXTRACTED_CONFIRMATION_TYPES.contains(&ident.as_str()))
+        .any(|ident| ALL_CONFIRMATION_TYPES.contains(&ident.as_str()))
 }
 
 fn unwrap_group_or_paren_type(ty: &Type) -> &Type {
@@ -658,6 +672,33 @@ fn type_has_mut_ref(ty: &Type) -> bool {
     finder.found
 }
 
+struct CallbackOrDynamicFinder {
+    found: bool,
+}
+
+impl<'ast> Visit<'ast> for CallbackOrDynamicFinder {
+    fn visit_type_bare_fn(&mut self, i: &'ast TypeBareFn) {
+        self.found = true;
+        visit::visit_type_bare_fn(self, i);
+    }
+
+    fn visit_type_impl_trait(&mut self, i: &'ast TypeImplTrait) {
+        self.found = true;
+        visit::visit_type_impl_trait(self, i);
+    }
+
+    fn visit_type_trait_object(&mut self, i: &'ast TypeTraitObject) {
+        self.found = true;
+        visit::visit_type_trait_object(self, i);
+    }
+}
+
+fn type_has_callback_or_dynamic(ty: &Type) -> bool {
+    let mut finder = CallbackOrDynamicFinder { found: false };
+    finder.visit_type(ty);
+    finder.found
+}
+
 fn is_shared_self_only_signature(sig: &Signature) -> bool {
     if !sig.generics.params.is_empty() || sig.generics.where_clause.is_some() {
         return false;
@@ -675,34 +716,6 @@ fn matches_shared_receiver(arg: Option<&FnArg>) -> bool {
     receiver.reference.is_some() && receiver.mutability.is_none() && receiver.colon_token.is_none()
 }
 
-fn input_exposes_callback_confirmation(ty: &Type) -> bool {
-    if !tokens_contain_extracted_confirmation(ty) {
-        return false;
-    }
-    let mut idents = Vec::new();
-    token_idents(ty.to_token_stream(), &mut idents);
-    let has_fn_trait = idents
-        .iter()
-        .any(|ident| ident == "Fn" || ident == "FnMut" || ident == "FnOnce");
-    has_fn_trait
-        || match unwrap_group_or_paren_type(ty) {
-            Type::BareFn(_) | Type::ImplTrait(_) | Type::TraitObject(_) => true,
-            Type::Array(_)
-            | Type::Group(_)
-            | Type::Infer(_)
-            | Type::Macro(_)
-            | Type::Never(_)
-            | Type::Paren(_)
-            | Type::Path(_)
-            | Type::Ptr(_)
-            | Type::Reference(_)
-            | Type::Slice(_)
-            | Type::Tuple(_)
-            | Type::Verbatim(_)
-            | _ => false,
-        }
-}
-
 fn signature_has_mut_input(sig: &Signature) -> bool {
     sig.inputs.iter().any(|input| match input {
         FnArg::Receiver(receiver) => receiver.mutability.is_some(),
@@ -710,27 +723,93 @@ fn signature_has_mut_input(sig: &Signature) -> bool {
     })
 }
 
-fn signature_exposes_owned_confirmation(sig: &Signature) -> bool {
-    if signature_has_mut_input(sig) {
+fn signature_has_generics_or_callbacks(sig: &Signature) -> bool {
+    if !sig.generics.params.is_empty() || sig.generics.where_clause.is_some() {
         return true;
     }
-    let has_callback = sig.inputs.iter().any(|input| match input {
+    sig.inputs.iter().any(|input| match input {
         FnArg::Receiver(_) => false,
-        FnArg::Typed(typed) => input_exposes_callback_confirmation(&typed.ty),
-    });
-    if has_callback {
-        return true;
-    }
+        FnArg::Typed(typed) => type_has_callback_or_dynamic(&typed.ty),
+    })
+}
+
+fn signature_returns_owned_confirmation(sig: &Signature) -> bool {
     match &sig.output {
         ReturnType::Default => false,
         ReturnType::Type(_, ret_ty) => {
-            !type_is_shared_ref(ret_ty) && tokens_contain_extracted_confirmation(ret_ty.as_ref())
+            !type_is_shared_ref(ret_ty) && tokens_contain_any_confirmation(ret_ty.as_ref())
         }
     }
 }
 
-fn is_valid_wrapper_impl(impl_item: &ItemImpl, rules: &IdentityConfirmationRules) -> bool {
-    if impl_item.trait_.is_some() {
+fn signature_exposes_owned_confirmation(sig: &Signature) -> bool {
+    signature_has_mut_input(sig)
+        || signature_has_generics_or_callbacks(sig)
+        || signature_returns_owned_confirmation(sig)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ImplKind {
+    Inherent,
+    Trait,
+}
+
+fn non_wrapper_fn_violates_confirmation_boundary(
+    vis: &Visibility,
+    impl_kind: ImplKind,
+    sig: &Signature,
+) -> bool {
+    if impl_kind == ImplKind::Inherent && private(vis) {
+        return false;
+    }
+    if !tokens_contain_any_confirmation(sig) {
+        return false;
+    }
+    if is_public(vis) || impl_kind == ImplKind::Trait {
+        return true;
+    }
+    sig.inputs.len() != 1 || signature_exposes_owned_confirmation(sig)
+}
+
+fn input_contains_any_ident(sig: &Signature, banned: &[&str]) -> bool {
+    sig.inputs.iter().any(|input| {
+        let mut idents = Vec::new();
+        token_idents(input.to_token_stream(), &mut idents);
+        idents
+            .iter()
+            .any(|ident| ident == "Self" || banned.contains(&ident.as_str()))
+    })
+}
+
+fn is_valid_wrapper_new(
+    self_name: &str,
+    method: &ImplItemFn,
+    rules: &IdentityConfirmationRules,
+) -> bool {
+    let returns_self = match &method.sig.output {
+        ReturnType::Type(_, ret_ty) => single_segment_type_name(ret_ty).as_deref() == Some("Self"),
+        ReturnType::Default => false,
+    };
+    let forbidden_input = input_contains_any_ident(&method.sig, &OUTER_CONFIRMED_TYPES)
+        || (INNER_CONFIRMATION_WRAPPERS.contains(&self_name)
+            && input_contains_any_ident(&method.sig, &INNER_CONFIRMATION_WRAPPERS));
+    returns_self
+        && !forbidden_input
+        && !signature_has_mut_input(&method.sig)
+        && !signature_has_generics_or_callbacks(&method.sig)
+        && !tokens_contain(method, &rules.issuer_function)
+        && !tokens_contain(method, &rules.seal_type)
+}
+
+fn is_valid_wrapper_impl(
+    self_name: &str,
+    impl_item: &ItemImpl,
+    rules: &IdentityConfirmationRules,
+) -> bool {
+    if impl_item.trait_.is_some()
+        || !impl_item.generics.params.is_empty()
+        || impl_item.generics.where_clause.is_some()
+    {
         return false;
     }
     impl_item.items.iter().all(|member| {
@@ -738,16 +817,7 @@ fn is_valid_wrapper_impl(impl_item: &ItemImpl, rules: &IdentityConfirmationRules
             return false;
         };
         if unraw(&method.sig.ident) == "new" {
-            let returns_self = match &method.sig.output {
-                ReturnType::Type(_, ret_ty) => {
-                    single_segment_type_name(ret_ty).as_deref() == Some("Self")
-                }
-                ReturnType::Default => false,
-            };
-            returns_self
-                && !signature_has_mut_input(&method.sig)
-                && !tokens_contain(method, &rules.issuer_function)
-                && !tokens_contain(method, &rules.seal_type)
+            is_valid_wrapper_new(self_name, method, rules)
         } else {
             is_shared_self_only_signature(&method.sig)
                 && !signature_exposes_owned_confirmation(&method.sig)
@@ -759,6 +829,7 @@ struct DefiningFileCheck<'a> {
     rules: &'a IdentityConfirmationRules,
     scope: Scope,
     target: DefiningTarget,
+    impl_kind: ImplKind,
     in_canonical_issuer: bool,
     in_canonical_seal_field: bool,
     confirmation_struct_count: usize,
@@ -777,6 +848,68 @@ impl DefiningFileCheck<'_> {
         }
         let expected = format!("const fn {} () -> Self", self.rules.issuer_function);
         method.sig.to_token_stream().to_string() == expected
+    }
+
+    fn classify_impl_target(&self, impl_item: &ItemImpl) -> (Option<String>, DefiningTarget) {
+        let single = single_segment_type_name(&impl_item.self_ty);
+        let name = type_last_name(&impl_item.self_ty);
+        let target = if name.as_deref() == Some(self.rules.confirmation_type.as_str()) {
+            DefiningTarget::Confirmation
+        } else if name.as_deref() == Some(self.rules.seal_type.as_str()) {
+            DefiningTarget::Seal
+        } else if single
+            .as_deref()
+            .is_some_and(|item_name| CONFIRMED_WRAPPER_TYPES.contains(&item_name))
+        {
+            DefiningTarget::Wrapper
+        } else if name.as_deref() == Some(ORIGIN_ENUM_TYPE) {
+            DefiningTarget::Origin
+        } else {
+            DefiningTarget::Other
+        };
+        (single, target)
+    }
+
+    fn check_impl_constraints(&mut self, impl_item: &ItemImpl, single: Option<&str>) {
+        if self.target == DefiningTarget::Seal
+            || (self.scope == Scope::Product && self.target == DefiningTarget::Origin)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        if self.scope == Scope::Product
+            && self.impl_kind == ImplKind::Trait
+            && (self.target != DefiningTarget::Other || tokens_contain_any_confirmation(impl_item))
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        if self.scope == Scope::Product
+            && self.target != DefiningTarget::Confirmation
+            && self.target != DefiningTarget::Wrapper
+            && tokens_contain_any_confirmation(&impl_item.self_ty)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        if self.scope == Scope::Product
+            && self.target == DefiningTarget::Wrapper
+            && !is_valid_wrapper_impl(single.unwrap_or(""), impl_item, self.rules)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        if self.target == DefiningTarget::Confirmation {
+            self.canonical_impl_count = self.canonical_impl_count.saturating_add(1);
+            let single_canonical = self.scope == Scope::Product
+                && impl_item.trait_.is_none()
+                && single == Some(self.rules.confirmation_type.as_str())
+                && self.canonical_impl_count == 1
+                && impl_item.items.len() == 1
+                && impl_item
+                    .items
+                    .first()
+                    .is_some_and(|item| self.is_canonical_issuer_method(item));
+            if !single_canonical {
+                self.findings.insert(Rule::IdentityConfirmationIssuance);
+            }
+        }
     }
 }
 
@@ -844,7 +977,7 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
             }
         } else if self.scope == Scope::Product
             && !private(&i.vis)
-            && tokens_contain_extracted_confirmation(&i.fields)
+            && tokens_contain_any_confirmation(&i.fields)
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -866,17 +999,47 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
             && !private(&i.vis)
             && i.variants
                 .iter()
-                .any(|variant| tokens_contain_extracted_confirmation(&variant.fields));
+                .any(|variant| tokens_contain_any_confirmation(&variant.fields));
         if invalid_origin || leaking_other {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
         visit::visit_item_enum(self, i);
     }
 
-    fn visit_item_fn(&mut self, i: &'ast ItemFn) {
+    fn visit_item_trait(&mut self, i: &'ast ItemTrait) {
+        if self.scope == Scope::Product
+            && (tokens_contain(i, &self.rules.confirmation_type)
+                || tokens_contain(i, &self.rules.seal_type)
+                || tokens_contain_any_confirmation(i))
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_item_trait(self, i);
+    }
+
+    fn visit_item_static(&mut self, i: &'ast ItemStatic) {
         if self.scope == Scope::Product
             && !private(&i.vis)
-            && signature_exposes_owned_confirmation(&i.sig)
+            && tokens_contain_any_confirmation(&i.ty)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_item_static(self, i);
+    }
+
+    fn visit_item_const(&mut self, i: &'ast ItemConst) {
+        if self.scope == Scope::Product
+            && !private(&i.vis)
+            && tokens_contain_any_confirmation(&i.ty)
+        {
+            self.findings.insert(Rule::IdentityConfirmationIssuance);
+        }
+        visit::visit_item_const(self, i);
+    }
+
+    fn visit_item_fn(&mut self, i: &'ast ItemFn) {
+        if self.scope == Scope::Product
+            && non_wrapper_fn_violates_confirmation_boundary(&i.vis, ImplKind::Inherent, &i.sig)
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -899,7 +1062,7 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
         if self.scope == Scope::Product
             && (tokens_contain(i, &self.rules.confirmation_type)
                 || tokens_contain(i, &self.rules.seal_type)
-                || tokens_contain_extracted_confirmation(i))
+                || tokens_contain_any_confirmation(i))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -910,7 +1073,7 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
         if self.scope == Scope::Product
             && (tokens_contain(i, &self.rules.confirmation_type)
                 || tokens_contain(i, &self.rules.seal_type)
-                || tokens_contain_extracted_confirmation(i))
+                || tokens_contain_any_confirmation(i))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -919,54 +1082,24 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
 
     fn visit_item_impl(&mut self, i: &'ast ItemImpl) {
         let outer = self.target;
-        let name = type_last_name(&i.self_ty);
-        let is_confirmation = name.as_deref() == Some(self.rules.confirmation_type.as_str());
-        let is_seal = name.as_deref() == Some(self.rules.seal_type.as_str());
-        let is_wrapper = name
-            .as_deref()
-            .is_some_and(|item_name| CONFIRMED_WRAPPER_TYPES.contains(&item_name));
-        let is_origin = name.as_deref() == Some(ORIGIN_ENUM_TYPE);
-        self.target = if is_confirmation {
-            DefiningTarget::Confirmation
-        } else if is_seal {
-            DefiningTarget::Seal
-        } else if is_wrapper {
-            DefiningTarget::Wrapper
-        } else if is_origin {
-            DefiningTarget::Origin
+        let outer_kind = self.impl_kind;
+        self.impl_kind = if i.trait_.is_some() {
+            ImplKind::Trait
         } else {
-            DefiningTarget::Other
+            ImplKind::Inherent
         };
-        if is_seal || (self.scope == Scope::Product && is_origin) {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        if self.scope == Scope::Product && is_wrapper && !is_valid_wrapper_impl(i, self.rules) {
-            self.findings.insert(Rule::IdentityConfirmationIssuance);
-        }
-        if is_confirmation {
-            self.canonical_impl_count = self.canonical_impl_count.saturating_add(1);
-            let single_canonical = self.scope == Scope::Product
-                && i.trait_.is_none()
-                && single_segment_type_name(&i.self_ty).as_deref()
-                    == Some(self.rules.confirmation_type.as_str())
-                && self.canonical_impl_count == 1
-                && i.items.len() == 1
-                && i.items
-                    .first()
-                    .is_some_and(|item| self.is_canonical_issuer_method(item));
-            if !single_canonical {
-                self.findings.insert(Rule::IdentityConfirmationIssuance);
-            }
-        }
+        let (single, target) = self.classify_impl_target(i);
+        self.target = target;
+        self.check_impl_constraints(i, single.as_deref());
         visit::visit_item_impl(self, i);
         self.target = outer;
+        self.impl_kind = outer_kind;
     }
 
     fn visit_impl_item_fn(&mut self, i: &'ast ImplItemFn) {
         if self.scope == Scope::Product
             && self.target == DefiningTarget::Other
-            && !private(&i.vis)
-            && signature_exposes_owned_confirmation(&i.sig)
+            && non_wrapper_fn_violates_confirmation_boundary(&i.vis, self.impl_kind, &i.sig)
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -1011,7 +1144,7 @@ impl<'ast> Visit<'ast> for DefiningFileCheck<'_> {
         if self.scope == Scope::Product
             && (tokens_contain(&i.ty, &self.rules.confirmation_type)
                 || tokens_contain(&i.ty, &self.rules.seal_type)
-                || tokens_contain_extracted_confirmation(&i.ty))
+                || tokens_contain_any_confirmation(&i.ty))
         {
             self.findings.insert(Rule::IdentityConfirmationIssuance);
         }
@@ -1612,6 +1745,7 @@ fn check_defining_file(
         rules,
         scope: Scope::Product,
         target: DefiningTarget::Other,
+        impl_kind: ImplKind::Inherent,
         in_canonical_issuer: false,
         in_canonical_seal_field: false,
         confirmation_struct_count: 0,

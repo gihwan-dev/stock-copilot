@@ -143,6 +143,7 @@ export const runTempAudit = (command, args, options = {}) => {
     });
 
     child.once("close", async (code, signal) => {
+      if (settled) return;
       const groups = sessionGroups();
       const descendants = groups === undefined || groups.length > 0;
       if (groups !== undefined && groups.length > 0) {

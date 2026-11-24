@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
 use super::{
-    AllowedStructuralSites, CommandStatus, ExpectedCanary, LineRange, check_structural,
-    parse_clippy_jsonl, validate_parsed_output,
+    AllowedStructuralSites, CommandStatus, LineRange, SpanRange, check_structural,
+    check_structural_with_env, parse_clippy_jsonl, validate_parsed_output,
 };
 use crate::arch_check::{
-    CrateName, Finding, RULES_PATH, Rule, check_sources, load_rules, load_workspace,
+    CrateName, Finding, RULES_PATH, Rule, check_sources, command, load_rules, load_workspace,
 };
 use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
 
@@ -58,7 +59,7 @@ fn create_base_fixture(name: &str) -> PathBuf {
     );
     write_file(
         &root.join("crates/domain/src/lib.rs"),
-        "pub mod instrument_mapping_change;\npub use instrument_mapping_change::UserIdentityConfirmation;\n",
+        "mod instrument_mapping_change;\npub use instrument_mapping_change::UserIdentityConfirmation;\n",
     );
     write_file(
         &root.join("crates/domain/src/instrument_mapping_change.rs"),
@@ -250,7 +251,7 @@ fn structural_check_catches_defining_and_allowed_file_misuse() {
     );
     write_file(
         &root.join("crates/application/src/confirm_instrument_identity.rs"),
-        "use domain::UserIdentityConfirmation;\npub fn allowed() -> UserIdentityConfirmation {\n    UserIdentityConfirmation::issue_after_user_confirmation()\n}\npub fn macro_in_allowed() -> UserIdentityConfirmation {\n    synth_macro::brand_new_unlisted_macro!()\n}\npub fn fn_ptr_in_allowed() -> fn() -> UserIdentityConfirmation {\n    UserIdentityConfirmation::issue_after_user_confirmation\n}\n",
+        "use domain::UserIdentityConfirmation;\npub fn allowed_and_same_line_fn_ptr() -> (UserIdentityConfirmation, fn() -> UserIdentityConfirmation) {\n    (UserIdentityConfirmation::issue_after_user_confirmation(), UserIdentityConfirmation::issue_after_user_confirmation)\n}\npub fn macro_in_allowed() -> UserIdentityConfirmation {\n    synth_macro::brand_new_unlisted_macro!()\n}\n",
     );
     generate_lockfile(&root.join("Cargo.toml"));
     let workspace = load_workspace(&root.join("Cargo.toml"), &[]).expect("load fixture");
@@ -268,6 +269,116 @@ fn structural_check_catches_defining_and_allowed_file_misuse() {
     assert_eq!(findings, expected);
 }
 
+#[test]
+fn structural_check_catches_same_line_fn_pointer_and_ignores_hostile_cargo_env() {
+    let rules = load_rules(&repository_root().join(RULES_PATH)).expect("load rules");
+    let root = create_base_fixture("h66-structural-same-line-and-env");
+    write_file(
+        &root.join("crates/helper-reexport/src/lib.rs"),
+        "pub fn clean() {}\n",
+    );
+    write_file(
+        &root.join("crates/application/src/lib.rs"),
+        "pub mod confirm_instrument_identity;\npub mod evil_same_pkg;\n",
+    );
+    write_file(
+        &root.join("crates/application/src/confirm_instrument_identity.rs"),
+        "use domain::UserIdentityConfirmation;\npub fn both() -> (UserIdentityConfirmation, fn() -> UserIdentityConfirmation) {\n    (UserIdentityConfirmation::issue_after_user_confirmation(), UserIdentityConfirmation::issue_after_user_confirmation)\n}\n",
+    );
+    write_file(
+        &root.join("crates/application/src/evil_same_pkg.rs"),
+        "use domain::UserIdentityConfirmation;\npub fn sneak() -> UserIdentityConfirmation {\n    UserIdentityConfirmation::issue_after_user_confirmation()\n}\n",
+    );
+    let fake_cargo_home = root.join("fake-cargo-home");
+    let empty_conf = root.join("empty-conf");
+    fs::create_dir_all(&empty_conf).expect("empty conf dir");
+    let remap = "--remap-path-prefix=crates/application/src/evil_same_pkg.rs=crates/application/src/confirm_instrument_identity.rs";
+    write_file(
+        &fake_cargo_home.join("config.toml"),
+        &format!(
+            "[build]\nrustc-wrapper = \"/nonexistent/evil-wrapper\"\nrustflags = [\"{remap}\"]\n\n[env]\nCLIPPY_CONF_DIR = {{ value = \"{}\", force = true }}\n",
+            empty_conf.display()
+        ),
+    );
+    generate_lockfile(&root.join("Cargo.toml"));
+    let workspace = load_workspace(&root.join("Cargo.toml"), &[]).expect("load fixture");
+    let cargo_home_str = fake_cargo_home.to_string_lossy().into_owned();
+    let hostile_env = [
+        ("CARGO_HOME", cargo_home_str.as_str()),
+        ("CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS", remap),
+        ("CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS", remap),
+        ("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS", remap),
+        ("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS", remap),
+        ("RUSTFLAGS", remap),
+        ("RUSTC_WRAPPER", "/nonexistent/evil-wrapper"),
+    ];
+    let findings =
+        check_structural_with_env(&workspace, &rules, &hostile_env).expect("structural check");
+    let expected = BTreeSet::from([
+        Finding::new(
+            Rule::IdentityConfirmationIssuance,
+            String::from("crates/application/src/confirm_instrument_identity.rs"),
+        ),
+        Finding::new(
+            Rule::IdentityConfirmationIssuance,
+            String::from("crates/application/src/evil_same_pkg.rs"),
+        ),
+    ]);
+    assert_eq!(findings, expected);
+}
+
+#[test]
+fn command_fails_closed_on_missing_defining_file_in_repo_and_skips_unrelated_fixture() {
+    let repo = repository_root();
+    let rules = load_rules(&repo.join(RULES_PATH)).expect("load rules");
+    let missing_root = fresh_directory(&repo, "h66-cli-missing-defining");
+    write_file(
+        &missing_root.join("Cargo.toml"),
+        "[workspace]\nresolver = \"3\"\nmembers = [\"crates/xtask\"]\n",
+    );
+    write_file(
+        &missing_root.join("crates/xtask/Cargo.toml"),
+        "[package]\nname = \"xtask\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write_file(
+        &missing_root.join("crates/xtask/src/lib.rs"),
+        "pub fn ok() {}\n",
+    );
+    fs::create_dir_all(missing_root.join("harness/arch-check")).expect("rules dir");
+    fs::copy(repo.join(RULES_PATH), missing_root.join(RULES_PATH)).expect("copy rules");
+    generate_lockfile(&missing_root.join("Cargo.toml"));
+    let missing_ws = load_workspace(&missing_root.join("Cargo.toml"), &[]).expect("load missing");
+    let missing_err = check_structural(&missing_ws, &rules).expect_err("missing defining file");
+    assert!(missing_err.to_string().contains("정의 파일"));
+    assert_eq!(command(&missing_root.join("Cargo.toml")), ExitCode::FAILURE);
+
+    let unrelated_root = fresh_directory(&repo, "h66-cli-unrelated-fixture");
+    write_file(
+        &unrelated_root.join("Cargo.toml"),
+        "[workspace]\nresolver = \"3\"\nmembers = [\"crates/adapters/platform-macos\"]\n",
+    );
+    write_file(
+        &unrelated_root.join("crates/adapters/platform-macos/Cargo.toml"),
+        "[package]\nname = \"platform-macos\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write_file(
+        &unrelated_root.join("crates/adapters/platform-macos/src/lib.rs"),
+        "pub fn ok() {}\n",
+    );
+    fs::create_dir_all(unrelated_root.join("harness/arch-check")).expect("rules dir");
+    fs::copy(repo.join(RULES_PATH), unrelated_root.join(RULES_PATH)).expect("copy rules");
+    generate_lockfile(&unrelated_root.join("Cargo.toml"));
+    let unrelated_ws =
+        load_workspace(&unrelated_root.join("Cargo.toml"), &[]).expect("load unrelated");
+    let unrelated_err =
+        check_structural(&unrelated_ws, &rules).expect_err("direct check fails closed");
+    assert!(unrelated_err.to_string().contains("정의 파일"));
+    assert_eq!(
+        command(&unrelated_root.join("Cargo.toml")),
+        ExitCode::SUCCESS
+    );
+}
+
 fn synthetic_sites() -> AllowedStructuralSites {
     AllowedStructuralSites {
         defining_file: String::from("crates/domain/src/instrument_mapping_change.rs"),
@@ -281,18 +392,27 @@ fn synthetic_sites() -> AllowedStructuralSites {
         seal_struct_ranges: vec![LineRange { start: 6, end: 7 }],
         confirmation_struct_ranges: vec![LineRange { start: 9, end: 10 }],
         defining_test_file_ranges: vec![LineRange { start: 1, end: 20 }],
-        allowed_direct_call_ranges: BTreeMap::from([(
+        allowed_direct_call_spans: BTreeMap::from([(
             String::from("crates/application/src/confirm_instrument_identity.rs"),
-            vec![LineRange { start: 40, end: 40 }],
+            vec![SpanRange {
+                start_line: 40,
+                start_column: 28,
+                end_line: 40,
+                end_column: 83,
+            }],
         )]),
-        expected_issuer_canary: ExpectedCanary::Expected,
+        expected_issuer_packages: BTreeSet::from([
+            CrateName::new("domain"),
+            CrateName::new("application"),
+        ]),
     }
 }
 
 const SAMPLE_ARTIFACT: &str =
     r#"{"reason":"compiler-artifact","manifest_path":"/workspace/crates/domain/Cargo.toml"}"#;
-const SAMPLE_SEAL: &str = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_types"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":10,"line_end":10,"is_primary":true,"expansion":null}]}}"#;
-const SAMPLE_ISSUER: &str = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"line_end":40,"is_primary":true,"expansion":null}]}}"#;
+const SAMPLE_SEAL: &str = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_types"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":10,"column_start":1,"line_end":10,"column_end":40,"is_primary":true,"expansion":null}]}}"#;
+const SAMPLE_DOMAIN_ISSUER: &str = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":495,"column_start":21,"line_end":495,"column_end":76,"is_primary":true,"expansion":null}]}}"#;
+const SAMPLE_ISSUER: &str = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"column_start":28,"line_end":40,"column_end":83,"is_primary":true,"expansion":null}]}}"#;
 
 fn run_synthetic_validation(
     status: CommandStatus,
@@ -322,7 +442,8 @@ fn run_synthetic_validation(
 
 #[test]
 fn structural_parser_fails_closed_on_errors_missing_artifacts_and_canary() {
-    let clean = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{SAMPLE_ISSUER}\n");
+    let clean =
+        format!("{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{SAMPLE_DOMAIN_ISSUER}\n{SAMPLE_ISSUER}\n");
     assert!(
         run_synthetic_validation(CommandStatus::Succeeded, b"", &clean)
             .expect("valid")
@@ -332,26 +453,26 @@ fn structural_parser_fails_closed_on_errors_missing_artifacts_and_canary() {
         .expect_err("failed status must fail closed");
     assert!(status_err.to_string().contains("boom"));
 
-    let missing_artifact = format!("{SAMPLE_SEAL}\n{SAMPLE_ISSUER}\n");
+    let missing_artifact = format!("{SAMPLE_SEAL}\n{SAMPLE_DOMAIN_ISSUER}\n{SAMPLE_ISSUER}\n");
     let artifact_err = run_synthetic_validation(CommandStatus::Succeeded, b"", &missing_artifact)
         .expect_err("missing artifact must fail closed");
     assert!(artifact_err.to_string().contains("domain"));
 
-    let silent_seal = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_ISSUER}\n");
+    let silent_seal = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_DOMAIN_ISSUER}\n{SAMPLE_ISSUER}\n");
     let seal_err = run_synthetic_validation(CommandStatus::Succeeded, b"", &silent_seal)
         .expect_err("silent seal canary must fail closed");
     assert!(seal_err.to_string().contains("봉인 타입"));
 
-    let silent_issuer = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n");
-    let issuer_err = run_synthetic_validation(CommandStatus::Succeeded, b"", &silent_issuer)
-        .expect_err("silent issuer canary must fail closed");
-    assert!(issuer_err.to_string().contains("발급 함수"));
+    let missing_app_canary = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{SAMPLE_DOMAIN_ISSUER}\n");
+    let issuer_err = run_synthetic_validation(CommandStatus::Succeeded, b"", &missing_app_canary)
+        .expect_err("missing per-package issuer canary must fail closed");
+    assert!(issuer_err.to_string().contains("application"));
 }
 
 #[test]
 fn structural_parser_reports_empty_spans_as_violation() {
-    let empty_span = r#"{"reason":"compiler-message","message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[]}}"#;
-    let jsonl = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{empty_span}\n");
+    let empty_span = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[]}}"#;
+    let jsonl = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{SAMPLE_DOMAIN_ISSUER}\n{empty_span}\n");
     let findings =
         run_synthetic_validation(CommandStatus::Succeeded, b"", &jsonl).expect("finding reported");
     assert_eq!(
@@ -365,9 +486,11 @@ fn structural_parser_reports_empty_spans_as_violation() {
 
 #[test]
 fn structural_parser_rejects_cross_package_and_non_lib_target_spoofing() {
-    let cross_pkg = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/attacker/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"line_end":40,"is_primary":true,"expansion":null}]}}"#;
-    let non_lib = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["test"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"line_end":40,"is_primary":true,"expansion":null}]}}"#;
-    let jsonl = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{cross_pkg}\n{non_lib}\n");
+    let cross_pkg = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/attacker/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"column_start":28,"line_end":40,"column_end":83,"is_primary":true,"expansion":null}]}}"#;
+    let non_lib = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["test"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"column_start":28,"line_end":40,"column_end":83,"is_primary":true,"expansion":null}]}}"#;
+    let jsonl = format!(
+        "{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{SAMPLE_DOMAIN_ISSUER}\n{cross_pkg}\n{non_lib}\n"
+    );
     let findings = run_synthetic_validation(CommandStatus::Succeeded, b"", &jsonl)
         .expect("spoofing findings reported");
     assert_eq!(
@@ -387,14 +510,19 @@ fn structural_parser_rejects_cross_package_and_non_lib_target_spoofing() {
 
 #[test]
 fn structural_parser_isolates_expansion_defining_line_allowed_line_and_seal_line_guards() {
-    let macro_on_allowed_line = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"line_end":40,"is_primary":true,"expansion":{"span":{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"line_end":40,"expansion":null}}}]}}"#;
-    let non_direct_line_in_allowed = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":41,"line_end":41,"is_primary":true,"expansion":null}]}}"#;
-    let product_line_in_defining = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":25,"line_end":25,"is_primary":true,"expansion":null}]}}"#;
-    let extra_seal_line_in_defining = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_types"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":25,"line_end":25,"is_primary":true,"expansion":null}]}}"#;
+    let macro_on_allowed_line = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"column_start":28,"line_end":40,"column_end":83,"is_primary":true,"expansion":{"span":{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"column_start":28,"line_end":40,"column_end":83,"expansion":null}}}]}}"#;
+    let same_line_other_column_in_allowed = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":40,"column_start":114,"line_end":40,"column_end":169,"is_primary":true,"expansion":null}]}}"#;
+    let non_direct_line_in_allowed = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/application/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/application/src/confirm_instrument_identity.rs","line_start":41,"column_start":28,"line_end":41,"column_end":83,"is_primary":true,"expansion":null}]}}"#;
+    let product_line_in_defining = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_methods"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":25,"column_start":10,"line_end":25,"column_end":65,"is_primary":true,"expansion":null}]}}"#;
+    let extra_seal_line_in_defining = r#"{"reason":"compiler-message","manifest_path":"/workspace/crates/domain/Cargo.toml","target":{"kind":["lib"]},"message":{"level":"warning","code":{"code":"clippy::disallowed_types"},"spans":[{"file_name":"crates/domain/src/instrument_mapping_change.rs","line_start":25,"column_start":10,"line_end":25,"column_end":40,"is_primary":true,"expansion":null}]}}"#;
 
     for (case_line, expected_subject) in [
         (
             macro_on_allowed_line,
+            "crates/application/src/confirm_instrument_identity.rs",
+        ),
+        (
+            same_line_other_column_in_allowed,
             "crates/application/src/confirm_instrument_identity.rs",
         ),
         (
@@ -410,7 +538,9 @@ fn structural_parser_isolates_expansion_defining_line_allowed_line_and_seal_line
             "crates/domain/src/instrument_mapping_change.rs",
         ),
     ] {
-        let jsonl = format!("{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{SAMPLE_ISSUER}\n{case_line}\n");
+        let jsonl = format!(
+            "{SAMPLE_ARTIFACT}\n{SAMPLE_SEAL}\n{SAMPLE_DOMAIN_ISSUER}\n{SAMPLE_ISSUER}\n{case_line}\n"
+        );
         let findings = run_synthetic_validation(CommandStatus::Succeeded, b"", &jsonl)
             .expect("isolated guard must report finding");
         assert_eq!(

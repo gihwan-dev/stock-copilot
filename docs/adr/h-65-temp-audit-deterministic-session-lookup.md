@@ -32,13 +32,13 @@ macOS 26.6.2(Build 25G83)에서 `temp-audit.mjs`와 `session-groups.py`, 그리�
 
 ## 검증
 
-- `node --test --test-reporter=spec harness/ci/tests/h53-temp.test.mjs`: 15/15 통과.
-  - `"소유 세션 조회 결과가 불완전하면 감사는 실패한다"`: **43.63–62.8ms** (동시 부하 환경 포함; 기존 7.1초 / 부하 시 10.09초).
-  - 신규 결정적 테스트 3건(`parseSessionGroupsOutput` 파싱 오류, 주입 `inspectSessionGroups` 불완전 결과 실패, 주입 `inspectSessionGroups`+`signalGroup` 잔존 그룹 종료): **0.58ms / 9.53ms / 5.71ms**.
+- `node --test --test-reporter=spec harness/ci/tests/h53-temp.test.mjs`: 16/16 통과.
+  - `"소유 세션 조회 결과가 불완전하면 감사는 실패한다"`: **43.63–64.93ms** (동시 부하 환경 포함; 기존 7.1초 / 부하 시 10.09초).
+  - 신규 결정적 테스트 4건(`parseSessionGroupsOutput` 파싱 오류, 주입 `inspectSessionGroups` 불완전 결과 실패, 주입 `inspectSessionGroups`+`signalGroup` 잔존 그룹 종료, 없는 명령 실행 시 `error` 뒤 `close`의 미처리 거부 없이 정리·실패): **0.29ms / 9.90ms / 11.89ms / 100.39ms**.
 - `node --test 'harness/ci/tests/*.test.mjs'`: 167/167 통과.
 - Prettier 및 ESLint(`--max-warnings 0`) 통과.
 
-### 격리 복사본 손 변형 (H-65 범위 5/5 검출)
+### 격리 복사본 손 변형 (H-65 범위 6/6 검출)
 
 | 번호 | 대상 파일 | 무력화한 조건 | 검출 테스트 | 결과 |
 |---|---|---|---|---|
@@ -47,6 +47,7 @@ macOS 26.6.2(Build 25G83)에서 `temp-audit.mjs`와 `session-groups.py`, 그리�
 | M03 | `harness/ci/temp-audit.mjs` | `parseSessionGroupsOutput`: 비숫자/기호(`+123`, `0x10`, `1e2`, 공백) 출력 행 거부 제거 | `h53-temp.test.mjs` | 검출 |
 | M04 | `harness/ci/temp-audit.mjs` | `runTempAudit`: 불완전 세션 조회(`undefined`) 실패 처리 제거 | `h53-temp.test.mjs` | 검출 |
 | M05 | `harness/ci/temp-audit.mjs` | `runTempAudit`: 잔존 자손 그룹 `SIGKILL` 전송 제거 | `h53-temp.test.mjs` | 검출 |
+| M27 | `harness/ci/temp-audit.mjs` | `runTempAudit`: spawn `error` 뒤 `close` 조기 종료 가드(`if (settled) return`) 제거 | `h53-temp.test.mjs` | 검출 |
 
 ## 남는 한계
 

@@ -344,6 +344,50 @@ test("주입한 세션 조회 가짜가 잔존 그룹을 보고하면 종료 신
   assert.deepEqual(readdirSync(directory), []);
 });
 
+test("없는 명령을 실행하면 임시 폴더를 정리하고 예외 없이 실패한다", async (t) => {
+  const directory = fixture(t);
+  let err = "";
+  const unhandled = [];
+  const onUnhandled = (reason) => {
+    unhandled.push(reason);
+  };
+  process.on("unhandledRejection", onUnhandled);
+  t.after(() => process.removeListener("unhandledRejection", onUnhandled));
+  const outcome = await runTempAudit(
+    "/nonexistent/stock-copilot-missing-cmd",
+    [],
+    {
+      baseTempDir: directory,
+      env: environment(),
+      stdio: "ignore",
+      stdout: { write: () => {} },
+      stderr: {
+        write: (chunk) => {
+          err += chunk;
+        },
+      },
+    },
+  );
+  await new Promise((done) => setTimeout(done, 50));
+  assert.equal(outcome.exitCode, 1);
+  assert.match(err, /ENOENT/u);
+  assert.deepEqual(unhandled, []);
+  assert.deepEqual(readdirSync(directory), []);
+  const cli = spawnSync(
+    process.execPath,
+    [audit, "/nonexistent/stock-copilot-missing-cmd"],
+    {
+      encoding: "utf8",
+      env: { ...environment(), TMPDIR: directory },
+      timeout: 10000,
+    },
+  );
+  assert.equal(cli.status, 1);
+  assert.match(cli.stderr, /ENOENT/u);
+  assert.doesNotMatch(cli.stderr, /scandir/u);
+  assert.deepEqual(readdirSync(directory), []);
+});
+
 test("임시 검사기는 Node의 컴파일 캐시를 정리하면서 누출은 계속 거부한다", (t) => {
   const directory = fixture(t);
   for (const [leak, expected] of [

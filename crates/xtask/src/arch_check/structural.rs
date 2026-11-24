@@ -23,10 +23,18 @@ const LINUX_EXCLUSIONS_PATH: &str = "harness/ci/linux/exclusions.json";
 const ISSUER_DISALLOWED_REASON: &str = "stock-copilot-h66-issuer";
 const SEAL_DISALLOWED_REASON: &str = "stock-copilot-h66-seal";
 
-const CLEARED_ENV_VARS: [&str; 15] = [
+const CLEARED_ENV_VARS: [&str; 23] = [
     "RUSTFLAGS",
     "CARGO_ENCODED_RUSTFLAGS",
     "CARGO_BUILD_RUSTFLAGS",
+    "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS",
+    "CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS",
+    "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS",
+    "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS",
+    "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER",
+    "CARGO_TARGET_X86_64_APPLE_DARWIN_RUNNER",
+    "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER",
+    "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER",
     "RUSTC",
     "CARGO_BUILD_RUSTC",
     "RUSTC_WRAPPER",
@@ -50,6 +58,35 @@ struct LineRange {
 impl LineRange {
     const fn contains(self, line_start: usize, line_end: usize) -> bool {
         line_start >= self.start && line_end <= self.end
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SpanRange {
+    start_line: usize,
+    start_column: usize,
+    end_line: usize,
+    end_column: usize,
+}
+
+impl SpanRange {
+    fn from_syn(span: proc_macro2::Span) -> Self {
+        let start = span.start();
+        let end = span.end();
+        Self {
+            start_line: start.line,
+            start_column: start.column.saturating_add(1),
+            end_line: end.line,
+            end_column: end.column.saturating_add(1),
+        }
+    }
+
+    const fn contains(self, other: Self) -> bool {
+        let starts_after = other.start_line > self.start_line
+            || (other.start_line == self.start_line && other.start_column >= self.start_column);
+        let ends_before = other.end_line < self.end_line
+            || (other.end_line == self.end_line && other.end_column <= self.end_column);
+        starts_after && ends_before
     }
 }
 
@@ -83,13 +120,13 @@ struct AllowedStructuralSites {
     seal_struct_ranges: Vec<LineRange>,
     confirmation_struct_ranges: Vec<LineRange>,
     defining_test_file_ranges: Vec<LineRange>,
-    allowed_direct_call_ranges: BTreeMap<String, Vec<LineRange>>,
-    expected_issuer_canary: ExpectedCanary,
+    allowed_direct_call_spans: BTreeMap<String, Vec<SpanRange>>,
+    expected_issuer_packages: BTreeSet<CrateName>,
 }
 
 struct DirectIssuerCallCollector<'a> {
     rules: &'a IdentityConfirmationRules,
-    ranges: Vec<LineRange>,
+    spans: Vec<SpanRange>,
 }
 
 impl<'ast> Visit<'ast> for DirectIssuerCallCollector<'_> {
@@ -98,11 +135,7 @@ impl<'ast> Visit<'ast> for DirectIssuerCallCollector<'_> {
             && let Expr::Path(callee) = i.func.as_ref()
             && is_direct_canonical_issuer_path(self.rules, callee)
         {
-            let span = i.span();
-            self.ranges.push(LineRange {
-                start: span.start().line,
-                end: span.end().line,
-            });
+            self.spans.push(SpanRange::from_syn(callee.span()));
         }
         visit::visit_expr_call(self, i);
     }
@@ -118,7 +151,7 @@ struct DefiningSites {
 struct ParsedOutput {
     observed_packages: BTreeSet<CrateName>,
     compiler_errors: Vec<String>,
-    seen_issuer: usize,
+    seen_issuer_packages: BTreeSet<CrateName>,
     seen_seal: usize,
     findings: BTreeSet<Finding>,
 }
@@ -267,10 +300,10 @@ fn collect_defining_sites(
                 test_ranges.push(item_line_range(&module.attrs, module.span()));
                 let mut collector = DirectIssuerCallCollector {
                     rules,
-                    ranges: Vec::new(),
+                    spans: Vec::new(),
                 };
                 collector.visit_item_mod(module);
-                if !collector.ranges.is_empty() {
+                if !collector.spans.is_empty() {
                     has_test_issuer = true;
                 }
             }
@@ -322,14 +355,20 @@ fn collect_test_mod_ranges(path: &Path) -> Result<Vec<LineRange>, CheckFailure> 
 }
 
 fn collect_allowed_sites(
-    root: &Path,
+    workspace: &Workspace,
+    defining_pkg: &MemberPackage,
     rules: &IdentityConfirmationRules,
+    target_packages: &BTreeSet<CrateName>,
 ) -> Result<AllowedStructuralSites, CheckFailure> {
+    let root = &workspace.root;
     let defining_path = root.join(&rules.defining_file);
     let defining = collect_defining_sites(&defining_path, rules)?;
     let defining_test_file_ranges = collect_test_mod_ranges(&root.join(&rules.defining_test_file))?;
-    let mut allowed_direct_call_ranges = BTreeMap::new();
-    let mut has_allowed_call = false;
+    let mut allowed_direct_call_spans = BTreeMap::new();
+    let mut expected_issuer_packages = BTreeSet::new();
+    if defining.canary == ExpectedCanary::Expected && target_packages.contains(&defining_pkg.name) {
+        expected_issuer_packages.insert(defining_pkg.name.clone());
+    }
     for relative in &rules.issuance_allowed_files {
         let full_path = root.join(relative);
         if !full_path.exists() {
@@ -338,19 +377,17 @@ fn collect_allowed_sites(
         let parsed = parse_rust_file(&full_path)?;
         let mut collector = DirectIssuerCallCollector {
             rules,
-            ranges: Vec::new(),
+            spans: Vec::new(),
         };
         collector.visit_file(&parsed);
-        if !collector.ranges.is_empty() {
-            has_allowed_call = true;
+        if !collector.spans.is_empty()
+            && let Some(pkg) = defining_package_for_file(workspace, relative)
+            && target_packages.contains(&pkg.name)
+        {
+            expected_issuer_packages.insert(pkg.name.clone());
         }
-        allowed_direct_call_ranges.insert(relative.clone(), collector.ranges);
+        allowed_direct_call_spans.insert(relative.clone(), collector.spans);
     }
-    let expected_issuer_canary = match defining.canary {
-        ExpectedCanary::Expected => ExpectedCanary::Expected,
-        ExpectedCanary::NotExpected if has_allowed_call => ExpectedCanary::Expected,
-        ExpectedCanary::NotExpected => ExpectedCanary::NotExpected,
-    };
     Ok(AllowedStructuralSites {
         defining_file: rules.defining_file.clone(),
         defining_test_file: rules.defining_test_file.clone(),
@@ -358,8 +395,8 @@ fn collect_allowed_sites(
         seal_struct_ranges: defining.seal_ranges,
         confirmation_struct_ranges: defining.confirmation_ranges,
         defining_test_file_ranges,
-        allowed_direct_call_ranges,
-        expected_issuer_canary,
+        allowed_direct_call_spans,
+        expected_issuer_packages,
     })
 }
 
@@ -390,21 +427,63 @@ fn prepare_clippy_config(
     Ok(conf_dir)
 }
 
-fn run_structural_clippy(
-    workspace: &Workspace,
-    target_packages: &BTreeSet<CrateName>,
-    structural_target: &Path,
+fn isolate_cargo_environment(
+    command: &mut Command,
     conf_dir: &Path,
-    extra_cargo_args: &[String],
-) -> Result<Output, CheckFailure> {
-    let mut command = Command::new("cargo");
-    command.current_dir(&workspace.root);
+    extra_inherited: &[(&str, &str)],
+) {
+    for (key, value) in extra_inherited {
+        command.env(key, value);
+    }
     for key in CLEARED_ENV_VARS {
         command.env_remove(key);
     }
+    command.env("RUSTFLAGS", "");
+    command.env("RUSTC_WRAPPER", "");
+    command.env("RUSTC_WORKSPACE_WRAPPER", "");
     command.env("CLIPPY_CONF_DIR", conf_dir);
-    if target_packages.contains(&CrateName::new("src-tauri")) {
-        let empty_dist = structural_target.join(EMPTY_DIST_SUBDIR);
+}
+
+fn push_clippy_config_overrides(command: &mut Command, conf_dir: &Path) {
+    let conf_lit = toml::Value::String(conf_dir.to_string_lossy().into_owned());
+    let overrides = [
+        String::from("build.rustc-wrapper=\"\""),
+        String::from("build.rustflags=[]"),
+        format!("env.CLIPPY_CONF_DIR.value={conf_lit}"),
+        String::from("env.CLIPPY_CONF_DIR.force=true"),
+        String::from("env.RUSTFLAGS.value=\"\""),
+        String::from("env.RUSTFLAGS.force=true"),
+        String::from("env.RUSTC_WRAPPER.value=\"\""),
+        String::from("env.RUSTC_WRAPPER.force=true"),
+    ];
+    for setting in overrides {
+        command.arg("--config").arg(setting);
+    }
+}
+
+struct ClippyInvocation<'a> {
+    target_packages: &'a BTreeSet<CrateName>,
+    structural_target: &'a Path,
+    conf_dir: &'a Path,
+    extra_inherited: &'a [(&'a str, &'a str)],
+}
+
+fn run_structural_clippy(
+    workspace: &Workspace,
+    invocation: &ClippyInvocation<'_>,
+) -> Result<Output, CheckFailure> {
+    let mut command = Command::new("cargo");
+    command.current_dir(&workspace.root);
+    isolate_cargo_environment(
+        &mut command,
+        invocation.conf_dir,
+        invocation.extra_inherited,
+    );
+    if invocation
+        .target_packages
+        .contains(&CrateName::new("src-tauri"))
+    {
+        let empty_dist = invocation.structural_target.join(EMPTY_DIST_SUBDIR);
         fs::create_dir_all(&empty_dist).map_err(|error| io_failure(&empty_dist, error))?;
         let tauri_config = json!({
             "build": {
@@ -413,9 +492,10 @@ fn run_structural_clippy(
         });
         command.env("TAURI_CONFIG", tauri_config.to_string());
     }
+    command.arg("clippy");
+    push_clippy_config_overrides(&mut command, invocation.conf_dir);
     command
         .args([
-            "clippy",
             "--locked",
             "--offline",
             "--all-targets",
@@ -425,9 +505,8 @@ fn run_structural_clippy(
         ])
         .arg(workspace.root.join("Cargo.toml"))
         .arg("--target-dir")
-        .arg(structural_target)
-        .args(extra_cargo_args);
-    for pkg in target_packages {
+        .arg(invocation.structural_target);
+    for pkg in invocation.target_packages {
         command.arg("-p").arg(pkg.as_str());
     }
     command.args([
@@ -488,6 +567,20 @@ fn span_lines(span: &Value) -> Option<(usize, usize)> {
     Some((start, end))
 }
 
+fn span_range(span: &Value) -> Option<SpanRange> {
+    let (start_line, end_line) = span_lines(span)?;
+    let start_col_raw = span.get("column_start").and_then(Value::as_u64)?;
+    let end_col_raw = span.get("column_end").and_then(Value::as_u64)?;
+    let start_column = usize::try_from(start_col_raw).ok()?;
+    let end_column = usize::try_from(end_col_raw).ok()?;
+    Some(SpanRange {
+        start_line,
+        start_column,
+        end_line,
+        end_column,
+    })
+}
+
 fn outermost_expansion_span(span: &Value) -> &Value {
     let mut current = span;
     while let Some(next) = current.get("expansion").and_then(|exp| exp.get("span")) {
@@ -521,6 +614,10 @@ fn ranges_contain(ranges: &[LineRange], line_start: usize, line_end: usize) -> b
     ranges
         .iter()
         .any(|range| range.contains(line_start, line_end))
+}
+
+fn span_ranges_contain(ranges: &[SpanRange], actual: SpanRange) -> bool {
+    ranges.iter().any(|range| range.contains(actual))
 }
 
 fn span_has_expansion(span: &Value) -> bool {
@@ -602,16 +699,20 @@ fn is_allowed_issuer_span(
     if !span_belongs_to_package(canonical_root, &relative, context) {
         return false;
     }
-    let Some((line_start, line_end)) = span_lines(span) else {
+    let Some(actual_span) = span_range(span) else {
         return false;
     };
     if relative == sites.defining_file {
-        return ranges_contain(&sites.defining_test_ranges, line_start, line_end);
+        return ranges_contain(
+            &sites.defining_test_ranges,
+            actual_span.start_line,
+            actual_span.end_line,
+        );
     }
     sites
-        .allowed_direct_call_ranges
+        .allowed_direct_call_spans
         .get(&relative)
-        .is_some_and(|ranges| ranges_contain(ranges, line_start, line_end))
+        .is_some_and(|ranges| span_ranges_contain(ranges, actual_span))
 }
 
 fn is_allowed_seal_span(
@@ -760,7 +861,9 @@ fn handle_compiler_message(
         .and_then(Value::as_str);
     match code {
         Some("clippy::disallowed_methods") => {
-            parsed.seen_issuer = parsed.seen_issuer.saturating_add(1);
+            if let Some(pkg) = &eval.message.package_name {
+                parsed.seen_issuer_packages.insert(pkg.clone());
+            }
             evaluate_diagnostic(
                 eval,
                 DiagnosticKind::IssuerMethod,
@@ -790,7 +893,7 @@ fn parse_clippy_jsonl(
     let mut parsed = ParsedOutput {
         observed_packages: BTreeSet::new(),
         compiler_errors: Vec::new(),
-        seen_issuer: 0,
+        seen_issuer_packages: BTreeSet::new(),
         seen_seal: 0,
         findings: BTreeSet::new(),
     };
@@ -853,18 +956,44 @@ fn validate_parsed_output(
             "봉인 타입 기준 진단을 관측하지 못했다(구조적 검사 비활성 의심)",
         ));
     }
-    if sites.expected_issuer_canary == ExpectedCanary::Expected && parsed.seen_issuer == 0 {
-        return Err(structural_error(
-            "발급 함수 기준 진단을 관측하지 못했다(구조적 검사 비활성 의심)",
-        ));
+    let missing_issuer: Vec<&str> = sites
+        .expected_issuer_packages
+        .difference(&parsed.seen_issuer_packages)
+        .map(CrateName::as_str)
+        .collect();
+    if !missing_issuer.is_empty() {
+        return Err(structural_error(format!(
+            "발급 함수 기준 진단을 관측하지 못한 패키지(구조적 검사 비활성 의심): {}",
+            missing_issuer.join(", ")
+        )));
     }
     Ok(parsed.findings)
 }
 
-pub(crate) fn check_structural_with_options(
+pub(crate) fn has_identity_confirmation_surface(
+    workspace: &Workspace,
+    rules: &IdentityConfirmationRules,
+) -> bool {
+    workspace
+        .packages
+        .iter()
+        .any(|package| package.name.as_str() == "xtask")
+        || workspace
+            .root
+            .join("harness/claude-hooks/hashes.json")
+            .exists()
+        || workspace.root.join(&rules.defining_file).exists()
+        || workspace.root.join(&rules.defining_test_file).exists()
+        || rules
+            .issuance_allowed_files
+            .iter()
+            .any(|relative| workspace.root.join(relative).exists())
+}
+
+pub(crate) fn check_structural_with_env(
     workspace: &Workspace,
     rules: &Rules,
-    extra_cargo_args: &[String],
+    extra_inherited: &[(&str, &str)],
 ) -> Result<BTreeSet<Finding>, CheckFailure> {
     let id_rules = &rules.source.identity_confirmation;
     let Some(defining_pkg) = defining_package_for_file(workspace, &id_rules.defining_file) else {
@@ -891,16 +1020,16 @@ pub(crate) fn check_structural_with_options(
         return Err(structural_error("구조적 검사 대상 패키지가 비어 있다"));
     }
     let (issuer_path, seal_path) = canonical_item_paths(defining_pkg, &defining_path, id_rules)?;
-    let sites = collect_allowed_sites(&workspace.root, id_rules)?;
+    let sites = collect_allowed_sites(workspace, defining_pkg, id_rules, &target_packages)?;
     let structural_target = workspace.target_directory.join(STRUCTURAL_CACHE_DIR);
     let conf_dir = prepare_clippy_config(&structural_target, &issuer_path, &seal_path)?;
-    let output = run_structural_clippy(
-        workspace,
-        &target_packages,
-        &structural_target,
-        &conf_dir,
-        extra_cargo_args,
-    )?;
+    let invocation = ClippyInvocation {
+        target_packages: &target_packages,
+        structural_target: &structural_target,
+        conf_dir: &conf_dir,
+        extra_inherited,
+    };
+    let output = run_structural_clippy(workspace, &invocation)?;
     let canonical_root = canonical_or_original(&workspace.root);
     let dir_to_package: BTreeMap<PathBuf, CrateName> = workspace
         .packages
@@ -925,5 +1054,5 @@ pub(crate) fn check_structural(
     workspace: &Workspace,
     rules: &Rules,
 ) -> Result<BTreeSet<Finding>, CheckFailure> {
-    check_structural_with_options(workspace, rules, &[])
+    check_structural_with_env(workspace, rules, &[])
 }

@@ -150,7 +150,12 @@ fn run(manifest: &Path) -> Result<BTreeSet<Finding>, CheckFailure> {
     let workspace = load_workspace(manifest, &[])?;
     let rules = load_rules(&workspace.root.join(RULES_PATH))?;
     let mut findings = check_workspace(&workspace, &rules)?;
-    findings.extend(structural::check_structural(&workspace, &rules)?);
+    if structural::has_identity_confirmation_surface(
+        &workspace,
+        &rules.source.identity_confirmation,
+    ) {
+        findings.extend(structural::check_structural(&workspace, &rules)?);
+    }
     Ok(findings)
 }
 
