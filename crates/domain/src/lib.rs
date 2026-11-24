@@ -444,6 +444,10 @@ pub use domain_event::{DomainEvent, DomainEventKind};
 mod buy_quantity;
 mod buy_quantity_arithmetic;
 mod buy_signal_history;
+mod investment_principles;
+pub use investment_principles::{
+    CashFloor, ConcentrationFloor, InvestmentPrinciples, PrincipleNote, PrincipleNoteError,
+};
 mod concentration_policy;
 pub use buy_quantity::{
     BuyQuantityConstraint, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, NoBuyQuantity,

@@ -590,6 +590,11 @@ pub use chat_types::{
 mod chat_ports;
 pub use chat_ports::{ChatChunkSink, ChatQueuePort, ChatRepository, ChatRunLedger, ChatStopSignal};
 
+mod investment_principles;
+pub use investment_principles::{
+    ApplyInvestmentPrinciples, PrinciplesRepository, UpdateInvestmentPrinciples,
+};
+
 mod chat_number_check;
 pub use chat_number_check::{
     ChatNumberCheck, ChatNumberEvidence, ChatNumberEvidenceSet, NoNumberEvidence,
