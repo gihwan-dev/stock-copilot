@@ -563,6 +563,10 @@ pub use news_data_settings::{
     SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
+mod candidate_discovery;
+pub use candidate_discovery::{
+    DiscoverCandidates, DiscoveryError, DiscoveryList, DiscoveryLists, DiscoveryReport,
+};
 mod deep_research;
 pub use deep_research::{
     AnalysisFailure, ClaimVerifier, DeepResearchError, DeepResearchPipeline, DeepResearchRequest,
