@@ -93,6 +93,25 @@ const eventFindings = (on, policy) => {
   });
 };
 
+const pushBranchFindings = (path, on, jobs, policy) => {
+  if (
+    path === ".github/workflows/ci.yml" &&
+    ("linux" in jobs || "macos" in jobs || "macos-branch" in jobs)
+  ) {
+    return isDeepStrictEqual(policy.ciPushBranches, ["master", "merge/**"]) &&
+      isDeepStrictEqual(on?.push?.branches, policy.ciPushBranches)
+      ? []
+      : [finding("event", "push.branches")];
+  }
+  if (path === ".github/workflows/signatures.yml" && "signatures" in jobs) {
+    return isDeepStrictEqual(policy.signaturesPushBranches, ["**"]) &&
+      isDeepStrictEqual(on?.push?.branches, policy.signaturesPushBranches)
+      ? []
+      : [finding("event", "push.branches")];
+  }
+  return [];
+};
+
 const stepFindings = (job, step, policy, toolSpec) => {
   const where = `jobs.${job}.steps`;
   if (!isObject(step)) {
@@ -305,6 +324,7 @@ export const workflowFindings = (path, text, policy, toolSpec) => {
       ? [finding("missing-key", "top.concurrency")]
       : []),
     ...eventFindings(parsed.on, policy),
+    ...pushBranchFindings(path, parsed.on, jobs, policy),
     ...(isDeepStrictEqual(parsed.permissions, policy.permissions)
       ? []
       : [finding("permissions")]),

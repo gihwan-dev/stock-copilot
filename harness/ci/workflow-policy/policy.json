@@ -222,7 +222,7 @@
       "name": "ci",
       "on": {
         "push": {
-          "branches": ["**"]
+          "branches": ["master", "merge/**"]
         },
         "pull_request": {
           "branches": ["master"]
@@ -1730,5 +1730,7 @@
       "shard": "${{ fromJSON(needs.diff-mutants-plan.outputs.macos_shards) }}"
     },
     "max-parallel": 2
-  }
+  },
+  "ciPushBranches": ["master", "merge/**"],
+  "signaturesPushBranches": ["**"]
 }

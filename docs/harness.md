@@ -34,7 +34,7 @@
 | 5. 에이전트 훅 | 도구 호출 전후, 서브에이전트 시작·종료 | 보호 경로 편집 차단, 금지 명령 차단, 편집 직후 검사, 종료 전 검사, 리뷰어 격리 확인 |
 | 6. 샌드박스 | 셸 명령 실행 중 | 셸과 그 자식 프로세스의 보호 경로 쓰기 |
 | 7. git 훅 | 커밋·푸시 | `just check`, `just check-full` |
-| 8. CI | 푸시 뒤, 밤 | 사후 탐지: 보호 경로 서명 검사, Linux 검사, macOS의 전체 `just check`와 변경분 변이, 리뷰 기록 검사. 실패하면 알린다 (7.6) |
+| 8. CI | 푸시 뒤, 밤 | 사후 탐지: 모든 푸시의 보호 경로 서명 검사(`signatures.yml`), `master`·`merge/**` 푸시와 밤의 전체 CI(`ci.yml`·`nightly.yml`: Linux 검사, macOS 전체 `just check`, 플랫폼 분리 병렬 변경분 변이, 리뷰 기록 검사). 실패하면 알린다 (7.6) |
 | 9. 리뷰 | 작업 완료 후 | 적대적 리뷰 → 비판 → 평가. 9장 항목 |
 
 ### 1.1 검사 명령
@@ -42,7 +42,7 @@
 | 명령 | 내용 | 누가 부르는가 |
 |---|---|---|
 | `just lint-file <경로>` | 바뀐 파일 하나의 형식과 린트 | `PostToolUse` 편집 훅 |
-| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | Codex Stop, master 커밋 훅(승인된 병합 예외는 workflow 2.8), 모든 브랜치 푸시와 밤의 macOS CI. Linux 푸시는 `just linux-check`·`just linux-test` |
+| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | Codex Stop, master 커밋 훅(승인된 병합 예외는 workflow 2.8), `master`·`merge/**` 푸시와 밤의 macOS CI. `master`·`merge/**` Linux 푸시는 `just linux-check`·`just linux-test` |
 | `just check-fast` | 기준 대비 변경 crate와 역의존 crate의 clippy·nextest, 빠른 정적 검사, test-diff·끄기 보고·commit-guard·hooks-installed. 프런트 변경 때 TS 검사. 하네스·설정·미지 경로는 전체 승격. 커버리지는 전체 검사에서 유지 | 작업 브랜치 커밋, 구현 중 |
 | `just check-full` | `just check` + 변이 테스트(기준 브랜치 대비 변경분) + 컨테이너 시각 회귀 + 순환 의존 검사 | 푸시 훅, CI |
 
@@ -58,15 +58,16 @@
 
 ### 1.2 언제 무엇을 돌리는가
 
-전체 `just check`는 로컬 macOS와 macOS CI가 맡는다. 작업 공간에 macOS 전용 crate가 있고 `cfg`와 매니페스트 `[target]` 표를 금지하므로(3.2) Linux에서는 작업 공간 전체를 빌드하지 않는다. Linux CI는 서명 검사와 플랫폼 중립 crate 묶음만 돈다. 플랫폼 중립 묶음은 작업 공간에서 보호된 제외 목록(macOS 전용 crate와 그것에 의존하는 crate)을 뺀 것이다. 모든 작업 브랜치의 push에서도 macOS 검사와 변경분 변이를 실행한다.
+전체 `just check`는 로컬 macOS와 macOS CI가 맡는다. 작업 공간에 macOS 전용 crate가 있고 `cfg`와 매니페스트 `[target]` 표를 금지하므로(3.2) Linux에서는 작업 공간 전체를 빌드하지 않는다. Linux CI는 서명 검사와 플랫폼 중립 crate 묶음만 돈다. 플랫폼 중립 묶음은 작업 공간에서 보호된 제외 목록(macOS 전용 crate와 그것에 의존하는 crate)을 뺀 것이다. 일반 작업 브랜치 푸시에서는 로컬 범위 검사(`just check-fast`)와 원격 서명 검사(`signatures.yml`)만 실행하고, 전체 CI(`ci.yml`: Linux 검사·시각 회귀, macOS 전체 `just check`, 플랫폼 분리 병렬 변경분 변이)는 `master`와 `merge/**` 병합 커밋 푸시에서만 실행한다.
 
 | 언제 | 어디서 | 내용 |
 |---|---|---|
 | 작업 브랜치 커밋 훅 | 로컬 macOS | `just check-fast` (하네스·설정 변경은 전체 승격). nextest 기본 프로필의 동시 테스트는 4개다 |
 | master·detached HEAD 커밋, 에이전트 종료 훅 | 로컬 macOS | `just check`. 조건을 충족한 master 병합은 workflow 2.8에 따라 정적 검사만 다시 한다 |
 | 푸시 훅 | 로컬 macOS | `just check-full` |
-| CI 푸시마다 | Linux arm64 | 보호 경로 서명 검사 (7.6), 리뷰 기록 검사, 작업 흐름 정책, 플랫폼 중립 crate 묶음의 형식·린트·deny·xtask 검사·테스트(네트워크 이름공간 안). 컨테이너 시각 회귀는 DS-15에서 더한다 (ADR 0020) |
-| CI 모든 브랜치 푸시와 밤 | macOS | `lefthook install` 뒤 전체 `just check`. 푸시는 변경분 변이도 실행하며 작업 제한은 120분이다. `src-tauri` 경로 고정 테스트, 앱 빌드, E2E 연기 테스트, WKWebView 스크린샷 보관(비교하지 않음)은 해당 작업(U-03 등)에서 더한다 |
+| CI 모든 브랜치 푸시 | Linux arm64 | 보호 경로 서명 검사 (`signatures.yml`, 7.6) |
+| CI `master`·`merge/**` 푸시 | Linux arm64 | 리뷰 기록 검사, 작업 흐름 정책, 플랫폼 중립 crate 묶음의 형식·린트·deny·xtask 검사·테스트(네트워크 이름공간 안), 컨테이너 시각 회귀, 플랫폼 중립 변경분 변이 조각(최대 8조각, 동시 4)과 최종 합산 판정 (`ci.yml`, ADR 0020·H-63) |
+| CI `master`·`merge/**` 푸시와 밤 | macOS | `lefthook install` 뒤 전체 `just check` (`macos`·`macos-branch`, 작업 제한 120분). `master`·`merge/**` 푸시는 macOS 전용 crate(`store-sqlite`) 변경분 변이 조각도 야간 변이와 공유하는 2슬롯 대기열(`macos-mutants-slot-{0,1}`)에서 실행한다. `src-tauri` 경로 고정 테스트, 앱 빌드, E2E 연기 테스트, WKWebView 스크린샷 보관(비교하지 않음)은 해당 작업(U-03 등)에서 더한다 |
 | CI 밤 | Linux | Linux 전체 묶음, 매일 최근24시간 변경분 변이·일요일 밤128분할 전체 변이, 권고 DB를 받은 뒤 `deny`. 오래 걸리는 속성 테스트와 AI 고정 자료의 CLI 버전 점검은 해당 작업에서 더한다 |
 
 밤 macOS 작업은 그날 `main`에 변경이 있을 때만 돈다.
@@ -507,7 +508,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 
 H-49: 변이 소스 선택과 테스트 패키지 선택을 분리한다. `crates/xtask/src/mutants_check/test_packages.rs`의 명시 소유 선언에 따라 application 변이는 application과 testkit-ports 테스트를 함께 실행한다(ADR 0091, 0119, 0120). domain·order-execution·store-sqlite 단독 변이는 각 자기 패키지 테스트를 유지한다. application이 포함된 여러 대상은 합집합을 `--test-package`로 전달한다. 선택 패키지를 `--cargo-arg=--package=...`에도 전달해 정상 소스 사전 실행부터 같은 테스트를 확인한다. application이 없으면 기존 기본 인자를 유지한다. 변경분·일일·주간 전체가 같은 실행 함수를 쓰며 알 수 없는 소스 소유자는 실패한다. testkit-ports의 테스트·지원 파일만 바뀌어도 application의 주간 전체 검사 대상임을 안내한다. 새 대상·외부 테스트 소유자를 추가할 때 선언과 회귀도 함께 갱신한다.
 
-H-46에서 참조 그래프·추가 전용 선택기를 제거했다. 변경분은 대상 src 파일과 diff 영역의 교집합만 검사한다. `cargo mutants --in-diff`는 변경 영역과 겹치는 변이에 적용하며, 테스트 코드 변경으로 다른 파일의 변이가 살아남는 영향은 검증하지 못한다. 테스트·지원 파일만 바뀐 crate는 주간 전체 실행 대상임을 출력한다. 변경분 실행의 전체 시간 제한은 20분이다. 제한 때 자신이 만든 프로세스 그룹만 종료하고 실패한다. 매일은 지난24시간의 변경분, 전체는 주1회다. 일일 기준은 master 첫 부모 이력에서24시간 전 커밋이며 얕은 이력은 먼저 가져온다. 그 이전 커밋이 없는 첫날은 빈 트리부터, 변경이 없으면 변경 없음으로 성공한다. 일일은 실행 생성 시각에서 예약18:00 UTC를 복원한 기준으로 기존 파일·diff 교집합 선택을 재사용한다. 계획 작업이 변이를 열거하고100개당 한 조각, 최대8개를 만든다. 일일 변이 단계330분·작업360분이며 계획 작업은30분이다. GitHub 실행 메타데이터 조회의 Actions 읽기 권한은 계획 작업에만 둔다. 일반 macOS/Linux 검사는 일일 cron에서만 돌린다. 주간128조각은 같은 전체 대상을 나눈다. 성공 종료한 빈 조각은 대상 없음으로 표시하며, 자료 유실·취소·불완전 실행은 실패로 구분한다. 미검출·시간 초과 실패 정책을 유지하며 결과는 Actions 로그와 작업 요약에 남긴다.
+H-46에서 참조 그래프·추가 전용 선택기를 제거했다. 변경분은 대상 src 파일과 diff 영역의 교집합만 검사한다. `cargo mutants --in-diff`는 변경 영역과 겹치는 변이에 적용하며, 테스트 코드 변경으로 다른 파일의 변이가 살아남는 영향은 검증하지 못한다. 테스트·지원 파일만 바뀐 crate는 주간 전체 실행 대상임을 출력한다. 로컬 변경분 실행(`just mutants-diff`)의 전체 시간 제한은 20분이다. 제한 때 자신이 만든 프로세스 그룹만 종료하고 실패한다. CI `ci.yml`의 `master`·`merge/**` 푸시 변경분 변이는 `diff-mutants-plan` → `diff-mutants-linux`(플랫폼 중립 crate, 최대 8조각, 동시 4)·`diff-mutants-macos`(`store-sqlite`, 최대 8조각, 야간 변이와 공통 2슬롯 대기열) → `diff-mutants-verdict` 합산으로 분리해 병렬 실행한다(H-63). 매일은 지난24시간의 변경분, 전체는 주1회다. 일일 기준은 master 첫 부모 이력에서24시간 전 커밋이며 얕은 이력은 먼저 가져온다. 그 이전 커밋이 없는 첫날은 빈 트리부터, 변경이 없으면 변경 없음으로 성공한다. 일일은 실행 생성 시각에서 예약18:00 UTC를 복원한 기준으로 기존 파일·diff 교집합 선택을 재사용한다. 계획 작업이 변이를 열거하고100개당 한 조각, 최대8개를 만든다. 일일 변이 단계330분·작업360분이며 계획 작업은30분이다. GitHub 실행 메타데이터 조회의 Actions 읽기 권한은 계획 작업에만 둔다. 일반 macOS/Linux 검사는 일일 cron에서만 돌린다. 주간128조각은 같은 전체 대상을 나눈다. 성공 종료한 빈 조각은 대상 없음으로 표시하며, 자료 유실·취소·불완전 실행은 실패로 구분한다. 미검출·시간 초과 실패 정책을 유지하며 결과는 Actions 로그와 작업 요약에 남긴다.
 
 `error_class.rs`에서 현재 생성되는 변이 2개는 모두 `ErrorClass: Default` 미구현으로 컴파일되지 않는다. 오류별 매핑 검증은 자동 변이가 아니라 `crates/application/tests/error_class.rs`의 exhaustive 기대 함수와 `every_leaf_matches_the_decision_table`에 의존한다. 생성된 변이의 미검출 0건을 매핑 검출력의 증거로 해석하지 않는다.
 
@@ -774,7 +775,7 @@ native SubagentStart/SubagentStop은 호환·회귀용 어댑터다. 현재 T3 �
 |---|---|---|
 | 기존 테스트 함수의 삭제·변경 | `xtask test-diff`가 기준 커밋 대비 기존 테스트 함수(Rust `#[test]`, TS 테스트 블록)의 삭제와 본문 변경을 뽑는다. 하나라도 있으면 실패한다. 새 테스트 추가는 허용한다 | Codex Stop, 커밋 훅, CI |
 | 테스트 수 감소 | `cargo nextest list`와 `vitest list`의 개수를 기준 커밋과 비교 | 같음 |
-| 승인된 변경 | 테스트 준비 변경은 메인이 원격 master의 직접 커밋으로 남긴 정확한 전·후 파일 해시와 지적 목록이 일치하고 단언이 보존된 경우에만 `test-diff` 예외를 받는다. 사용자 서명 검사는 별도로 유지한다 (workflow 2.9, 7.6) | 커밋 훅, CI |
+| 승인된 변경 | 테스트 준비·승인 단언 변경은 메인이 원격 master의 단일 부모 직접 커밋으로 남긴 정확한 전·후 파일 해시와 지적 목록이 일치하는 `harness/test-diff/approvals.toml` 행(단언 구조 보존) 또는 해당 병합 구간 1회 한정 승인 묶음(`harness/test-diff/bundles/<작업 ID>.toml`, 병합 트레일러 대조, H-62)으로만 `test-diff` 예외를 받는다. 사용자 서명 검사는 별도로 유지한다 (workflow 2.9, 7.6) | 커밋 훅, CI |
 | 구현을 베낀 테스트 | 변이 테스트로 드러난다(베낀 테스트는 변이를 죽이지 못한다). 테스트 입력 리터럴을 구현에서 다시 쓰는지 찾는 xtask 검사는 효과가 확인되지 않아 두지 않는다 | `just check-full`, 리뷰 |
 
 커밋·병합 커밋 훅은 `commit-base`가 선택한 40자리 커밋을 선택된 전체 또는 fast 검사에 전달한다. 평소에는 `merge-base HEAD refs/heads/master`다. 이름 있는 현재 작업 브랜치가 `master`가 아닐 때 다음 두 경로에서만 로컬 `master` 끝을 쓴다.

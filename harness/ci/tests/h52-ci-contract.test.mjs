@@ -7,9 +7,14 @@ import { repoRoot } from "./signature-repo.mjs";
 const ci = JSON.parse(
   readFileSync(join(repoRoot, ".github/workflows/ci.yml"), "utf8"),
 );
+const signatures = JSON.parse(
+  readFileSync(join(repoRoot, ".github/workflows/signatures.yml"), "utf8"),
+);
 const macos = ci.jobs["macos-branch"];
 
-test("작업 브랜치 push도 macOS 전체 검사와 변경분 변이를 실행한다", () => {
+test("master와 merge/** 푸시는 macOS 전체 검사와 변경분 변이를 실행하고 서명 검사는 모든 푸시에서 실행한다", () => {
+  assert.deepEqual(ci.on.push.branches, ["master", "merge/**"]);
+  assert.deepEqual(signatures.on.push.branches, ["**"]);
   assert.equal(
     macos.if,
     "github.event_name == 'push' && github.ref != 'refs/heads/master'",

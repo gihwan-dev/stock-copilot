@@ -54,20 +54,22 @@ H-55·H-56(ADR 0153)은 `harness/test-diff/approvals.toml`의 승인 행으로 �
 
 `trusted_authority`가 `refs/remotes/origin/master`에서 묶음을 읽으므로, **묶음 도입 커밋 `I`를 먼저 `origin/master`에 단독 푸시·갱신한 뒤** 병합 커밋 `M`을 만들어 푸시한다(`I`와 `M`을 로컬에 연달아 만들고 한꺼번에 푸시하면 로컬 `origin/master`가 아직 `I` 이전이므로 훅이 닫힌 실패로 거부한다).
 
-1. 초안 생성(표준 출력 검토 후 메인이 직접 `harness/test-diff/bundles/<작업 ID>.toml` 저장):
-   - `just test-diff-bundle-draft <작업 ID> <기준 40자리 SHA> <브랜치 40자리 SHA> [merge-head|target-commit|target-tree]`
+1. 초안 생성(표준 출력 검토 후 메인이 직접 `harness/test-diff/bundles/<작업 ID>.toml` 저장, `reason`을 실제 승인 사유로 반드시 작성):
+   - `just test-diff-bundle-draft <작업 ID> <기준 40자리 SHA> <브랜치 40자리 SHA> merge-head`
 2. 사전 대조 확인(병합 전 작업 브랜치 끝 커밋 기준):
    - `just test-diff-bundle-check harness/test-diff/bundles/<작업 ID>.toml <기준 40자리 SHA> <브랜치 40자리 SHA>`
-3. 묶음 단독 서명 커밋 `I` 생성 후 `origin/master`에 단독 푸시 및 원격 추적 참조 갱신:
-   - `git add harness/test-diff/bundles/<작업 ID>.toml && git commit -S -m "..."`
+3. 묶음 단독 커밋 `I` 생성 후 `origin/master`에 단독 푸시 및 원격 추적 참조 갱신(현재 `harness/ci/signatures/lock-point.txt`가 비어 있어 서명 검사 비활성 상태이므로 일반 `git commit`으로 통과하며, 추후 잠금 시점을 켜면 보호 경로 규칙에 따라 사용자 `git commit -S`가 필요하다):
+   - `git add harness/test-diff/bundles/<작업 ID>.toml && git commit -m "H-62: <작업 ID> 테스트 변경 승인 묶음"`
    - `git push origin master && git fetch origin master`
-4. 병합 커밋 메시지 트레일러 생성 및 `--no-ff` 병합 커밋 `M` 생성·푸시:
+4. 병합 커밋 메시지 트레일러 생성, `merge/<작업 ID>` 브랜치에서 `--no-ff` 병합 커밋 `M` 생성 후 `merge/<작업 ID>` 푸시(`ci.yml` 전체 검사 실행):
    - `just test-diff-bundle-message harness/test-diff/bundles/<작업 ID>.toml`
+   - `git checkout -b merge/<작업 ID> master`
    - 커밋 본문 끝에 아래 트레일러 두 줄을 붙여 병합한다(`merge-head` 모드에서 커밋된 병합 커밋에 필수):
      ```text
      Test-Diff-Bundle: harness/test-diff/bundles/<작업 ID>.toml
      Test-Diff-Findings: <건수>
      ```
+   - `git push origin merge/<작업 ID>` 후 `just remote-check <M의 SHA>`(Linux·`macos-branch`·병렬 변이·`signatures.yml`) 통과 확인 뒤 `master`에 반영한다.
    - 병합 커밋 `M`에서 `just test-diff-bundle-check harness/test-diff/bundles/<작업 ID>.toml <I의 SHA> <M의 SHA>`와 `just base=<I의 SHA> test-diff`, `mutants-diff` 선행 검사, CI `ci.yml`이 그대로 통과한다.
 
 ## 보류 결정과 선택지

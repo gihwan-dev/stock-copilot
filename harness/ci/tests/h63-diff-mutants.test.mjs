@@ -23,7 +23,7 @@ import {
   expectedShardJobs,
   parseJobPages,
 } from "../diff-mutants-aggregate.mjs";
-import { checkRun, failureCode } from "../remote-check.mjs";
+import { checkRun, failureCode, remoteCheckFrom } from "../remote-check.mjs";
 import { mkdtempSync } from "../test-temp.mjs";
 import { installActionSpec, readTools } from "../tools.mjs";
 import {
@@ -972,4 +972,164 @@ test("H-63과 H-59 macOS 변이 작업은 워크플로 간 공통 2슬롯 대기
     delete policyCopy.expected[CI_PATH].jobs["diff-mutants-macos"].concurrency;
     delete ciCopy.jobs["diff-mutants-macos"].concurrency;
   });
+});
+
+test("H-63 정책은 ci.yml 푸시 트리거를 master·merge/**로 고정하고 signatures.yml 축소와 작업 브랜치 원격 생략을 거부한다", async () => {
+  const signaturesPath = ".github/workflows/signatures.yml";
+  const ci = JSON.parse(readFileSync(join(repoRoot, CI_PATH), "utf8"));
+  const signatures = JSON.parse(
+    readFileSync(join(repoRoot, signaturesPath), "utf8"),
+  );
+  const checkWith = (path, workflowData, policyData = POLICY) =>
+    workflowFindings(
+      path,
+      `${JSON.stringify(workflowData, undefined, 2)}\n`,
+      policyData,
+      TOOL_SPEC,
+    );
+
+  assert.deepEqual(ci.on.push.branches, ["master", "merge/**"]);
+  assert.deepEqual(signatures.on.push.branches, ["**"]);
+  assert.deepEqual(checkWith(CI_PATH, ci), []);
+  assert.deepEqual(checkWith(signaturesPath, signatures), []);
+
+  for (const invalidBranches of [
+    ["**"],
+    ["master"],
+    ["merge/**"],
+    ["master", "merge/*"],
+    ["master", "merge/**", "h-*"],
+    ["merge/**", "master"],
+    [],
+    undefined,
+  ]) {
+    const mutatedCi = structuredClone(ci);
+    if (invalidBranches === undefined) {
+      delete mutatedCi.on.push.branches;
+    } else {
+      mutatedCi.on.push.branches = invalidBranches;
+    }
+    assert.ok(
+      checkWith(CI_PATH, mutatedCi).includes("event:push.branches"),
+      `ci branches=${JSON.stringify(invalidBranches)}`,
+    );
+  }
+
+  const ciWithoutPush = structuredClone(ci);
+  delete ciWithoutPush.on.push;
+  assert.ok(checkWith(CI_PATH, ciWithoutPush).includes("event:push.branches"));
+
+  for (const driftedBranches of [["**"], ["master"], ["merge/**"]]) {
+    const driftedPolicy = structuredClone(POLICY);
+    driftedPolicy.ciPushBranches = driftedBranches;
+    const driftedCi = structuredClone(ci);
+    driftedCi.on.push.branches = driftedBranches;
+    assert.ok(
+      checkWith(CI_PATH, driftedCi, driftedPolicy).includes(
+        "event:push.branches",
+      ),
+      `ci drifted=${JSON.stringify(driftedBranches)}`,
+    );
+  }
+
+  for (const narrowedSignatures of [
+    ["master", "merge/**"],
+    ["master"],
+    [],
+    undefined,
+  ]) {
+    const mutatedSig = structuredClone(signatures);
+    if (narrowedSignatures === undefined) {
+      delete mutatedSig.on.push.branches;
+    } else {
+      mutatedSig.on.push.branches = narrowedSignatures;
+    }
+    assert.ok(
+      checkWith(signaturesPath, mutatedSig).includes("event:push.branches"),
+      `signatures branches=${JSON.stringify(narrowedSignatures)}`,
+    );
+  }
+
+  const driftedSigPolicy = structuredClone(POLICY);
+  driftedSigPolicy.signaturesPushBranches = ["master", "merge/**"];
+  const driftedSig = structuredClone(signatures);
+  driftedSig.on.push.branches = ["master", "merge/**"];
+  assert.ok(
+    checkWith(signaturesPath, driftedSig, driftedSigPolicy).includes(
+      "event:push.branches",
+    ),
+  );
+
+  const mergeRun = {
+    id: 101,
+    run_attempt: 1,
+    head_sha: HEAD,
+    event: "push",
+    head_branch: "merge/h-62",
+    status: "completed",
+    conclusion: "success",
+    path: CI_PATH,
+    repository: { full_name: "gihwan-dev/stock-copilot" },
+    head_repository: { full_name: "gihwan-dev/stock-copilot" },
+  };
+  const sigRun = {
+    ...mergeRun,
+    id: 102,
+    path: signaturesPath,
+  };
+  const mergeJobs = [
+    makeJob("linux", [
+      "container visual regression",
+      "linux check",
+      "linux tests without network",
+    ]),
+    makeJob("macos-branch", ["branch checkout", "just check"]),
+    makeJob("diff-mutants-plan", ["range", "diff mutants plan"]),
+    makeJob("diff-mutants-linux (0/1)", [
+      "diff mutants shard",
+      "diff mutants summary",
+    ]),
+    {
+      name: "diff-mutants-macos",
+      head_sha: HEAD,
+      run_attempt: 1,
+      status: "completed",
+      conclusion: "skipped",
+      steps: [],
+    },
+    makeJob("diff-mutants-verdict", ["diff mutants aggregate"]),
+  ];
+  const sigJobs = [
+    makeJob("signatures", ["signatures from the base checkout"]),
+  ];
+  assert.equal(checkRun(HEAD, mergeRun, mergeJobs), true);
+  const ok = await remoteCheckFrom(HEAD, async (apiPath) => {
+    if (apiPath.includes("workflows/ci.yml/runs")) {
+      return { total_count: 1, workflow_runs: [mergeRun] };
+    }
+    if (apiPath.includes("workflows/signatures.yml/runs")) {
+      return { total_count: 1, workflow_runs: [sigRun] };
+    }
+    if (apiPath.includes("runs/101/attempts/1/jobs")) {
+      return { total_count: mergeJobs.length, jobs: mergeJobs };
+    }
+    if (apiPath.includes("runs/102/attempts/1/jobs")) {
+      return { total_count: sigJobs.length, jobs: sigJobs };
+    }
+    throw new Error(`unexpected ${apiPath}`);
+  });
+  assert.equal(ok, true);
+
+  await assert.rejects(
+    remoteCheckFrom(HEAD, async (apiPath) => {
+      if (apiPath.includes("workflows/ci.yml/runs")) {
+        return { total_count: 0, workflow_runs: [] };
+      }
+      if (apiPath.includes("workflows/signatures.yml/runs")) {
+        return { total_count: 1, workflow_runs: [sigRun] };
+      }
+      throw new Error(`unexpected ${apiPath}`);
+    }),
+    /ci\.yml: 해당 SHA의 실행이 없거나 응답이 불완전하다/u,
+  );
 });

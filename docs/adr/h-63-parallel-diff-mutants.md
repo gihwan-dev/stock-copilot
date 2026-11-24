@@ -4,7 +4,7 @@
 - 날짜: 2026-11-24
 - 결정한 사람: 메인 에이전트(사용자 확인 대기)
 - 관련 작업: H-63 (H-59·H-62 후속)
-- 반영한 문서: `.github/workflows/{ci,nightly}.yml`, `crates/xtask/src/{mutants_check,test_diff,nextest_list}*`, `harness/ci/{diff-mutants-plan,diff-mutants-shard,diff-mutants-aggregate,remote-check}.mjs`, `harness/ci/workflow-policy/{check.mjs,policy.json}`, `justfile`
+- 반영한 문서: `.github/workflows/{ci,nightly}.yml`, `crates/xtask/src/{mutants_check,test_diff,nextest_list}*`, `harness/ci/{diff-mutants-plan,diff-mutants-shard,diff-mutants-aggregate,remote-check}.mjs`, `harness/ci/workflow-policy/{check.mjs,policy.json}`, `justfile`, `docs/harness.md`, `docs/workflow.md`
 
 ## 맥락
 
@@ -34,18 +34,30 @@ D-54 병합에서 `domain` 선택 변이 130건을 단일 `macos-15` 러너(`mac
 | Linux 계획·조각 실행의 선행 `test-diff`는 `test_diff::check_for_linux`를 사용한다: 전체 저장소 `.rs` 파일의 AST 변경 비교는 macOS와 동일하게 전부 수행하고, `cargo nextest list`만 `exclusions.json`의 macOS 전용 크레이트를 제외하며, `approval::apply_for_base`를 그대로 호출한다 | Linux에서 빌드할 수 없는 macOS 전용 크레이트 때문에 `nextest list`가 깨지지 않으면서도, macOS 전용 크레이트의 무단 테스트 수정은 AST 비교로 잡히고 H-62 승인 묶음·H-55 승인 행은 Linux와 macOS에서 동일하게 통과한다 | Linux에서 `test-diff`를 건너뛰기(무단 테스트 약화 뒤 변이 실행 위험) | H-62·H-63 완료 기준 |
 | 분할·요약·합산·정책 검증 로직을 `xtask`와 `harness/ci/diff-mutants-{plan,shard,aggregate}.mjs`에 두고 워크플로는 호출만 한다 | 워크플로 YAML/JSON에 로직을 넣지 않아 로컬 단위·부정 변형 테스트로 전 경로를 검증할 수 있다 | 워크플로 인라인 셸 스크립트로 합산 구현 | H-63 완료 기준 |
 
+## 추가 결정: 작업 브랜치 푸시에서 전체 CI 제외 (`master`·`merge/**` 한정)
+
+- **배경**: 작업 브랜치(`d-58`, `h-64`, `s-24` 등)를 푸시할 때마다 `ci.yml`의 전체 검사(Linux·macOS·변경분 변이)가 실행되어 GitHub Actions 실행기(특히 macOS 슬롯)를 차지하고, 실제 병합 판정에 쓰이는 병합 커밋(`merge/*`)의 검사가 30분 넘게 대기열에 밀리는 병목이 발생했다. 작업 브랜치 푸시의 `ci.yml` 결과는 병합 판정에 쓰이지 않으며, 판정은 `merge/*` 병합 커밋과 `master`에서만 수행한다.
+- **결정**:
+  1. `.github/workflows/ci.yml`의 `on.push.branches`를 `["**"]`에서 `["master", "merge/**"]`로 제한한다. 일반 작업 브랜치 푸시에서는 로컬 범위 검사(`just check-fast`)와 원격 서명 검사(`signatures.yml`, `on.push.branches: ["**"]` 유지)만 돌고, 전체 CI(`linux`, `macos` / `macos-branch`, `diff-mutants-plan`, `diff-mutants-linux`, `diff-mutants-macos`, `diff-mutants-verdict`)는 `master`와 `merge/**` 푸시에서만 실행한다.
+  2. `harness/ci/workflow-policy/policy.json`에 `ciPushBranches: ["master", "merge/**"]`와 `signaturesPushBranches: ["**"]`를 추가하고, `harness/ci/workflow-policy/check.mjs`의 `pushBranchFindings`로 `ci.yml`의 분기 확대(`**`, 추가 브랜치, `branches` 누락)·축소(`master` 또는 `merge/**` 누락, `merge/*` 오기)와 `signatures.yml`의 축소 모두 `event:push.branches`로 닫힌 실패하게 고정한다.
+  3. H-59 규칙(`ci.yml` 최상위 `concurrency`: `master`는 실행·재시도별 독립 그룹 및 취소 금지, 그 외 브랜치는 브랜치별 이전 실행 취소)은 `merge/**` 브랜치에서 그대로 유지한다(`h59-capacity.test.mjs`).
+  4. `remote-check.mjs`와 `merge-gate.mjs`는 `merge/*` 푸시의 `linux`, `macos-branch`, `diff-mutants-plan`, 실행된 조각, 건너뛴 플랫폼 항목, `diff-mutants-verdict`와 `signatures.yml`을 모두 요구하므로, `ci.yml` 실행이 없는 일반 작업 브랜치 SHA로는 병합 게이트가 닫힌 실패로 거부된다.
+  5. `docs/harness.md`와 `docs/workflow.md`에 "작업 브랜치는 로컬 범위 검사 + 서명 검사만, 전체 검사는 `merge/**`·`master` 병합 커밋에서" 원칙과 H-63 병렬 변이 파이프라인을 반영한다.
+- **버린 대안**: 모든 브랜치 푸시에서 `ci.yml`을 계속 돌리며 macOS 동시 실행 한도만 늘리기(계정 한도 제약으로 근본 해결 불가), 또는 `signatures.yml`까지 `merge/**`로 줄이기(작업 브랜치 푸시의 보호 경로 사후 탐지 약화).
+
 ## 기존 테스트 파일 기계적 갱신 내역 (AGENTS.md 5)
 
-새 CI 작업 구조(`diff-mutants-plan`·`diff-mutants-linux`·`diff-mutants-macos`·`diff-mutants-verdict`)와 공통 `macos-mutants-slot-{0,1}` 그룹을 반영하기 위해 아래 6개 기존 테스트 파일을 기계적으로 갱신했다(기존 단언 약화·삭제 없음; 최종 `master` 반영은 사용자 서명 커밋으로 진행한다).
+새 CI 작업 구조(`diff-mutants-plan`·`diff-mutants-linux`·`diff-mutants-macos`·`diff-mutants-verdict`), 공통 `macos-mutants-slot-{0,1}` 그룹, 그리고 `ci.yml` 푸시 트리거(`master`·`merge/**`)를 반영하기 위해 아래 7개 기존 테스트 파일을 기계적으로 갱신했다(기존 단언 약화·삭제 없음; 최종 `master` 반영은 사용자 서명 커밋 또는 잠금 시점 이전 메인 병합 절차로 진행한다).
 
 | 파일 | 변경 요약 |
 |---|---|
 | `harness/ci/tests/workflow-policy.test.mjs` | `jobPermissions` 기대에 `.github/workflows/ci.yml#diff-mutants-verdict` 추가 |
-| `harness/ci/tests/h52-ci-contract.test.mjs` | `macos-branch` 120분 유지 및 `diff-mutants-{plan,linux,macos,verdict}` 계약 단언으로 갱신 |
+| `harness/ci/tests/h52-ci-contract.test.mjs` | `ci.yml` 푸시 브랜치 `["master", "merge/**"]`·`signatures.yml` `["**"]`, `macos-branch` 120분 유지 및 `diff-mutants-{plan,linux,macos,verdict}` 계약 단언으로 갱신 |
 | `harness/ci/tests/h52-remote-check.test.mjs` | `ci.yml` 필수 작업·단계 목록과 변이 조각 타임아웃 분류 픽스처를 새 작업 구조에 맞춤 |
 | `harness/ci/tests/h52-review2.test.mjs` | `ci.yml` 필수 작업 픽스처에 `diff-mutants-plan`·`diff-mutants-verdict` 추가 |
 | `harness/ci/tests/h52-review3.test.mjs` | 필수 단계 누락 테스트 픽스처에 `diff-mutants-plan`·`diff-mutants-verdict` 추가 |
 | `harness/ci/tests/h59-capacity.test.mjs` | `mutationSlotConcurrency.group` 기대 문자열을 공통 `macos-mutants-slot-{0,1}`로 갱신 |
+| `harness/ci/tests/ci-plumbing.test.mjs` | `ci.on.push.branches` 기대를 `["master", "merge/**"]`로, `signatures.on.push.branches` 기대를 `["**"]`로 분리 명시 |
 
 ## 보류 결정과 선택지
 
@@ -55,8 +67,6 @@ D-54 병합에서 `domain` 선택 변이 130건을 단일 `macos-15` 러너(`mac
    - `diff-mutants-aggregate.mjs`와 `remote-check.mjs`는 기존 H-52 계약과 동일하게 모든 작업의 `run_attempt` 일치를 요구한다. 조각 타임아웃·미배정 재시도 시 부분 재실행(Re-run failed jobs)이 아닌 **전체 재실행(Re-run all jobs)**을 사용한다.
 3. **구 `harness/ci/diff-mutants.mjs`·`diff-mutants-verdict.mjs` 정리 시점**:
    - 현재 기존 H-54 테스트(`h54-diff-mutants.test.mjs`)를 깨지 않도록 두 스크립트를 보존했다. H-63 병합 뒤 원격 안정화가 확인되면 후속 정리 작업에서 폐기 여부를 결정한다.
-4. **보호 문서(`docs/harness.md`, `docs/workflow.md`) 동기화**:
-   - `docs/harness.md`(61·69·510행)와 `docs/workflow.md`(180행)는 보호 문서이므로 본 브랜치에서 직접 수정하지 않고 메인 서명 커밋으로 후속 동기화한다.
 
 ## 결과
 
