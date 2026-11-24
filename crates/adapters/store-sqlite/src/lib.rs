@@ -243,3 +243,6 @@ mod briefing_tests;
 
 #[cfg(test)]
 mod signal_store_boundary_tests;
+
+#[cfg(test)]
+mod close_evidence_tests;
