@@ -450,4 +450,22 @@ mod order_gate;
 pub use order_gate::{
     OrderGateCollectedFacts, OrderGateError, OrderGateOutcome, OrderGatePolicyContext,
     ValidateOrderProposal,
+
+mod chat_types;
+pub use chat_types::{
+    BackgroundPreemption, ChatCard, ChatCardId, ChatCardKind, ChatChunk, ChatExecutionMode,
+    ChatFailureReason, ChatQueueAcquisition, ChatRunLedgerEntry, ChatRunModelSpec, ChatRunProfile,
+    ChatRunTiming, ChatScreenContext, ChatSequence, ChatSessionId, ChatSessionRecord,
+    ChatSessionSummary, ChatSignalState, ChatSinkClosed, ChatSource, ChatSourceKind, ChatTurnId,
+    ChatTurnIdentity, ChatTurnMetrics, ChatTurnStatus, ChatTurnSummary, StoredAssistantAttachments,
+    StoredAssistantReply, StoredChatContent, StoredChatEntry,
+};
+
+mod chat_ports;
+pub use chat_ports::{ChatChunkSink, ChatQueuePort, ChatRepository, ChatRunLedger, ChatStopSignal};
+
+mod send_chat_message;
+pub use send_chat_message::{
+    AnalysisToolAllowance, ChatModelConfig, SendChatMessage, SendChatOutcome, SendChatRequest,
+    build_chat_prompt, check_analysis_tool,
 };
