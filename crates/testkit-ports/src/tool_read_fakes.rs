@@ -443,7 +443,7 @@ impl ArticleToolPort for FixedArticleToolPort {
 #[derive(Debug)]
 pub struct FixedThesisToolPort {
     targets: Vec<(Symbol, InstrumentId)>,
-    evidence: Vec<(CollectedItemHandle, EvidenceRef)>,
+    evidence: Vec<(InstrumentId, CollectedItemHandle, EvidenceRef)>,
     metadata: ThesisRunMetadata,
 }
 
@@ -451,7 +451,7 @@ impl FixedThesisToolPort {
     #[must_use]
     pub const fn new(
         targets: Vec<(Symbol, InstrumentId)>,
-        evidence: Vec<(CollectedItemHandle, EvidenceRef)>,
+        evidence: Vec<(InstrumentId, CollectedItemHandle, EvidenceRef)>,
         metadata: ThesisRunMetadata,
     ) -> Self {
         Self {
@@ -478,13 +478,15 @@ impl ThesisToolPort for FixedThesisToolPort {
 
     fn collected_evidence(
         &self,
+        _run: &AiRunId,
+        instrument: &InstrumentId,
         handle: &CollectedItemHandle,
     ) -> impl Future<Output = Result<Option<EvidenceRef>, SystemPortError>> + Send {
         let found = self
             .evidence
             .iter()
-            .find(|(known, _evidence)| known == handle)
-            .map(|(_known, evidence)| evidence.clone());
+            .find(|(owner, known, _evidence)| owner == instrument && known == handle)
+            .map(|(_owner, _known, evidence)| evidence.clone());
         ready(Ok(found))
     }
 

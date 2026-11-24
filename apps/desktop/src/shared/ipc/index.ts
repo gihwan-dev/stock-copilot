@@ -1,6 +1,7 @@
 export type { IpcFailure } from "./call";
 export {
   appVersion,
+  getBriefings,
   getSettings,
   listenUiEvent,
   openExternal,
@@ -61,6 +62,11 @@ export type {
   SectorCap,
 } from "./risk-editor";
 export type {
+  BriefingFailure,
+  BriefingKind,
+  BriefingOutcome,
+  BriefingSourceKind,
+  BriefingSourceView,
   BriefingSummary,
   BriefingsView,
   InstrumentCandle,

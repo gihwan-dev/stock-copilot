@@ -2,15 +2,21 @@
 mod tests {
     use std::sync::Arc;
 
-    use application::{AiRunId, CollectedItemHandle, ThesisRunMetadata, ToolName};
+    use application::{
+        AiRunId, CollectedItemHandle, ThesisRunMetadata, ToolCallLedger, ToolCallOutcome,
+        ToolCallRecord, ToolCallRecordInput, ToolName, ToolPayloadJson, ToolProtocolVersion,
+        ToolRequestId,
+    };
     use domain::{
-        EvidenceRef, EvidenceUrl, InstrumentId, NewsSource, NormalizedUrl, Symbol, UntrustedText,
+        EvidenceRef, EvidenceUrl, InstrumentId, Nanosecond, NewsSource, NormalizedUrl,
+        OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText,
     };
     use mcp_server::{
         ToolErrorCode, ToolInvocation, ToolRegistry, register_thesis_tools,
         validate_arguments_against_schema,
     };
     use serde_json::{Map, Value, json};
+    use testkit_ports::system_fakes::MemoryToolCallLedger;
     use testkit_ports::tool_read_fakes::{FixedThesisToolPort, LatestThesisRepository};
 
     fn runtime() -> tokio::runtime::Runtime {
@@ -20,11 +26,20 @@ mod tests {
             .expect("테스트 런타임")
     }
 
+    fn at(seconds: i64) -> Timestamp {
+        Timestamp::from_parts(
+            UnixSeconds::new(seconds),
+            Nanosecond::new(0_u32),
+            OffsetSeconds::new(0_i32),
+        )
+        .expect("시각")
+    }
+
     fn text(raw: &str) -> UntrustedText {
         UntrustedText::try_new(raw).expect("글")
     }
 
-    fn registry() -> ToolRegistry {
+    async fn registry() -> ToolRegistry {
         let news = EvidenceRef::News(
             NewsSource::Hankyung,
             EvidenceUrl::try_new(
@@ -37,15 +52,39 @@ mod tests {
                 Symbol::try_new("005930").expect("종목"),
                 InstrumentId::try_new("KR7005930003").expect("종목 ID"),
             )],
-            vec![(CollectedItemHandle::try_new("news-1").expect("핸들"), news)],
+            vec![
+                (
+                    InstrumentId::try_new("KR7005930003").expect("종목 ID"),
+                    CollectedItemHandle::try_new("news-1").expect("핸들"),
+                    news.clone(),
+                ),
+                (
+                    InstrumentId::try_new("KR7000660001").expect("다른 종목 ID"),
+                    CollectedItemHandle::try_new("news-other-stock").expect("핸들"),
+                    news,
+                ),
+            ],
             ThesisRunMetadata {
                 model: text("model-x"),
                 prompt_version: text("p1"),
             },
         ));
         let repository = Arc::new(LatestThesisRepository::default());
+        let history = Arc::new(MemoryToolCallLedger::recording());
+        let record = ToolCallRecord::new(ToolCallRecordInput {
+            run_id: AiRunId::try_new("run-j02").expect("실행"),
+            request_id: ToolRequestId::try_new("q1").expect("요청"),
+            tool_name: ToolName::try_new("get_quote").expect("도구"),
+            arguments_json: ToolPayloadJson::try_new("{}").expect("인자"),
+            result_json: ToolPayloadJson::try_new("{}").expect("결과"),
+            outcome: ToolCallOutcome::Succeeded,
+            started_at: at(1_764_000_000_i64),
+            finished_at: at(1_764_000_000_i64),
+            protocol_version: ToolProtocolVersion::try_new("2026-07-28").expect("버전"),
+        });
+        history.record_call(&record).await.expect("원장");
         let mut registry = ToolRegistry::new();
-        register_thesis_tools(&mut registry, &port, &repository).expect("등록");
+        register_thesis_tools(&mut registry, &port, &repository, &history).expect("등록");
         registry
     }
 
@@ -86,7 +125,7 @@ mod tests {
     #[test]
     fn web_only_change_waits_for_review_and_collected_evidence_applies() {
         runtime().block_on(async {
-            let registry = registry();
+            let registry = registry().await;
             let empty = call(&registry, "get_thesis", json!({ "symbol": "005930" }))
                 .await
                 .expect("빈 노트");
@@ -123,7 +162,7 @@ mod tests {
                     "base_version": 1_u64,
                     "changes": [add_claim("c2", &json!([
                         { "kind": "collected", "value": "news-1" },
-                        { "kind": "tool", "value": "tool:get_quote" }
+                        { "kind": "tool", "value": "tool:q1" }
                     ]))]
                 }),
             )
@@ -143,6 +182,48 @@ mod tests {
         });
     }
 
+    fn refused_cases(change: &Value) -> Vec<(Value, &'static str)> {
+        vec![
+            (
+                json!({ "symbol": "005930", "base_version": 0_u64, "changes": [add_claim("c9", &json!([{ "kind": "collected", "value": "news-1" }]))] }),
+                "낡은 버전",
+            ),
+            (
+                json!({ "symbol": "000660", "base_version": 0_u64, "changes": [change] }),
+                "앱이 모르는 종목",
+            ),
+            (
+                json!({ "symbol": "005930", "base_version": 1_u64, "changes": [add_claim("c3", &json!([{ "kind": "collected", "value": "news-unknown" }]))] }),
+                "수집 목록 밖 핸들",
+            ),
+            (
+                json!({ "symbol": "005930", "base_version": 1_u64, "changes": [add_claim("c4", &json!([{ "kind": "news", "value": "https://www.hankyung.com/a" }]))] }),
+                "AI가 지정한 출처 종류",
+            ),
+            (
+                json!({ "symbol": "005930", "base_version": 1_u64, "changes": [add_claim("c5", &json!([]))] }),
+                "근거 없음",
+            ),
+            (
+                json!({ "symbol": "005930", "base_version": 1_u64, "changes": [add_claim("c7", &json!([
+                { "kind": "collected", "value": "news-other-stock" },
+                { "kind": "web", "value": "https://blog.example/rumor" }
+            ]))] }),
+                "다른 종목으로 수집한 핸들",
+            ),
+            (
+                json!({ "symbol": "005930", "base_version": 1_u64, "changes": [add_claim("c8", &json!([
+                { "kind": "tool", "value": "tool:never_called" }
+            ]))] }),
+                "원장에 없는 도구 근거",
+            ),
+            (
+                json!({ "symbol": "005930", "get_thesis": true }),
+                "알 수 없는 인자",
+            ),
+        ]
+    }
+
     fn tool_for(label: &str) -> &'static str {
         if label == "알 수 없는 인자" {
             "get_thesis"
@@ -154,7 +235,7 @@ mod tests {
     #[test]
     fn stale_versions_unknown_targets_and_forged_sources_are_refused() {
         runtime().block_on(async {
-            let registry = registry();
+            let registry = registry().await;
             let change = add_claim("c1", &json!([{ "kind": "collected", "value": "news-1" }]));
             call(
                 &registry,
@@ -163,39 +244,22 @@ mod tests {
             )
             .await
             .expect("첫 변경");
-            for (args, label) in [
-                (
-                    json!({ "symbol": "005930", "base_version": 0_u64, "changes": [add_claim("c9", &json!([{ "kind": "collected", "value": "news-1" }]))] }),
-                    "낡은 버전",
-                ),
-                (
-                    json!({ "symbol": "000660", "base_version": 0_u64, "changes": [change.clone()] }),
-                    "앱이 모르는 종목",
-                ),
-                (
-                    json!({ "symbol": "005930", "base_version": 1_u64, "changes": [add_claim("c3", &json!([{ "kind": "collected", "value": "news-unknown" }]))] }),
-                    "수집 목록 밖 핸들",
-                ),
-                (
-                    json!({ "symbol": "005930", "base_version": 1_u64, "changes": [add_claim("c4", &json!([{ "kind": "news", "value": "https://www.hankyung.com/a" }]))] }),
-                    "AI가 지정한 출처 종류",
-                ),
-                (
-                    json!({ "symbol": "005930", "base_version": 1_u64, "changes": [add_claim("c5", &json!([]))] }),
-                    "근거 없음",
-                ),
-                (
-                    json!({ "symbol": "005930", "get_thesis": true }),
-                    "알 수 없는 인자",
-                ),
-            ] {
+            for (args, label) in refused_cases(&change) {
                 assert_eq!(
                     call(&registry, tool_for(label), args).await,
                     Err(ToolErrorCode::InvalidInput),
                     "{label}"
                 );
             }
-            let mut with_source = add_claim("c6", &json!([{ "kind": "web", "value": "https://x.example/a" }]));
+            let after = call(&registry, "get_thesis", json!({ "symbol": "005930" }))
+                .await
+                .expect("조회");
+            assert_eq!(after["version"], json!(1_u64), "거부 뒤 버전이 그대로다");
+            assert_eq!(after["claims"].as_array().map(Vec::len), Some(1_usize));
+            let mut with_source = add_claim(
+                "c6",
+                &json!([{ "kind": "web", "value": "https://x.example/a" }]),
+            );
             with_source
                 .as_object_mut()
                 .expect("객체")

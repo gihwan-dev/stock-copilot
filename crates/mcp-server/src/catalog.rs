@@ -38,7 +38,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct AnalysisCatalogPorts<P, M, N, W, A, T, R, E> {
+pub struct AnalysisCatalogPorts<P, M, N, W, A, T, R, H, E> {
     pub portfolio: Arc<P>,
     pub market: Arc<M>,
     pub news: Arc<N>,
@@ -46,11 +46,12 @@ pub struct AnalysisCatalogPorts<P, M, N, W, A, T, R, E> {
     pub article: Arc<A>,
     pub thesis: Arc<T>,
     pub thesis_repository: Arc<R>,
+    pub tool_history: Arc<H>,
     pub estimates: E,
 }
 
-pub fn build_analysis_catalog<P, M, N, W, A, T, R, E, C>(
-    ports: &AnalysisCatalogPorts<P, M, N, W, A, T, R, E>,
+pub fn build_analysis_catalog<P, M, N, W, A, T, R, H, E, C>(
+    ports: &AnalysisCatalogPorts<P, M, N, W, A, T, R, H, E>,
     clock: &Arc<C>,
     cursors: &Arc<CursorStore<C>>,
 ) -> Result<ToolRegistry, ToolRegistryError>
@@ -62,6 +63,7 @@ where
     A: ArticleToolPort + 'static,
     T: ThesisToolPort + 'static,
     R: ThesisRepository + 'static,
+    H: application::ToolCallHistory + 'static,
     E: CatalogSection,
     C: Clock + 'static,
 {
@@ -71,7 +73,12 @@ where
     news::register_news_tools(&mut registry, &ports.news, cursors)?;
     research::register_web_research_tool(&mut registry, &ports.research, clock)?;
     article::register_read_article_tool(&mut registry, &ports.article)?;
-    thesis::register_thesis_tools(&mut registry, &ports.thesis, &ports.thesis_repository)?;
+    thesis::register_thesis_tools(
+        &mut registry,
+        &ports.thesis,
+        &ports.thesis_repository,
+        &ports.tool_history,
+    )?;
     ports.estimates.register_into(&mut registry)?;
     Ok(registry)
 }

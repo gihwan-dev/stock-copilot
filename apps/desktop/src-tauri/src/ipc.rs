@@ -1,4 +1,5 @@
 pub mod app_version;
+pub mod briefing;
 pub mod chat;
 pub mod chat_dto;
 pub mod chat_hub;

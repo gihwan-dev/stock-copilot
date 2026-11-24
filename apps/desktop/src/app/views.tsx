@@ -2,12 +2,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "@tanstack/react-router";
 import { useState, type ReactElement } from "react";
 import { AboutSection } from "../features/about";
+import { BriefingCard, BriefingHistoryScreen } from "../features/briefing";
 import { ChatPanel } from "../features/chat";
 import { InstrumentDetail, InstrumentList } from "../features/instruments";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
 import { SettingsScreen } from "../features/settings";
 import { RiskEditors } from "../features/settings-risk";
+import { ScorecardPanel } from "../features/scorecard";
 import { SignalCards } from "../features/signal";
 import { StatusScreen } from "../features/status";
 import { TransactionsScreen } from "../features/transactions";
@@ -93,7 +95,14 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
     case "ready":
       return (
         <Stack gap="space-6">
+          <BriefingCard
+            load={sources.briefings}
+            onOpenHistory={(): void => {
+              go("/briefings");
+            }}
+          />
           <SignalCards sources={sources} />
+          <ScorecardPanel load={sources.scorecard} />
           <PortfolioOverview
             sources={sources}
             onOpenTransactions={(): void => {
@@ -127,6 +136,19 @@ export const HomeView = (): ReactElement => {
     >
       <HomeBody retry={retry} />
     </Page>
+  );
+};
+
+export const BriefingsRouteView = (): ReactElement => {
+  const go = useNavigate();
+  const sources = useSources();
+  return (
+    <BriefingHistoryScreen
+      load={sources.briefings}
+      onBack={(): void => {
+        go("/");
+      }}
+    />
   );
 };
 
