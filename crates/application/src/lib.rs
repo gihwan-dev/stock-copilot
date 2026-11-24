@@ -404,6 +404,12 @@ pub use analysis_tools::{
     ScorecardSelection, ScorecardView,
 };
 
+mod estimate_cycle;
+pub use estimate_cycle::{
+    BackgroundBudget, CycleAdmission, CycleProgress, EstimateCycleReport, RunEstimateCycle,
+    SingleEstimateOutcome, SingleEstimateRunner,
+};
+
 mod prompt_file;
 pub use prompt_file::{PromptFile, PromptFileError};
 
