@@ -16,7 +16,6 @@ mod tests {
     use std::os::fd::AsRawFd;
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
-    use std::process::{Command, Stdio};
     use std::sync::atomic::{AtomicU64, Ordering};
     use testkit::fake_ai_cli::{
         EnvObservation, EnvPresence, FakeAiMode, FakeAiScenario, NonessentialTrafficFlag,
@@ -581,27 +580,47 @@ mod tests {
     }
 
     #[test]
-    fn parent_opened_file_descriptor_is_not_inherited_by_child() {
-        let dir = TempDirGuard::new("fd-cloexec");
-        let mut held_files = Vec::new();
-        for idx in 0_usize..16_usize {
-            let file_path = dir.path().join(format!("probe-{idx}.txt"));
-            fs::write(&file_path, "secret-fd-content").expect("write probe");
-            held_files.push(File::open(&file_path).expect("open probe"));
-        }
-        let probe_fd = held_files.last().expect("last file").as_raw_fd();
-        let check_script = format!("(: <&{probe_fd}) 2>/dev/null");
-        let status = Command::new("/bin/sh")
-            .env_clear()
-            .args(["-c", &check_script])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .expect("spawn sh");
-        assert!(
-            !status.success(),
-            "parent file descriptor {probe_fd} must not be inherited by child process"
-        );
+    fn parent_opened_file_descriptor_is_not_inherited_through_provider_spawn() {
+        run_async(async {
+            let dir = TempDirGuard::new("fd-cloexec");
+            let mut held_files = Vec::new();
+            for idx in 0_usize..16_usize {
+                let file_path = dir.path().join(format!("probe-{idx}.txt"));
+                fs::write(&file_path, "secret-fd-content").expect("write probe");
+                held_files.push(File::open(&file_path).expect("open probe"));
+            }
+            let probe_fd = held_files.last().expect("last file").as_raw_fd();
+            let script_path = dir.path().join("fake-fd-check");
+            let init = collection_init_line();
+            let script = format!(
+                "#!/bin/sh\nif (: <&{probe_fd}) 2>/dev/null; then exit 42; fi\nprintf '%s\\n' '{init}'\n"
+            );
+            fs::write(&script_path, script).expect("write script");
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o700_u32))
+                .expect("chmod script");
+            let provider =
+                ClaudeCodeProvider::new(base_config(script_path, dir.path().join("work-fd")));
+            let mut stream = provider
+                .run(RunSpec::new(
+                    AiRunId::try_new("fd-check-1").expect("id"),
+                    RunInput::Collection(CollectionQuery::CodeTopics {
+                        instruments: vec![Symbol::try_new("005930").expect("sym")],
+                        topics: vec![CollectionTopic::CompanyNews],
+                    }),
+                    ModelSelection::Fast,
+                    ReasoningEffort::Default,
+                    RunPurpose::WebCollection,
+                ))
+                .await
+                .expect("run through adapter");
+            let mut events = Vec::new();
+            while let Some(ev) = stream.next().await.expect("fd check must succeed") {
+                events.push(ev);
+            }
+            assert!(
+                !events.is_empty(),
+                "adapter child exited cleanly because parent fd {probe_fd} was not inherited"
+            );
+        });
     }
 }

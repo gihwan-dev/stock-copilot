@@ -62,6 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let app = build_app(
         tauri::Builder::default().manage(ExternalLinkRuntime::new(
+        tauri::Builder::default().manage(src_tauri::ipc::open_external::ExternalLinkRuntime::new(
             Arc::new(Unavailable),
             Arc::new(Unavailable),
         )),
