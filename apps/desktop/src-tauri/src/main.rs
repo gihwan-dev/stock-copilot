@@ -1,8 +1,14 @@
+use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::platform::notifier::{
-    FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
+    AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationEventSubscriber,
+    NotificationPreferences, UnavailableNotificationDelivery,
 };
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
+use src_tauri::product_events::{
+    BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
+};
+use src_tauri::sqlite_ports::{SharedDatabase, SqliteRepositories};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
     database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
@@ -31,41 +37,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let clock = platform_macos::SystemClock::new()
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let shared_clock = Arc::new(clock);
-    let (events, scheduler_events) = product_event_bus();
-    let ports = Ports::<ProductPorts> {
-        broker_read: Arc::new(Unavailable),
-        market_info: Arc::new(Unavailable),
-        macro_series: Arc::new(Unavailable),
-        fundamentals: Arc::new(Unavailable),
-        ai_provider: Arc::new(Unavailable),
-        chat_repository: Arc::new(Unavailable),
-        chat_ledger: Arc::new(Unavailable),
-        chat_queue: Arc::new(Unavailable),
-        warm_chat: Arc::new(Unavailable),
-        portfolios: Arc::new(Unavailable),
-        transactions: Arc::new(Unavailable),
-        market_data: Arc::new(Unavailable),
-        news: Arc::new(Unavailable),
-        theses: Arc::new(Unavailable),
-        estimates: Arc::new(Unavailable),
-        signals: Arc::new(Unavailable),
-        proposals: Arc::new(Unavailable),
-        valuations: Arc::new(Unavailable),
-        settings: Arc::new(Unavailable),
-        audit: Arc::new(Unavailable),
-        secrets: Arc::new(Unavailable),
-        notifier: Arc::new(FilteredNotifier::new(
-            UnavailableNotificationDelivery,
-            NotificationPreferences::default(),
-        )),
-        news_feeds: Vec::new(),
+    let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
+    let notifier = Arc::new(FilteredNotifier::new(
+        UnavailableNotificationDelivery,
+        NotificationPreferences::default(),
+    ));
+    let ui_events = Arc::new(UiEventSlot::<tauri::Wry>::default());
+    let (events, scheduler_events) = product_event_bus(ProductSubscribers {
+        notifier: Arc::clone(&notifier),
+        audit: Arc::clone(&repositories),
         clock: Arc::clone(&shared_clock),
-        presence: Arc::new(platform_macos::MacOsRiskDialogPresence::unavailable()),
-        events,
-        saved_accounts: Vec::new(),
-        database: Arc::new(database_factory(shared_clock)),
-    };
-    let app = build_app(product_builder(scheduler_events), ports, context)?;
+        ui_events: Arc::clone(&ui_events),
+    });
+    let ports = product_ports(&repositories, notifier, &shared_clock, events);
+    let app = build_app(
+        product_builder(scheduler_events, repositories.shared().clone(), ui_events),
+        ports,
+        context,
+    )?;
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
             .app_data_dir()?
@@ -83,8 +72,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+fn product_ports(
+    repositories: &Arc<SqliteRepositories>,
+    notifier: Arc<ProductNotifier>,
+    shared_clock: &Arc<platform_macos::SystemClock>,
+    events: application::EventBus,
+) -> Ports<ProductPorts> {
+    Ports::<ProductPorts> {
+        broker_read: Arc::new(Unavailable),
+        market_info: Arc::new(Unavailable),
+        macro_series: Arc::new(Unavailable),
+        fundamentals: Arc::new(Unavailable),
+        ai_provider: Arc::new(Unavailable),
+        chat_repository: Arc::clone(repositories),
+        chat_ledger: Arc::clone(repositories),
+        chat_queue: Arc::new(Unavailable),
+        warm_chat: Arc::new(Unavailable),
+        portfolios: Arc::new(Unavailable),
+        transactions: Arc::clone(repositories),
+        market_data: Arc::clone(repositories),
+        news: Arc::clone(repositories),
+        theses: Arc::clone(repositories),
+        estimates: Arc::clone(repositories),
+        signals: Arc::clone(repositories),
+        proposals: Arc::clone(repositories),
+        valuations: Arc::clone(repositories),
+        settings: Arc::clone(repositories),
+        audit: Arc::clone(repositories),
+        secrets: Arc::new(Unavailable),
+        notifier,
+        news_feeds: Vec::new(),
+        clock: Arc::clone(shared_clock),
+        presence: Arc::new(platform_macos::MacOsRiskDialogPresence::unavailable()),
+        events,
+        saved_accounts: Vec::new(),
+        database: Arc::new(database_factory(Arc::clone(shared_clock))),
+    }
+}
+
 fn product_builder(
     scheduler_events: Arc<scheduler::SchedulerEventBridge>,
+    shared_database: SharedDatabase,
+    ui_events: Arc<UiEventSlot<tauri::Wry>>,
 ) -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .manage(ExternalLinkRuntime::new(
@@ -92,14 +121,46 @@ fn product_builder(
             Arc::new(Unavailable),
         ))
         .manage(scheduler_events)
+        .manage(shared_database)
+        .manage(ui_events)
 }
 
-fn product_event_bus() -> (application::EventBus, Arc<scheduler::SchedulerEventBridge>) {
+type ProductNotifier = FilteredNotifier<UnavailableNotificationDelivery>;
+
+struct ProductSubscribers {
+    notifier: Arc<ProductNotifier>,
+    audit: Arc<SqliteRepositories>,
+    clock: Arc<platform_macos::SystemClock>,
+    ui_events: Arc<UiEventSlot<tauri::Wry>>,
+}
+
+fn product_event_bus(
+    subscribers: ProductSubscribers,
+) -> (application::EventBus, Arc<scheduler::SchedulerEventBridge>) {
     let bridge = Arc::new(scheduler::SchedulerEventBridge::new());
     let mut builder = application::EventBusBuilder::default();
     builder.subscribe(
         scheduler::SchedulerEventBridge::subscribed_kinds(),
         scheduler::BridgedSchedulerEvents(Arc::clone(&bridge)),
+    );
+    builder.subscribe(ui_event_kinds(), BridgedUiEvents(subscribers.ui_events));
+    builder.subscribe(
+        NotificationEventSubscriber::<
+            AsyncRuntimeNotificationDispatch<ProductNotifier>,
+            RecordedTriggerUrgency,
+        >::subscribed_kinds(),
+        NotificationEventSubscriber::new(
+            AsyncRuntimeNotificationDispatch::new(subscribers.notifier),
+            RecordedTriggerUrgency,
+        ),
+    );
+    let clock: Arc<dyn application::Clock> = subscribers.clock;
+    builder.subscribe(
+        application::AuditEventRecorder::<FlushingAuditSink<SqliteRepositories>>::kinds(),
+        application::AuditEventRecorder::new(
+            clock,
+            FlushingAuditSink::new(AuditEventQueue::default(), subscribers.audit),
+        ),
     );
     (builder.build(), bridge)
 }
