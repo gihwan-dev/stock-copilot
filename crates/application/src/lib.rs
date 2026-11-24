@@ -385,6 +385,11 @@ pub use market_tool_reads::{
     OverviewUnit, QuoteToolView, RankingToolKind, RankingToolLine, RankingsToolView,
     SectorToolLine, SectorsToolView, SessionStatus, SessionToolLine, ValueProvenance,
 };
+mod news_tool_reads;
+pub use news_tool_reads::{
+    CollectedItemHandle, CollectedItemQuery, DisclosureToolLine, LookbackDays, NewsKeyword,
+    NewsToolLine, NewsToolReads, ToolQueryTextError,
+};
 mod portfolio_tool_reads;
 pub use portfolio_tool_reads::{
     AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
