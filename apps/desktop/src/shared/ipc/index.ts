@@ -91,5 +91,22 @@ export {
   intervalMinutes,
   newsPerHourCounts,
 } from "./news-schema";
+export type {
+  ExcludedKind,
+  Horizon,
+  InvestmentProfile,
+  OrderSwitch,
+  OrderSwitchState,
+  RiskLevel,
+  SectorCapPercent,
+  StockCapPercent,
+} from "./profile-schema";
+export {
+  excludedKinds,
+  horizons,
+  riskLevels,
+  sectorCapPercents,
+  stockCapPercents,
+} from "./profile-schema";
 export type { SettingsClient, TossKeys } from "./settings-client";
 export { unavailableSettingsClient } from "./settings-client";
