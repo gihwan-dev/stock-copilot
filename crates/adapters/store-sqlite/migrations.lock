@@ -57,3 +57,8 @@ sha256 = "fdb81878e025fe5c41e89cc4e1c9841133b7331675e98de9f861b64865d67562"
 number = 12
 file = "0012_audit_log.sql"
 sha256 = "45c3fd10363fae257b80a0d24f82bab4b297ddf58ab697253975c3cf268c26c4"
+
+[[migration]]
+number = 13
+file = "0013_chat_and_run_ledgers.sql"
+sha256 = "dc1710434598326318541fc04ea42be7834b36873d69118c58735a7925b0151f"

@@ -184,3 +184,8 @@ mod audit;
 pub use audit::AuditStore;
 #[cfg(test)]
 mod audit_tests;
+
+mod chat;
+pub use chat::ChatStore;
+#[cfg(test)]
+mod chat_tests;

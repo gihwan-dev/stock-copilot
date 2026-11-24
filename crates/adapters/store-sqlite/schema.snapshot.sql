@@ -1,4 +1,6 @@
 CREATE UNIQUE INDEX audit_log_entry ON audit_log(at_payload, kind, payload);
+CREATE INDEX chat_entries_user_message ON chat_entries(session_id, user_message_id, position);
+CREATE INDEX chat_run_ledger_run ON chat_run_ledger(run_id);
 CREATE INDEX daily_valuation_snapshots_lookup ON daily_valuation_snapshots(account, as_of_seconds, as_of_nanos, id);
 CREATE INDEX estimate_calibrations_lookup ON estimate_calibrations(key_hash, position DESC);
 CREATE INDEX estimate_resolution_unavailable_task ON estimate_resolution_unavailable(task_id, id);
@@ -16,6 +18,7 @@ CREATE INDEX proposal_drafts_proposal ON proposal_drafts(proposal_id, id DESC);
 CREATE INDEX proposal_validation_reports_lookup ON proposal_validation_reports(proposal_id, id);
 CREATE INDEX signal_occurrences_instrument ON signal_occurrences(instrument_id, id);
 CREATE INDEX signal_occurrences_symbol ON signal_occurrences(market, symbol, id);
+CREATE INDEX tool_call_ledger_run ON tool_call_ledger(run_id, id);
 CREATE INDEX transaction_entries_account_id ON transaction_entries(account, id);
 CREATE TABLE audit_log (
     seq INTEGER PRIMARY KEY CHECK (seq >= 1),
@@ -24,6 +27,24 @@ CREATE TABLE audit_log (
     payload TEXT NOT NULL,
     prev_hash TEXT NOT NULL CHECK (length(prev_hash) = 64),
     hash TEXT NOT NULL UNIQUE CHECK (length(hash) = 64)
+) STRICT;
+CREATE TABLE chat_entries (
+    session_id TEXT NOT NULL REFERENCES chat_sessions(session_id),
+    position INTEGER NOT NULL CHECK (position >= 1),
+    user_message_id TEXT,
+    entry_payload TEXT NOT NULL,
+    PRIMARY KEY (session_id, position)
+) STRICT;
+CREATE TABLE chat_run_ledger (
+    id INTEGER PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    entry_payload TEXT NOT NULL UNIQUE
+) STRICT;
+CREATE TABLE chat_sessions (
+    session_id TEXT PRIMARY KEY,
+    created_payload TEXT NOT NULL,
+    updated_payload TEXT NOT NULL,
+    entry_count INTEGER NOT NULL CHECK (entry_count >= 0)
 ) STRICT;
 CREATE TABLE daily_valuation_days (
     id INTEGER PRIMARY KEY,
@@ -314,6 +335,18 @@ CREATE TABLE thesis_history (
 CREATE TABLE thesis_notes (
     instrument TEXT PRIMARY KEY
 ) STRICT;
+CREATE TABLE tool_call_ledger (
+    id INTEGER PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    request_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    arguments_json TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK (outcome IN ('succeeded', 'tool_error', 'rejected')),
+    started_payload TEXT NOT NULL,
+    finished_payload TEXT NOT NULL,
+    protocol_version TEXT NOT NULL
+) STRICT;
 CREATE TABLE transaction_entries (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL,
@@ -358,6 +391,13 @@ CREATE TABLE transaction_sources (
 CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER audit_log_seq BEFORE INSERT ON audit_log WHEN NEW.seq IS NOT (SELECT coalesce(max(seq), 0) + 1 FROM audit_log) BEGIN SELECT RAISE(ABORT, 'audit_log seq must be contiguous'); END;
+CREATE TRIGGER chat_entries_contiguous BEFORE INSERT ON chat_entries WHEN NEW.position IS NOT (SELECT coalesce(max(position), 0) + 1 FROM chat_entries WHERE session_id = NEW.session_id) BEGIN SELECT RAISE(ABORT, 'chat entry position must be contiguous'); END;
+CREATE TRIGGER chat_entries_no_delete BEFORE DELETE ON chat_entries BEGIN SELECT RAISE(ABORT, 'chat entries are append only'); END;
+CREATE TRIGGER chat_entries_no_update BEFORE UPDATE ON chat_entries BEGIN SELECT RAISE(ABORT, 'chat entries are append only'); END;
+CREATE TRIGGER chat_run_ledger_no_delete BEFORE DELETE ON chat_run_ledger BEGIN SELECT RAISE(ABORT, 'chat run ledger is append only'); END;
+CREATE TRIGGER chat_run_ledger_no_update BEFORE UPDATE ON chat_run_ledger BEGIN SELECT RAISE(ABORT, 'chat run ledger is append only'); END;
+CREATE TRIGGER chat_sessions_fixed_identity BEFORE UPDATE OF session_id, created_payload ON chat_sessions BEGIN SELECT RAISE(ABORT, 'chat session identity is fixed'); END;
+CREATE TRIGGER chat_sessions_no_delete BEFORE DELETE ON chat_sessions BEGIN SELECT RAISE(ABORT, 'chat sessions are kept'); END;
 CREATE TRIGGER daily_valuation_days_no_delete BEFORE DELETE ON daily_valuation_days BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;
 CREATE TRIGGER daily_valuation_days_no_replace BEFORE INSERT ON daily_valuation_days WHEN EXISTS (SELECT 1 FROM daily_valuation_days WHERE account = NEW.account AND day_year = NEW.day_year AND day_month = NEW.day_month AND day_number = NEW.day_number) BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;
 CREATE TRIGGER daily_valuation_days_no_update BEFORE UPDATE ON daily_valuation_days BEGIN SELECT RAISE(ABORT, 'daily valuation days are append only'); END;
@@ -410,3 +450,5 @@ CREATE TRIGGER signal_occurrences_no_update BEFORE UPDATE ON signal_occurrences 
 CREATE TRIGGER thesis_history_no_delete BEFORE DELETE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
 CREATE TRIGGER thesis_history_no_replace BEFORE INSERT ON thesis_history WHEN EXISTS (SELECT 1 FROM thesis_history WHERE instrument = NEW.instrument AND sequence = NEW.sequence) BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
 CREATE TRIGGER thesis_history_no_update BEFORE UPDATE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
+CREATE TRIGGER tool_call_ledger_no_delete BEFORE DELETE ON tool_call_ledger BEGIN SELECT RAISE(ABORT, 'tool call ledger is append only'); END;
+CREATE TRIGGER tool_call_ledger_no_update BEFORE UPDATE ON tool_call_ledger BEGIN SELECT RAISE(ABORT, 'tool call ledger is append only'); END;

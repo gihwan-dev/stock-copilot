@@ -10,3 +10,6 @@
 | S-08 | `AuditStore`가 `AuditLog`를 구현한다. 마이그레이션 `0012_audit_log.sql`(STRICT, 수정·삭제 금지 트리거, 연속 순번 트리거), 해시는 `SHA-256(길이 접두 seq·시각·종류·페이로드·이전 해시)`, 첫 행의 이전 해시는 0 64개. 같은 (시각, 종류, 페이로드)를 다시 넣으면 `AlreadyRecorded` | 순번만으로 중복 허용 |
 | S-08 | 연결 단위 authorizer(쓰기·읽기 연결 모두, 마이그레이션 뒤에도 다시 설치)가 `audit_log`의 UPDATE·DELETE·DROP·ALTER와 트리거·색인·테이블 생성을 거부하고, rusqlite가 모르는 동작도 거부한다 | 마이그레이션 실행기만 authorizer를 씀 |
 | S-08 | `SQLITE_DBCONFIG_DEFENSIVE`는 켜지 않았다. 기존 테스트 `instrument_mapping_tests::open_rejects_writable_schema_disguised_triggers`가 쓰기 연결에서 `writable_schema` 주입을 전제로 하므로, 켜려면 그 테스트의 주입 경로를 원시 연결로 옮기는 사용자 서명 변경이 필요하다. 그동안 `writable_schema`로 고친 감사 트리거와 지운 감사 트리거는 다시 열 때 스키마 검증이 거부한다(테스트로 확인) | 기존 테스트를 고치고 DEFENSIVE를 켬 |
+| S-09 | `ChatStore` 하나가 `ChatRepository`·`ChatRunLedger`·`ToolCallLedger`를 구현한다(마이그레이션 `0013_chat_and_run_ledgers.sql`). 대화 항목·실행 원장·MCP 호출 원장은 수정·삭제 금지 트리거, 대화 항목은 세션별 연속 위치 트리거. 세션 목록은 세션 ID 순(가짜의 `BTreeMap`과 같게) | 세션·원장마다 별도 저장소 타입 |
+| S-09 | 실행 원장은 같은 항목 전체를 다시 넣으면 `AlreadyRecorded`(가짜와 같음), MCP 호출 원장은 가짜처럼 매번 새 행으로 추가한다. MCP 결과는 포트가 주는 JSON 그대로 저장하고 해시로 줄이지 않는다 | 결과 해시만 저장 |
+| S-09 | "AI 작업 원장"은 `application`에 채팅 실행 원장 밖의 포트가 없어 `ChatRunLedger`까지만 구현했다. 백그라운드 AI 작업 원장은 포트가 생기면 같은 마이그레이션 방식으로 더한다 | 포트 없이 테이블만 먼저 만듦 |
