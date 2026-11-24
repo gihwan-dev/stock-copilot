@@ -52,6 +52,10 @@
     ".github/workflows/nightly.yml#daily-plan": {
       "contents": "read",
       "actions": "read"
+    },
+    ".github/workflows/ci.yml#diff-mutants-verdict": {
+      "contents": "read",
+      "actions": "read"
     }
   },
   "conditions": [
@@ -68,7 +72,11 @@
     "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')",
     "github.event.schedule == '0 18 * * *'",
     "github.event.schedule == '0 18 * * *' && needs.changes.outputs.changed == 'yes'",
-    "failure() && github.event.schedule == '0 18 * * *'"
+    "failure() && github.event.schedule == '0 18 * * *'",
+    "github.event_name == 'push'",
+    "github.event_name == 'push' && needs.diff-mutants-plan.outputs.run_linux == 'yes'",
+    "github.event_name == 'push' && needs.diff-mutants-plan.outputs.run_macos == 'yes'",
+    "always() && github.event_name == 'push'"
   ],
   "commands": [
     "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'",
@@ -77,7 +85,6 @@
     "just base=\"$BASE\" check",
     "just base=HEAD check",
     "just linux-check",
-    "date +\"started=%s\" >> \"$GITHUB_OUTPUT\"",
     "lefthook install",
     "node base-tools/harness/ci/notify.mjs",
     "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\" --range-start \"$RANGE_START\" --base-kind \"$BASE_KIND\"",
@@ -95,9 +102,12 @@
     "just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
     "node harness/ci/mutation-range.mjs verify",
     "node harness/ci/visual.mjs",
-    "node harness/ci/diff-mutants.mjs",
-    "node harness/ci/diff-mutants-verdict.mjs",
-    "node harness/ci/branch-checkout.mjs"
+    "node harness/ci/branch-checkout.mjs",
+    "node harness/ci/diff-mutants-plan.mjs",
+    "node harness/ci/linux/offline.mjs just mutants-diff-platform-shard \"$MUTATION_BASE\" linux \"$MUTATION_SHARD\"",
+    "just mutants-diff-platform-shard \"$MUTATION_BASE\" macos \"$MUTATION_SHARD\"",
+    "node harness/ci/diff-mutants-shard.mjs summary",
+    "node harness/ci/diff-mutants-aggregate.mjs"
   ],
   "expressions": [
     "${{ github.event.before }}",
@@ -114,7 +124,6 @@
     "${{ steps.base.outputs.tools }}",
     "${{ steps.changed.outputs.changed }}",
     "${{ steps.range.outputs.base }}",
-    "${{ steps.job_clock.outputs.started }}",
     "${{ steps.mutation.outcome }}",
     "${{ matrix.shard }}",
     "${{ steps.plan.outputs.base }}",
@@ -123,7 +132,27 @@
     "${{ steps.plan.outputs.anchor }}",
     "${{ steps.plan.outcome }}",
     "${{ needs.daily-plan.outputs.base }}",
-    "${{ steps.mutation.outputs.status }}"
+    "${{ steps.plan.outputs.total }}",
+    "${{ steps.plan.outputs.linux_count }}",
+    "${{ steps.plan.outputs.macos_count }}",
+    "${{ steps.plan.outputs.linux_shards }}",
+    "${{ steps.plan.outputs.macos_shards }}",
+    "${{ steps.plan.outputs.run_linux }}",
+    "${{ steps.plan.outputs.run_macos }}",
+    "${{ needs.diff-mutants-plan.outputs.base }}",
+    "${{ needs.diff-mutants-plan.outputs.total }}",
+    "${{ needs.diff-mutants-plan.outputs.linux_count }}",
+    "${{ needs.diff-mutants-plan.outputs.macos_count }}",
+    "${{ needs.diff-mutants-plan.outputs.linux_shards }}",
+    "${{ needs.diff-mutants-plan.outputs.macos_shards }}",
+    "${{ needs.diff-mutants-plan.outputs.run_linux }}",
+    "${{ needs.diff-mutants-plan.outputs.run_macos }}",
+    "${{ needs.diff-mutants-plan.result }}",
+    "${{ needs.diff-mutants-linux.result }}",
+    "${{ needs.diff-mutants-macos.result }}",
+    "${{ github.run_id }}",
+    "${{ github.run_attempt }}",
+    "${{ github.repository }}"
   ],
   "envNames": [
     "BASE",
@@ -132,7 +161,6 @@
     "EVENT_NAME",
     "GH_TOKEN",
     "HEAD",
-    "JOB_STARTED_AT",
     "PR_BASE",
     "PR_HEAD",
     "RANGE_START",
@@ -144,7 +172,21 @@
     "MUTATION_SHARD",
     "MUTATION_BASE",
     "MUTATION_MODE",
-    "MUTATION_STATUS"
+    "MUTATION_PLATFORM",
+    "MUTATION_EXPECTED_COUNT",
+    "RUN_ID",
+    "RUN_ATTEMPT",
+    "REPOSITORY",
+    "PLAN_RESULT",
+    "LINUX_RESULT",
+    "MACOS_RESULT",
+    "MUTATION_TOTAL",
+    "LINUX_COUNT",
+    "MACOS_COUNT",
+    "LINUX_SHARDS",
+    "MACOS_SHARDS",
+    "RUN_LINUX",
+    "RUN_MACOS"
   ],
   "inputValues": {
     "fetch-depth": [0, 1],
@@ -180,7 +222,7 @@
       "name": "ci",
       "on": {
         "push": {
-          "branches": ["**"]
+          "branches": ["master", "merge/**"]
         },
         "pull_request": {
           "branches": ["master"]
@@ -260,11 +302,6 @@
           "timeout-minutes": 120,
           "steps": [
             {
-              "name": "job clock",
-              "id": "job_clock",
-              "run": "date +\"started=%s\" >> \"$GITHUB_OUTPUT\""
-            },
-            {
               "name": "checkout",
               "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
               "with": {
@@ -329,38 +366,6 @@
               "env": {
                 "BASE": "${{ steps.range.outputs.base }}"
               }
-            },
-            {
-              "name": "diff mutants",
-              "id": "mutation",
-              "run": "node harness/ci/diff-mutants.mjs",
-              "env": {
-                "BASE": "${{ steps.range.outputs.base }}",
-                "JOB_STARTED_AT": "${{ steps.job_clock.outputs.started }}"
-              }
-            },
-            {
-              "name": "diff mutants timeout",
-              "if": "steps.mutation.outputs.status == 'deadline'",
-              "run": "node harness/ci/diff-mutants-verdict.mjs",
-              "env": {
-                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
-              }
-            },
-            {
-              "name": "diff mutants budget",
-              "if": "steps.mutation.outputs.status == 'budget'",
-              "run": "node harness/ci/diff-mutants-verdict.mjs",
-              "env": {
-                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
-              }
-            },
-            {
-              "name": "diff mutants verdict",
-              "run": "node harness/ci/diff-mutants-verdict.mjs",
-              "env": {
-                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
-              }
             }
           ]
         },
@@ -369,11 +374,6 @@
           "runs-on": "macos-15",
           "timeout-minutes": 120,
           "steps": [
-            {
-              "name": "job clock",
-              "id": "job_clock",
-              "run": "date +\"started=%s\" >> \"$GITHUB_OUTPUT\""
-            },
             {
               "name": "checkout",
               "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
@@ -443,43 +443,297 @@
               "env": {
                 "BASE": "${{ steps.range.outputs.base }}"
               }
+            }
+          ]
+        },
+        "diff-mutants-plan": {
+          "if": "github.event_name == 'push'",
+          "runs-on": "ubuntu-24.04-arm",
+          "timeout-minutes": 30,
+          "outputs": {
+            "base": "${{ steps.plan.outputs.base }}",
+            "total": "${{ steps.plan.outputs.total }}",
+            "linux_count": "${{ steps.plan.outputs.linux_count }}",
+            "macos_count": "${{ steps.plan.outputs.macos_count }}",
+            "linux_shards": "${{ steps.plan.outputs.linux_shards }}",
+            "macos_shards": "${{ steps.plan.outputs.macos_shards }}",
+            "run_linux": "${{ steps.plan.outputs.run_linux }}",
+            "run_macos": "${{ steps.plan.outputs.run_macos }}"
+          },
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
+              }
             },
             {
-              "name": "diff mutants",
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "pnpm",
+              "run": "node harness/ci/tools.mjs pnpm"
+            },
+            {
+              "name": "tools",
+              "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+              "with": {
+                "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+              }
+            },
+            {
+              "name": "cargo-mutants",
+              "run": "node harness/ci/tools.mjs cargo-install"
+            },
+            {
+              "name": "lefthook",
+              "run": "node harness/ci/tools.mjs lefthook"
+            },
+            {
+              "name": "fetch",
+              "run": "node harness/ci/tools.mjs fetch"
+            },
+            {
+              "name": "range",
+              "id": "range",
+              "run": "node harness/ci/ci-range.mjs base",
+              "env": {
+                "EVENT_NAME": "${{ github.event_name }}",
+                "REF": "${{ github.ref }}",
+                "BEFORE": "${{ github.event.before }}",
+                "SHA": "${{ github.sha }}",
+                "PR_BASE": "${{ github.event.pull_request.base.sha }}",
+                "PR_HEAD": "${{ github.event.pull_request.head.sha }}"
+              }
+            },
+            {
+              "name": "diff mutants plan",
+              "id": "plan",
+              "timeout-minutes": 20,
+              "run": "node harness/ci/diff-mutants-plan.mjs",
+              "env": {
+                "BASE": "${{ steps.range.outputs.base }}"
+              }
+            }
+          ]
+        },
+        "diff-mutants-linux": {
+          "needs": ["diff-mutants-plan"],
+          "if": "github.event_name == 'push' && needs.diff-mutants-plan.outputs.run_linux == 'yes'",
+          "runs-on": "ubuntu-24.04-arm",
+          "timeout-minutes": 110,
+          "strategy": {
+            "fail-fast": false,
+            "matrix": {
+              "shard": "${{ fromJSON(needs.diff-mutants-plan.outputs.linux_shards) }}"
+            },
+            "max-parallel": 4
+          },
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "pnpm",
+              "run": "node harness/ci/tools.mjs pnpm"
+            },
+            {
+              "name": "tools",
+              "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+              "with": {
+                "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+              }
+            },
+            {
+              "name": "cargo-mutants",
+              "run": "node harness/ci/tools.mjs cargo-install"
+            },
+            {
+              "name": "lefthook",
+              "run": "node harness/ci/tools.mjs lefthook"
+            },
+            {
+              "name": "fetch",
+              "run": "node harness/ci/tools.mjs fetch"
+            },
+            {
+              "name": "diff mutants shard",
               "id": "mutation",
-              "run": "node harness/ci/diff-mutants.mjs",
+              "timeout-minutes": 90,
+              "run": "node harness/ci/linux/offline.mjs just mutants-diff-platform-shard \"$MUTATION_BASE\" linux \"$MUTATION_SHARD\"",
               "env": {
-                "BASE": "${{ steps.range.outputs.base }}",
-                "JOB_STARTED_AT": "${{ steps.job_clock.outputs.started }}"
+                "MUTATION_BASE": "${{ needs.diff-mutants-plan.outputs.base }}",
+                "MUTATION_SHARD": "${{ matrix.shard }}"
               }
             },
             {
-              "name": "diff mutants timeout",
-              "if": "steps.mutation.outputs.status == 'deadline'",
-              "run": "node harness/ci/diff-mutants-verdict.mjs",
+              "name": "diff mutants summary",
+              "if": "always()",
+              "run": "node harness/ci/diff-mutants-shard.mjs summary",
               "env": {
-                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
+                "MUTATION_OUTCOME": "${{ steps.mutation.outcome }}",
+                "MUTATION_BASE": "${{ needs.diff-mutants-plan.outputs.base }}",
+                "MUTATION_SHARD": "${{ matrix.shard }}",
+                "MUTATION_PLATFORM": "linux",
+                "MUTATION_EXPECTED_COUNT": "${{ needs.diff-mutants-plan.outputs.linux_count }}",
+                "SHA": "${{ github.sha }}"
+              }
+            }
+          ]
+        },
+        "diff-mutants-macos": {
+          "needs": ["diff-mutants-plan"],
+          "if": "github.event_name == 'push' && needs.diff-mutants-plan.outputs.run_macos == 'yes'",
+          "runs-on": "macos-15",
+          "timeout-minutes": 180,
+          "concurrency": {
+            "group": "macos-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+            "queue": "max",
+            "cancel-in-progress": false
+          },
+          "strategy": {
+            "fail-fast": false,
+            "matrix": {
+              "shard": "${{ fromJSON(needs.diff-mutants-plan.outputs.macos_shards) }}"
+            },
+            "max-parallel": 2
+          },
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
               }
             },
             {
-              "name": "diff mutants budget",
-              "if": "steps.mutation.outputs.status == 'budget'",
-              "run": "node harness/ci/diff-mutants-verdict.mjs",
-              "env": {
-                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
               }
             },
             {
-              "name": "diff mutants verdict",
-              "run": "node harness/ci/diff-mutants-verdict.mjs",
+              "name": "pnpm",
+              "run": "node harness/ci/tools.mjs pnpm"
+            },
+            {
+              "name": "tools",
+              "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+              "with": {
+                "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+              }
+            },
+            {
+              "name": "cargo-mutants",
+              "run": "node harness/ci/tools.mjs cargo-install"
+            },
+            {
+              "name": "lefthook",
+              "run": "node harness/ci/tools.mjs lefthook"
+            },
+            {
+              "name": "fetch",
+              "run": "node harness/ci/tools.mjs fetch"
+            },
+            {
+              "name": "diff mutants shard",
+              "id": "mutation",
+              "timeout-minutes": 150,
+              "run": "just mutants-diff-platform-shard \"$MUTATION_BASE\" macos \"$MUTATION_SHARD\"",
               "env": {
-                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
+                "MUTATION_BASE": "${{ needs.diff-mutants-plan.outputs.base }}",
+                "MUTATION_SHARD": "${{ matrix.shard }}"
+              }
+            },
+            {
+              "name": "diff mutants summary",
+              "if": "always()",
+              "run": "node harness/ci/diff-mutants-shard.mjs summary",
+              "env": {
+                "MUTATION_OUTCOME": "${{ steps.mutation.outcome }}",
+                "MUTATION_BASE": "${{ needs.diff-mutants-plan.outputs.base }}",
+                "MUTATION_SHARD": "${{ matrix.shard }}",
+                "MUTATION_PLATFORM": "macos",
+                "MUTATION_EXPECTED_COUNT": "${{ needs.diff-mutants-plan.outputs.macos_count }}",
+                "SHA": "${{ github.sha }}"
+              }
+            }
+          ]
+        },
+        "diff-mutants-verdict": {
+          "needs": [
+            "diff-mutants-plan",
+            "diff-mutants-linux",
+            "diff-mutants-macos"
+          ],
+          "if": "always() && github.event_name == 'push'",
+          "runs-on": "ubuntu-24.04",
+          "timeout-minutes": 10,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 1,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "diff mutants aggregate",
+              "run": "node harness/ci/diff-mutants-aggregate.mjs",
+              "env": {
+                "GH_TOKEN": "${{ github.token }}",
+                "SHA": "${{ github.sha }}",
+                "RUN_ID": "${{ github.run_id }}",
+                "RUN_ATTEMPT": "${{ github.run_attempt }}",
+                "REPOSITORY": "${{ github.repository }}",
+                "PLAN_RESULT": "${{ needs.diff-mutants-plan.result }}",
+                "LINUX_RESULT": "${{ needs.diff-mutants-linux.result }}",
+                "MACOS_RESULT": "${{ needs.diff-mutants-macos.result }}",
+                "MUTATION_TOTAL": "${{ needs.diff-mutants-plan.outputs.total }}",
+                "LINUX_COUNT": "${{ needs.diff-mutants-plan.outputs.linux_count }}",
+                "MACOS_COUNT": "${{ needs.diff-mutants-plan.outputs.macos_count }}",
+                "LINUX_SHARDS": "${{ needs.diff-mutants-plan.outputs.linux_shards }}",
+                "MACOS_SHARDS": "${{ needs.diff-mutants-plan.outputs.macos_shards }}",
+                "RUN_LINUX": "${{ needs.diff-mutants-plan.outputs.run_linux }}",
+                "RUN_MACOS": "${{ needs.diff-mutants-plan.outputs.run_macos }}"
               }
             }
           ]
         },
         "notify": {
-          "needs": ["linux", "macos"],
+          "needs": ["linux", "macos", "diff-mutants-verdict"],
           "if": "failure() && github.event_name == 'push' && github.ref == 'refs/heads/master'",
           "runs-on": "ubuntu-24.04",
           "timeout-minutes": 10,
@@ -744,7 +998,7 @@
           "runs-on": "macos-15",
           "timeout-minutes": 180,
           "concurrency": {
-            "group": "${{ github.workflow }}-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+            "group": "macos-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
             "queue": "max",
             "cancel-in-progress": false
           },
@@ -998,7 +1252,7 @@
           "runs-on": "macos-15",
           "timeout-minutes": 360,
           "concurrency": {
-            "group": "${{ github.workflow }}-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+            "group": "macos-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
             "queue": "max",
             "cancel-in-progress": false
           },
@@ -1444,6 +1698,16 @@
       "job": "daily-plan",
       "name": "mutation results",
       "run": "node harness/ci/mutants-summary.mjs"
+    },
+    {
+      "job": "diff-mutants-linux",
+      "name": "diff mutants summary",
+      "run": "node harness/ci/diff-mutants-shard.mjs summary"
+    },
+    {
+      "job": "diff-mutants-macos",
+      "name": "diff mutants summary",
+      "run": "node harness/ci/diff-mutants-shard.mjs summary"
     }
   ],
   "dailyMutationStrategy": {
@@ -1452,5 +1716,21 @@
       "shard": "${{ fromJSON(needs.daily-plan.outputs.shards) }}"
     },
     "max-parallel": 2
-  }
+  },
+  "diffLinuxMutationStrategy": {
+    "fail-fast": false,
+    "matrix": {
+      "shard": "${{ fromJSON(needs.diff-mutants-plan.outputs.linux_shards) }}"
+    },
+    "max-parallel": 4
+  },
+  "diffMacosMutationStrategy": {
+    "fail-fast": false,
+    "matrix": {
+      "shard": "${{ fromJSON(needs.diff-mutants-plan.outputs.macos_shards) }}"
+    },
+    "max-parallel": 2
+  },
+  "ciPushBranches": ["master", "merge/**"],
+  "signaturesPushBranches": ["**"]
 }

@@ -29,7 +29,7 @@ const ciConcurrency = {
 };
 const mutationSlotConcurrency = {
   group:
-    "${{ github.workflow }}-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+    "macos-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
   queue: "max",
   "cancel-in-progress": false,
 };

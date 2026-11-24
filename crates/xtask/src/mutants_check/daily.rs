@@ -21,7 +21,7 @@ fn base(root: &Path, value: &str, usage: crate::git_base::BaseUse) -> Result<Str
         .map_err(|error| error.to_string())
 }
 
-fn empty(root: &Path) -> Result<Outcomes, String> {
+pub(super) fn empty(root: &Path) -> Result<Outcomes, String> {
     let output = root.join(super::OUTPUT_DIRECTORY).join("mutants.out");
     std::fs::create_dir_all(&output).map_err(|error| error.to_string())?;
     for name in ["missed.txt", "timeout.txt", "caught.txt", "unviable.txt"] {

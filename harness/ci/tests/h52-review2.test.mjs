@@ -220,7 +220,7 @@ test("같은 SHA의 실행 후보 하나라도 ID가 없으면 오래된 성공�
         ],
       };
     const names = path.includes("runs/1/")
-      ? ["linux", "macos-branch"]
+      ? ["linux", "macos-branch", "diff-mutants-plan", "diff-mutants-verdict"]
       : ["signatures"];
     const steps = {
       linux: [
@@ -228,12 +228,9 @@ test("같은 SHA의 실행 후보 하나라도 ID가 없으면 오래된 성공�
         "linux check",
         "linux tests without network",
       ],
-      "macos-branch": [
-        "branch checkout",
-        "just check",
-        "diff mutants",
-        "diff mutants verdict",
-      ],
+      "macos-branch": ["branch checkout", "just check"],
+      "diff-mutants-plan": ["range", "diff mutants plan"],
+      "diff-mutants-verdict": ["diff mutants aggregate"],
       signatures: ["signatures from the base checkout"],
     };
     return {
@@ -287,11 +284,32 @@ test("미배정 정황에 단계가 null이면 원인을 확정하지 않는다"
     runner_name: "",
     steps: null,
   };
-  assert.equal(failureCode(sha, run, [linux, unknown]), "INVALID_EVIDENCE");
+  const plan = {
+    name: "diff-mutants-plan",
+    status: "completed",
+    conclusion: "success",
+    head_sha: sha,
+    run_attempt: 1,
+    steps: [],
+  };
+  const verdict = {
+    name: "diff-mutants-verdict",
+    status: "completed",
+    conclusion: "success",
+    head_sha: sha,
+    run_attempt: 1,
+    steps: [],
+  };
+  assert.equal(
+    failureCode(sha, run, [linux, unknown, plan, verdict]),
+    "INVALID_EVIDENCE",
+  );
   assert.equal(
     failureCode(sha, run, [
       { ...linux, conclusion: "failure", steps: [{ conclusion: "failure" }] },
       unknown,
+      plan,
+      verdict,
     ]),
     "CHECK_FAILED",
   );

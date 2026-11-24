@@ -73,6 +73,10 @@ test("the repository workflows pass the policy", () => {
 test("the policy is an allowlist that pins the reviewed actions and grants issue writes only to the notify jobs", () => {
   assert.deepEqual(policy.permissions, { contents: "read" });
   assert.deepEqual(policy.jobPermissions, {
+    ".github/workflows/ci.yml#diff-mutants-verdict": {
+      contents: "read",
+      actions: "read",
+    },
     ".github/workflows/ci.yml#notify": { issues: "write" },
     ".github/workflows/nightly.yml#notify": { issues: "write" },
     ".github/workflows/nightly.yml#daily-plan": {
@@ -106,16 +110,13 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
   Object.values(policy.actions).forEach((action) =>
     assert.match(action.sha, /^[0-9a-f]{40}$/u),
   );
-  assert.ok(policy.commands.includes('date +"started=%s" >> "$GITHUB_OUTPUT"'));
-  policy.commands
-    .filter((command) => command !== 'date +"started=%s" >> "$GITHUB_OUTPUT"')
-    .forEach((command) =>
-      assert.match(
-        command,
-        /^(node (base-tools\/)?harness\/ci\/|just |lefthook install$|corepack enable$|echo '(서명 검사 비활성|알림 없음)|set -euo pipefail\ngh api "repos\/\$GITHUB_REPOSITORY\/actions\/workflows\/signatures\.yml\/runs)/u,
-        command,
-      ),
-    );
+  policy.commands.forEach((command) =>
+    assert.match(
+      command,
+      /^(node (base-tools\/)?harness\/ci\/|just |lefthook install$|corepack enable$|echo '(서명 검사 비활성|알림 없음)|set -euo pipefail\ngh api "repos\/\$GITHUB_REPOSITORY\/actions\/workflows\/signatures\.yml\/runs)/u,
+      command,
+    ),
+  );
   [...policy.expressions, ...policy.conditions].forEach((text) =>
     assert.doesNotMatch(
       text.replaceAll("inputs.mode", "mutation-mode"),
