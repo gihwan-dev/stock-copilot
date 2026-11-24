@@ -141,7 +141,8 @@ impl EventSubscriber for SchedulerEventSubscriber {
             | DomainEvent::StoredDataChanged
             | DomainEvent::FxRateUpdated(_)
             | DomainEvent::DisclosureTriggerRecorded(_)
-            | DomainEvent::SourceStatusChanged(_) => Ok(()),
+            | DomainEvent::SourceStatusChanged(_)
+            | DomainEvent::BriefingFinished(_) => Ok(()),
         }
     }
 }

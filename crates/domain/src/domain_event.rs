@@ -1,6 +1,6 @@
 use crate::{
-    AccountId, ClientOrderId, DataSource, DisclosureKey, FxPair, InformationSource, InstrumentId,
-    KnownMarket, ProposalId,
+    AccountId, BriefingId, ClientOrderId, DataSource, DisclosureKey, FxPair, InformationSource,
+    InstrumentId, KnownMarket, ProposalId,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +44,7 @@ pub enum DomainEvent {
     FxRateUpdated(FxPair),
     DisclosureTriggerRecorded(DisclosureKey),
     SourceStatusChanged(DataSource),
+    BriefingFinished(BriefingId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -87,6 +88,7 @@ pub enum DomainEventKind {
     FxRateUpdated,
     DisclosureTriggerRecorded,
     SourceStatusChanged,
+    BriefingFinished,
 }
 
 impl DomainEvent {
@@ -132,6 +134,7 @@ impl DomainEvent {
             Self::FxRateUpdated(_) => DomainEventKind::FxRateUpdated,
             Self::DisclosureTriggerRecorded(_) => DomainEventKind::DisclosureTriggerRecorded,
             Self::SourceStatusChanged(_) => DomainEventKind::SourceStatusChanged,
+            Self::BriefingFinished(_) => DomainEventKind::BriefingFinished,
         }
     }
 }
@@ -404,6 +407,19 @@ mod tests {
                 DomainEventKind::SourceStatusChanged,
                 "SourceStatusChanged",
             ),
+            (
+                DomainEvent::BriefingFinished(crate::BriefingId::new(
+                    crate::BriefingKind::Morning,
+                    crate::CalendarDate::from_parts(
+                        crate::CalendarYear::new(2026),
+                        crate::MonthNumber::new(11),
+                        crate::DayNumber::new(25),
+                    )
+                    .expect("가짜 날짜"),
+                )),
+                DomainEventKind::BriefingFinished,
+                "BriefingFinished",
+            ),
         ]
     }
     fn cases() -> Vec<(DomainEvent, DomainEventKind, &'static str)> {
@@ -464,6 +480,7 @@ mod tests {
                 format!("DisclosureTriggerRecorded({id:?})")
             }
             DomainEvent::SourceStatusChanged(id) => format!("SourceStatusChanged({id:?})"),
+            DomainEvent::BriefingFinished(id) => format!("BriefingFinished({id:?})"),
         }
     }
     #[test]
@@ -573,10 +590,7 @@ mod tests {
         payloads
     }
     fn pending_contract(rows: &[[String; 8]]) -> Result<(), ContractMismatch> {
-        let expected = BTreeMap::from([
-            ("AiJobFinished".to_owned(), "AI-17".to_owned()),
-            ("BriefingFinished".to_owned(), "J-03".to_owned()),
-        ]);
+        let expected = BTreeMap::from([("AiJobFinished".to_owned(), "AI-17".to_owned())]);
         let mut actual = BTreeMap::new();
         for [
             name,

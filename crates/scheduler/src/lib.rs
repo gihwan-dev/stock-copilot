@@ -1,4 +1,5 @@
 mod ai_queue;
+mod briefing_jobs;
 mod code_jobs;
 mod engine;
 mod market_hours;
@@ -9,6 +10,9 @@ mod sync_jobs;
 mod types;
 
 pub use ai_queue::{AiJobQueue, AiQueueAdmission, AiQueueError, DisabledAiJobQueue};
+pub use briefing_jobs::{
+    BriefingJob, BriefingPort, BriefingRunResult, PRE_US_MARKET_LEAD_MINUTES, RunBriefingRunner,
+};
 pub use code_jobs::{
     BACKUP_RETENTION_DAYS, BackupResult, BackupRetention, CompactionResult, DailyBackupJob,
     DailyValuationJob, DailyValuationPort, DatabaseBackupPort, EstimateResolutionJob,
@@ -40,6 +44,8 @@ pub use types::{
     MissedPolicy, ScheduleRule, ScheduledJobId, StartupPolicy, TickReport,
 };
 
+#[cfg(test)]
+mod briefing_jobs_tests;
 #[cfg(test)]
 mod code_jobs_tests;
 #[cfg(test)]
