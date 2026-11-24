@@ -171,6 +171,12 @@ pub enum ToolRegistryError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolReach {
+    AppDataOnly,
+    OpenWorld,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResultRetention {
     RecordInLedger,
     OmitFromLedger,
@@ -186,6 +192,7 @@ pub struct ToolSpec {
     input_schema: JsonObject,
     output_schema: Option<JsonObject>,
     retention: ResultRetention,
+    reach: ToolReach,
 }
 
 impl ToolSpec {
@@ -213,12 +220,19 @@ impl ToolSpec {
             input_schema,
             output_schema,
             retention: ResultRetention::RecordInLedger,
+            reach: ToolReach::AppDataOnly,
         })
     }
 
     #[must_use]
     pub const fn with_result_omitted_from_ledger(mut self) -> Self {
         self.retention = ResultRetention::OmitFromLedger;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_open_world(mut self) -> Self {
+        self.reach = ToolReach::OpenWorld;
         self
     }
 
@@ -244,17 +258,21 @@ impl ToolSpec {
 
     #[must_use]
     pub fn to_rmcp_tool(&self) -> Tool {
+        let open_world = match self.reach {
+            ToolReach::AppDataOnly => false,
+            ToolReach::OpenWorld => true,
+        };
         let annotations = match self.access {
             ToolAccessKind::ReadOnly => ToolAnnotations::new()
                 .read_only(true)
                 .destructive(false)
                 .idempotent(true)
-                .open_world(false),
+                .open_world(open_world),
             ToolAccessKind::StateChanging => ToolAnnotations::new()
                 .read_only(false)
                 .destructive(false)
                 .idempotent(false)
-                .open_world(false),
+                .open_world(open_world),
         };
         let mut tool = Tool::new(
             Cow::Owned(self.name.as_str().to_owned()),
