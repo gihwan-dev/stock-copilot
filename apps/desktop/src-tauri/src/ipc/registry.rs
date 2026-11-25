@@ -3,8 +3,8 @@ use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events}
 
 use super::{
     app_version, briefing, chat, instruments, open_external, order_approval, portfolio, public_ip,
-    risk_editor, schedule, scorecard, self_check, settings, signals, thesis, toss, transactions,
-    updates,
+    risk_editor, schedule, scorecard, self_check, settings, signals, system_data, thesis, toss,
+    transactions, updates,
 };
 
 #[must_use]
@@ -47,7 +47,14 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         instruments::remove_watchlist::<tauri::Wry>,
         thesis::get_thesis::<tauri::Wry>,
         signals::get_signals::<tauri::Wry>,
-        signals::skip_signal::<tauri::Wry>
+        signals::skip_signal::<tauri::Wry>,
+        system_data::get_account_selection::<tauri::Wry>,
+        system_data::select_account::<tauri::Wry>,
+        system_data::get_principles::<tauri::Wry>,
+        system_data::set_principles::<tauri::Wry>,
+        system_data::backup_now::<tauri::Wry>,
+        system_data::export_data::<tauri::Wry>,
+        system_data::delete_all_data::<tauri::Wry>
     ];
     Builder::<R>::new()
         .commands(commands)

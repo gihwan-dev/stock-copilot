@@ -147,6 +147,34 @@ export const commands = {
     typedError<UiSkipResult, IpcError>(
       __TAURI_INVOKE("skip_signal", { request }),
     ),
+  getAccountSelection: (request: SystemRequest) =>
+    typedError<UiAccountSelection, IpcError>(
+      __TAURI_INVOKE("get_account_selection", { request }),
+    ),
+  selectAccount: (request: SelectAccountRequest) =>
+    typedError<UiAccountSelection, IpcError>(
+      __TAURI_INVOKE("select_account", { request }),
+    ),
+  getPrinciples: (request: SystemRequest) =>
+    typedError<UiPrinciples, IpcError>(
+      __TAURI_INVOKE("get_principles", { request }),
+    ),
+  setPrinciples: (request: SetPrinciplesRequest) =>
+    typedError<UiPrinciples, IpcError>(
+      __TAURI_INVOKE("set_principles", { request }),
+    ),
+  backupNow: (request: SystemRequest) =>
+    typedError<UiBackupResult, IpcError>(
+      __TAURI_INVOKE("backup_now", { request }),
+    ),
+  exportData: (request: SystemRequest) =>
+    typedError<UiExportResult, IpcError>(
+      __TAURI_INVOKE("export_data", { request }),
+    ),
+  deleteAllData: (request: SystemRequest) =>
+    typedError<UiDeleteResult, IpcError>(
+      __TAURI_INVOKE("delete_all_data", { request }),
+    ),
 };
 
 /** Events */
@@ -734,6 +762,10 @@ export type SaveOrderSettingsRequest = {
 
 export type ScorecardScope = "all";
 
+export type SelectAccountRequest = {
+  account: string;
+};
+
 export type SelfCheckScope = "current";
 
 export type SendChatMessageRequest =
@@ -807,6 +839,10 @@ export type SetOrderPermissionRequest = {
   permission: UiOrderPermission;
 };
 
+export type SetPrinciplesRequest = {
+  principles: UiPrinciplesInput;
+};
+
 export type SettingsQueryScope = "all";
 
 export type SignalsScope = "current";
@@ -848,9 +884,25 @@ export type SubmitTossKeysRequest = {
   secret: string;
 };
 
+export type SystemRequest = {
+  scope: SystemScope;
+};
+
+export type SystemScope = "current";
+
 export type TossConnectionQuery = "current";
 
 export type TransactionsScope = "recent";
+
+export type UiAccountRow = {
+  id: string;
+  number: string;
+};
+
+export type UiAccountSelection = {
+  selected: string;
+  accounts: UiAccountRow[];
+};
 
 export type UiAiRuntime = "ready" | "missing";
 
@@ -869,6 +921,12 @@ export type UiAllocationView = {
   instruments: UiAllocationRow[];
   concentration: UiConcentration;
 };
+
+export type UiBackupResult = {
+  status: UiBackupStatus;
+};
+
+export type UiBackupStatus = "backed-up";
 
 export type UiBriefing = UiBriefing_Serialize | UiBriefing_Deserialize;
 
@@ -934,11 +992,15 @@ export type UiBriefingsView_Serialize = {
 
 export type UiCardExpiry = "5" | "10" | "15" | "30";
 
+export type UiCashMinPercent = "0" | "5" | "10" | "20" | "30";
+
 export type UiClaimStatus = "confirmed" | "needs-review";
 
 export type UiClaimVerdict = "intact" | "weakened" | "broken" | "unverifiable";
 
 export type UiConcentration = "balanced" | "concentrated";
+
+export type UiConcentrationCount = "3" | "4" | "5" | "6" | "8" | "10";
 
 export type UiConnectionState = "connected" | "needs-key";
 
@@ -988,6 +1050,12 @@ export type UiDataSource =
   | "FederalReserve"
   | "UsTreasury"
   | "Fred";
+
+export type UiDeleteResult = {
+  status: UiDeleteStatus;
+};
+
+export type UiDeleteStatus = "deleted";
 
 export type UiDirection = "up" | "down" | "flat";
 
@@ -1719,6 +1787,12 @@ export type UiEvent =
 
 export type UiExcludableType = "etf" | "etn" | "preferred" | "spac" | "reit";
 
+export type UiExportResult = {
+  status: UiExportStatus;
+};
+
+export type UiExportStatus = "exported";
+
 export type UiFxPair = "UsdKrw" | "KrwUsd";
 
 export type UiHolding = {
@@ -1916,6 +1990,18 @@ export type UiPortfolioView_Serialize = {
   currencies: UiCurrencyValue_Serialize[];
   holdings: UiHolding[];
   today: UiSignedAmount | null;
+};
+
+export type UiPrinciples = {
+  text: string;
+  cash_min_percent: UiCashMinPercent;
+  concentration_min_count: UiConcentrationCount;
+};
+
+export type UiPrinciplesInput = {
+  text: string;
+  cash_min_percent: UiCashMinPercent;
+  concentration_min_count: UiConcentrationCount;
 };
 
 export type UiProfileDraft = {

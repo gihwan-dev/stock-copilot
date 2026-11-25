@@ -186,7 +186,11 @@ export {
   newsPerHourCounts,
 } from "./news-schema";
 export type { SettingsClient, TossKeys } from "./settings-client";
-export { coreSetupClient, unavailableSettingsClient } from "./settings-client";
+export {
+  coreSettingsClient,
+  coreSetupClient,
+  unavailableSettingsClient,
+} from "./settings-client";
 export {
   investorProfile,
   orderSettings,

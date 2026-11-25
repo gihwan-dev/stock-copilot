@@ -1,9 +1,19 @@
 export const responses = {
   addWatchlist: { outcome: "applied", reason: null },
   appVersion: { version: "0.1.0" },
+  backupNow: { status: "backed-up" },
   cancelChatTurn: { outcome: "NotRunning", turn_id: "turn-1" },
   checkTossConnection: { state: "connected" },
   copyText: { status: "copied" },
+  deleteAllData: { status: "deleted" },
+  exportData: { status: "exported" },
+  getAccountSelection: {
+    accounts: [
+      { id: "1", number: "0731" },
+      { id: "2", number: "0999" },
+    ],
+    selected: "1",
+  },
   getAllocation: {
     concentration: "concentrated",
     instruments: [
@@ -176,6 +186,11 @@ export const responses = {
     total: { amount: "12200000", currency: "KRW" },
     total_coverage: "complete",
   },
+  getPrinciples: {
+    cash_min_percent: "10",
+    concentration_min_count: "6",
+    text: "한 종목에 몰지 않는다",
+  },
   getPublicIp: { address: "203.0.113.10" },
   getRiskSettings: {
     order: {
@@ -323,6 +338,13 @@ export const responses = {
   },
   saveInvestorProfile: { kind: "declined", rejection: "none" },
   saveOrderSettings: { kind: "unavailable", rejection: "none" },
+  selectAccount: {
+    accounts: [
+      { id: "1", number: "0731" },
+      { id: "2", number: "0999" },
+    ],
+    selected: "2",
+  },
   sendChatMessage: {
     actual_model: "claude-sonnet-5-5",
     failure_reason: null,
@@ -343,6 +365,11 @@ export const responses = {
     time_adjustment: "adjustable",
   },
   setOrderPermission: { kind: "denied", order_enabled: "off" },
+  setPrinciples: {
+    cash_min_percent: "10",
+    concentration_min_count: "6",
+    text: "한 종목에 몰지 않는다",
+  },
   skipSignal: { outcome: "recorded" },
   submitTossKeys: { state: "ip-not-allowed" },
 } as const;

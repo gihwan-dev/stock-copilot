@@ -1,8 +1,12 @@
 add_watchlist
 app_version
+backup_now
 cancel_chat_turn
 check_toss_connection
 copy_text
+delete_all_data
+export_data
+get_account_selection
 get_allocation
 get_briefings
 get_chat_history
@@ -10,6 +14,7 @@ get_instrument_detail
 get_instruments
 get_job_schedules
 get_portfolio
+get_principles
 get_public_ip
 get_risk_settings
 get_scorecard
@@ -27,8 +32,10 @@ restart_to_update
 resubscribe_chat_turn
 save_investor_profile
 save_order_settings
+select_account
 send_chat_message
 set_job_schedule
 set_order_permission
+set_principles
 skip_signal
 submit_toss_keys

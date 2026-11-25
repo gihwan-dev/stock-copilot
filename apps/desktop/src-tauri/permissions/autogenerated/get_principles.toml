@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-principles"
+description = "Enables the get_principles command without any pre-configured scope."
+commands.allow = ["get_principles"]
+
+[[permission]]
+identifier = "deny-get-principles"
+description = "Denies the get_principles command without any pre-configured scope."
+commands.deny = ["get_principles"]

@@ -5,7 +5,7 @@ import { FirstRunGate, OnboardingClientProvider } from "../features/onboarding";
 import { AppFrame, AppShell, EmptyState, Page } from "../shared/ds";
 import {
   addWatchlist,
-  coreSetupClient,
+  coreSettingsClient,
   getInstrumentDetail,
   getInstruments,
   removeWatchlist,
@@ -135,5 +135,5 @@ export const App = (props: AppProps): ReactElement => {
 };
 
 export const CoreApp = (): ReactElement => (
-  <App setupClient={coreSetupClient} />
+  <App settingsClient={coreSettingsClient} />
 );

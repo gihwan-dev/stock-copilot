@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-principles"
+description = "Enables the set_principles command without any pre-configured scope."
+commands.allow = ["set_principles"]
+
+[[permission]]
+identifier = "deny-set-principles"
+description = "Denies the set_principles command without any pre-configured scope."
+commands.deny = ["set_principles"]

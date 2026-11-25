@@ -891,6 +891,26 @@ impl application::CollectedItemReads for SqliteRepositories {
     }
 }
 
+impl application::PrinciplesRepository for SqliteRepositories {
+    async fn store_principles(
+        &self,
+        principles: &domain::InvestmentPrinciples,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::PrinciplesRepository::store_principles(
+            &crate::PrinciplesStore::new(database),
+            principles,
+        )
+        .await
+    }
+    async fn principles(&self) -> Result<Option<domain::InvestmentPrinciples>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::PrinciplesRepository::principles(&crate::PrinciplesStore::new(database)).await
+    }
+}
+
 impl application::NewsDataSettingsRepository for SqliteRepositories {
     async fn load(&self) -> Result<Option<application::NewsDataSettings>, SystemPortError> {
         let guard = self.shared.read().await;

@@ -22,6 +22,7 @@ use src_tauri::ipc::scorecard::ScorecardIpcState;
 use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
 use src_tauri::ipc::signals::{MarketCalendars, SignalsIpcState};
 use src_tauri::ipc::state::BoxFuture;
+use src_tauri::ipc::system_data::{DataCare, SystemDataIpcState};
 use src_tauri::ipc::thesis::ThesisIpcState;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
@@ -172,6 +173,99 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
             ))),
             Arc::<platform_macos::SystemClock>::clone(clock),
         ))
+        .manage(SystemDataIpcState::new(
+            AccountSelector::new(
+                Arc::<ProductBroker>::clone(&toss.broker),
+                toss.accounts.clone(),
+                Arc::clone(events),
+            ),
+            toss.accounts.clone(),
+            Arc::new(ProductDataCare {
+                repositories: Arc::clone(repositories),
+                secrets: Arc::clone(&toss.secrets),
+                clock: Arc::<platform_macos::SystemClock>::clone(clock),
+                events: Arc::clone(events),
+            }),
+            Arc::clone(repositories),
+        ))
+    }
+}
+
+const DATABASE_FILES: [&str; 3] = [
+    "stock-copilot.db",
+    "stock-copilot.db-wal",
+    "stock-copilot.db-shm",
+];
+
+const WIPED_SECRETS: [application::SecretKey; 7] = [
+    application::SecretKey::TossClientId,
+    application::SecretKey::TossClientSecret,
+    application::SecretKey::TossAccessToken,
+    application::SecretKey::DatabaseEncryptionKey,
+    application::SecretKey::AuditHmacKey,
+    application::SecretKey::DartApiKey,
+    application::SecretKey::FredApiKey,
+];
+
+struct ProductDataCare {
+    repositories: Arc<SqliteRepositories>,
+    secrets: Arc<ProductSecrets>,
+    clock: Arc<platform_macos::SystemClock>,
+    events: Arc<application::EventBus>,
+}
+
+fn storage_failure() -> application::SystemPortError {
+    application::SystemPortError::new(
+        application::SystemPort::Repository,
+        application::SystemFailure::Unavailable(application::RetryDelay::Unknown),
+    )
+}
+
+fn remove_stored_files(data_directory: &Path) -> Result<(), application::SystemPortError> {
+    let files = DATABASE_FILES.map(|name| data_directory.join(name));
+    for file in files.iter().filter(|file| file.exists()) {
+        std::fs::remove_file(file).map_err(|_locked| storage_failure())?;
+    }
+    let backups = data_directory.join("backups");
+    if backups.exists() {
+        std::fs::remove_dir_all(&backups).map_err(|_locked| storage_failure())?;
+    }
+    Ok(())
+}
+
+impl DataCare for ProductDataCare {
+    fn back_up(
+        &self,
+        directory: PathBuf,
+    ) -> BoxFuture<'_, Result<(), application::SystemPortError>> {
+        Box::pin(async move {
+            use application::SecretStore as _;
+            let key = self
+                .secrets
+                .load(application::SecretKey::DatabaseEncryptionKey)
+                .await?
+                .ok_or_else(storage_failure)?;
+            self.repositories
+                .back_up(directory, &key, self.clock.as_ref())
+                .await
+                .map(|_outcome| ())
+        })
+    }
+
+    fn wipe(
+        &self,
+        data_directory: PathBuf,
+    ) -> BoxFuture<'_, Result<(), application::SystemPortError>> {
+        Box::pin(async move {
+            use application::SecretStore as _;
+            let _closed = self.repositories.shared().close().await?;
+            remove_stored_files(&data_directory)?;
+            for key in WIPED_SECRETS {
+                let _removed = self.secrets.remove(key).await?;
+            }
+            let _delivery = self.events.publish(domain::DomainEvent::StoredDataChanged);
+            Ok(())
+        })
     }
 }
 

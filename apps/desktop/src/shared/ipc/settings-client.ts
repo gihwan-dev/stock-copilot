@@ -1,5 +1,14 @@
 import { err, type Result } from "../lib";
 import {
+  accountSelection,
+  backupNow,
+  deleteAllData,
+  exportData,
+  principles,
+  selectAccount,
+  setPrinciples,
+} from "./system-call";
+import {
   checkTossConnection,
   copyText,
   publicIp,
@@ -123,4 +132,15 @@ export const coreSetupClient: SettingsClient = {
   submitTossKeys,
   publicIp,
   copyText,
+};
+
+export const coreSettingsClient: SettingsClient = {
+  ...coreSetupClient,
+  accountSelection,
+  selectAccount,
+  backupNow,
+  exportData,
+  deleteAllData,
+  principles,
+  setPrinciples,
 };
