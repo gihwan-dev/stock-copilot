@@ -70,3 +70,37 @@ fn task_series_excludes_the_creation_day_and_ends_at_creation() {
             .all(|candle| candle.time().date() < created.offset_calendar_date())
     );
 }
+
+#[test]
+fn redraft_maps_draft_outcomes_without_sending_a_stale_proposal() {
+    use approval_command::ports::RedraftOutcome;
+    let kind = |outcome| match super::redraft_outcome(outcome, None) {
+        RedraftOutcome::Redrafted(_) => "redrafted",
+        RedraftOutcome::OutOfEstimateRange => "out-of-range",
+        RedraftOutcome::MarketClosed => "closed",
+        RedraftOutcome::NoSignal => "no-signal",
+    };
+    assert_eq!(
+        kind(application::DraftProposalOutcome::NoSignal),
+        "no-signal"
+    );
+    assert_eq!(
+        kind(application::DraftProposalOutcome::MarketClosed),
+        "closed"
+    );
+    assert_eq!(
+        kind(application::DraftProposalOutcome::ReestimateScheduled {
+            deliveries: Vec::new()
+        }),
+        "out-of-range"
+    );
+    let missing =
+        domain::ProposalId::new(domain::ClientOrderId::try_new("p-missing-1").expect("제안"));
+    assert_eq!(
+        kind(application::DraftProposalOutcome::Existing {
+            proposal_id: missing
+        }),
+        "no-signal",
+        "읽을 수 없는 기존 제안은 보내지 않는다"
+    );
+}

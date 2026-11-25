@@ -56,3 +56,20 @@ fn without_a_database_nothing_is_consumed() {
     ));
     let _error = result.expect_err("DB 없음");
 }
+
+#[test]
+fn unknown_proposal_has_no_instrument() {
+    let fixture = Fixture::new();
+    let shared = SharedDatabase::new();
+    let repositories = SqliteRepositories::new(shared.clone());
+    let (proposal, _client) = proposal();
+    runtime().block_on(async {
+        let database =
+            Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+        assert!(shared.install(database).await.is_none());
+        assert_eq!(
+            crate::proposal_instrument(&repositories, &proposal).await,
+            Ok(None)
+        );
+    });
+}

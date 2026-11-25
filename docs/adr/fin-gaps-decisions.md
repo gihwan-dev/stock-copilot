@@ -77,3 +77,13 @@
 | G-02 | `fin-gaps-native-dialog`(1c61b255)를 그대로 가져왔다. `harness/arch-check/rules.toml`에 `platform-macos` → `socket2`·`syn`·`proc-macro2`, `through = "rfd"` 예외 한 항목. 설치 앱의 "주문 켜기"·위험 완화 저장과 주문 요약은 rfd 네이티브 확인 창을 띄운다 | - |
 | O-07 | `platform-macos`의 `LocalDeviceOwnerAuth`가 `LAContext.evaluatePolicy(.deviceOwnerAuthentication)`을 별도 스레드에서 부르고 제품 조립의 `UnavailableDeviceOwnerAuth`를 대신한다. `unsafe` 예외의 범위와 하네스 항목(source-check `[[unsafe-lints]]`, disable-control `[[expect]]` 세 문, arch-check `through` 네 항목)은 [ADR 0180](0180-local-authentication-unsafe.md). 지시의 "모듈 단위 `#[allow(unsafe_code)]`"는 `allow` 금지와 모듈 위치 끄기 금지 때문에 문 단위 `#[expect]`로 했다 | 모듈 단위 `allow`, 작업 공간 `deny` |
 | U-14 | `tauri-plugin-notification =2.8.1`(tauri ^2.12, 기본 기능 끔)을 `src-tauri`에만 넣고 `product_builder`에서 등록한다. `SystemNotificationDelivery`가 앱 시작 때 묶이는 `AppHandle`로 알림 센터에 보낸다. 앱이 묶이기 전이거나 플러그인 상태가 없으면 `Unavailable`. WebView capability에는 알림 권한을 주지 않는다(발송은 코어만, 업데이트 플러그인과 같은 SEC-10 방식). arch-check `through = "tauri-plugin-notification"` 예외 한 항목, deny 허용 목록에 `tauri-plugin-notification`·`notify-rust`·`mac-notification-sys`(빌드 스크립트 둘)과 `objc2-local-authentication` | capability에 `notification:default` |
+
+## 3차 (주문 승인 런타임)
+
+| 작업 | 정한 것 | 다른 선택지 |
+|---|---|---|
+| O-조립 3 | 정책 문맥(`ProposalContextPort`)은 fin-flow의 `ProductSignalData`를 재사용해 만든다: 제안 ID → `proposal_drafts.instrument`(새 조회 `proposal_instrument`) → 종목 마스터·보유·종목 유형 사실·섹터 배정·투자 성향 정책·저장된 시장가 허용. 마스터·보유 평가가 없으면 문맥 없음(`None`)이라 승인 단계가 제안 없음으로 거절한다 | 빈 섹터 배정·기본 평가로 채움(비중 상한 우회) |
+| O-조립 3 | 재초안은 같은 계좌일 때만 fin-flow의 `DraftProposal`을 새 제안 ID로 다시 돌린다. 새로 만들면 그 제안, 이미 있으면 저장된 제안을 다시 읽고 못 읽으면 신호 없음, 장 닫힘은 장 닫힘, 재추정 예약은 추정 범위 밖으로 돌려준다. 계좌가 바뀌었으면 신호 없음 | 재초안 없이 만료 제안 거절만 |
+| O-조립 3 | 승인 서비스는 이벤트 버스를 값으로 받아, 주문·제안 이벤트 9종을 제품 버스로 다시 내보내는 전달 버스(`forwarding_bus`)를 준다(감사 기록·알림·화면 갱신 구독자가 받음) | 별도 버스 그대로(구독자가 주문 이벤트를 못 받음) |
+| O-조립 3 | 조립 루트에서 `ApprovalService`를 SQLite 저장소·토스 읽기 어댑터·`TossBrokerTrade`(같은 토큰 관리자)·제품 확인 창/본인 확인·`NeverFrozen`으로 묶어 `OrderApprovalRuntime`으로 관리한다. 추정 신원(`estimate_identity`)이 없어 신호 파이프라인이 없으면 런타임을 두지 않아 요청은 `unavailable`. "주문 켜기"는 저장된 위험 설정 기본값(꺼짐)이 그대로 막는다 | 항상 조립 |
+| O-조립 3 시험 | 종단 시험은 기존 주문 경로 고정물(저장된 제안·가짜 토스 읽기·`RecordingBroker`·`ScriptedPresence`)에 제품 조각(`LedgerTxPort`, 전달 버스)을 끼워 웹뷰 IPC에서 시작한다: 확인 → 본인 확인 → 사전 기록 감사가 전송보다 먼저 → 가짜 토스 주문 1건 → 응답 감사 → 앱 버스 주문 이벤트 → 같은 제안 재요청 거절. 주문 켜기 꺼짐과 본인 확인 거부는 주문 0건. 신호 → 제안 초안 구간은 fin-flow 시험이 맡고, SQLite 원장 원자성은 store-sqlite 시험이 맡는다 | 실제 토스·Touch ID(금지) |

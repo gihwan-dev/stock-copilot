@@ -4232,6 +4232,7 @@ dependencies = [
  "application",
  "approval-command",
  "broker-toss",
+ "broker-toss-trade",
  "domain",
  "mcp-server",
  "platform-macos",
