@@ -271,10 +271,12 @@ export const releasePlan = ({ version, notesFile, root = repoRoot }) => {
         }),
       );
     }),
+    command("태그 올리기", "git", ["push", "origin", `refs/tags/v${version}`]),
     command("GitHub 릴리스", "gh", [
       "release",
       "create",
       `v${version}`,
+      "--verify-tag",
       paths.archive,
       paths.latest,
       "--repo",
