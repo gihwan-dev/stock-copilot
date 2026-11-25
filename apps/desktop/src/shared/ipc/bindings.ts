@@ -139,6 +139,14 @@ export const commands = {
     typedError<UiThesisView_Serialize, IpcError>(
       __TAURI_INVOKE("get_thesis", { request }),
     ),
+  getSignals: (request: GetSignalsRequest) =>
+    typedError<UiSignalsView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_signals", { request }),
+    ),
+  skipSignal: (request: SkipSignalRequest) =>
+    typedError<UiSkipResult, IpcError>(
+      __TAURI_INVOKE("skip_signal", { request }),
+    ),
 };
 
 /** Events */
@@ -623,6 +631,10 @@ export type GetSettingsRequest = {
   scope: SettingsQueryScope;
 };
 
+export type GetSignalsRequest = {
+  scope: SignalsScope;
+};
+
 export type GetStatusRequest = {
   scope: SelfCheckScope;
 };
@@ -796,6 +808,13 @@ export type SetOrderPermissionRequest = {
 };
 
 export type SettingsQueryScope = "all";
+
+export type SignalsScope = "current";
+
+export type SkipSignalRequest = {
+  symbol: string;
+  reason: string;
+};
 
 export type StoredChatEntryDto =
   StoredChatEntryDto_Serialize | StoredChatEntryDto_Deserialize;
@@ -1836,6 +1855,8 @@ export type UiKstTime = {
 
 export type UiMarket = "Kr" | "Us";
 
+export type UiMarketState = "open" | "closed";
+
 export type UiMoney = {
   amount: string;
   currency: UiCurrency;
@@ -1863,6 +1884,8 @@ export type UiOrderSettingsDraft = {
   card_expiry: UiCardExpiry;
   order_count_limit: UiOrderCountLimit;
 };
+
+export type UiOrderSwitch = "on" | "off";
 
 export type UiOrderSwitchOutcome = {
   kind: UiOrderSwitchOutcomeKind;
@@ -2041,10 +2064,71 @@ export type UiSettingsView = {
   account_count: number;
 };
 
+export type UiSignalCard = UiSignalCard_Serialize | UiSignalCard_Deserialize;
+
+export type UiSignalCard_Deserialize = {
+  symbol: string;
+  name: string;
+  direction: UiSignalDirection;
+  market: UiMarketState;
+  order_switch: UiOrderSwitch;
+  price?: UiMoney | null;
+  ai_probability: string;
+  tracked_probability: string;
+  threshold: string;
+  bin_hit_rate?: string | null;
+  bin_count: string;
+  rationale: string;
+  counterargument: string;
+  sources: UiSignalSource[];
+};
+
+export type UiSignalCard_Serialize = {
+  symbol: string;
+  name: string;
+  direction: UiSignalDirection;
+  market: UiMarketState;
+  order_switch: UiOrderSwitch;
+  price: UiMoney | null;
+  ai_probability: string;
+  tracked_probability: string;
+  threshold: string;
+  bin_hit_rate: string | null;
+  bin_count: string;
+  rationale: string;
+  counterargument: string;
+  sources: UiSignalSource[];
+};
+
+export type UiSignalDirection = "buy" | "sell";
+
+export type UiSignalSource = {
+  kind: UiSignalSourceKind;
+  label: string;
+};
+
+export type UiSignalSourceKind = "tool" | "web" | "news" | "disclosure";
+
+export type UiSignalsView = UiSignalsView_Serialize | UiSignalsView_Deserialize;
+
+export type UiSignalsView_Deserialize = {
+  cards: UiSignalCard_Deserialize[];
+};
+
+export type UiSignalsView_Serialize = {
+  cards: UiSignalCard_Serialize[];
+};
+
 export type UiSignedAmount = {
   amount: UiMoney;
   rate: string;
   direction: UiDirection;
+};
+
+export type UiSkipOutcome = "recorded";
+
+export type UiSkipResult = {
+  outcome: UiSkipOutcome;
 };
 
 export type UiSourceStatus =

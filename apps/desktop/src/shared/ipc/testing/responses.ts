@@ -214,6 +214,7 @@ export const responses = {
     sector_cap_percent: "40",
     toss_connection: "needs-key",
   },
+  getSignals: { cards: [] },
   getStatus: {
     ai_resumes_at: "2026-11-25T15:00:00+09:00",
     ai_runtime: "ready",
@@ -342,5 +343,6 @@ export const responses = {
     time_adjustment: "adjustable",
   },
   setOrderPermission: { kind: "denied", order_enabled: "off" },
+  skipSignal: { outcome: "recorded" },
   submitTossKeys: { state: "ip-not-allowed" },
 } as const;

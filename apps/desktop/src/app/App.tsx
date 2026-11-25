@@ -14,6 +14,7 @@ import {
   getPortfolio,
   getScorecard,
   getSelfCheck,
+  getSignals,
   getStatus,
   getThesis,
   getTransactions,
@@ -22,6 +23,7 @@ import {
   pendingScreenSources,
   saveInvestorProfile,
   saveOrderSettings,
+  skipSignal,
   type ScreenSources,
   type SettingsClient,
 } from "../shared/ipc";
@@ -57,6 +59,8 @@ const coreScreenSources: ScreenSources = {
   addWatchlist,
   removeWatchlist,
   thesis: getThesis,
+  signals: getSignals,
+  skipSignal,
 };
 
 const CoreEventBridge = (): null => {

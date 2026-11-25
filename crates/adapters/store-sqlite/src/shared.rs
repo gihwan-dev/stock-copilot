@@ -235,6 +235,34 @@ impl ThesisRepository for SqliteRepositories {
     }
 }
 
+impl application::SignalSkipRepository for SqliteRepositories {
+    async fn record_skip(
+        &self,
+        skip: &application::SignalSkip,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::SignalSkipRepository::record_skip(&crate::SignalSkipStore::new(database), skip)
+            .await
+    }
+}
+
+impl application::SignalSkipHistory for SqliteRepositories {
+    async fn latest_skip(
+        &self,
+        instrument: &InstrumentId,
+    ) -> Result<Option<Timestamp>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        let skips = crate::SignalSkipStore::new(database).skips().await?;
+        Ok(skips
+            .into_iter()
+            .filter(|skip| skip.instrument == *instrument)
+            .map(|skip| skip.skipped_at)
+            .max())
+    }
+}
+
 impl application::ThesisHistoryTimes for SqliteRepositories {
     async fn record_times(
         &self,

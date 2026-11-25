@@ -15,6 +15,7 @@ get_risk_settings
 get_scorecard
 get_self_check
 get_settings
+get_signals
 get_status
 get_thesis
 get_transactions
@@ -29,4 +30,5 @@ save_order_settings
 send_chat_message
 set_job_schedule
 set_order_permission
+skip_signal
 submit_toss_keys

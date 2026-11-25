@@ -16,6 +16,7 @@ use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
 use src_tauri::ipc::scorecard::ScorecardIpcState;
 use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
+use src_tauri::ipc::signals::{MarketCalendars, SignalsIpcState};
 use src_tauri::ipc::state::BoxFuture;
 use src_tauri::ipc::thesis::ThesisIpcState;
 use src_tauri::mcp_catalog::{
@@ -159,6 +160,13 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
             Arc::clone(events),
         ))
         .manage(ThesisIpcState::from_repository(Arc::clone(repositories)))
+        .manage(SignalsIpcState::new(
+            Arc::clone(repositories),
+            Arc::new(TossResolutionSource(Arc::<ProductBroker>::clone(
+                &toss.broker,
+            ))),
+            Arc::<platform_macos::SystemClock>::clone(clock),
+        ))
     }
 }
 
@@ -216,6 +224,16 @@ impl ResolutionSource for TossResolutionSource {
         Box::pin(self.0.candles(instrument, window, period, adjustment))
     }
 
+    fn calendar_on(
+        &self,
+        market: domain::KnownMarket,
+        date: domain::CalendarDate,
+    ) -> BoxFuture<'_, Result<domain::MarketCalendar, application::PortError>> {
+        Box::pin(self.0.calendar_on(market, date))
+    }
+}
+
+impl MarketCalendars for TossResolutionSource {
     fn calendar_on(
         &self,
         market: domain::KnownMarket,

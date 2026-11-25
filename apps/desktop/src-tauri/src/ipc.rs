@@ -17,6 +17,7 @@ pub mod schedule;
 pub mod scorecard;
 pub mod self_check;
 pub mod settings;
+pub mod signals;
 pub mod state;
 pub mod thesis;
 pub mod toss;

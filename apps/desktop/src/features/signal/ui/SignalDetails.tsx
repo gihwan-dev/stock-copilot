@@ -41,22 +41,37 @@ const Fact = (props: {
   </Inline>
 );
 
+const Sizing = (props: {
+  readonly sizing: SignalCardView["sizing"];
+}): ReactElement => {
+  switch (props.sizing.kind) {
+    case "pending":
+      return (
+        <Text variant="body-sm" tone="ink-muted">
+          {signalText("sizingPending", "ko")}
+        </Text>
+      );
+    case "zero":
+      return <DataText value={props.sizing.reason} variant="body-sm" />;
+    case "sized":
+      return (
+        <Inline gap="space-6" align="center" wrap="wrap">
+          <Fact label={signalText("quantity", "ko")}>
+            <Quantity value={props.sizing.quantity} />
+          </Fact>
+          <Fact label={signalText("amount", "ko")}>
+            <Money value={props.sizing.amount} />
+          </Fact>
+        </Inline>
+      );
+  }
+};
+
 export const KeyFacts = (props: {
   readonly card: SignalCardView;
 }): ReactElement => (
   <Stack gap="space-2">
-    {props.card.sizing.kind === "zero" ? (
-      <DataText value={props.card.sizing.reason} variant="body-sm" />
-    ) : (
-      <Inline gap="space-6" align="center" wrap="wrap">
-        <Fact label={signalText("quantity", "ko")}>
-          <Quantity value={props.card.sizing.quantity} />
-        </Fact>
-        <Fact label={signalText("amount", "ko")}>
-          <Money value={props.card.sizing.amount} />
-        </Fact>
-      </Inline>
-    )}
+    <Sizing sizing={props.card.sizing} />
     <Inline gap="space-6" align="center" wrap="wrap">
       <Fact label={signalText("trackedProbability", "ko")}>
         <Probability value={props.card.trackedProbability} />
@@ -74,9 +89,13 @@ export const Facts = (props: {
   <Disclosure title={signalText("factsTitle", "ko")} defaultOpen="closed">
     <Stack gap="space-1">
       <Fact label={signalText("price", "ko")}>
-        <Money value={props.card.price} />
+        {props.card.price === undefined ? (
+          <Text variant="body-sm">{signalText("priceUnknown", "ko")}</Text>
+        ) : (
+          <Money value={props.card.price} />
+        )}
       </Fact>
-      {props.card.sizing.kind === "zero" ? (
+      {props.card.sizing.kind !== "sized" ? (
         <Stack gap="space-1">{[]}</Stack>
       ) : (
         <Stack gap="space-1">

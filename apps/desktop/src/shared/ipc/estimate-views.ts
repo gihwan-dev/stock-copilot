@@ -29,7 +29,8 @@ export type SignalSizing =
       readonly costs: Money;
       readonly weightAfter: PercentDisplay;
     }
-  | { readonly kind: "zero"; readonly reason: FreeText };
+  | { readonly kind: "zero"; readonly reason: FreeText }
+  | { readonly kind: "pending" };
 
 export type SignalCardView = {
   readonly id: EntityId;
@@ -39,7 +40,7 @@ export type SignalCardView = {
   readonly market: "open" | "closed";
   readonly orderSwitch: "on" | "off";
   readonly proposal: EntityId | undefined;
-  readonly price: Money;
+  readonly price: Money | undefined;
   readonly sizing: SignalSizing;
   readonly aiProbability: PercentDisplay;
   readonly trackedProbability: PercentDisplay;

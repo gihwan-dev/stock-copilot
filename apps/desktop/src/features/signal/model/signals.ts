@@ -36,6 +36,7 @@ export type CardAction =
 export const cardAction = (card: SignalCardView): CardAction => {
   if (card.market === "closed") return { kind: "market-closed" };
   if (card.sizing.kind === "zero") return { kind: "zero-quantity" };
+  if (card.sizing.kind === "pending") return { kind: "no-order" };
   if (card.orderSwitch === "off" || card.proposal === undefined)
     return { kind: "no-order" };
   return { kind: "order", proposal: card.proposal };

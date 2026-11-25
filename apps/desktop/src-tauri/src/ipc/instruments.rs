@@ -395,10 +395,33 @@ async fn quotes(
     Ok(observations.into_iter().filter_map(quoted).collect())
 }
 
-struct Tracked {
-    symbol: Symbol,
-    entry: DirectoryEntry,
-    origin: UiInstrumentOrigin,
+pub(crate) struct Tracked {
+    pub(crate) symbol: Symbol,
+    pub(crate) entry: DirectoryEntry,
+    pub(crate) origin: UiInstrumentOrigin,
+}
+
+pub(crate) async fn tracked_instruments(
+    state: &InstrumentsIpcState,
+    screen: Option<&ScreenState>,
+    directory: &InstrumentDirectory,
+) -> Result<Vec<Tracked>, IpcError> {
+    let watchlist = state.watchlist.list().await.map_err(list_error)?;
+    let held = holdings(screen).await;
+    Ok(tracked(&held, &watchlist, directory))
+}
+
+pub(crate) async fn last_prices(
+    state: &InstrumentsIpcState,
+    instruments: Vec<QuoteInstrument>,
+) -> Option<BTreeMap<Symbol, Price>> {
+    let found = quotes(state, instruments).await.ok()?;
+    Some(
+        found
+            .into_iter()
+            .map(|(symbol, quote)| (symbol, quote.price))
+            .collect(),
+    )
 }
 
 fn holdings_of(view: &StoredView<PortfolioValuation>) -> Vec<ValuedHolding> {

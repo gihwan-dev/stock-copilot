@@ -461,7 +461,9 @@ pub use estimate_cycle::{
 };
 
 mod skip_signal;
-pub use skip_signal::{SignalSkip, SignalSkipRepository, SkipReason, SkipReasonError, SkipSignal};
+pub use skip_signal::{
+    SignalSkip, SignalSkipHistory, SignalSkipRepository, SkipReason, SkipReasonError, SkipSignal,
+};
 
 mod prompt_replay;
 pub use prompt_replay::{
