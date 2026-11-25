@@ -1,0 +1,61 @@
+{
+  "recorded_at": "2026-11-25T09:00:00+09:00",
+  "rows": [
+    {
+      "id": "2026-11-24T00:00:00+09:00-0",
+      "settled_at": "2026-11-24T00:00:00+09:00",
+      "symbol": "005930",
+      "name": "삼성전자",
+      "cash": null,
+      "kind": "buy",
+      "quantity": "10",
+      "amount": {
+        "amount": "720000",
+        "currency": "KRW"
+      },
+      "presence": "present"
+    },
+    {
+      "id": "2026-11-23T00:00:00+09:00-1",
+      "settled_at": "2026-11-23T00:00:00+09:00",
+      "symbol": "005930",
+      "name": "삼성전자",
+      "cash": null,
+      "kind": "sell",
+      "quantity": "10",
+      "amount": {
+        "amount": "720000",
+        "currency": "KRW"
+      },
+      "presence": "vanished"
+    },
+    {
+      "id": "2026-11-22T00:00:00+09:00-2",
+      "settled_at": "2026-11-22T00:00:00+09:00",
+      "symbol": null,
+      "name": null,
+      "cash": "KRW",
+      "kind": "deposit",
+      "quantity": null,
+      "amount": {
+        "amount": "720000",
+        "currency": "KRW"
+      },
+      "presence": "present"
+    },
+    {
+      "id": "2026-11-21T00:00:00+09:00-3",
+      "settled_at": "2026-11-21T00:00:00+09:00",
+      "symbol": null,
+      "name": null,
+      "cash": "KRW",
+      "kind": "other",
+      "quantity": null,
+      "amount": {
+        "amount": "720000",
+        "currency": "KRW"
+      },
+      "presence": "present"
+    }
+  ]
+}
