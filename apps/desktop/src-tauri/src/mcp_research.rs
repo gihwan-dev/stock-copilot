@@ -1,8 +1,13 @@
+use crate::ai_runtime::ChatTurnBook;
 use application::{
     AiEvent, AiEventStream, AiProvider, AiRunId, AuditLog, Clock, CollectionQuery, CollectionTopic,
     IsolationCheck, ModelSelection, ReasoningEffort, ResearchTopic, RunInput, RunPurpose, RunSpec,
     SystemPortError, WatchlistRepository, WebResearchToolFailure, WebResearchToolOutcome,
     WebResearchToolPort, WebResearchToolRequest, WebSearchGuard,
+};
+use application::{
+    ChatRepository, ChatRunLedger, ChatSignalState, ChatStopSignal, ChatWebResearch,
+    ChatWebResearchFailure, ChatWebResearchRequest,
 };
 use domain::{
     DisplayInstrumentName, Symbol, UntrustedText, WebSearchInspection, WebSearchSensitiveContext,
@@ -54,18 +59,46 @@ pub struct AppWebResearch<S, A, C> {
     store: Arc<S>,
     collector: Arc<A>,
     clock: Arc<C>,
+    turns: ChatTurnBook,
     sequence: AtomicU64,
 }
 
 impl<S, A, C> AppWebResearch<S, A, C> {
     #[must_use]
-    pub const fn new(store: Arc<S>, collector: Arc<A>, clock: Arc<C>) -> Self {
+    pub const fn new(store: Arc<S>, collector: Arc<A>, clock: Arc<C>, turns: ChatTurnBook) -> Self {
         Self {
             store,
             collector,
             clock,
+            turns,
             sequence: AtomicU64::new(1_u64),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct KeepRunning;
+
+impl ChatStopSignal for KeepRunning {
+    fn state(&self) -> ChatSignalState {
+        ChatSignalState::Active
+    }
+}
+
+const fn user_failure(failure: ChatWebResearchFailure) -> WebResearchToolFailure {
+    match failure {
+        ChatWebResearchFailure::UserMessageMissing => WebResearchToolFailure::UserMessageMissing,
+        ChatWebResearchFailure::Storage(_)
+        | ChatWebResearchFailure::AuditFailed(_)
+        | ChatWebResearchFailure::IsolationRejected(_)
+        | ChatWebResearchFailure::IsolationNotVerified
+        | ChatWebResearchFailure::ForbiddenToolAttempt
+        | ChatWebResearchFailure::ProviderUnavailable
+        | ChatWebResearchFailure::InvalidResponse(_)
+        | ChatWebResearchFailure::InvalidCredential(_)
+        | ChatWebResearchFailure::RateLimited(_)
+        | ChatWebResearchFailure::Cancelled
+        | ChatWebResearchFailure::Interrupted => WebResearchToolFailure::CollectionFailed,
     }
 }
 
@@ -75,10 +108,44 @@ const fn unavailable(error: SystemPortError) -> WebResearchToolFailure {
 
 impl<S, A, C> AppWebResearch<S, A, C>
 where
-    S: WatchlistRepository + AuditLog,
+    S: WatchlistRepository + AuditLog + ChatRepository + ChatRunLedger,
     A: AiProvider,
     C: Clock,
 {
+    async fn user_message(
+        &self,
+        run: &AiRunId,
+    ) -> Result<WebResearchToolOutcome, WebResearchToolFailure> {
+        let turn = self
+            .turns
+            .turn_of(run)
+            .ok_or(WebResearchToolFailure::UserMessageMissing)?;
+        let request = ChatWebResearchRequest::new(
+            turn.session,
+            turn.turn,
+            self.collection_run(run)?,
+            ModelSelection::Fast,
+            ReasoningEffort::Low,
+        );
+        let findings = ChatWebResearch::new(
+            self.collector.as_ref(),
+            self.store.as_ref(),
+            self.store.as_ref(),
+            self.store.as_ref(),
+            self.clock.as_ref(),
+        )
+        .execute(&request, &KeepRunning)
+        .await
+        .map_err(user_failure)?;
+        if findings.summary().as_untrusted_str().trim().is_empty() {
+            return Err(WebResearchToolFailure::CollectionFailed);
+        }
+        Ok(WebResearchToolOutcome {
+            summary: findings.summary().clone(),
+            collected_at: self.clock.now(),
+        })
+    }
+
     async fn targets(&self) -> Result<Vec<Symbol>, SystemPortError> {
         Ok(WatchlistRepository::load(self.store.as_ref())
             .await?
@@ -167,7 +234,7 @@ where
 
 impl<S, A, C> WebResearchToolPort for AppWebResearch<S, A, C>
 where
-    S: WatchlistRepository + AuditLog,
+    S: WatchlistRepository + AuditLog + ChatRepository + ChatRunLedger,
     A: AiProvider,
     C: Clock,
 {
@@ -180,8 +247,9 @@ where
         run: &AiRunId,
         request: &WebResearchToolRequest,
     ) -> Result<WebResearchToolOutcome, WebResearchToolFailure> {
-        let WebResearchToolRequest::CodeTopics { symbols, topics } = request else {
-            return Err(WebResearchToolFailure::ModeNotAllowed);
+        let (symbols, topics) = match request {
+            WebResearchToolRequest::CodeTopics { symbols, topics } => (symbols, topics),
+            WebResearchToolRequest::StoredUserMessage => return self.user_message(run).await,
         };
         let known: BTreeSet<Symbol> = self
             .targets()

@@ -149,6 +149,7 @@ pub struct CatalogStores<R, E, B, W> {
     pub estimates: Arc<E>,
     pub bodies: Arc<B>,
     pub collector: Arc<W>,
+    pub turns: crate::ai_runtime::ChatTurnBook,
     pub runs: RunMetadataBook,
     pub events: Arc<EventBus>,
 }
@@ -175,6 +176,8 @@ where
         + NewsDataSettingsRepository
         + WatchlistRepository
         + application::AuditLog
+        + application::ChatRepository
+        + application::ChatRunLedger
         + 'static,
     B: ArticleBodies + 'static,
     W: application::AiProvider + 'static,
@@ -192,6 +195,7 @@ where
             Arc::clone(&stores.estimates),
             stores.collector,
             Arc::clone(clock),
+            stores.turns,
         )),
         article: Arc::new(StoredArticles::new(
             Arc::clone(&stores.estimates),

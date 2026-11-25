@@ -540,3 +540,49 @@ impl<A: AiProvider> AiProvider for LateAi<A> {
         self.bound()?.verify_isolation(kind).await
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatTurnRef {
+    pub session: application::ChatSessionId,
+    pub turn: application::ChatTurnId,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ChatTurnBook(Arc<RwLock<BTreeMap<String, ChatTurnRef>>>);
+
+impl ChatTurnBook {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn open(&self, run: &AiRunId, turn: ChatTurnRef) -> ChatTurnEntry {
+        if let Ok(mut map) = self.0.write() {
+            let _previous = map.insert(run.as_str().to_owned(), turn);
+        }
+        ChatTurnEntry {
+            book: self.clone(),
+            run: run.as_str().to_owned(),
+        }
+    }
+
+    #[must_use]
+    pub fn turn_of(&self, run: &AiRunId) -> Option<ChatTurnRef> {
+        self.0.read().ok()?.get(run.as_str()).cloned()
+    }
+}
+
+#[derive(Debug)]
+pub struct ChatTurnEntry {
+    book: ChatTurnBook,
+    run: String,
+}
+
+impl Drop for ChatTurnEntry {
+    fn drop(&mut self) {
+        if let Ok(mut map) = self.book.0.write() {
+            let _removed = map.remove(&self.run);
+        }
+    }
+}

@@ -46,7 +46,10 @@ pub fn build_app<R: Runtime, P: PortTypes>(
                 publish_main(app.handle(), data)
             }))?;
             app.manage(ipc::state::ScreenState::from_ports(&ports));
-            let chat_state = ipc::chat_hub::ChatIpcState::from_ports(&ports);
+            let chat_state = ipc::chat_hub::ChatIpcState::from_ports(&ports).with_turns(
+                app.try_state::<ai_runtime::ChatTurnBook>()
+                    .map(|book| book.inner().clone()),
+            );
             app.manage(ports);
             let _scheduling = platform::scheduling::start_background::<R, P>(app);
             let shutdown_hook = database_shutdown_hook(app, shared_database);

@@ -164,6 +164,57 @@ impl application::AuditLog for ClosedEstimates {
     }
 }
 
+impl application::ChatRepository for ClosedEstimates {
+    fn ensure_session(
+        &self,
+        _session: &application::ChatSessionId,
+        _now: domain::Timestamp,
+    ) -> impl Future<Output = Result<application::ChatSessionRecord, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn load_session(
+        &self,
+        _session: &application::ChatSessionId,
+    ) -> impl Future<Output = Result<Option<application::ChatSessionRecord>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+
+    fn list_sessions(
+        &self,
+    ) -> impl Future<Output = Result<Vec<application::ChatSessionSummary>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+
+    fn append_entry(
+        &self,
+        _session: &application::ChatSessionId,
+        _entry: &application::StoredChatEntry,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn load_user_message(
+        &self,
+        _session: &application::ChatSessionId,
+        _message_id: &application::UserMessageId,
+    ) -> impl Future<Output = Result<Option<application::StoredUserMessage>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+}
+
+impl application::ChatRunLedger for ClosedEstimates {
+    fn record_chat_run(
+        &self,
+        _entry: &application::ChatRunLedgerEntry,
+    ) -> impl Future<Output = Result<application::RecordOutcome, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+}
+
 struct NoBodies;
 
 impl crate::mcp_sources::ArticleBodies for NoBodies {
@@ -208,6 +259,7 @@ fn catalog() -> ToolRegistry {
                     >::Missing,
                 ),
             runs: crate::ai_runtime::RunMetadataBook::new(),
+            turns: crate::ai_runtime::ChatTurnBook::new(),
             events: Arc::new(EventBusBuilder::default().build()),
         },
     )
