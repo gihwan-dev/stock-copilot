@@ -115,6 +115,10 @@ export const commands = {
     typedError<UiScorecardView_Serialize, IpcError>(
       __TAURI_INVOKE("get_scorecard", { request }),
     ),
+  getTransactions: (request: GetTransactionsRequest) =>
+    typedError<UiTransactionsView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_transactions", { request }),
+    ),
 };
 
 /** Events */
@@ -599,6 +603,10 @@ export type GetStatusRequest = {
   scope: SelfCheckScope;
 };
 
+export type GetTransactionsRequest = {
+  scope: TransactionsScope;
+};
+
 export type IpcError = {
   kind: IpcErrorKind;
 };
@@ -788,6 +796,8 @@ export type SubmitTossKeysRequest = {
 };
 
 export type TossConnectionQuery = "current";
+
+export type TransactionsScope = "recent";
 
 export type UiAiRuntime = "ready" | "missing";
 
@@ -1975,6 +1985,51 @@ export type UiTossConnectionState =
 export type UiTotalCoverage = "complete" | "partial";
 
 export type UiTrading = "trading" | "suspended";
+
+export type UiTransactionKind =
+  "buy" | "sell" | "dividend" | "deposit" | "withdrawal" | "fee" | "other";
+
+export type UiTransactionPresence = "present" | "vanished";
+
+export type UiTransactionRow =
+  UiTransactionRow_Serialize | UiTransactionRow_Deserialize;
+
+export type UiTransactionRow_Deserialize = {
+  id: string;
+  settled_at: string;
+  symbol?: string | null;
+  name?: string | null;
+  cash?: UiCurrency | null;
+  kind: UiTransactionKind;
+  quantity?: string | null;
+  amount: UiMoney;
+  presence: UiTransactionPresence;
+};
+
+export type UiTransactionRow_Serialize = {
+  id: string;
+  settled_at: string;
+  symbol: string | null;
+  name: string | null;
+  cash: UiCurrency | null;
+  kind: UiTransactionKind;
+  quantity: string | null;
+  amount: UiMoney;
+  presence: UiTransactionPresence;
+};
+
+export type UiTransactionsView =
+  UiTransactionsView_Serialize | UiTransactionsView_Deserialize;
+
+export type UiTransactionsView_Deserialize = {
+  recorded_at: string;
+  rows: UiTransactionRow_Deserialize[];
+};
+
+export type UiTransactionsView_Serialize = {
+  recorded_at: string;
+  rows: UiTransactionRow_Serialize[];
+};
 
 export type UiUpdateFailure = "check" | "download" | "install";
 
