@@ -3606,18 +3606,6 @@
       "row": "원시 타입",
       "expect": []
     },
-    "src/shared/ipc/risk-schema.ts": {
-      "row": "원시 타입",
-      "expect": []
-    },
-    "src/shared/ipc/status-schema.ts": {
-      "row": "원시 타입",
-      "expect": []
-    },
-    "src/shared/ipc/scorecard-schema.ts": {
-      "row": "원시 타입",
-      "expect": []
-    },
     "src/shared/ipc/schema.ts": {
       "row": "원시 타입",
       "expect": [

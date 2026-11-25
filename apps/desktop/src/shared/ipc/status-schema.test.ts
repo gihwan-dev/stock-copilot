@@ -1,25 +1,30 @@
 import { expect, test } from "vitest";
 import { text } from "../lib";
 import { settleSelfCheck, settleStatus } from "./status-schema";
+import { wire } from "./schema";
 import { responses } from "./testing/responses";
 
 test("settleSelfCheck shows one problem or clear", () => {
   expect(
-    settleSelfCheck({ status: "ok", data: responses.getSelfCheck }),
+    settleSelfCheck({ status: "ok", data: wire(responses.getSelfCheck) }),
   ).toStrictEqual({
     kind: "ok",
     value: { kind: "problem", problem: "claude-missing" },
   });
   expect(
-    settleSelfCheck({ status: "ok", data: { problem: "none" } }),
+    settleSelfCheck({ status: "ok", data: wire({ problem: "none" }) }),
   ).toStrictEqual({ kind: "ok", value: { kind: "clear" } });
   expect(
-    settleSelfCheck({ status: "ok", data: { problem: "mcp-broken" } }).kind,
+    settleSelfCheck({ status: "ok", data: wire({ problem: "mcp-broken" }) })
+      .kind,
   ).toBe("err");
 });
 
 test("settleStatus names sources from messages and keeps the AI wait time", () => {
-  const result = settleStatus({ status: "ok", data: responses.getStatus });
+  const result = settleStatus({
+    status: "ok",
+    data: wire(responses.getStatus),
+  });
   expect(result.kind).toBe("ok");
   if (result.kind === "ok") {
     expect(result.value.aiRuntime).toStrictEqual({ kind: "ready" });
@@ -33,10 +38,10 @@ test("settleStatus names sources from messages and keeps the AI wait time", () =
   expect(
     settleStatus({
       status: "ok",
-      data: {
+      data: wire({
         ...responses.getStatus,
         sources: [{ source: "x", last_success: null }],
-      },
+      }),
     }).kind,
   ).toBe("err");
 });

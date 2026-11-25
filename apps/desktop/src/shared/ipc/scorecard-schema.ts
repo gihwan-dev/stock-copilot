@@ -1,12 +1,12 @@
 import { z } from "zod";
 import {
   emptyFreeText,
+  freeTextSchema,
   parseChartDecimal,
   parseEntityId,
   parseFreeText,
   text,
   type ChartDecimal,
-  type EntityId,
   type FreeText,
   type Result,
   type UiText,
@@ -16,13 +16,9 @@ import type {
   ScorecardCombination,
   ScorecardScreenView,
 } from "./estimate-views";
-import { settleWithSchema, type IpcFailure } from "./schema";
+import { settleWithSchema, type IpcFailure, type WireOutcome } from "./schema";
 
-type CommandOutcome =
-  | { readonly status: "ok"; readonly data: unknown }
-  | { readonly status: "error"; readonly error: unknown };
-
-const asFreeText = (value: UiText | string): FreeText => {
+const asFreeText = (value: UiText): FreeText => {
   const parsed = parseFreeText(value);
   return parsed.kind === "ok" ? parsed.value : emptyFreeText;
 };
@@ -33,11 +29,6 @@ const decimal = z.unknown().transform((value, context): ChartDecimal => {
   context.addIssue({ code: "custom", message: "decimal" });
   return z.NEVER;
 });
-
-const entity = (value: string): EntityId | undefined => {
-  const parsed = parseEntityId(value);
-  return parsed.kind === "ok" ? parsed.value : undefined;
-};
 
 const binKeys = {
   "below-50": "bin.below-50",
@@ -61,7 +52,7 @@ const binSchema = z.strictObject({
 });
 
 const combinationSchema = z.strictObject({
-  model: z.string().min(1),
+  model: freeTextSchema,
   horizon: z.enum([
     "hours",
     "few-days",
@@ -76,20 +67,20 @@ const combinationSchema = z.strictObject({
 });
 
 type RawCombination = Readonly<z.infer<typeof combinationSchema>>;
-type RawBin = Readonly<RawCombination["bins"][number]>;
+type RawBin = Readonly<z.infer<typeof binSchema>>;
 
 const toBin = (
   row: Readonly<RawCombination>,
   point: RawBin,
 ): readonly ScorecardBinRow[] => {
-  const binId = entity(`${row.model}:${row.horizon}:${point.bin}`);
-  return binId === undefined ||
+  const binId = parseEntityId(`${row.model}:${row.horizon}:${point.bin}`);
+  return binId.kind === "err" ||
     point.mean_prediction === null ||
     point.hit_rate === null
     ? []
     : [
         {
-          id: binId,
+          id: binId.value,
           label: asFreeText(text(binKeys[point.bin], "ko")),
           meanPrediction: point.mean_prediction,
           hitRate: point.hit_rate,
@@ -101,13 +92,13 @@ const toBin = (
 const toCombination = (
   row: Readonly<RawCombination>,
 ): readonly ScorecardCombination[] => {
-  const id = entity(`${row.model}:${row.horizon}`);
-  return id === undefined
+  const id = parseEntityId(`${row.model}:${row.horizon}`);
+  return id.kind === "err"
     ? []
     : [
         {
-          id,
-          model: asFreeText(row.model),
+          id: id.value,
+          model: row.model,
           horizon: asFreeText(text(horizonKeys[row.horizon], "ko")),
           judged: row.judged,
           verdict: row.verdict,
@@ -129,6 +120,6 @@ const viewSchema = z
   }));
 
 export const settleScorecard = (
-  outcome: CommandOutcome,
+  outcome: WireOutcome,
 ): Result<ScorecardScreenView, IpcFailure> =>
   settleWithSchema(outcome, viewSchema);

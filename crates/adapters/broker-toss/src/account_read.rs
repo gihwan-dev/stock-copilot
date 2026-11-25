@@ -175,6 +175,13 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     pub async fn connection_status(&self) -> Result<(), crate::TokenError> {
         self.tokens.token().await.map(|_lease| ())
     }
+    pub async fn calendar_on(
+        &self,
+        market: domain::KnownMarket,
+        date: domain::CalendarDate,
+    ) -> Result<domain::MarketCalendar, PortError> {
+        crate::market_calendar::fetch_on(self, market, date).await
+    }
     pub(crate) fn tokens(&self) -> &TokenManager<Store, Time, Renewal> {
         &self.tokens
     }

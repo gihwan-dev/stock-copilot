@@ -61,7 +61,7 @@ impl<R: SourceStatusRepository + 'static> SourceStatusList for RepositorySources
 #[derive(Clone)]
 pub struct SelfCheckIpcState {
     ai: Arc<dyn AiStatusProbe>,
-    sources: Arc<dyn SourceStatusList>,
+    statuses: Arc<dyn SourceStatusList>,
 }
 
 impl fmt::Debug for SelfCheckIpcState {
@@ -78,13 +78,13 @@ impl SelfCheckIpcState {
     ) -> Self {
         Self {
             ai,
-            sources: Arc::new(RepositorySources(repository)),
+            statuses: Arc::new(RepositorySources(repository)),
         }
     }
 
     #[must_use]
-    pub fn with_sources(ai: Arc<dyn AiStatusProbe>, list: Arc<dyn SourceStatusList>) -> Self {
-        Self { ai, sources: list }
+    pub fn with_statuses(ai: Arc<dyn AiStatusProbe>, statuses: Arc<dyn SourceStatusList>) -> Self {
+        Self { ai, statuses }
     }
 }
 
@@ -340,7 +340,7 @@ pub async fn get_status<R: Runtime>(
     } = request;
     let state = managed(&app)?;
     let statuses = state
-        .sources
+        .statuses
         .list()
         .await
         .map_err(|error| IpcError::from(error.class()))?;

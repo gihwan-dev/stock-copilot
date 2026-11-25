@@ -27,6 +27,7 @@ use src_tauri::platform::notifier::{
     NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
 };
 use src_tauri::platform::peer_process::PsPeerInspector;
+use src_tauri::platform::resolution::{ResolutionData, ResolutionDataSlot, ResolutionSource};
 use src_tauri::platform::scheduling::SpecWatchInputs;
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::product_events::{
@@ -115,6 +116,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(turns)
             .manage(link)
             .manage(self_check)
+            .manage(ResolutionDataSlot(Arc::new(ResolutionData::new(
+                TossResolutionSource(Arc::<ProductBroker>::clone(&toss.broker)),
+            ))))
             .manage(ScorecardIpcState::from_repository(
                 Arc::clone(&repositories),
                 Arc::<platform_macos::SystemClock>::clone(&shared_clock),
@@ -164,6 +168,29 @@ fn product_self_check(
         }),
         Arc::clone(repositories),
     )
+}
+
+struct TossResolutionSource(Arc<ProductBroker>);
+
+impl ResolutionSource for TossResolutionSource {
+    fn candles<'a>(
+        &'a self,
+        instrument: &'a domain::QuoteInstrument,
+        window: domain::TimeInterval,
+        period: domain::CandlePeriod,
+        adjustment: domain::PriceAdjustment,
+    ) -> BoxFuture<'a, Result<Vec<domain::Candle>, application::PortError>> {
+        use application::BrokerRead as _;
+        Box::pin(self.0.candles(instrument, window, period, adjustment))
+    }
+
+    fn calendar_on(
+        &self,
+        market: domain::KnownMarket,
+        date: domain::CalendarDate,
+    ) -> BoxFuture<'_, Result<domain::MarketCalendar, application::PortError>> {
+        Box::pin(self.0.calendar_on(market, date))
+    }
 }
 
 const OPEN_COMMAND: &str = "/usr/bin/open";
@@ -678,6 +705,7 @@ type AppPortTypes = ProductPorts<
     ProductQueue,
     ProductAiJobs,
     ProductBroker,
+    store_sqlite::SqlitePortfolioStore,
 >;
 
 const ALLOWED_BUILTIN_PLUGINS: [&str; 4] = [
@@ -3314,8 +3342,16 @@ mod holdings_job_assembly_tests {
     }
 
     #[derive(Debug)]
-    struct HoldingJobPorts;
-    impl PortTypes for HoldingJobPorts {
+    struct GenericJobPorts<Holdings, Store>(std::marker::PhantomData<fn() -> (Holdings, Store)>);
+    type HoldingJobPorts = GenericJobPorts<SqlitePortfolioStore, SqliteRepositories>;
+    impl<Holdings, Store> PortTypes for GenericJobPorts<Holdings, Store>
+    where
+        Holdings: PortfolioRepository + 'static,
+        Store: application::MarketDataRepository
+            + application::NewsRepository
+            + ValuationRepository
+            + 'static,
+    {
         type BrokerRead = testkit_ports::scripted::ScriptedBrokerRead;
         type MarketInfo = testkit_ports::scripted::ScriptedMarketInfo;
         type MacroSeries = Unavailable;
@@ -3327,15 +3363,15 @@ mod holdings_job_assembly_tests {
         type ChatQueuePort = testkit_ports::chat_fakes::ScriptedChatQueue;
         type WarmChatRuntime = testkit_ports::chat_fakes::ScriptedWarmChatRuntime;
         type AiJobQueue = AdmittingQueue;
-        type PortfolioRepository = SqlitePortfolioStore;
+        type PortfolioRepository = Holdings;
         type TransactionRepository = Unavailable;
-        type MarketDataRepository = SqliteRepositories;
-        type NewsRepository = SqliteRepositories;
+        type MarketDataRepository = Store;
+        type NewsRepository = Store;
         type ThesisRepository = Unavailable;
         type EstimateRepository = Unavailable;
         type SignalRepository = Unavailable;
         type ProposalRepository = Unavailable;
-        type ValuationRepository = SqliteRepositories;
+        type ValuationRepository = Store;
         type SettingsRepository = testkit_ports::memory::MemorySettingsRepository;
         type AuditLog = Unavailable;
         type SecretStore = testkit_ports::system_fakes::MemorySecretStore;
