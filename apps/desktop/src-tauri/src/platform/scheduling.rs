@@ -1,4 +1,5 @@
-use crate::platform::background::{BackgroundRuntime, IdleCollectorWorker};
+use crate::platform::background::{BackgroundRuntime, CollectorWorker, IdleCollectorWorker};
+use crate::platform::collector::{CollectorFeeds, app_collector};
 use crate::platform::scheduled_ports::{AppSpecWatch, AppStoredJobs};
 use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
@@ -109,6 +110,7 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     {
         return SchedulingStart::InvalidSchedule;
     }
+    let clock: Arc<dyn application::Clock> = Arc::<P::Clock>::clone(&ports.clock);
     let Ok(scheduler) = Scheduler::new(
         Arc::clone(&ports.clock),
         Arc::new(DisabledAiJobQueue),
@@ -117,13 +119,32 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
         return SchedulingStart::InvalidSchedule;
     };
     bridge.bind(scheduler.event_subscriber().with_order_sync(demand));
+    let collector = collector_worker::<R, P>(app, Arc::clone(&clock));
     let runtime = BackgroundRuntime::spawn(
         Arc::new(scheduler),
         Duration::from_secs(DEFAULT_TICK_INTERVAL_SECONDS),
-        Arc::new(IdleCollectorWorker),
+        collector,
     );
     app.manage(Arc::new(runtime));
     SchedulingStart::Started
+}
+
+fn collector_worker<R: Runtime, P: PortTypes>(
+    app: &App<R>,
+    clock: Arc<dyn application::Clock>,
+) -> Arc<dyn CollectorWorker> {
+    match (
+        app.try_state::<Arc<SqliteRepositories>>(),
+        app.try_state::<CollectorFeeds>(),
+    ) {
+        (Some(stored), Some(listed)) if !listed.0.is_empty() => Arc::new(app_collector::<R, P>(
+            app.handle(),
+            stored.as_ref(),
+            listed.inner(),
+            clock,
+        )),
+        (Some(_) | None, Some(_) | None) => Arc::new(IdleCollectorWorker),
+    }
 }
 
 #[derive(Debug, Clone)]

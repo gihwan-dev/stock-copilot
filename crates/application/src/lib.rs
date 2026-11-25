@@ -690,3 +690,9 @@ pub use warm_chat::{
 };
 mod database_restore;
 pub use database_restore::{RestoreOutcome, announce_restore};
+
+mod collect_feed;
+pub use collect_feed::{
+    CollectFeed, CollectedCount, CollectionDue, FeedRound, FeedRoundOutcome, collection_due,
+    feed_data_source,
+};
