@@ -727,3 +727,22 @@ impl application::ScorecardObservationRepository for SqliteRepositories {
         .await
     }
 }
+
+impl application::ValuationCloseEvidenceRepository for SqliteRepositories {
+    async fn observed_close_evidence(
+        &self,
+        instrument: &ResolvedOrderInstrument,
+        date: domain::CalendarDate,
+        as_of: Timestamp,
+    ) -> Result<Vec<domain::ObservedCloseEvidence>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ValuationCloseEvidenceRepository::observed_close_evidence(
+            &MarketStore::new(database),
+            instrument,
+            date,
+            as_of,
+        )
+        .await
+    }
+}

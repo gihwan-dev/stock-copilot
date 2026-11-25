@@ -5,8 +5,8 @@ use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
 use domain::Timestamp;
 use scheduler::{
-    BriefingJob, DailyBackupJob, IntradayCompactionJob, RegistryError, TossSpecWatchJob,
-    TransactionsSyncJob,
+    BriefingJob, DailyBackupJob, DailyValuationJob, IntradayCompactionJob, RegistryError,
+    TossSpecWatchJob, TransactionsSyncJob,
 };
 use scheduler::{
     DEFAULT_TICK_INTERVAL_SECONDS, JobError, JobRegistry, NoMarketCalendar, PortfolioSyncJob,
@@ -171,6 +171,7 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     registry.register(BriefingJob::morning(stored()))?;
     registry.register(BriefingJob::closing_review(stored()))?;
     registry.register(BriefingJob::pre_us_market(stored()))?;
+    registry.register(DailyValuationJob::new(stored()))?;
     registry.register(TransactionsSyncJob::new(
         stored(),
         Arc::new(NoMarketCalendar),

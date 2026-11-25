@@ -732,22 +732,27 @@ mod tests {
         .expect("세션")
     }
     fn thirty_facts(key: &CalibrationKey) -> Vec<CalibrationFact> {
-        let probability =
-            AiProbability::parse(&AiProbabilityInput::try_new("70").expect("입력")).expect("확률");
-        (0_i64..30_i64)
-            .map(|index| {
-                let start_day = index.checked_mul(10_i64).expect("시작일");
-                let end_day = start_day.checked_add(5_i64).expect("종료일");
+        (1_u8..=99_u8)
+            .flat_map(|percent| (0_u8..100_u8).map(move |index| (percent, index)))
+            .map(|(percent, index)| {
+                let probability = AiProbability::parse(
+                    &AiProbabilityInput::try_new(&percent.to_string()).expect("입력"),
+                )
+                .expect("확률");
                 CalibrationFact::new(
                     CalibrationEstimate::new(
-                        CalibrationEstimateId::try_new(&format!("est-{index}")).expect("ID"),
-                        InstrumentId::try_new(&format!("inst-{index}")).expect("종목"),
+                        CalibrationEstimateId::try_new(&format!("est-{percent}-{index}"))
+                            .expect("ID"),
+                        InstrumentId::try_new(&format!("inst-{percent}-{index}")).expect("종목"),
                         key.clone(),
-                        TimeInterval::try_new(at(start_day, -18_000), at(end_day, -18_000))
-                            .expect("구간"),
+                        TimeInterval::try_new(at(0, -18_000), at(5, -18_000)).expect("구간"),
                         probability,
                     ),
-                    CalibrationOutcome::Hit,
+                    if index < percent {
+                        CalibrationOutcome::Hit
+                    } else {
+                        CalibrationOutcome::Miss
+                    },
                 )
             })
             .collect()

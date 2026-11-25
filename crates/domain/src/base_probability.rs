@@ -297,7 +297,11 @@ fn approve_probability(value: Number) -> Result<BaseProbability, crate::NoEstima
     Ok(BaseProbability(value.0))
 }
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+    pub(crate) const fn base_value(value: Decimal) -> BaseProbability {
+        BaseProbability(value)
+    }
+
     use super::{
         BaseProbability, EstimateDistance, Limit, Number, approve_distances, approve_probability,
         calculate, constant, distances, exp, ln, sine,

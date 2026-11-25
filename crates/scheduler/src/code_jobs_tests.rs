@@ -222,6 +222,7 @@ impl EstimateResolutionPort for CountingResolution {
             resolved: 3,
             ongoing: 1,
             unavailable: 0,
+            brier: domain::BrierTally::default(),
         })
     }
 }

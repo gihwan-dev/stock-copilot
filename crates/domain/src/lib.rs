@@ -271,6 +271,11 @@ pub use order_summary_facts::{
 };
 
 mod calibration;
+mod calibration_arithmetic;
+pub use calibration::{
+    BrierComparison, BrierScore, BrierTally, CalibrationPriorStrength, brier_comparison,
+    shrunk_toward_base,
+};
 pub use calibration::{
     CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCapacity,
     CalibrationCount, CalibrationError, CalibrationEstimate, CalibrationEstimateId,

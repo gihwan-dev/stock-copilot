@@ -1682,4 +1682,26 @@ mod collector_store_tests {
         });
         std::fs::remove_dir_all(directory).expect("정리");
     }
+
+    #[test]
+    fn daily_valuation_without_market_calendar_fails_without_recording_and_skips_backfill() {
+        use scheduler::{DailyValuationPort, JobError};
+        use src_tauri::platform::scheduled_ports::AppStoredJobs;
+        let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
+        let app = mock_app(&repositories);
+        let jobs = AppStoredJobs::<tauri::test::MockRuntime, super::AppPortTypes>::new(
+            app.handle().clone(),
+            repositories.as_ref().clone(),
+        );
+        let now = broker_toss::TossTimestamp::try_from("2026-11-25T07:00:00Z")
+            .expect("clock")
+            .into_domain();
+        tauri::async_runtime::block_on(async {
+            assert_eq!(
+                jobs.record_today(now).await,
+                Err(JobError::PortUnavailable(String::from("market-calendar")))
+            );
+            assert_eq!(jobs.missing_days(now).await, Ok(Vec::new()));
+        });
+    }
 }

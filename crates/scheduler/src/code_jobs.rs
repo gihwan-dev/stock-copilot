@@ -272,11 +272,12 @@ impl<P: DailyValuationPort> ScheduledJob for DailyValuationJob<P> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResolutionTally {
     pub resolved: u32,
     pub ongoing: u32,
     pub unavailable: u32,
+    pub brier: domain::BrierTally,
 }
 
 pub trait EstimateResolutionPort: Send + Sync {
@@ -379,7 +380,13 @@ impl<R: EstimateResolutionRepository, D: ResolutionMarketData> EstimateResolutio
         let mut tally = ResolutionTally::default();
         for report in reports {
             match report.status {
-                ResolutionStatus::Resolved { .. } | ResolutionStatus::AlreadyResolved => {
+                ResolutionStatus::Resolved { brier, .. } => {
+                    tally.resolved = tally.resolved.saturating_add(1);
+                    tally.brier = brier
+                        .and_then(|comparison| tally.brier.clone().with(comparison))
+                        .unwrap_or_else(|| tally.brier.clone());
+                }
+                ResolutionStatus::AlreadyResolved => {
                     tally.resolved = tally.resolved.saturating_add(1);
                 }
                 ResolutionStatus::Ongoing => tally.ongoing = tally.ongoing.saturating_add(1),

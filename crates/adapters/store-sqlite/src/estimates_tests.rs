@@ -569,8 +569,9 @@ pub(crate) fn seed_resolved_and_append_only_rows(
         .expect("resolve");
     assert_eq!(reports.len(), 1, "one resolved report");
     let resolved_ok = match reports.first().map(|item| &item.status) {
-        Some(ResolutionStatus::Resolved { outcome, .. }) => {
+        Some(ResolutionStatus::Resolved { outcome, brier, .. }) => {
             outcome.state() == OutcomeState::Success
+                && brier.is_some_and(|scores| scores.before == scores.after)
         }
         Some(
             ResolutionStatus::Ongoing
