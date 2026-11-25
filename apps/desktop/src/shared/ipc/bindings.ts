@@ -67,6 +67,14 @@ export const commands = {
     typedError<UiTossConnection, IpcError>(
       __TAURI_INVOKE("submit_toss_keys", { request }),
     ),
+  getUpdateStatus: (request: UpdateStatusRequest) =>
+    typedError<UpdateStatusView, IpcError>(
+      __TAURI_INVOKE("get_update_status", { request }),
+    ),
+  restartToUpdate: (request: RestartToUpdateRequest) =>
+    typedError<UpdateStatusView, IpcError>(
+      __TAURI_INVOKE("restart_to_update", { request }),
+    ),
 };
 
 /** Events */
@@ -570,6 +578,12 @@ export type OrderApprovalStatus =
   | "broker-rejected"
   | "outcome-unknown"
   | "unavailable";
+
+export type RestartConfirm = "restart";
+
+export type RestartToUpdateRequest = {
+  confirm: RestartConfirm;
+};
 
 export type ResubscribeChatTurnRequest = {
   turn_id: string;
@@ -1626,6 +1640,41 @@ export type UiTossConnectionState =
   | "forbidden"
   | "account-not-found"
   | "key-in-use";
+
+export type UiUpdateFailure = "check" | "download" | "install";
+
+export type UiUpdateState =
+  | "off"
+  | "idle"
+  | "checking"
+  | ({
+      downloading: {
+        version: string;
+      };
+    } & { failed?: never; ready?: never })
+  | "up-to-date"
+  | ({
+      ready: {
+        version: string;
+        notes: string;
+      };
+    } & { downloading?: never; failed?: never })
+  | ({
+      failed: {
+        failure: UiUpdateFailure;
+      };
+    } & { downloading?: never; ready?: never });
+
+export type UpdateStatusQuery = "current" | "check-now";
+
+export type UpdateStatusRequest = {
+  query: UpdateStatusQuery;
+};
+
+export type UpdateStatusView = {
+  current_version: string;
+  state: UiUpdateState;
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(

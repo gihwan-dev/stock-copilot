@@ -18,7 +18,6 @@ names = [
     "append_invoke_initialization_script",
     "register_uri_scheme_protocol",
     "register_asynchronous_uri_scheme_protocol",
-    "plugin",
     "plugin_boxed",
     "register_plugin",
     "on_webview_event",
@@ -46,6 +45,11 @@ names = [
 ]
 allowed-files = []
 reason = "명령 밖의 IPC 통로, 플러그인, 사용자 정의 프로토콜, 스크립트 주입, 창·webview 생성, 런타임 capability 추가. 지금 쓰는 곳이 없다"
+
+[[api]]
+names = ["plugin"]
+allowed-files = ["src/main.rs"]
+reason = "fin-update: 제품 조립 지점이 공식 자동 업데이트 플러그인(tauri-plugin-updater) 하나만 등록한다. capability에 updater 권한을 주지 않아 WebView는 플러그인 명령을 부를 수 없고, 확인·설치는 코어 명령으로만 한다 (SEC-10)"
 
 [[api]]
 names = ["on_navigation", "on_new_window"]

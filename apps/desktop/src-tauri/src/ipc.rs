@@ -13,6 +13,7 @@ pub mod schedule;
 pub mod settings;
 pub mod state;
 pub mod toss;
+pub mod updates;
 
 #[cfg(test)]
 mod tests;

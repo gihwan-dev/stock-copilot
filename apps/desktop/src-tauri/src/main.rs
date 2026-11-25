@@ -24,6 +24,8 @@ use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
 };
 use src_tauri::toss_link::{TossLink, TossLinkState, live_toss_read};
+use src_tauri::updates;
+use src_tauri::updates::tauri_source::{TauriUpdateSource, configured_pubkey};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
     database::{DatabaseFactory, DatabaseKeyProvision},
@@ -109,6 +111,7 @@ fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Er
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     match single_instance {
         InstanceAcquisition::Primary(_guard) => {
+            start_updates(app.handle());
             run_app(app, |handle, code| handle.exit(code.as_i32()));
             Ok(())
         }
@@ -201,6 +204,15 @@ fn database_key_provision() -> DatabaseKeyProvision {
     DatabaseKeyProvision(Box::new(secrets_keychain::generate_database_key))
 }
 
+fn start_updates(handle: &tauri::AppHandle<tauri::Wry>) {
+    let mode = updates::mode_for(
+        updates::current_build(),
+        configured_pubkey(handle).as_deref(),
+    );
+    let source: Arc<dyn updates::UpdateSource> = Arc::new(TauriUpdateSource::new(handle.clone()));
+    src_tauri::ipc::updates::start(handle, Arc::new(updates::UpdateCenter::new(mode, source)));
+}
+
 fn product_builder(
     scheduler_events: Arc<scheduler::SchedulerEventBridge>,
     repositories: &Arc<SqliteRepositories>,
@@ -208,6 +220,7 @@ fn product_builder(
     clock: &Arc<platform_macos::SystemClock>,
 ) -> tauri::Builder<tauri::Wry> {
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ExternalLinkRuntime::new(
             Arc::new(Unavailable),
             Arc::new(Unavailable),

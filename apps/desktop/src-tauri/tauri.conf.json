@@ -23,6 +23,14 @@
       "freezePrototype": true
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "STOCK_COPILOT_UPDATER_PUBKEY_PLACEHOLDER",
+      "endpoints": [
+        "https://github.com/gihwan-dev/stock-copilot/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["app"],
