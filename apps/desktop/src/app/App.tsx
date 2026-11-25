@@ -5,7 +5,9 @@ import { FirstRunGate, OnboardingClientProvider } from "../features/onboarding";
 import { AppFrame, AppShell, EmptyState, Page } from "../shared/ds";
 import {
   coreSetupClient,
+  getAllocation,
   getBriefings,
+  getPortfolio,
   getSelfCheck,
   getStatus,
   investorProfile,
@@ -33,6 +35,8 @@ type AppProps = {
 const coreScreenSources: ScreenSources = {
   ...pendingScreenSources,
   briefings: getBriefings,
+  portfolio: getPortfolio,
+  allocation: getAllocation,
   investorProfile,
   orderSettings,
   saveInvestorProfile,

@@ -8,6 +8,7 @@ pub mod event;
 pub mod event_bridge;
 pub mod open_external;
 pub mod order_approval;
+pub mod portfolio;
 pub mod public_ip;
 pub mod registry;
 pub mod risk_editor;

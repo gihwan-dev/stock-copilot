@@ -477,6 +477,43 @@ mod tests {
         }
     }
     #[test]
+    fn replacing_the_shared_master_lets_the_same_reader_convert_holdings() {
+        let clock = crate::support::time();
+        let server = ScriptedHttpServer::start(vec![
+            issued(),
+            response("200 OK", &recording("holdings")["body"]),
+            response("200 OK", &recording("holdings")["body"]),
+        ])
+        .expect("server");
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(server.port()).expect("local"),
+            Arc::<crate::support::FakeTime>::clone(&clock),
+            Arc::<crate::support::FakeTime>::clone(&clock),
+        )
+        .expect("client");
+        let reader = TossAccountRead::new(
+            TokenManager::new(
+                client,
+                Store,
+                Time(Arc::clone(&clock)),
+                Renewal,
+                Arc::new(EventBus::default()),
+            ),
+            Time(Arc::clone(&clock)),
+            MasterInstrumentFacts::try_new(vec![]).expect("empty master"),
+        );
+        assert_eq!(
+            run(reader.holdings(&AccountId::new(413)))
+                .expect_err("master missing")
+                .kind(),
+            PortErrorKind::InvalidResponse(ResponseMismatch::Validation)
+        );
+        reader.replace_market_master(master(clock.now()));
+        let converted = run(reader.holdings(&AccountId::new(413))).expect("converted");
+        assert_eq!(converted.holdings().len(), 2);
+        server.finish().expect("finish");
+    }
+    #[test]
     fn liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate() {
         let clock = crate::support::time();
         let rows = master(clock.now())

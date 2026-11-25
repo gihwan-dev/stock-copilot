@@ -1,0 +1,60 @@
+{
+  "recorded_at": "2026-11-25T09:00:00+09:00",
+  "total": {
+    "amount": "12200000",
+    "currency": "KRW"
+  },
+  "total_coverage": "complete",
+  "exchange_rate_at": null,
+  "currencies": [
+    {
+      "currency": "KRW",
+      "holdings": {
+        "amount": "7200000",
+        "currency": "KRW"
+      },
+      "buying_power": {
+        "amount": "5000000",
+        "currency": "KRW"
+      }
+    },
+    {
+      "currency": "USD",
+      "holdings": {
+        "amount": "0.00",
+        "currency": "USD"
+      },
+      "buying_power": {
+        "amount": "0.00",
+        "currency": "USD"
+      }
+    }
+  ],
+  "holdings": [
+    {
+      "symbol": "005930",
+      "name": "삼성전자",
+      "quantity": "100",
+      "value": {
+        "amount": "7200000",
+        "currency": "KRW"
+      },
+      "profit": {
+        "amount": {
+          "amount": "700000",
+          "currency": "KRW"
+        },
+        "rate": "10.77",
+        "direction": "up"
+      }
+    }
+  ],
+  "today": {
+    "amount": {
+      "amount": "-100000",
+      "currency": "KRW"
+    },
+    "rate": "-1.41",
+    "direction": "down"
+  }
+}

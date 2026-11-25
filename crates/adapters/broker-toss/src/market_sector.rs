@@ -237,9 +237,9 @@ pub(crate) async fn etfs<S: SecretStore, T: Clock, R: TokenRenewal>(
         .collect::<Result<Vec<_>, PortError>>()?;
     let etfs = SectorEtfs::from_response(sector.clone(), market, rows, reader.market_now())
         .map_err(|_error| invalid(endpoint))?;
+    let facts = reader.market_master();
     for row in etfs.etfs() {
-        let master = reader
-            .market_master()
+        let master = facts
             .instruments()
             .iter()
             .find(|master| {

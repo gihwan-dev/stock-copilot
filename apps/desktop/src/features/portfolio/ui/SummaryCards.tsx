@@ -42,6 +42,13 @@ const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
         <Text key="hint" variant="caption" tone="ink-muted">
           {portfolioText("totalHint", "ko")}
         </Text>,
+        ...(props.view.totalCoverage === "partial"
+          ? [
+              <Text key="partial" variant="caption" tone="ink-muted">
+                {portfolioText("totalPartial", "ko")}
+              </Text>,
+            ]
+          : []),
         ...(props.view.exchangeRate === undefined
           ? []
           : [
@@ -60,11 +67,17 @@ const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
 const TodayCard = (props: { readonly view: PortfolioView }): ReactElement => (
   <Card title={portfolioText("todayTitle", "ko")}>
     <Stack gap="space-2">
-      <PriceChange
-        amount={props.view.today.amount}
-        rate={props.view.today.rate}
-        direction={props.view.today.direction}
-      />
+      {props.view.today === undefined ? (
+        <Text variant="caption" tone="ink-muted">
+          {portfolioText("todayPending", "ko")}
+        </Text>
+      ) : (
+        <PriceChange
+          amount={props.view.today.amount}
+          rate={props.view.today.rate}
+          direction={props.view.today.direction}
+        />
+      )}
       <Inline gap="space-2" align="center" wrap="wrap">
         <Text variant="caption" tone="ink-muted">
           {portfolioText("recordedAt", "ko")}
@@ -86,7 +99,13 @@ const CurrencyRow = (props: {
       <Money value={props.value.holdings} />
     </TableCell>
     <TableCell align="end">
-      <Money value={props.value.buyingPower} />
+      {props.value.buyingPower === undefined ? (
+        <Text variant="caption" tone="ink-muted">
+          {portfolioText("notObserved", "ko")}
+        </Text>
+      ) : (
+        <Money value={props.value.buyingPower} />
+      )}
     </TableCell>
   </TableRow>
 );
