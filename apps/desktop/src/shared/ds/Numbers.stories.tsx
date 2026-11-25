@@ -8,6 +8,7 @@ import {
   parseTimestamp,
 } from "../lib";
 import {
+  ChartNumber,
   DataText,
   DirectionBadge,
   Money,
@@ -27,7 +28,8 @@ type Story = {
     | "PriceChange"
     | "DirectionBadge"
     | "DataText"
-    | "TimestampText";
+    | "TimestampText"
+    | "ChartNumber";
   readonly themes: readonly ["light", "dark"];
   readonly render: () => ReactElement | null;
 };
@@ -35,7 +37,14 @@ const money = parseMoney("12345678901234567", "KRW");
 const ratio = parsePercentDisplay("-0.00");
 const quantity = parseQuantity("0.123456");
 const probability = parsePercentDisplay("73");
+const decimal = parseChartDecimal("1234567");
 export const numberComponentStories: readonly Story[] = [
+  {
+    component: "ChartNumber",
+    themes: ["light", "dark"],
+    render: (): ReactElement | null =>
+      decimal.kind === "ok" ? <ChartNumber value={decimal.value} /> : null,
+  },
   ...(["full", "compact"] as const).map((notation): Story => ({
     component: "Money",
     themes: ["light", "dark"],

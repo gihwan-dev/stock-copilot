@@ -21,6 +21,9 @@ before(async () => {
       mockCommands({
         appVersion: () => responses.appVersion,
         getSettings: () => responses.getSettings,
+        getPortfolio: () => {
+          throw { kind: "no-data" };
+        },
         checkTossConnection: ({ request }) => {
           window.core.checks.push(request);
           return { state: script.checks.shift() ?? "connected" };

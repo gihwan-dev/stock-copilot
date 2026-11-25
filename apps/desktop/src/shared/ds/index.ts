@@ -50,6 +50,7 @@ export {
   DirectionBadge,
   DataText,
   TimestampText,
+  ChartNumber,
 } from "./Numbers";
 export { Markdown } from "./Markdown";
 export { ChatInput } from "./ChatInput";

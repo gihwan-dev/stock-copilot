@@ -24,7 +24,11 @@ before(async () => {
     window.fireEvent = fireEvent;
     window.act = act;
     window.mount = (fake, path = "/") => {
-      mockCommands({ appVersion: () => responses.appVersion });
+      mockCommands({
+      getPortfolio: () => {
+        throw { kind: "no-data" };
+      },
+      appVersion: () => responses.appVersion });
       const client = createAppQueryClient();
       window.openAdvanced();
       const view = render(h(App, { initialPath: path, queryClient: client, settingsClient: fake }));

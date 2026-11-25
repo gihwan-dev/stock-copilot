@@ -19,6 +19,9 @@ before(async () => {
     window.fireEvent = fireEvent;
     window.mountCore = (settings = responses.getSettings) => {
       mockCommands({
+        getPortfolio: () => {
+          throw { kind: "no-data" };
+        },
         appVersion: () => responses.appVersion,
         getSettings: () => settings,
         checkTossConnection: () => ({
@@ -29,6 +32,9 @@ before(async () => {
     };
     window.mountPlain = () => {
       mockCommands({
+        getPortfolio: () => {
+          throw { kind: "no-data" };
+        },
         appVersion: () => responses.appVersion,
         getSettings: () => responses.getSettings,
       });
