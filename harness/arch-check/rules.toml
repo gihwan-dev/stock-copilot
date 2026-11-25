@@ -320,6 +320,18 @@ prompt-defining-crate = "application"
 prompt-impl-crates = ["platform-macos"]
 prompt-impl-files = ["crates/testkit-ports/src/scripted_identity_confirmation.rs"]
 
+[source.order-collector]
+collector-types = ["ClosedOrderPageCollector", "OpenOrderCollector"]
+allowed-crates = ["broker-toss"]
+allowed-files = [
+    "crates/domain/src/lib.rs",
+    "crates/domain/src/order_query_proof.rs",
+    "crates/domain/tests/t15_completeness_boundary.rs",
+    "crates/application/tests/ports.rs",
+    "crates/approval-command/tests/o19_reconcile.rs",
+    "crates/testkit-ports/tests/o25_order_reconciliation.rs",
+]
+
 [source.toss-order]
 write-means = [
     "post",

@@ -874,6 +874,18 @@ findings = [
 ]
 
 [[case]]
+name = "order-collector-outside-allowed-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "crates/application/src/synthesized.rs" },
+    { rule = "order-collector-start", subject = "crates/adapters/broker-toss-trade/src/lib.rs" },
+    { rule = "order-collector-start", subject = "crates/application/src/lib.rs" },
+    { rule = "order-collector-start", subject = "crates/application/src/synthesized.rs" },
+    { rule = "order-collector-start", subject = "crates/domain/src/sneak.rs" },
+    { rule = "order-collector-start", subject = "crates/testkit-ports/src/lib.rs" },
+    { rule = "order-collector-start", subject = "crates/testkit-ports/tests/new_fixture.rs" },
+]
+
+[[case]]
 name = "identity-confirmation-reexported-paste-fail"
 findings = [
     { rule = "identity-confirmation-issuance", subject = "apps/desktop/e2e-app/src/lib.rs" },
