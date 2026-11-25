@@ -1819,3 +1819,196 @@ mod collector_store_tests {
         });
     }
 }
+
+#[cfg(test)]
+mod briefing_assembly_tests {
+    use application::{AiEvent, BriefingOutcome, BriefingRepository, IsolationCheck, SecretValue};
+    use domain::UntrustedText;
+    use scheduler::{
+        AiJobQueue, AiQueueAdmission, AiQueueError, JobRegistry, JobRunOutcome, ScheduledJobId,
+        Scheduler,
+    };
+    use src_tauri::database::DatabaseFactory;
+    use src_tauri::platform::scheduling::register_stored_jobs;
+    use src_tauri::ports::{PortTypes, Ports};
+    use src_tauri::unavailable::{Unavailable, UnavailableFeed};
+    use std::sync::Arc;
+    use store_sqlite::{SharedDatabase, SqliteRepositories};
+    use testkit_ports::chat_fakes::{ScriptedAiEventStream, ScriptedAiProvider};
+
+    #[derive(Debug, Default)]
+    struct AdmittingQueue;
+
+    impl AiJobQueue for AdmittingQueue {
+        fn request_background_slot(
+            &self,
+            _job: ScheduledJobId,
+            _now: domain::Timestamp,
+        ) -> impl Future<Output = Result<AiQueueAdmission, AiQueueError>> + Send {
+            std::future::ready(Ok(AiQueueAdmission::Admitted))
+        }
+        fn release_background_slot(
+            &self,
+            _job: ScheduledJobId,
+            _now: domain::Timestamp,
+        ) -> impl Future<Output = Result<(), AiQueueError>> + Send {
+            std::future::ready(Ok(()))
+        }
+    }
+
+    #[derive(Debug)]
+    struct AssemblyPorts;
+    impl PortTypes for AssemblyPorts {
+        type BrokerRead = testkit_ports::scripted::ScriptedBrokerRead;
+        type MarketInfo = Unavailable;
+        type MacroSeries = Unavailable;
+        type NewsFeed = UnavailableFeed;
+        type Fundamentals = Unavailable;
+        type AiProvider = ScriptedAiProvider;
+        type ChatRepository = testkit_ports::chat_fakes::MemoryChatRepository;
+        type ChatRunLedger = testkit_ports::chat_fakes::MemoryChatRunLedger;
+        type ChatQueuePort = testkit_ports::chat_fakes::ScriptedChatQueue;
+        type WarmChatRuntime = testkit_ports::chat_fakes::ScriptedWarmChatRuntime;
+        type AiJobQueue = AdmittingQueue;
+        type PortfolioRepository = testkit_ports::memory::MemoryPortfolioRepository;
+        type TransactionRepository = Unavailable;
+        type MarketDataRepository = Unavailable;
+        type NewsRepository = Unavailable;
+        type ThesisRepository = Unavailable;
+        type EstimateRepository = Unavailable;
+        type SignalRepository = Unavailable;
+        type ProposalRepository = Unavailable;
+        type ValuationRepository = Unavailable;
+        type SettingsRepository = testkit_ports::memory::MemorySettingsRepository;
+        type AuditLog = Unavailable;
+        type SecretStore = testkit_ports::system_fakes::MemorySecretStore;
+        type Clock = testkit_ports::SteppedClock;
+        type Notifier = Unavailable;
+        type UserPresence = testkit_ports::ScriptedPresence;
+    }
+
+    fn utc(text: &str) -> domain::Timestamp {
+        broker_toss::TossTimestamp::try_from(text)
+            .expect("clock")
+            .into_domain()
+    }
+
+    fn ports(
+        provider: Arc<ScriptedAiProvider>,
+        clock: Arc<testkit_ports::SteppedClock>,
+    ) -> Ports<AssemblyPorts> {
+        Ports {
+            broker_read: Arc::new(testkit_ports::scripted::ScriptedBrokerRead::default()),
+            market_info: Arc::new(Unavailable),
+            macro_series: Arc::new(Unavailable),
+            news_feeds: Vec::new(),
+            fundamentals: Arc::new(Unavailable),
+            ai_provider: provider,
+            chat_repository: Arc::new(testkit_ports::chat_fakes::MemoryChatRepository::default()),
+            chat_ledger: Arc::new(testkit_ports::chat_fakes::MemoryChatRunLedger::default()),
+            chat_queue: Arc::new(testkit_ports::chat_fakes::ScriptedChatQueue::default()),
+            warm_chat: Arc::new(testkit_ports::chat_fakes::ScriptedWarmChatRuntime::default()),
+            ai_jobs: Arc::new(AdmittingQueue),
+            portfolios: Arc::new(testkit_ports::memory::MemoryPortfolioRepository::default()),
+            transactions: Arc::new(Unavailable),
+            market_data: Arc::new(Unavailable),
+            news: Arc::new(Unavailable),
+            theses: Arc::new(Unavailable),
+            estimates: Arc::new(Unavailable),
+            signals: Arc::new(Unavailable),
+            proposals: Arc::new(Unavailable),
+            valuations: Arc::new(Unavailable),
+            settings: Arc::new(testkit_ports::memory::MemorySettingsRepository::default()),
+            audit: Arc::new(Unavailable),
+            secrets: Arc::new(testkit_ports::system_fakes::MemorySecretStore::default()),
+            clock,
+            notifier: Arc::new(Unavailable),
+            presence: Arc::new(testkit_ports::ScriptedPresence::new([], [])),
+            events: Arc::new(application::EventBusBuilder::default().build()),
+            saved_accounts: Vec::new(),
+            database: Arc::new(DatabaseFactory(Box::new(|_path, _key| {
+                Err(application::SystemPortError::new(
+                    application::SystemPort::Repository,
+                    application::SystemFailure::InvalidData,
+                ))
+            }))),
+        }
+    }
+
+    fn assert_morning_executed(report: &scheduler::TickReport) {
+        let morning = report
+            .records
+            .iter()
+            .find(|record| record.id == ScheduledJobId::MorningBriefing)
+            .expect("아침 브리핑 실행");
+        match &morning.outcome {
+            JobRunOutcome::Executed(_) => {}
+            other @ (JobRunOutcome::SkippedMissedWindow
+            | JobRunOutcome::DeferredByAiQueue { .. }
+            | JobRunOutcome::Failed(_)) => panic!("실행되지 않음: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn admitted_morning_briefing_runs_through_the_scheduler_and_is_stored() {
+        let provider = Arc::new(ScriptedAiProvider::default());
+        provider
+            .script_run()
+            .push(Ok(ScriptedAiEventStream::from_events(vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::TextDelta(UntrustedText::try_new("오늘 시장 요약").expect("text")),
+            ])));
+        let clock = Arc::new(testkit_ports::SteppedClock::new(utc(
+            "2026-11-24T23:19:30Z",
+        )));
+        let shared = SharedDatabase::new();
+        let repositories = SqliteRepositories::new(shared.clone());
+        let app = tauri::test::mock_builder()
+            .manage(ports(Arc::clone(&provider), Arc::clone(&clock)))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("앱");
+        let mut registry = JobRegistry::new();
+        register_stored_jobs::<tauri::test::MockRuntime, AssemblyPorts>(
+            &mut registry,
+            app.handle(),
+            &repositories,
+            None,
+        )
+        .expect("등록");
+        let scheduler =
+            Scheduler::new(Arc::clone(&clock), Arc::new(AdmittingQueue), registry).expect("일정");
+        let directory = std::path::PathBuf::from("../../../target/fin-e")
+            .join(format!("briefing-assembly-{}", std::process::id()));
+        tauri::async_runtime::block_on(async {
+            let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+            src_tauri::database::prepare_directory(&path).expect("폴더");
+            let database = store_sqlite::Database::open(
+                &path,
+                &SecretValue::new(vec![83; 32]),
+                clock.as_ref(),
+            )
+            .expect("열기");
+            assert!(shared.install(database).await.is_none());
+            let _startup = scheduler.tick_once().await;
+            clock
+                .advance_to(utc("2026-11-24T23:20:05Z"))
+                .expect("08:20 KST");
+            let report = scheduler.tick_once().await;
+            assert_morning_executed(&report);
+            let saved = repositories.recent().await.expect("조회");
+            let latest = saved.first().expect("기록");
+            assert_eq!(latest.id.kind(), domain::BriefingKind::Morning);
+            match &latest.outcome {
+                BriefingOutcome::Completed { body, .. } => {
+                    assert_eq!(
+                        body,
+                        &UntrustedText::try_new("오늘 시장 요약").expect("text")
+                    );
+                }
+                BriefingOutcome::Failed(failure) => panic!("실패 기록: {failure:?}"),
+            }
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
+    }
+}
