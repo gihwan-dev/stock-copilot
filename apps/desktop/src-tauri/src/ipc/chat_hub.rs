@@ -335,6 +335,7 @@ impl<P: PortTypes> ChatBackend for PortsChatBackend<P> {
 pub struct ChatIpcState {
     backend: Arc<dyn ChatBackend>,
     hub: Arc<ChatStreamHub>,
+    turns: Option<crate::ai_runtime::ChatTurnBook>,
 }
 
 impl fmt::Debug for ChatIpcState {
@@ -349,7 +350,14 @@ impl ChatIpcState {
         Self {
             backend: Arc::new(PortsChatBackend::from_ports(ports)),
             hub: Arc::new(ChatStreamHub::default()),
+            turns: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_turns(mut self, turns: Option<crate::ai_runtime::ChatTurnBook>) -> Self {
+        self.turns = turns;
+        self
     }
 
     #[must_use]
@@ -370,6 +378,15 @@ impl ChatIpcState {
             .register_turn(session_id, turn_id.clone(), delivery)
             .await;
         let sink = HubChunkSink::new(turn_id.clone(), Arc::clone(&self.hub));
+        let _turn = self.turns.as_ref().map(|book| {
+            book.open(
+                domain_request.run_id(),
+                crate::ai_runtime::ChatTurnRef {
+                    session: domain_request.session_id().clone(),
+                    turn: domain_request.turn_id().clone(),
+                },
+            )
+        });
         let outcome = self.backend.send_turn(domain_request, sink, stop).await;
         self.hub.mark_finished(&turn_id).await;
         Ok(outcome_to_response(&outcome))

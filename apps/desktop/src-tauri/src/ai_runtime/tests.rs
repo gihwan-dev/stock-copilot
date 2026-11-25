@@ -581,3 +581,42 @@ fn analysis_run_registers_thesis_metadata_only_while_it_runs() {
         );
     });
 }
+
+struct FixedHasher;
+
+impl application::PromptHasher for FixedHasher {
+    fn digest(
+        &self,
+        source: &application::PromptSource,
+    ) -> Result<application::PromptDigest, application::PromptLocationError> {
+        let mark = if source.as_str() == "보유 종목 확인" {
+            "ab"
+        } else {
+            "cd"
+        };
+        application::PromptDigest::try_new(&mark.repeat(32))
+    }
+}
+
+#[test]
+fn thesis_metadata_records_the_digest_of_the_prompt_actually_sent() {
+    tauri::async_runtime::block_on(async {
+        let base = TempBase::new();
+        let (calls, _call_rx) = mpsc::channel();
+        let (links, _link_rx) = mpsc::channel();
+        let book = super::RunMetadataBook::new().with_hasher(Arc::new(FixedHasher));
+        let ai = McpAttachedAi::new(
+            Arc::new(RecordingAi { calls, links }),
+            Arc::new(host(&base.0, matching_inspector())),
+        )
+        .with_runs(book.clone());
+        let _stream = ai.run(analysis("chat-digest")).await.expect("실행");
+        let metadata = book
+            .thesis_metadata(&AiRunId::try_new("chat-digest").expect("id"))
+            .expect("등록");
+        assert_eq!(
+            metadata.prompt_version.as_untrusted_str(),
+            "Chat@sha256:abababababababab"
+        );
+    });
+}

@@ -1,9 +1,10 @@
 use application::{AiProvider, AiRunId, ChatHistory, InformationError, RunSpec};
 use src_tauri::ai_runtime::{
-    AiAvailability, AttachableAi, BridgeLocation, LateAi, McpAttachedAi, McpRunLink, McpServerHost,
-    McpServerHostParts, RunMetadataBook,
+    AiAvailability, AttachableAi, BridgeLocation, ChatTurnBook, LateAi, McpAttachedAi, McpRunLink,
+    McpServerHost, McpServerHostParts, RunMetadataBook,
 };
 use src_tauri::audit_queue::AuditEventQueue;
+use src_tauri::collected_links::{CollectedLinker, TitleLinker};
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::mcp_catalog::{
@@ -71,8 +72,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         intraday: Arc::clone(&intraday),
     });
     let events = Arc::new(bus);
+    let turns = ChatTurnBook::new();
     let ai = assemble_ai(
-        discover_ai_setup(&context.config().identifier, bundled_bridge()),
+        discover_ai_setup(
+            &context.config().identifier,
+            bundled_bridge(),
+            turns.clone(),
+        ),
         &shared_clock,
         &events,
         &repositories,
@@ -80,7 +86,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let ports = product_ports(&repositories, notifier, &shared_clock, events, ai);
     let app = build_app(
-        product_builder(scheduler_events, &repositories, ui_events, &shared_clock).manage(intraday),
+        product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
+            .manage(intraday)
+            .manage(turns),
         ports,
         context,
     )?;
@@ -174,7 +182,8 @@ fn product_builder(
         .manage(Arc::clone(repositories))
         .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
         .manage(database_key_provision())
-        .manage(ui_events);
+        .manage(ui_events)
+        .manage(CollectedLinker(Arc::new(AliasTitleLinker)));
     let with_feeds = builder.manage(collector_feeds(clock));
     match spec_watch_inputs(clock) {
         Some(inputs) => with_feeds.manage(inputs),
@@ -434,6 +443,7 @@ struct AiSetup {
     bridge: BridgeLocation,
     sandbox: Option<ai_claude_code::SandboxLayer>,
     cli_projects_dir: Option<PathBuf>,
+    turns: ChatTurnBook,
 }
 
 impl std::fmt::Debug for AiSetup {
@@ -473,6 +483,33 @@ fn assemble_ai(
         grants: tokio::sync::Mutex::new(BTreeMap::new()),
     });
     Ok(ProductAiParts { ai, queue, jobs })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AliasTitleLinker;
+
+impl TitleLinker for AliasTitleLinker {
+    fn instruments_in(
+        &self,
+        title: &domain::UntrustedText,
+        aliases: &[application::StockAlias],
+    ) -> Vec<domain::InstrumentId> {
+        let entries = aliases
+            .iter()
+            .filter_map(|alias| {
+                sources::MatchDictionaryEntry::new(
+                    alias.instrument.clone(),
+                    alias.alias.as_str(),
+                    sources::MatchNameKind::Alias,
+                    sources::MatchNameAmbiguity::Distinct,
+                )
+            })
+            .collect();
+        sources::StockMatcher::new(entries)
+            .match_title(title)
+            .matched()
+            .to_vec()
+    }
 }
 
 struct ProductArticleBodies {
@@ -535,15 +572,17 @@ impl ArticleBodies for ProductArticleBodies {
     }
 }
 
-fn claude_ai(
-    setup: AiSetup,
+fn product_catalog(
+    setup: &AiSetup,
     clock: &Arc<platform_macos::SystemClock>,
     events: &Arc<application::EventBus>,
     repositories: &Arc<SqliteRepositories>,
-) -> Option<McpAttachedAi<ProductClaude, ProductMcpHost>> {
-    let runs = RunMetadataBook::new();
-    let collector = LateAi::<ai_claude_code::ClaudeCodeProvider>::new();
-    let registry = analysis_catalog(
+    (runs, collector): (
+        &RunMetadataBook,
+        &LateAi<ai_claude_code::ClaudeCodeProvider>,
+    ),
+) -> Option<mcp_server::ToolRegistry> {
+    analysis_catalog(
         clock,
         CatalogStores {
             theses: Arc::clone(repositories),
@@ -551,10 +590,22 @@ fn claude_ai(
             bodies: Arc::new(ProductArticleBodies::new(clock)),
             runs: runs.clone(),
             collector: Arc::new(collector.clone()),
+            turns: setup.turns.clone(),
             events: Arc::clone(events),
         },
     )
-    .ok()?;
+    .ok()
+}
+
+fn claude_ai(
+    setup: AiSetup,
+    clock: &Arc<platform_macos::SystemClock>,
+    events: &Arc<application::EventBus>,
+    repositories: &Arc<SqliteRepositories>,
+) -> Option<McpAttachedAi<ProductClaude, ProductMcpHost>> {
+    let runs = RunMetadataBook::new().with_hasher(Arc::new(store_sqlite::Sha256PromptHasher));
+    let collector = LateAi::<ai_claude_code::ClaudeCodeProvider>::new();
+    let registry = product_catalog(&setup, clock, events, repositories, (&runs, &collector))?;
     let base = ai_claude_code::ClaudeCodeConfig::new(
         setup.executable?,
         setup.work_root,
@@ -614,7 +665,7 @@ fn bundled_bridge() -> BridgeLocation {
     location
 }
 
-fn discover_ai_setup(identifier: &str, bridge: BridgeLocation) -> AiSetup {
+fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBook) -> AiSetup {
     let host_env = ai_claude_code::HostEnvironment::from_pairs(std::env::vars());
     let temp_root = host_env
         .tmpdir()
@@ -642,6 +693,7 @@ fn discover_ai_setup(identifier: &str, bridge: BridgeLocation) -> AiSetup {
         work_root,
         bridge,
         cli_projects_dir: None,
+        turns,
     }
 }
 
@@ -1110,7 +1162,7 @@ mod ai_composition_tests {
         RunPurpose, RunSpec,
     };
     use serde_json::{Value, json};
-    use src_tauri::ai_runtime::BridgeLocation;
+    use src_tauri::ai_runtime::{BridgeLocation, ChatTurnBook};
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -1136,6 +1188,7 @@ mod ai_composition_tests {
             bridge: BridgeLocation::new(),
             sandbox: None,
             cli_projects_dir: None,
+            turns: ChatTurnBook::new(),
         };
         assemble_ai(setup, clock, events, repositories).expect("AI 조립")
     }
@@ -1242,6 +1295,7 @@ mod ai_composition_tests {
             bridge,
             sandbox: None,
             cli_projects_dir: Some(root.join("projects")),
+            turns: ChatTurnBook::new(),
         }
     }
 
@@ -1510,6 +1564,29 @@ mod ai_composition_tests {
                 Ok(scheduler::AiQueueAdmission::Admitted)
             );
         });
+    }
+
+    #[test]
+    fn alias_linker_matches_collected_titles_with_the_shared_stock_matcher() {
+        use src_tauri::collected_links::TitleLinker;
+        let samsung = domain::InstrumentId::try_new("005930").expect("종목");
+        let aliases = [application::StockAlias {
+            instrument: samsung.clone(),
+            alias: application::AliasName::try_new("삼성전자").expect("약칭"),
+        }];
+        let title = |raw: &str| domain::UntrustedText::try_new(raw).expect("제목");
+        assert_eq!(
+            super::AliasTitleLinker.instruments_in(&title("삼성전자, 4분기 실적 발표"), &aliases),
+            vec![samsung]
+        );
+        assert_eq!(
+            super::AliasTitleLinker.instruments_in(&title("환율 하락"), &aliases),
+            Vec::<domain::InstrumentId>::new()
+        );
+        assert_eq!(
+            super::AliasTitleLinker.instruments_in(&title("삼성전자"), &[]),
+            Vec::<domain::InstrumentId>::new()
+        );
     }
 
     #[test]

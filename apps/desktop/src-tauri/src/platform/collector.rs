@@ -1,3 +1,4 @@
+use crate::collected_links::{CollectedLinker, LinkingTimes};
 use crate::platform::background::{CollectorFuture, CollectorWorker};
 use crate::ports::{PortTypes, Ports};
 use application::{
@@ -305,13 +306,18 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed + 'static> FeedRunner for AppFeedRunn
                 return Err(unopened());
             }
             let ports = self.app.try_state::<Ports<P>>().ok_or_else(unopened)?;
+            let linker = self
+                .app
+                .try_state::<CollectedLinker>()
+                .map(|state| Arc::clone(&state.0));
+            let times = LinkingTimes::new(&self.repositories, linker.as_deref());
             CollectFeed::new(
                 &self.repositories,
                 &self.repositories,
                 ports.clock.as_ref(),
                 &ports.events,
             )
-            .with_times(&self.repositories)
+            .with_times(&times)
             .collect(&self.feed, cursor)
             .await
         })
