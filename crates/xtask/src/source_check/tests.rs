@@ -6,7 +6,7 @@ use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, reposit
 
 use super::allowlist::{ALLOWLIST_FILE, Allowlists};
 use super::finding::{ExpectProblem, Rule};
-use super::manifest::BANNED_TABLES;
+use super::manifest::{BANNED_TABLES, ManifestRole, manifest_findings, unsafe_exception_lints};
 use super::tokens::{
     BANNED_ATTRIBUTES, BANNED_MACROS, CLOCK_AND_ENVIRONMENT_FUNCTIONS, CLOCK_METHODS, CLOCK_PREFIX,
     DOMAIN_FLOATS, ENVIRONMENT_GLOB, ENVIRONMENT_MACRO, MODULE_ALIAS_SUFFIX, MODULE_GLOB_SUFFIX,
@@ -503,4 +503,34 @@ fn property_count_literals_are_rejected_including_macros() {
         .iter()
         .any(|finding| finding.rule == Rule::PropertyCasesLiteral)
     );
+}
+
+#[test]
+fn only_the_listed_unsafe_exception_may_relax_unsafe_code_to_deny() {
+    let root: toml::Table = "[workspace.lints.rust]\nunsafe_code = \"forbid\"\nunused = \"deny\"\n\n[workspace.lints.clippy]\npanic = \"forbid\"\n"
+        .parse()
+        .expect("root");
+    let exception = unsafe_exception_lints(&root).expect("forbid가 있는 작업 공간");
+    let relaxed: toml::Table = "[lints.rust]\nunsafe_code = \"deny\"\nunused = \"deny\"\n\n[lints.clippy]\npanic = \"forbid\"\n"
+        .parse()
+        .expect("relaxed");
+    let loosened: toml::Table = "[lints.rust]\nunsafe_code = \"deny\"\nunused = \"deny\"\n\n[lints.clippy]\npanic = \"warn\"\n"
+        .parse()
+        .expect("loosened");
+    let path = "crates/adapters/platform-macos/Cargo.toml";
+    assert!(
+        manifest_findings(path, &relaxed, ManifestRole::Member, Some(&exception)).is_empty(),
+        "목록에 있고 unsafe_code만 다르면 통과"
+    );
+    for (manifest, listed) in [(&relaxed, None), (&loosened, Some(&exception))] {
+        let rules: Vec<Rule> = manifest_findings(path, manifest, ManifestRole::Member, listed)
+            .into_iter()
+            .map(|finding| finding.rule)
+            .collect();
+        assert_eq!(rules, vec![Rule::LintsNotInherited]);
+    }
+    let already_denied: toml::Table = "[workspace.lints.rust]\nunsafe_code = \"deny\"\n"
+        .parse()
+        .expect("deny root");
+    assert_eq!(unsafe_exception_lints(&already_denied), None);
 }

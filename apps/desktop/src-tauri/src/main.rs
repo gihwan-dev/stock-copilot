@@ -29,12 +29,15 @@ use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
 use src_tauri::platform::intraday::{BridgedIntradayWatch, IntradayWatchSlot};
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
-    NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
+    NotificationEventSubscriber, NotificationPreferences,
 };
 use src_tauri::platform::peer_process::PsPeerInspector;
 use src_tauri::platform::resolution::{ResolutionData, ResolutionDataSlot, ResolutionSource};
 use src_tauri::platform::scheduling::SpecWatchInputs;
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
+use src_tauri::platform::system_notification::{
+    NotificationHandleSlot, SystemNotificationDelivery,
+};
 use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
 };
@@ -82,8 +85,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let shared_clock = Arc::new(clock);
     let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
+    let notification_handle = Arc::new(NotificationHandleSlot::<tauri::Wry>::default());
     let notifier = Arc::new(FilteredNotifier::new(
-        UnavailableNotificationDelivery,
+        SystemNotificationDelivery::new(Arc::clone(&notification_handle)),
         NotificationPreferences::default(),
     ));
     let ui_events = Arc::new(UiEventSlot::<tauri::Wry>::default());
@@ -122,6 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         product_estimate_flow(&ports, &toss, (&directory, estimate_runs), &signals);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
+            .manage(notification_handle)
             .manage(directory)
             .manage(intraday)
             .manage(turns)
@@ -647,7 +652,7 @@ fn product_ports(
         presence: Arc::new(platform_macos::MacOsPresence::new(
             platform_macos::NativeRiskDialog,
             platform_macos::NativeOrderDialog,
-            platform_macos::UnavailableDeviceOwnerAuth,
+            platform_macos::LocalDeviceOwnerAuth,
         )),
         events,
         saved_accounts: toss.accounts.clone(),
@@ -807,6 +812,7 @@ fn product_builder(
 ) -> tauri::Builder<tauri::Wry> {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(ExternalLinkRuntime::new(
             Arc::clone(repositories),
             Arc::new(MacUrlOpener),
@@ -1433,7 +1439,7 @@ fn probed_sandbox(app_data: &Path, scratch: &Path) -> Option<ai_claude_code::San
     }
 }
 
-type ProductNotifier = FilteredNotifier<UnavailableNotificationDelivery>;
+type ProductNotifier = FilteredNotifier<SystemNotificationDelivery<tauri::Wry>>;
 
 struct ProductSubscribers<D> {
     notifier: Arc<FilteredNotifier<D>>,
@@ -2537,9 +2543,8 @@ mod collector_store_tests {
     };
     use domain::{DataSource, NewsItem, NewsSource, NormalizedUrl, UntrustedText};
     use src_tauri::platform::collector::{AppFeedRunner, FeedRunner};
-    use src_tauri::platform::notifier::{
-        FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
-    };
+    use src_tauri::platform::notifier::{FilteredNotifier, NotificationPreferences};
+    use src_tauri::platform::system_notification::SystemNotificationDelivery;
     use std::sync::{Arc, RwLock};
     use store_sqlite::{SharedDatabase, SqliteRepositories};
 
@@ -2606,7 +2611,7 @@ mod collector_store_tests {
     fn mock_app(repositories: &Arc<SqliteRepositories>) -> tauri::App<tauri::test::MockRuntime> {
         let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
         let notifier = Arc::new(FilteredNotifier::new(
-            UnavailableNotificationDelivery,
+            SystemNotificationDelivery::<tauri::Wry>::new(Arc::default()),
             NotificationPreferences::default(),
         ));
         let events = Arc::new(application::EventBusBuilder::default().build());
@@ -2649,7 +2654,7 @@ mod collector_store_tests {
         });
         let clock = Arc::new(system);
         let notifier = Arc::new(FilteredNotifier::new(
-            UnavailableNotificationDelivery,
+            SystemNotificationDelivery::<tauri::Wry>::new(Arc::default()),
             NotificationPreferences::default(),
         ));
         let events = Arc::new(application::EventBusBuilder::default().build());

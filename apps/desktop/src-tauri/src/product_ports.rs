@@ -1,4 +1,5 @@
-use crate::platform::notifier::{FilteredNotifier, UnavailableNotificationDelivery};
+use crate::platform::notifier::FilteredNotifier;
+use crate::platform::system_notification::SystemNotificationDelivery;
 use crate::ports::PortTypes;
 use crate::unavailable::{Unavailable, UnavailableFeed};
 use application::{
@@ -62,10 +63,10 @@ where
     type AuditLog = Store;
     type SecretStore = Secrets;
     type Clock = platform_macos::SystemClock;
-    type Notifier = FilteredNotifier<UnavailableNotificationDelivery>;
+    type Notifier = FilteredNotifier<SystemNotificationDelivery<tauri::Wry>>;
     type UserPresence = platform_macos::MacOsPresence<
         platform_macos::NativeRiskDialog,
         platform_macos::NativeOrderDialog,
-        platform_macos::UnavailableDeviceOwnerAuth,
+        platform_macos::LocalDeviceOwnerAuth,
     >;
 }

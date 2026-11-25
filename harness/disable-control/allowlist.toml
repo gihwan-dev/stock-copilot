@@ -27,3 +27,21 @@ module = "apps/desktop/src-tauri/src/ipc"
 site = "injected-command"
 lint = "clippy::needless_pass_by_value"
 reason = "Tauri는 AppHandle·Window·State 같은 주입 값을 값으로만 넘긴다. &AppHandle은 CommandArg가 아니다 (ADR 0016)"
+
+[[expect]]
+path = "crates/adapters/platform-macos/src/local_auth.rs"
+statement = "let context = unsafe { LAContext::new() };"
+lint = "unsafe_code"
+reason = "O-07: LocalAuthentication의 LAContext 생성. platform-macos만 unsafe_code를 deny로 두는 보호된 예외 (ADR 0180, architecture 4.5)"
+
+[[expect]]
+path = "crates/adapters/platform-macos/src/local_auth.rs"
+statement = "let available = unsafe { context.canEvaluatePolicy_error(policy) }.is_ok();"
+lint = "unsafe_code"
+reason = "O-07: 본인 확인을 쓸 수 있는지 미리 묻는 canEvaluatePolicy:error: (ADR 0180, architecture 4.5)"
+
+[[expect]]
+path = "crates/adapters/platform-macos/src/local_auth.rs"
+statement = "let () = unsafe { context.evaluatePolicy_localizedReason_reply(policy, &message, &reply) };"
+lint = "unsafe_code"
+reason = "O-07: evaluatePolicy:localizedReason:reply: 호출. 응답 블록은 Send인 채널 송신자만 잡는다 (ADR 0180, architecture 4.5)"

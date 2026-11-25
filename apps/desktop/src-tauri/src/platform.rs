@@ -11,4 +11,5 @@ pub mod resolution;
 pub mod scheduled_ports;
 pub mod scheduling;
 pub mod single_instance;
+pub mod system_notification;
 pub mod tray;

@@ -37,7 +37,7 @@ use comments::comment_lines;
 use failure::CheckFailure;
 use finding::{Finding, Rule};
 use globs::glob_import_lines;
-use manifest::{ManifestRole, manifest_findings};
+use manifest::{ManifestRole, manifest_findings, unsafe_exception_lints};
 use test_impls::test_module_impl_lines;
 use tokens::{AttributeScope, ClockScope, FloatScope, Scope, token_rules};
 
@@ -314,17 +314,25 @@ fn package_findings(
     allowlists: &Allowlists,
 ) -> Result<(Vec<String>, Vec<Finding>), CheckFailure> {
     let mut members = Vec::new();
+    let workspace_root = read_manifest(root, "Cargo.toml")?;
+    let exception_lints = unsafe_exception_lints(&workspace_root);
     let mut findings = manifest_findings(
         "Cargo.toml",
-        &read_manifest(root, "Cargo.toml")?,
+        &workspace_root,
         ManifestRole::WorkspaceRoot,
+        None,
     );
     for package in metadata.workspace_packages() {
         let manifest = relative_path(root, package.manifest_path.as_std_path())?;
+        let exception = match allowlists.unsafe_lints(&manifest) {
+            Membership::Listed => exception_lints.as_ref(),
+            Membership::Unlisted => None,
+        };
         findings.extend(manifest_findings(
             &manifest,
             &read_manifest(root, &manifest)?,
             ManifestRole::Member,
+            exception,
         ));
         let directory = manifest.strip_suffix("Cargo.toml").unwrap_or(&manifest);
         for target in &package.targets {

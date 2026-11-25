@@ -3,6 +3,9 @@ use crate::platform::notifier::{
     NotificationDelivery, NotificationDispatch, NotificationEventSubscriber, NotificationMessage,
     NotificationPreferences, NotificationToggle, UnavailableNotificationDelivery, message_for,
 };
+use crate::platform::system_notification::{
+    NotificationBinding, NotificationHandleSlot, SystemNotificationDelivery,
+};
 use application::{
     EventBusBuilder, Notification, Notifier, RetryDelay, SubscriberFailure, SystemFailure,
     SystemPort, SystemPortError, WriteCompleted,
@@ -307,5 +310,32 @@ fn briefing_finished_event_dispatches_briefing_notification() {
     assert_eq!(
         *recorded.read().expect("수신 기록"),
         vec![Notification::BriefingFinished]
+    );
+}
+
+#[test]
+fn system_delivery_without_a_bound_app_or_plugin_reports_unavailable() {
+    let slot = Arc::new(NotificationHandleSlot::<tauri::test::MockRuntime>::default());
+    let delivery = SystemNotificationDelivery::new(Arc::clone(&slot));
+    let unavailable = Err(SystemPortError::new(
+        SystemPort::Notifier,
+        SystemFailure::Unavailable(RetryDelay::Unknown),
+    ));
+    let message = message_for(Notification::NewSignal);
+    assert_eq!(
+        tauri::async_runtime::block_on(delivery.deliver(Notification::NewSignal, message)),
+        unavailable,
+        "앱이 묶이기 전"
+    );
+    let app = tauri::test::mock_app();
+    assert_eq!(slot.bind(app.handle().clone()), NotificationBinding::Bound);
+    assert_eq!(
+        slot.bind(app.handle().clone()),
+        NotificationBinding::AlreadyBound
+    );
+    assert_eq!(
+        tauri::async_runtime::block_on(delivery.deliver(Notification::NewSignal, message)),
+        unavailable,
+        "알림 플러그인이 없는 앱"
     );
 }
