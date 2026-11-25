@@ -2477,16 +2477,15 @@ mod collector_store_tests {
         let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
         let directory = std::path::PathBuf::from("../../../target/fin-hold")
             .join(format!("restore-{}", std::process::id()));
-        let observed = broker_toss::TossTimestamp::try_from("2026-11-25T00:00:00Z")
-            .expect("시각")
-            .into_domain();
-        let opened_by = testkit_ports::SteppedClock::new(observed);
         let system = platform_macos::SystemClock::new().expect("시계");
+        let observed = broker_toss::TossTimestamp::try_from("2026-11-25T07:00:00Z")
+            .expect("clock")
+            .into_domain();
         tauri::async_runtime::block_on(async {
             let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
             src_tauri::database::prepare_directory(&path).expect("폴더");
             let database =
-                store_sqlite::Database::open(&path, &SecretValue::new(vec![61; 32]), &opened_by)
+                store_sqlite::Database::open(&path, &SecretValue::new(vec![61; 32]), &system)
                     .expect("열기");
             assert!(shared.install(database).await.is_none());
             let guard = shared.read().await;
