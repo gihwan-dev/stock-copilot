@@ -4,8 +4,10 @@ get_briefings
 get_chat_history
 get_job_schedules
 get_settings
+get_update_status
 open_external
 request_order_approval
+restart_to_update
 resubscribe_chat_turn
 send_chat_message
 set_job_schedule

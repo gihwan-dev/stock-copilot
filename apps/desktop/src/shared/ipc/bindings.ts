@@ -59,6 +59,14 @@ export const commands = {
     typedError<UiJobSchedule_Serialize, IpcError>(
       __TAURI_INVOKE("set_job_schedule", { request }),
     ),
+  getUpdateStatus: (request: UpdateStatusRequest) =>
+    typedError<UpdateStatusView, IpcError>(
+      __TAURI_INVOKE("get_update_status", { request }),
+    ),
+  restartToUpdate: (request: RestartToUpdateRequest) =>
+    typedError<UpdateStatusView, IpcError>(
+      __TAURI_INVOKE("restart_to_update", { request }),
+    ),
 };
 
 /** Events */
@@ -558,6 +566,12 @@ export type OrderApprovalStatus =
   | "broker-rejected"
   | "outcome-unknown"
   | "unavailable";
+
+export type RestartConfirm = "restart";
+
+export type RestartToUpdateRequest = {
+  confirm: RestartConfirm;
+};
 
 export type ResubscribeChatTurnRequest = {
   turn_id: string;
@@ -1594,6 +1608,41 @@ export type UiSettingsView = {
 export type UiTimeAdjustment = "adjustable" | "not-adjustable";
 
 export type UiToggleState = "off" | "on";
+
+export type UiUpdateFailure = "check" | "download" | "install";
+
+export type UiUpdateState =
+  | "off"
+  | "idle"
+  | "checking"
+  | ({
+      downloading: {
+        version: string;
+      };
+    } & { failed?: never; ready?: never })
+  | "up-to-date"
+  | ({
+      ready: {
+        version: string;
+        notes: string;
+      };
+    } & { downloading?: never; failed?: never })
+  | ({
+      failed: {
+        failure: UiUpdateFailure;
+      };
+    } & { downloading?: never; ready?: never });
+
+export type UpdateStatusQuery = "current" | "check-now";
+
+export type UpdateStatusRequest = {
+  query: UpdateStatusQuery;
+};
+
+export type UpdateStatusView = {
+  current_version: string;
+  state: UiUpdateState;
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(

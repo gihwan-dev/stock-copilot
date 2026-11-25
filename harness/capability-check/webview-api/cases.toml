@@ -258,3 +258,15 @@ fn open(url: Url) {
     tauri::webview::Webview::builder("x", WebviewUrl::External(url));
 }
 '''
+
+[[case]]
+name = "plugin-outside-assembly"
+expect = ["src/lib.rs: capability:webview-api:plugin"]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+pub fn build(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder.plugin(tauri_plugin_updater::Builder::new().build())
+}
+'''

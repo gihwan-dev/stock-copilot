@@ -17,6 +17,7 @@ mod security;
 pub mod sqlite_ports;
 pub mod startup;
 pub mod unavailable;
+pub mod updates;
 
 use lifecycle::Lifecycle;
 use ports::{PortTypes, Ports};

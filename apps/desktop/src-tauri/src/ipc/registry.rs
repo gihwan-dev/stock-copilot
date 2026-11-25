@@ -1,7 +1,9 @@
 use tauri::Runtime;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
-use super::{app_version, briefing, chat, open_external, order_approval, schedule, settings};
+use super::{
+    app_version, briefing, chat, open_external, order_approval, schedule, settings, updates,
+};
 
 #[must_use]
 pub fn specta_builder<R: Runtime>() -> Builder<R> {
@@ -21,7 +23,9 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         order_approval::request_order_approval::<tauri::Wry>,
         briefing::get_briefings::<tauri::Wry>,
         schedule::get_job_schedules::<tauri::Wry>,
-        schedule::set_job_schedule::<tauri::Wry>
+        schedule::set_job_schedule::<tauri::Wry>,
+        updates::get_update_status::<tauri::Wry>,
+        updates::restart_to_update::<tauri::Wry>
     ];
     Builder::<R>::new()
         .commands(commands)

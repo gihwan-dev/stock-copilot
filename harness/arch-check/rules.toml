@@ -601,3 +601,27 @@ crates = ["scheduler"]
 externals = ["socket2", "syn", "proc-macro2"]
 through = "tokio"
 reason = "J-01: rt·sync·time만 켠 tokio에 Tauri의 net 및 작업 공간 기능 통합으로 보이는 전이 의존. 스케줄러는 네트워크 기능을 호출하지 않는다"
+
+[[external-location-exception]]
+crates = ["src-tauri"]
+externals = ["reqwest", "hyper", "hyper-util", "socket2", "hyper-rustls", "rustls", "tokio-rustls", "security-framework", "cargo_metadata", "toml", "syn", "proc-macro2", "paste"]
+through = "tauri-plugin-updater"
+reason = "fin-update: 사용자 승인 자동 업데이트(tauri-plugin-updater =2.14.1)가 GitHub Releases의 latest.json과 서명된 묶음을 reqwest로 받는다. 플러그인 내부 전송만 쓰고 src-tauri가 HTTP를 직접 열지 않는다. tauri·tauri-plugin 빌드 경로의 절차 매크로·메타데이터 crate도 함께 보인다"
+
+[[external-location-exception]]
+crates = ["application"]
+externals = ["syn", "proc-macro2"]
+through = "secrecy"
+reason = "fin-update: tauri-plugin-updater의 zip(Windows·Linux 대상)이 zeroize의 derive 기능을 켜 전체 대상 기능 통합으로 보이는 절차 매크로 경로. macOS 제품은 zip도 zeroize derive도 쓰지 않는다"
+
+[[external-location-exception]]
+crates = ["mcp-bridge", "mcp-server", "store-sqlite"]
+externals = ["syn", "proc-macro2"]
+through = "zeroize"
+reason = "fin-update: tauri-plugin-updater의 zip(Windows·Linux 대상)이 zeroize의 derive 기능을 켜 전체 대상 기능 통합으로 보이는 절차 매크로 경로. macOS 제품은 zip도 zeroize derive도 쓰지 않는다"
+
+[[external-location-exception]]
+crates = ["mcp-server"]
+externals = ["syn", "proc-macro2"]
+through = "getrandom"
+reason = "fin-update: tauri-plugin-updater 추가로 전체 대상(wasm 등) metadata에서 getrandom 경로에 기능 통합된 절차 매크로가 보인다. mcp-server는 getrandom을 난수 토큰에만 쓴다"

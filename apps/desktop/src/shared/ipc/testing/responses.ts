@@ -90,6 +90,7 @@ export const responses = {
     sector_cap_percent: "40",
     toss_connection: "needs-key",
   },
+  getUpdateStatus: { current_version: "0.1.0", state: "off" },
   ipcErrors: [
     { kind: "user-fixable" },
     { kind: "retryable" },
@@ -98,6 +99,7 @@ export const responses = {
   ],
   openExternal: { status: "opened" },
   requestOrderApproval: { reason: "presence-denied", status: "rejected" },
+  restartToUpdate: { current_version: "0.1.0", state: "off" },
   resubscribeChatTurn: {
     replayed_count: 2,
     state: "Finished",
