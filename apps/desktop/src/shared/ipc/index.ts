@@ -186,3 +186,9 @@ export {
 } from "./news-schema";
 export type { SettingsClient, TossKeys } from "./settings-client";
 export { coreSetupClient, unavailableSettingsClient } from "./settings-client";
+export {
+  investorProfile,
+  orderSettings,
+  saveInvestorProfile,
+  saveOrderSettings,
+} from "./risk-call";

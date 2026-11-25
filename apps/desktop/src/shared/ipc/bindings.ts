@@ -83,6 +83,18 @@ export const commands = {
     typedError<UpdateStatusView, IpcError>(
       __TAURI_INVOKE("restart_to_update", { request }),
     ),
+  getRiskSettings: (request: GetRiskSettingsRequest) =>
+    typedError<UiRiskSettingsView, IpcError>(
+      __TAURI_INVOKE("get_risk_settings", { request }),
+    ),
+  saveInvestorProfile: (request: SaveInvestorProfileRequest) =>
+    typedError<UiRiskSaveOutcome, IpcError>(
+      __TAURI_INVOKE("save_investor_profile", { request }),
+    ),
+  saveOrderSettings: (request: SaveOrderSettingsRequest) =>
+    typedError<UiRiskSaveOutcome, IpcError>(
+      __TAURI_INVOKE("save_order_settings", { request }),
+    ),
 };
 
 /** Events */
@@ -543,6 +555,10 @@ export type GetPublicIpRequest = {
   query: PublicIpQuery;
 };
 
+export type GetRiskSettingsRequest = {
+  scope: RiskSettingsScope;
+};
+
 export type GetSettingsRequest = {
   scope: SettingsQueryScope;
 };
@@ -612,6 +628,16 @@ export type ResubscribeChatTurnResponse = {
   turn_id: string;
   replayed_count: number;
   state: ActiveTurnStateDto;
+};
+
+export type RiskSettingsScope = "current";
+
+export type SaveInvestorProfileRequest = {
+  draft: UiProfileDraft;
+};
+
+export type SaveOrderSettingsRequest = {
+  draft: UiOrderSettingsDraft;
 };
 
 export type SendChatMessageRequest =
@@ -782,6 +808,8 @@ export type UiBriefingsView_Serialize = {
   latest: UiBriefing_Serialize | null;
   past: UiBriefing_Serialize[];
 };
+
+export type UiCardExpiry = "5" | "10" | "15" | "30";
 
 export type UiConnectionState = "connected" | "needs-key";
 
@@ -1536,6 +1564,8 @@ export type UiEvent =
       ThesisUpdated?: never;
     });
 
+export type UiExcludableType = "etf" | "etn" | "preferred" | "spac" | "reit";
+
 export type UiFxPair = "UsdKrw" | "KrwUsd";
 
 export type UiHorizon =
@@ -1545,6 +1575,8 @@ export type UiInformationSource =
   | "Web"
   | ({ News: UiNewsSource } & { Disclosure?: never })
   | ({ Disclosure: UiDisclosureSource } & { News?: never });
+
+export type UiInstrumentCap = "10" | "15" | "20" | "25" | "30";
 
 export type UiJobRun = {
   at: string;
@@ -1605,7 +1637,16 @@ export type UiNewsSource =
 
 export type UiOptionalKeyState = "configured" | "unconfigured";
 
+export type UiOrderCountLimit = "off" | "3" | "5" | "10";
+
 export type UiOrderPermission = "off" | "on";
+
+export type UiOrderSettingsDraft = {
+  market_orders: UiSwitch;
+  hours_horizon: UiSwitch;
+  card_expiry: UiCardExpiry;
+  order_count_limit: UiOrderCountLimit;
+};
 
 export type UiOrderSwitchOutcome = {
   kind: UiOrderSwitchOutcomeKind;
@@ -1615,11 +1656,43 @@ export type UiOrderSwitchOutcome = {
 export type UiOrderSwitchOutcomeKind =
   "changed" | "unchanged" | "denied" | "unavailable";
 
+export type UiProfileDraft = {
+  horizon: UiProfileHorizon;
+  risk_appetite: UiProfileRiskAppetite;
+  instrument_cap: UiInstrumentCap;
+  sector_cap: UiSectorCap;
+  excluded_types: UiExcludableType[];
+};
+
+export type UiProfileHorizon =
+  "hours" | "few-days" | "weeks-to-months" | "half-year-or-more";
+
+export type UiProfileRiskAppetite = "conservative" | "neutral" | "aggressive";
+
 export type UiPublicIp = {
   address: string;
 };
 
 export type UiRiskAppetite = "conservative" | "neutral" | "aggressive";
+
+export type UiRiskRejection =
+  | "none"
+  | "invalid-profile"
+  | "unsupported-exclusion"
+  | "unsupported-order-setting";
+
+export type UiRiskSaveKind =
+  "saved" | "unchanged" | "declined" | "unavailable" | "rejected";
+
+export type UiRiskSaveOutcome = {
+  kind: UiRiskSaveKind;
+  rejection: UiRiskRejection;
+};
+
+export type UiRiskSettingsView = {
+  profile: UiProfileDraft;
+  order: UiOrderSettingsDraft;
+};
 
 export type UiScheduledJob =
   | "morning-briefing"
@@ -1630,6 +1703,8 @@ export type UiScheduledJob =
   | "weekly-review"
   | "intraday-watch"
   | "news-collection";
+
+export type UiSectorCap = "30" | "40" | "50";
 
 export type UiSettingsView = {
   toss_connection: UiConnectionState;
@@ -1651,6 +1726,8 @@ export type UiSettingsView = {
   auto_start_at_login: UiToggleState;
   account_count: number;
 };
+
+export type UiSwitch = "off" | "on";
 
 export type UiTimeAdjustment = "adjustable" | "not-adjustable";
 

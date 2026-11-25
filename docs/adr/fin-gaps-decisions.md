@@ -27,3 +27,12 @@
 | 미리 띄운 채팅 (C-09) | `warm_chat: Unavailable` | `main.rs` | 조사 뒤 판단 |
 | 거시·재무 (FRED·DART) | `macro_series`·`fundamentals: Unavailable` | `main.rs` | 선택 키 기능, 조사 뒤 판단 |
 | 채팅·브리핑·뉴스·공시 수집 | 실제 연결됨 | `main.rs` | - |
+
+## 정한 것
+
+| 작업 | 정한 것 | 다른 선택지 |
+|---|---|---|
+| 위임 | 하네스가 구현 위임(`delegate_task` role=implementation, `Agent`)을 막아 모든 행을 메인 세션이 차례로 구현한다 | 하위 구현자 병렬 |
+| G-01 | 위험 편집은 명령 3개(`get_risk_settings`, `save_investor_profile`, `save_order_settings`). 저장은 기존 유스케이스(`UpdateInvestorProfile`, `ChangeRiskSettings`)만 거쳐 SEC-12 확인 창 규칙이 그대로 선다. 화면 상태(`ScreenState`)가 만들던 빈 이벤트 버스를 제품 버스(`Ports.events`)로 바꿔 `SettingsChanged`가 실제 구독자에게 간다 | 빈 버스 유지(설정 변경이 감사·화면 갱신에 안 감) |
+| G-01 | 종목 주의 비중은 문서값 10% 고정(편집 화면에 항목 없음), 섹터 제외는 저장값을 그대로 둔다(화면에 항목 없음). 화면의 제외 유형 중 우선주·스팩은 domain `ExcludedSecurityType`에 없어 고르면 한 문장으로 거부한다. ETF는 국내·해외 ETF 둘 다 | 우선주·스팩을 조용히 버림 |
+| G-01 | 카드 만료 시간·주문 횟수 상한은 domain·저장소에 자리가 없어(만료 10분 고정, 시간당 상한 고정) 기본값(10분, 끔)만 받고 다른 값은 한 문장으로 거부한다 | 새 설정 표 추가(만료·상한을 쓰는 주문 경로가 아직 값을 읽지 않음) |
