@@ -88,7 +88,7 @@ test("U-27 advanced status shows check records with reasons, no-action states, s
     assert.ok(waitingText.includes("아직 성공 기록 없음"));
     assert.ok(waitingText.includes("격리 설정 확인에 실패했어요"));
     assert.ok(waitingText.includes("확률 추정"));
-    assert.ok(waitingText.includes("12345"));
+    assert.ok(waitingText.includes("12,345"));
     w.cleanup();
 
     const ready = w.mount(w.scenarios.ready);

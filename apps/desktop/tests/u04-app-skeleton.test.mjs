@@ -26,7 +26,12 @@ test("U04 App boots with mockCommands, renders ready and error states without re
   try {
     const w = bundle.open();
 
-    w.mockCommands({ appVersion: () => w.responses.appVersion });
+    w.mockCommands({
+      getPortfolio: () => {
+        throw { kind: "no-data" };
+      },
+      appVersion: () => w.responses.appVersion,
+    });
     const first = w.mountScreen("/");
     await w.waitFor(() => {
       if (!first.view.container.textContent.includes("앱이 준비됐어요."))
@@ -55,6 +60,9 @@ test("U04 App boots with mockCommands, renders ready and error states without re
     w.clearMocks();
 
     w.mockCommands({
+      getPortfolio: () => {
+        throw { kind: "no-data" };
+      },
       appVersion: () => {
         throw w.responses.ipcErrors[0];
       },
@@ -74,6 +82,9 @@ test("U04 App boots with mockCommands, renders ready and error states without re
     w.clearMocks();
 
     w.mockCommands({
+      getPortfolio: () => {
+        throw { kind: "no-data" };
+      },
       appVersion: () => ({ version: "bad" }),
     });
     const malformed = w.mountScreen("/");

@@ -510,6 +510,24 @@ impl CollectedTimes for InformationStore<'_> {
     }
 }
 
+impl application::CollectedUrlCatalog for InformationStore<'_> {
+    async fn find_collected(
+        &self,
+        url: &domain::ParsedExternalUrl,
+    ) -> Result<Option<NormalizedUrl>, SystemPortError> {
+        let wanted = String::from(url.canonical_url().as_str());
+        let stored: Option<String> = self
+            .database
+            .read(move |connection| {
+                connection
+                    .query_row(sql::KNOWN_URL, [wanted], |row| row.get(0))
+                    .optional()
+            })
+            .await?;
+        Ok(stored.and_then(|text| NormalizedUrl::try_new(&text).ok()))
+    }
+}
+
 impl CollectedItemReads for InformationStore<'_> {
     async fn collected_since(
         &self,

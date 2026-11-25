@@ -1,5 +1,11 @@
 import type { ReactElement } from "react";
-import { Card, DataText, Table, TimestampText } from "../../../shared/ds";
+import {
+  Card,
+  ChartNumber,
+  DataText,
+  Table,
+  TimestampText,
+} from "../../../shared/ds";
 import type {
   AiUsageRow,
   CheckRecord,
@@ -111,10 +117,10 @@ export const UsageCard = (props: {
                 <DataText value={row.task} variant="body-sm" />
               </TableRowHeader>
               <TableCell align="end">
-                <DataText value={row.tokens} variant="body-sm" />
+                <ChartNumber value={row.tokens} />
               </TableCell>
               <TableCell align="end">
-                <DataText value={row.seconds} variant="body-sm" />
+                <ChartNumber value={row.seconds} />
               </TableCell>
             </TableRow>
           ))}
