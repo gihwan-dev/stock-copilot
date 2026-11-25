@@ -237,6 +237,7 @@ impl fmt::Debug for SpawnSpec {
 }
 
 pub(crate) struct SpawnedChild {
+    pub(crate) pid: Option<application::ProcessId>,
     pub(crate) shared: Arc<SharedChild>,
     pub(crate) stdin: ChildStdin,
     pub(crate) stdout: ChildStdout,
@@ -272,7 +273,9 @@ pub(crate) fn spawn_isolated_child(
         .stdout
         .take()
         .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "missing child stdout"))?;
+    let pid = application::ProcessId::try_new(child.id()).ok();
     Ok(SpawnedChild {
+        pid,
         shared: SharedChild::new(child),
         stdin,
         stdout,
