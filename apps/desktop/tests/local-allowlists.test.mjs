@@ -52,6 +52,7 @@ const expectedLists = {
     "src/shared/ipc/settings-schema.ts",
     "src/shared/ipc/risk-schema.ts",
     "src/shared/ipc/status-schema.ts",
+    "src/shared/ipc/scorecard-schema.ts",
     "src/shared/ipc/bindings.ts",
   ],
   PROMISE_REJECTION_ALLOWLIST: [
