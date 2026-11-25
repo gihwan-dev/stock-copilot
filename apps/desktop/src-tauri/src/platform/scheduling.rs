@@ -9,8 +9,8 @@ use scheduler::{
     TossSpecWatchJob, TransactionsSyncJob,
 };
 use scheduler::{
-    DEFAULT_TICK_INTERVAL_SECONDS, DisabledAiJobQueue, JobError, JobRegistry, NoMarketCalendar,
-    PortfolioSyncJob, PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
+    DEFAULT_TICK_INTERVAL_SECONDS, JobError, JobRegistry, NoMarketCalendar, PortfolioSyncJob,
+    PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -114,7 +114,7 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     let clock: Arc<dyn application::Clock> = Arc::<P::Clock>::clone(&ports.clock);
     let Ok(scheduler) = Scheduler::new(
         Arc::clone(&ports.clock),
-        Arc::new(DisabledAiJobQueue),
+        Arc::clone(&ports.ai_jobs),
         registry,
     ) else {
         return SchedulingStart::InvalidSchedule;

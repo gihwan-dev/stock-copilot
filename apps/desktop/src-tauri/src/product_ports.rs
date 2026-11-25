@@ -2,15 +2,22 @@ use crate::platform::notifier::{FilteredNotifier, UnavailableNotificationDeliver
 use crate::ports::PortTypes;
 use crate::unavailable::{Unavailable, UnavailableFeed};
 use application::{
-    AuditLog, ChatNumberEvidence, ChatRepository, ChatRunLedger, EstimateRepository,
-    MarketDataRepository, NewsRepository, ProposalRepository, SettingsRepository, SignalRepository,
-    ThesisRepository, TransactionRepository, ValuationRepository,
+    AiProvider, AuditLog, ChatNumberEvidence, ChatQueuePort, ChatRepository, ChatRunLedger,
+    EstimateRepository, MarketDataRepository, NewsRepository, ProposalRepository,
+    SettingsRepository, SignalRepository, ThesisRepository, TransactionRepository,
+    ValuationRepository,
 };
 use std::marker::PhantomData;
+type PortMarker<Store, Secrets, Ai, Queue, Jobs> = fn() -> (Store, Secrets, Ai, Queue, Jobs);
 #[derive(Debug)]
-pub struct ProductPorts<Store, Secrets>(PhantomData<fn() -> (Store, Secrets)>);
-impl<Store, Secrets> PortTypes for ProductPorts<Store, Secrets>
+pub struct ProductPorts<Store, Secrets, Ai, Queue, Jobs>(
+    PhantomData<PortMarker<Store, Secrets, Ai, Queue, Jobs>>,
+);
+impl<Store, Secrets, Ai, Queue, Jobs> PortTypes for ProductPorts<Store, Secrets, Ai, Queue, Jobs>
 where
+    Ai: AiProvider + 'static,
+    Queue: ChatQueuePort + 'static,
+    Jobs: scheduler::AiJobQueue + 'static,
     Store: ChatRepository
         + ChatRunLedger
         + ChatNumberEvidence
@@ -32,11 +39,12 @@ where
     type MacroSeries = Unavailable;
     type NewsFeed = UnavailableFeed;
     type Fundamentals = Unavailable;
-    type AiProvider = Unavailable;
+    type AiProvider = Ai;
     type ChatRepository = Store;
     type ChatRunLedger = Store;
-    type ChatQueuePort = Unavailable;
+    type ChatQueuePort = Queue;
     type WarmChatRuntime = Unavailable;
+    type AiJobQueue = Jobs;
     type PortfolioRepository = Unavailable;
     type TransactionRepository = Store;
     type MarketDataRepository = Store;

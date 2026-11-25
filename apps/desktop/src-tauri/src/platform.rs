@@ -2,6 +2,7 @@ pub mod autostart;
 pub mod background;
 pub mod collector;
 pub mod notifier;
+pub mod peer_process;
 pub mod process_cleanup;
 pub mod residency;
 pub mod scheduled_ports;

@@ -189,7 +189,7 @@ crates = ["serde"]
 forbidden-in = ["domain"]
 
 [[external-location]]
-crates = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml", "sqlparser"]
+crates = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml"]
 allowed-in = ["xtask"]
 
 [[external-location]]

@@ -11,7 +11,7 @@ use mcp_server::{
 use std::fmt;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 
 #[cfg(test)]
 mod tests;
@@ -195,6 +195,29 @@ impl<A: AttachableAi, H: RunMcpHost> AiProvider for McpAttachedAi<A, H> {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct BridgeLocation(Arc<OnceLock<PathBuf>>);
+
+impl BridgeLocation {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set(&self, path: PathBuf) -> Result<(), PathBuf> {
+        self.0.set(path)
+    }
+
+    #[must_use]
+    pub fn get(&self) -> Option<&Path> {
+        self.0.get().map(PathBuf::as_path)
+    }
+
+    fn executable(&self) -> Option<ExecutablePath> {
+        ExecutablePath::try_new(self.get()?.to_str()?).ok()
+    }
+}
+
 pub struct McpServerSession<C: Clock + 'static> {
     handle: Arc<McpServerHandle<C>>,
 }
@@ -237,7 +260,7 @@ pub struct McpServerHost<C, P, L> {
     registry: Arc<ToolRegistry>,
     ledger: ToolLedgerMode<L>,
     base_dir: PathBuf,
-    bridge: ExecutablePath,
+    bridge: BridgeLocation,
 }
 
 impl<C, P, L> fmt::Debug for McpServerHost<C, P, L> {
@@ -256,7 +279,7 @@ pub struct McpServerHostParts<C, P, L> {
     pub registry: Arc<ToolRegistry>,
     pub ledger: ToolLedgerMode<L>,
     pub base_dir: PathBuf,
-    pub bridge: ExecutablePath,
+    pub bridge: BridgeLocation,
 }
 
 impl<C, P, L> fmt::Debug for McpServerHostParts<C, P, L> {
@@ -297,6 +320,7 @@ where
 
     fn open(&self, run: &AiRunId) -> Result<Self::Session, InformationError> {
         let unavailable = |_error| InformationError::Unavailable(ResetTime::NotProvided);
+        let bridge = self.bridge.executable().ok_or_else(missing)?;
         ensure_private_dir(&self.base_dir).map_err(unavailable)?;
         let socket = RunSocketSpec::generate_under(&self.base_dir)
             .map_err(|_error| InformationError::Unavailable(ResetTime::NotProvided))?;
@@ -305,7 +329,7 @@ where
         let request = RunServerRequest::new(
             RunIdentity::new(run.clone(), RunKind::Analysis),
             socket,
-            PeerProcessTarget::pending_parent(self.bridge.clone()),
+            PeerProcessTarget::pending_parent(bridge),
             deps,
         );
         let handle = McpServerHandle::start(request)
@@ -331,4 +355,58 @@ fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
         .mode(0o700)
         .create(dir)?;
     std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+}
+
+#[derive(Debug)]
+pub enum AiAvailability<A> {
+    Ready(A),
+    Missing,
+}
+
+const fn missing() -> InformationError {
+    InformationError::Unavailable(ResetTime::NotProvided)
+}
+
+impl<A: AiProvider> AiProvider for AiAvailability<A> {
+    type Stream = A::Stream;
+
+    async fn run(&self, spec: RunSpec) -> Result<Self::Stream, InformationError> {
+        match self {
+            Self::Ready(inner) => inner.run(spec).await,
+            Self::Missing => Err(missing()),
+        }
+    }
+
+    async fn resume(
+        &self,
+        spec: RunSpec,
+        history: ChatHistory,
+        message: UntrustedText,
+    ) -> Result<Self::Stream, InformationError> {
+        match self {
+            Self::Ready(inner) => inner.resume(spec, history, message).await,
+            Self::Missing => Err(missing()),
+        }
+    }
+
+    async fn usage(&self) -> Result<AiUsage, InformationError> {
+        match self {
+            Self::Ready(inner) => inner.usage().await,
+            Self::Missing => Err(missing()),
+        }
+    }
+
+    async fn interrupt(&self, run: &AiRunId) -> Result<(), InformationError> {
+        match self {
+            Self::Ready(inner) => inner.interrupt(run).await,
+            Self::Missing => Err(missing()),
+        }
+    }
+
+    async fn verify_isolation(&self, kind: RunKind) -> Result<IsolationCheck, InformationError> {
+        match self {
+            Self::Ready(inner) => inner.verify_isolation(kind).await,
+            Self::Missing => Err(missing()),
+        }
+    }
 }
