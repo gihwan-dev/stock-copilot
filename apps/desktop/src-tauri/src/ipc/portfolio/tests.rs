@@ -142,12 +142,12 @@ fn portfolio_view_carries_names_totals_and_signed_profit_from_domain_values() {
     .expect("화면");
     assert_eq!(unnamed.holdings[0].name, "005930");
     assert_eq!(view.holdings[0].trading, super::UiTrading::Trading);
-    let mut row = samsung().row().clone();
-    if let Some(detail) = row.korean_detail.as_mut() {
+    let mut halted_row = samsung().row().clone();
+    if let Some(detail) = halted_row.korean_detail.as_mut() {
         detail.krx = TradingSuspension::Suspended;
     }
     let suspended = InstrumentDirectory::default();
-    suspended.replace(&[MasterInstrument::try_new(row).expect("정지 종목")]);
+    suspended.replace(&[MasterInstrument::try_new(halted_row).expect("정지 종목")]);
     let halted =
         to_portfolio_view(at(RECORDED_AT), &portfolio().evaluate(None), &suspended).expect("화면");
     assert_eq!(halted.holdings[0].trading, super::UiTrading::Suspended);
