@@ -43,7 +43,7 @@ import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
 
-export const frameworkFailure: IpcFailure = { kind: "framework" };
+const frameworkFailure: IpcFailure = { kind: "framework" };
 const timeoutFailure: IpcFailure = { kind: "timeout" };
 
 const createTimeout = <T>(): {
@@ -57,7 +57,7 @@ const createTimeout = <T>(): {
   return { promise: deferred.promise, cancel };
 };
 
-export const raceTimeout = <T>(
+const raceTimeout = <T>(
   pending: Promise<Result<T, IpcFailure>>,
 ): Promise<Result<T, IpcFailure>> => {
   const timer = createTimeout<T>();
@@ -67,6 +67,16 @@ export const raceTimeout = <T>(
   });
   return Promise.race([settled, timer.promise]);
 };
+
+export const settleCall = <O, T>(
+  pending: Promise<O>,
+  settle: (outcome: O) => Result<T, IpcFailure>,
+): Promise<Result<T, IpcFailure>> =>
+  raceTimeout(
+    pending
+      .then(settle)
+      .catch((): Result<T, IpcFailure> => err(frameworkFailure)),
+  );
 
 export const appVersion = (): Promise<Result<AppVersion, IpcFailure>> =>
   raceTimeout(
@@ -87,14 +97,7 @@ export const getSettings = (): Promise<Result<SettingsView, IpcFailure>> =>
 export const openExternal = (
   url: ExternalUrl,
 ): Promise<Result<OpenExternalResult, IpcFailure>> =>
-  raceTimeout(
-    commands
-      .openExternal({ url })
-      .then(settleOpenExternal)
-      .catch((): Result<OpenExternalResult, IpcFailure> =>
-        err(frameworkFailure),
-      ),
-  );
+  settleCall(commands.openExternal({ url }), settleOpenExternal);
 
 export const getBriefings = (): Promise<Result<BriefingsView, IpcFailure>> =>
   raceTimeout(
@@ -107,13 +110,9 @@ export const getBriefings = (): Promise<Result<BriefingsView, IpcFailure>> =>
 export const setOrderPermission = (
   permission: OrderPermissionState,
 ): Promise<Result<OrderSwitchOutcome, IpcFailure>> =>
-  raceTimeout(
-    commands
-      .setOrderPermission({ permission })
-      .then(settleOrderSwitchOutcome)
-      .catch((): Result<OrderSwitchOutcome, IpcFailure> =>
-        err(frameworkFailure),
-      ),
+  settleCall(
+    commands.setOrderPermission({ permission }),
+    settleOrderSwitchOutcome,
   );
 
 export const listenUiEvent = (

@@ -21,6 +21,9 @@ before(async () => {
       mockCommands({
         appVersion: () => responses.appVersion,
         getSettings: () => settings,
+        checkTossConnection: () => ({
+          state: settings.toss_connection === "connected" ? "connected" : "needs-keys",
+        }),
       });
       return render(h(CoreApp));
     };

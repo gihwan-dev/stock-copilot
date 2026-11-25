@@ -1,6 +1,6 @@
-import { err, type Result } from "../lib";
+import type { Result } from "../lib";
 import { commands } from "./bindings";
-import { frameworkFailure, raceTimeout } from "./call";
+import { settleCall } from "./call";
 import type { IpAddressText, IpcFailure, SecretText } from "./schema";
 import {
   settleCopyResult,
@@ -14,42 +14,26 @@ export type TossKeys = {
   readonly secret: SecretText;
 };
 
-const failed = (): Result<TossConnection, IpcFailure> => err(frameworkFailure);
-
 export const checkTossConnection = (): Promise<
   Result<TossConnection, IpcFailure>
 > =>
-  raceTimeout(
-    commands
-      .checkTossConnection({ query: "current" })
-      .then(settleTossConnection)
-      .catch(failed),
+  settleCall(
+    commands.checkTossConnection({ query: "current" }),
+    settleTossConnection,
   );
 
 export const submitTossKeys = (
   keys: TossKeys,
 ): Promise<Result<TossConnection, IpcFailure>> =>
-  raceTimeout(
-    commands
-      .submitTossKeys({ client_id: keys.clientId, secret: keys.secret })
-      .then(settleTossConnection)
-      .catch(failed),
+  settleCall(
+    commands.submitTossKeys({ client_id: keys.clientId, secret: keys.secret }),
+    settleTossConnection,
   );
 
 export const publicIp = (): Promise<Result<PublicIp, IpcFailure>> =>
-  raceTimeout(
-    commands
-      .getPublicIp({ query: "current" })
-      .then(settlePublicIp)
-      .catch((): Result<PublicIp, IpcFailure> => err(frameworkFailure)),
-  );
+  settleCall(commands.getPublicIp({ query: "current" }), settlePublicIp);
 
 export const copyText = (
   value: IpAddressText,
 ): Promise<Result<CopyResult, IpcFailure>> =>
-  raceTimeout(
-    commands
-      .copyText({ text: value })
-      .then(settleCopyResult)
-      .catch((): Result<CopyResult, IpcFailure> => err(frameworkFailure)),
-  );
+  settleCall(commands.copyText({ text: value }), settleCopyResult);
