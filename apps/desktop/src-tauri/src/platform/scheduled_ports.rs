@@ -126,7 +126,7 @@ impl<R: Runtime, P: PortTypes> TransactionSyncPort for AppStoredJobs<R, P> {
         };
         let mut tally = TransactionSyncTally::default();
         let mut first_failure = None;
-        for account in &ports.saved_accounts {
+        for account in &ports.saved_accounts.current() {
             match recent.sync_recent(account).await {
                 Ok(_delivery) => tally.recent_synced = tally.recent_synced.saturating_add(1),
                 Err(error) => first_failure = first_failure.or_else(|| Some(storage(error))),
@@ -203,10 +203,11 @@ impl<R: Runtime, P: PortTypes> BriefingPort for AppStoredJobs<R, P> {
         _now: Timestamp,
     ) -> Result<BriefingRunResult, JobError> {
         let ports = self.ports()?;
+        let accounts = ports.saved_accounts.current();
         let context = HoldingsBriefingContext {
             portfolios: ports.portfolios.as_ref(),
             news: ports.news.as_ref(),
-            accounts: &ports.saved_accounts,
+            accounts: &accounts,
         };
         let report = RunBriefing {
             ai: ports.ai_provider.as_ref(),
@@ -249,7 +250,7 @@ impl<R: Runtime, P: PortTypes> DailyValuationPort for AppStoredJobs<R, P> {
             &ports.events,
         );
         let mut first_failure = None;
-        for account in &ports.saved_accounts {
+        for account in &ports.saved_accounts.current() {
             if let Err(error) = use_case.execute(account, &calendar).await {
                 first_failure =
                     first_failure.or_else(|| Some(JobError::ExecutionFailed(format!("{error:?}"))));

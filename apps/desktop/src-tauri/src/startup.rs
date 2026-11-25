@@ -19,7 +19,7 @@ pub async fn prepare<P: PortTypes>(ports: &Ports<P>) -> MainScreenData {
     let profile = ports.settings.profile().await;
     let risk_settings = ports.settings.risk_settings().await;
     let mut portfolios = Vec::new();
-    for account in &ports.saved_accounts {
+    for account in &ports.saved_accounts.current() {
         portfolios.push(StoredPortfolio {
             account: account.clone(),
             record: ports.portfolios.latest(account).await,

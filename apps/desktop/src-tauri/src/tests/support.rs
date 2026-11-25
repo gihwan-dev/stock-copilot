@@ -63,7 +63,7 @@ pub(crate) fn ports() -> Ports<TestPorts> {
         notifier: Arc::new(Unavailable),
         presence: Arc::new(testkit_ports::ScriptedPresence::new([], [])),
         events: Arc::new(application::EventBusBuilder::default().build()),
-        saved_accounts: Vec::new(),
+        saved_accounts: crate::broker_link::AccountSlot::default(),
         database: Arc::new(DatabaseFactory(Box::new(|_path, _key| {
             Err(failure(application::SystemFailure::InvalidData))
         }))),

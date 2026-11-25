@@ -53,7 +53,7 @@ struct PortsBackend<P: PortTypes> {
     market_data: Arc<P::MarketDataRepository>,
     presence: Arc<P::UserPresence>,
     events: application::EventBus,
-    saved_accounts: Vec<domain::AccountId>,
+    saved_accounts: crate::broker_link::AccountSlot,
 }
 
 async fn secret_presence<S: SecretStore>(store: &S, key: SecretKey) -> SecretPresence {
@@ -104,7 +104,7 @@ impl<P: PortTypes> ScreenBackend for PortsBackend<P> {
                 toss_connected,
                 dart_key,
                 fred_key,
-                account_count: saturating_account_count(self.saved_accounts.len()),
+                account_count: saturating_account_count(self.saved_accounts.current().len()),
             })
         })
     }
@@ -125,7 +125,8 @@ impl<P: PortTypes> ScreenBackend for PortsBackend<P> {
     ) -> BoxFuture<'_, Result<application::StoredView<domain::PortfolioValuation>, SystemPortError>>
     {
         Box::pin(async move {
-            let Some(account) = self.saved_accounts.first() else {
+            let accounts = self.saved_accounts.current();
+            let Some(account) = accounts.first() else {
                 return Ok(application::StoredView::Missing);
             };
             application::GetPortfolioView::new(self.portfolios.as_ref(), self.market_data.as_ref())
@@ -138,7 +139,8 @@ impl<P: PortTypes> ScreenBackend for PortsBackend<P> {
         &self,
     ) -> BoxFuture<'_, Result<application::StoredView<domain::Allocation>, SystemPortError>> {
         Box::pin(async move {
-            let Some(account) = self.saved_accounts.first() else {
+            let accounts = self.saved_accounts.current();
+            let Some(account) = accounts.first() else {
                 return Ok(application::StoredView::Missing);
             };
             application::GetAllocationView::new(self.portfolios.as_ref(), self.market_data.as_ref())
@@ -151,7 +153,8 @@ impl<P: PortTypes> ScreenBackend for PortsBackend<P> {
         &self,
     ) -> BoxFuture<'_, Result<Option<SyncRecord<SettledRowSet>>, SystemPortError>> {
         Box::pin(async move {
-            let Some(account) = self.saved_accounts.first() else {
+            let accounts = self.saved_accounts.current();
+            let Some(account) = accounts.first() else {
                 return Ok(None);
             };
             self.transactions.latest(account).await

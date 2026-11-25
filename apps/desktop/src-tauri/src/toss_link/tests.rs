@@ -2,17 +2,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use application::{
-    AccessDenial, PortErrorKind, SecretKey, SecretStore, SecretValue, SystemFailure, SystemPort,
-    SystemPortError,
+    AccessDenial, SecretKey, SecretStore, SecretValue, SystemFailure, SystemPort, SystemPortError,
 };
-use broker_toss::{TokenError, TossEndpoint};
 use domain::{Nanosecond, SpanSeconds, TimeSpan};
-use testkit::ScriptedHttpServer;
 use testkit_ports::SteppedClock;
 
 use super::{
-    ConnectionListener, TossConnectionState, TossKeys, TossLink, TossLinkBackend, TossLinkFailure,
-    TossProbe, connection_state, live_toss_read,
+    ConnectionListener, ProbeFailure, ProbeResult, TossConnectionState, TossKeys, TossLink,
+    TossLinkBackend, TossLinkFailure, TossProbe, connection_state,
 };
 use crate::ipc::state::BoxFuture;
 
@@ -80,25 +77,25 @@ impl SecretStore for MemorySecretStore {
 
 #[derive(Default)]
 struct ScriptedProbe {
-    replies: std::sync::RwLock<Vec<Result<(), TokenError>>>,
+    replies: std::sync::RwLock<Vec<ProbeResult>>,
     checks: AtomicUsize,
     reconnects: AtomicUsize,
 }
 
 impl ScriptedProbe {
-    fn with(replies: Vec<Result<(), TokenError>>) -> Arc<Self> {
+    fn with(replies: Vec<ProbeResult>) -> Arc<Self> {
         Arc::new(Self {
             replies: std::sync::RwLock::new(replies),
             ..Self::default()
         })
     }
 
-    fn next(&self) -> Result<(), TokenError> {
+    fn next(&self) -> ProbeResult {
         self.replies
             .write()
-            .map_or(Err(TokenError::Renewal), |mut replies| {
+            .map_or(Err(ProbeFailure::Unavailable), |mut replies| {
                 replies.reverse();
-                let reply = replies.pop().unwrap_or(Err(TokenError::Renewal));
+                let reply = replies.pop().unwrap_or(Err(ProbeFailure::Unavailable));
                 replies.reverse();
                 reply
             })
@@ -106,13 +103,13 @@ impl ScriptedProbe {
 }
 
 impl TossProbe for ScriptedProbe {
-    fn check(&self) -> BoxFuture<'_, Result<(), TokenError>> {
+    fn check(&self) -> BoxFuture<'_, ProbeResult> {
         self.checks.fetch_add(1, Ordering::SeqCst);
         let reply = self.next();
         Box::pin(std::future::ready(reply))
     }
 
-    fn reconnect(&self) -> BoxFuture<'_, Result<(), TokenError>> {
+    fn reconnect(&self) -> BoxFuture<'_, ProbeResult> {
         self.reconnects.fetch_add(1, Ordering::SeqCst);
         let reply = self.next();
         Box::pin(std::future::ready(reply))
@@ -131,9 +128,12 @@ impl ConnectionListener for CountingListener {
 
 fn clock() -> Arc<SteppedClock> {
     Arc::new(SteppedClock::new(
-        broker_toss::TossTimestamp::try_from("2026-11-25T00:00:00Z")
-            .expect("clock")
-            .into_domain(),
+        domain::Timestamp::from_parts(
+            domain::UnixSeconds::new(1_795_564_800),
+            Nanosecond::new(0),
+            domain::OffsetSeconds::new(0),
+        )
+        .expect("clock"),
     ))
 }
 
@@ -152,7 +152,7 @@ struct Fixture {
     link: TossLink<MemorySecretStore>,
 }
 
-fn fixture(replies: Vec<Result<(), TokenError>>) -> Fixture {
+fn fixture(replies: Vec<ProbeResult>) -> Fixture {
     let secrets = Arc::new(MemorySecretStore::default());
     let probe = ScriptedProbe::with(replies);
     let listener = Arc::new(CountingListener::default());
@@ -239,33 +239,22 @@ fn submit_rejects_blank_or_control_character_keys_without_storing_or_calling_tos
 fn submit_reports_the_screen_state_for_each_token_refusal() {
     for (reply, expected) in [
         (
-            Err(TokenError::Rejected(PortErrorKind::AccessDenied(
-                AccessDenial::IpNotAllowed,
-            ))),
+            Err(ProbeFailure::Denied(AccessDenial::IpNotAllowed)),
             TossConnectionState::IpNotAllowed,
         ),
         (
-            Err(TokenError::Rejected(PortErrorKind::AccessDenied(
-                AccessDenial::InvalidCredentials,
-            ))),
+            Err(ProbeFailure::Denied(AccessDenial::InvalidCredentials)),
             TossConnectionState::InvalidKey,
         ),
         (
-            Err(TokenError::Rejected(PortErrorKind::AccessDenied(
-                AccessDenial::Forbidden,
-            ))),
+            Err(ProbeFailure::Denied(AccessDenial::Forbidden)),
             TossConnectionState::Forbidden,
         ),
         (
-            Err(TokenError::Rejected(PortErrorKind::AccessDenied(
-                AccessDenial::AccountNotFound,
-            ))),
+            Err(ProbeFailure::Denied(AccessDenial::AccountNotFound)),
             TossConnectionState::AccountNotFound,
         ),
-        (
-            Err(TokenError::RevokedRepeated),
-            TossConnectionState::KeyInUse,
-        ),
+        (Err(ProbeFailure::KeyInUse), TossConnectionState::KeyInUse),
     ] {
         let fx = fixture(vec![reply]);
         let result =
@@ -278,7 +267,7 @@ fn submit_reports_the_screen_state_for_each_token_refusal() {
 #[test]
 fn transport_failure_is_a_retryable_failure_not_a_connection_state() {
     assert_eq!(
-        connection_state(Err(TokenError::Http(broker_toss::TossHttpError::Transport))),
+        connection_state(Err(ProbeFailure::Unavailable)),
         Err(TossLinkFailure::Unavailable)
     );
 }
@@ -298,9 +287,7 @@ fn store_failure_is_reported_and_toss_is_not_called() {
 
 #[test]
 fn failed_checks_retry_toss_at_most_once_a_minute_and_new_keys_retry_at_once() {
-    let ip = Err(TokenError::Rejected(PortErrorKind::AccessDenied(
-        AccessDenial::IpNotAllowed,
-    )));
+    let ip = Err(ProbeFailure::Denied(AccessDenial::IpNotAllowed));
     let fx = fixture(vec![ip, ip, Ok(()), Ok(())]);
     tauri::async_runtime::block_on(async {
         assert_eq!(
@@ -321,67 +308,6 @@ fn failed_checks_retry_toss_at_most_once_a_minute_and_new_keys_retry_at_once() {
         );
         assert_eq!(fx.probe.reconnects.load(Ordering::SeqCst), 2);
     });
-}
-
-fn http(status: &str, body: &str) -> Vec<u8> {
-    format!(
-        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    )
-    .into_bytes()
-}
-
-fn token_ok() -> Vec<u8> {
-    http(
-        "200 OK",
-        r#"{"access_token":"fake-access-token","token_type":"Bearer","expires_in":3600}"#,
-    )
-}
-
-fn access_denied() -> Vec<u8> {
-    http("403 Forbidden", r#"{"error":"access_denied"}"#)
-}
-
-fn live_link(
-    server: &ScriptedHttpServer,
-    secrets: &Arc<MemorySecretStore>,
-) -> TossLink<MemorySecretStore> {
-    let system = Arc::new(platform_macos::SystemClock::new().expect("clock"));
-    let reader = live_toss_read(
-        &TossEndpoint::local(server.port()).expect("endpoint"),
-        Arc::clone(secrets),
-        Arc::clone(&system),
-        Arc::new(application::EventBus::default()),
-    )
-    .expect("reader");
-    TossLink::new(
-        Arc::clone(secrets),
-        Arc::new(reader),
-        Arc::new(super::NoListener),
-        clock(),
-    )
-}
-
-#[test]
-fn pasted_keys_reach_the_fake_toss_token_endpoint_and_ip_refusal_then_success_is_reported() {
-    let server = ScriptedHttpServer::start(vec![access_denied(), token_ok()]).expect("server");
-    let secrets = Arc::new(MemorySecretStore::default());
-    let link = live_link(&server, &secrets);
-    tauri::async_runtime::block_on(async {
-        assert_eq!(
-            link.submit(keys(ID_SENTINEL, SECRET_SENTINEL)).await,
-            Ok(TossConnectionState::IpNotAllowed)
-        );
-        assert_eq!(
-            link.submit(keys(ID_SENTINEL, SECRET_SENTINEL)).await,
-            Ok(TossConnectionState::Connected)
-        );
-        assert_eq!(link.check().await, Ok(TossConnectionState::Connected));
-    });
-    let requests = String::from_utf8(server.finish().expect("requests")).expect("utf8");
-    assert_eq!(requests.matches("grant_type=client_credentials").count(), 2);
-    assert!(requests.contains(ID_SENTINEL));
-    assert!(requests.contains(SECRET_SENTINEL));
 }
 
 #[test]

@@ -59,7 +59,7 @@ impl<R: Runtime, P: PortTypes> PortfolioSyncPort for AppPortfolioSync<R, P> {
         );
         let mut synced = 0_u32;
         let mut first_failure = None;
-        for account in &ports.saved_accounts {
+        for account in &ports.saved_accounts.current() {
             match use_case.execute(account).await {
                 Ok(_report) => synced = synced.saturating_add(1),
                 Err(error) => {

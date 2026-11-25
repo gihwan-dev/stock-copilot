@@ -4,6 +4,7 @@ use src_tauri::ai_runtime::{
     McpServerHost, McpServerHostParts, RunMetadataBook,
 };
 use src_tauri::audit_queue::AuditEventQueue;
+use src_tauri::broker_link::{AccountSelector, BrokerMarketTools};
 use src_tauri::collected_links::{CollectedLinker, TitleLinker};
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
@@ -23,7 +24,9 @@ use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, atta
 use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
 };
-use src_tauri::toss_link::{TossLink, TossLinkState, live_toss_read};
+use src_tauri::toss_link::{
+    ProbeFailure, ProbeResult, SharedClock, SharedSecrets, TossLink, TossLinkState, TossProbe,
+};
 use src_tauri::updates;
 use src_tauri::updates::tauri_source::{TauriUpdateSource, configured_pubkey};
 use src_tauri::{build_app, run_app};
@@ -75,29 +78,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         intraday: Arc::clone(&intraday),
     });
     let events = Arc::new(bus);
+    let toss = product_toss(&shared_clock, &events)?;
     let turns = ChatTurnBook::new();
     let ai = assemble_ai(
         discover_ai_setup(
             &context.config().identifier,
             bundled_bridge(),
             turns.clone(),
-        ),
+        )
+        .with_market(BrokerMarketTools::connected(Arc::<ProductBroker>::clone(
+            &toss.broker,
+        ))),
         &shared_clock,
         &events,
         &repositories,
     )
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
-    let ports = product_ports(&repositories, notifier, &shared_clock, events, ai);
-    let toss = toss_link_state(&ports.secrets, &shared_clock, &ports.events);
+    let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
+    let link = toss_link_state(&ports, &toss, &shared_clock);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
             .manage(intraday)
             .manage(turns)
-            .manage(toss),
+            .manage(link),
         ports,
         context,
     )?;
     run_primary(app)
+}
+
+fn start_toss_check(app: &tauri::AppHandle<tauri::Wry>) {
+    if let Some(state) = tauri::Manager::try_state::<TossLinkState>(app) {
+        let link = state.inner().clone();
+        let _check = tauri::async_runtime::spawn(async move {
+            let _state = link.backend().check().await;
+        });
+    }
 }
 
 fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
@@ -112,6 +128,7 @@ fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Er
     match single_instance {
         InstanceAcquisition::Primary(_guard) => {
             start_updates(app.handle());
+            start_toss_check(app.handle());
             run_app(app, |handle, code| handle.exit(code.as_i32()));
             Ok(())
         }
@@ -119,16 +136,39 @@ fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Er
     }
 }
 
+struct ProductToss {
+    secrets: Arc<ProductSecrets>,
+    broker: Arc<ProductBroker>,
+}
+
+fn product_toss(
+    clock: &Arc<platform_macos::SystemClock>,
+    events: &Arc<application::EventBus>,
+) -> Result<ProductToss, std::io::Error> {
+    let secrets = Arc::new(product_secrets());
+    let broker = live_toss_read(
+        &broker_toss::TossEndpoint::production(),
+        Arc::clone(&secrets),
+        Arc::clone(clock),
+        Arc::clone(events),
+    )
+    .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    Ok(ProductToss {
+        secrets,
+        broker: Arc::new(broker),
+    })
+}
+
 fn product_ports(
     repositories: &Arc<SqliteRepositories>,
-    notifier: Arc<ProductNotifier>,
+    (notifier, toss): (Arc<ProductNotifier>, &ProductToss),
     shared_clock: &Arc<platform_macos::SystemClock>,
     events: Arc<application::EventBus>,
     ai: ProductAiParts,
 ) -> Ports<AppPortTypes> {
     Ports::<AppPortTypes> {
-        broker_read: Arc::new(Unavailable),
-        market_info: Arc::new(Unavailable),
+        broker_read: Arc::clone(&toss.broker),
+        market_info: Arc::clone(&toss.broker),
         macro_series: Arc::new(Unavailable),
         fundamentals: Arc::new(Unavailable),
         ai_provider: ai.ai,
@@ -148,39 +188,132 @@ fn product_ports(
         valuations: Arc::clone(repositories),
         settings: Arc::clone(repositories),
         audit: Arc::clone(repositories),
-        secrets: Arc::new(product_secrets()),
+        secrets: Arc::clone(&toss.secrets),
         notifier,
         news_feeds: Vec::new(),
         clock: Arc::clone(shared_clock),
         presence: Arc::new(platform_macos::MacOsRiskDialogPresence::unavailable()),
         events,
-        saved_accounts: Vec::new(),
+        saved_accounts: src_tauri::broker_link::AccountSlot::default(),
         database: Arc::new(database_factory(Arc::clone(shared_clock))),
     }
 }
 
 type ProductSecrets = secrets_keychain::KeychainSecretStore<secrets_keychain::SystemKeychain>;
 
+type ProductBroker = LiveTossRead<ProductSecrets, platform_macos::SystemClock>;
+
+#[derive(Debug, Default, Clone, Copy)]
+struct NoStreamRenewal;
+
+impl broker_toss::TokenRenewal for NoStreamRenewal {
+    fn close(&self) -> impl Future<Output = Result<(), broker_toss::TokenError>> + Send {
+        std::future::ready(Ok(()))
+    }
+
+    fn reconnect(
+        &self,
+        _token: &application::SecretValue,
+    ) -> impl Future<Output = Result<(), broker_toss::TokenError>> + Send {
+        std::future::ready(Ok(()))
+    }
+
+    fn resubscribe(&self) -> impl Future<Output = Result<(), broker_toss::TokenError>> + Send {
+        std::future::ready(Ok(()))
+    }
+
+    fn reconcile_orders(
+        &self,
+        _token: &application::SecretValue,
+    ) -> impl Future<Output = Result<(), broker_toss::TokenError>> + Send {
+        std::future::ready(Ok(()))
+    }
+}
+
+type LiveTossRead<S, C> =
+    broker_toss::TossAccountRead<SharedSecrets<S>, SharedClock<C>, NoStreamRenewal>;
+
+fn live_toss_read<S, C>(
+    endpoint: &broker_toss::TossEndpoint,
+    secrets: Arc<S>,
+    clock: Arc<C>,
+    events: Arc<application::EventBus>,
+) -> Result<LiveTossRead<S, C>, broker_toss::TossHttpError>
+where
+    S: application::SecretStore + 'static,
+    C: application::Clock + 'static,
+{
+    let shared_clock: Arc<dyn application::Clock> = Arc::<C>::clone(&clock);
+    let client = broker_toss::TossHttpClient::new(
+        endpoint,
+        shared_clock,
+        Arc::new(broker_toss::TokioRequestWait),
+    )?;
+    let tokens = broker_toss::TokenManager::new(
+        client,
+        SharedSecrets(secrets),
+        SharedClock(Arc::clone(&clock)),
+        NoStreamRenewal,
+        events,
+    );
+    let master = domain::MasterInstrumentFacts::try_new(Vec::new())
+        .map_err(|_error| broker_toss::TossHttpError::Configuration)?;
+    Ok(broker_toss::TossAccountRead::new(
+        tokens,
+        SharedClock(clock),
+        master,
+    ))
+}
+
+const fn probe_failure(error: broker_toss::TokenError) -> ProbeFailure {
+    use application::PortErrorKind;
+    use broker_toss::{TokenError, TossHttpError};
+    match error {
+        TokenError::MissingCredentials => ProbeFailure::MissingKeys,
+        TokenError::Rejected(PortErrorKind::AccessDenied(denial)) => ProbeFailure::Denied(denial),
+        TokenError::Rejected(PortErrorKind::InvalidRequest(_))
+        | TokenError::Http(TossHttpError::InvalidCredential) => ProbeFailure::RejectedKey,
+        TokenError::RevokedRepeated => ProbeFailure::KeyInUse,
+        TokenError::Store(failure) => ProbeFailure::Store(failure),
+        TokenError::Rejected(_)
+        | TokenError::Http(_)
+        | TokenError::InvalidResponse
+        | TokenError::Renewal
+        | TokenError::Superseded => ProbeFailure::Unavailable,
+    }
+}
+
+struct LiveProbe<S, C>(Arc<LiveTossRead<S, C>>);
+
+impl<S, C> TossProbe for LiveProbe<S, C>
+where
+    S: application::SecretStore + 'static,
+    C: application::Clock + 'static,
+{
+    fn check(&self) -> src_tauri::ipc::state::BoxFuture<'_, ProbeResult> {
+        Box::pin(async move { self.0.connection_status().await.map_err(probe_failure) })
+    }
+
+    fn reconnect(&self) -> src_tauri::ipc::state::BoxFuture<'_, ProbeResult> {
+        Box::pin(async move { self.0.reconnect().await.map_err(probe_failure) })
+    }
+}
+
 fn toss_link_state(
-    secrets: &Arc<ProductSecrets>,
+    ports: &Ports<AppPortTypes>,
+    toss: &ProductToss,
     clock: &Arc<platform_macos::SystemClock>,
-    events: &Arc<application::EventBus>,
 ) -> TossLinkState {
-    let probe: Arc<dyn src_tauri::toss_link::TossProbe> = match live_toss_read(
-        &broker_toss::TossEndpoint::production(),
-        Arc::clone(secrets),
-        Arc::clone(clock),
-        Arc::clone(events),
-    ) {
-        Ok(reader) => Arc::new(reader),
-        Err(_error) => Arc::new(src_tauri::toss_link::UnavailableProbe),
-    };
     let shared_clock: Arc<dyn application::Clock> =
         Arc::<platform_macos::SystemClock>::clone(clock);
     TossLinkState::new(Arc::new(TossLink::new(
-        Arc::clone(secrets),
-        probe,
-        Arc::new(src_tauri::toss_link::NoListener),
+        Arc::clone(&toss.secrets),
+        Arc::new(LiveProbe(Arc::clone(&toss.broker))),
+        Arc::new(AccountSelector::new(
+            Arc::clone(&toss.broker),
+            ports.saved_accounts.clone(),
+            Arc::clone(&ports.events),
+        )),
         shared_clock,
     )))
 }
@@ -302,8 +435,14 @@ type ProductMcpHost =
     McpServerHost<platform_macos::SystemClock, PsPeerInspector, SqliteRepositories>;
 type ProductAi = AiAvailability<McpAttachedAi<ProductClaude, ProductMcpHost>>;
 type ProductQueue = ai_claude_code::AiRunnerQueue<ProductAi>;
-type AppPortTypes =
-    ProductPorts<SqliteRepositories, ProductSecrets, ProductAi, ProductQueue, ProductAiJobs>;
+type AppPortTypes = ProductPorts<
+    SqliteRepositories,
+    ProductSecrets,
+    ProductAi,
+    ProductQueue,
+    ProductAiJobs,
+    ProductBroker,
+>;
 
 const ALLOWED_BUILTIN_PLUGINS: [&str; 4] = [
     "cc-plugin-agents-md",
@@ -491,6 +630,13 @@ struct AiSetup {
     sandbox: Option<ai_claude_code::SandboxLayer>,
     cli_projects_dir: Option<PathBuf>,
     turns: ChatTurnBook,
+    market: BrokerMarketTools,
+}
+
+impl AiSetup {
+    fn with_market(self, market: BrokerMarketTools) -> Self {
+        Self { market, ..self }
+    }
 }
 
 impl std::fmt::Debug for AiSetup {
@@ -639,6 +785,7 @@ fn product_catalog(
             collector: Arc::new(collector.clone()),
             turns: setup.turns.clone(),
             events: Arc::clone(events),
+            market: setup.market.clone(),
         },
     )
     .ok()
@@ -741,6 +888,7 @@ fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBo
         bridge,
         cli_projects_dir: None,
         turns,
+        market: BrokerMarketTools::unconnected(),
     }
 }
 
@@ -1236,6 +1384,7 @@ mod ai_composition_tests {
             sandbox: None,
             cli_projects_dir: None,
             turns: ChatTurnBook::new(),
+            market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
         };
         assemble_ai(setup, clock, events, repositories).expect("AI 조립")
     }
@@ -1343,6 +1492,7 @@ mod ai_composition_tests {
             sandbox: None,
             cli_projects_dir: Some(root.join("projects")),
             turns: ChatTurnBook::new(),
+            market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
         }
     }
 
@@ -1837,7 +1987,9 @@ mod collector_store_tests {
         ));
         let events = Arc::new(application::EventBusBuilder::default().build());
         let ai = super::ai_composition_tests::without_claude(&clock, &events, repositories);
-        let ports: Ports = super::product_ports(repositories, notifier, &clock, events, ai);
+        let toss = super::product_toss(&clock, &events).expect("토스 조립");
+        let ports: Ports =
+            super::product_ports(repositories, (notifier, &toss), &clock, events, ai);
         tauri::test::mock_builder()
             .manage(ports)
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
@@ -2057,7 +2209,7 @@ mod briefing_assembly_tests {
             notifier: Arc::new(Unavailable),
             presence: Arc::new(testkit_ports::ScriptedPresence::new([], [])),
             events: Arc::new(events),
-            saved_accounts: Vec::new(),
+            saved_accounts: src_tauri::broker_link::AccountSlot::default(),
             database: Arc::new(DatabaseFactory(Box::new(|_path, _key| {
                 Err(application::SystemPortError::new(
                     application::SystemPort::Repository,
@@ -2355,5 +2507,137 @@ mod briefing_assembly_tests {
             let _closed = shared.close().await;
         });
         std::fs::remove_dir_all(directory).expect("정리");
+    }
+}
+
+#[cfg(test)]
+mod toss_assembly_tests {
+    use application::SecretValue;
+    use src_tauri::broker_link::{AccountSelector, AccountSlot};
+    use src_tauri::toss_link::{TossConnectionState, TossKeys, TossLink, TossLinkBackend};
+    use std::sync::Arc;
+    use testkit::ScriptedHttpServer;
+    use testkit_ports::memory::MemoryReply;
+    use testkit_ports::system_fakes::MemorySecretStore;
+
+    const ID_SENTINEL: &str = "client-id-sentinel-7f3a";
+    const SECRET_SENTINEL: &str = "client-secret-sentinel-91bc";
+
+    fn http(status: &str, body: &str) -> Vec<u8> {
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .into_bytes()
+    }
+
+    fn token_ok() -> Vec<u8> {
+        http(
+            "200 OK",
+            r#"{"access_token":"fake-access-token","token_type":"Bearer","expires_in":3600}"#,
+        )
+    }
+
+    fn access_denied() -> Vec<u8> {
+        http("403 Forbidden", r#"{"error":"access_denied"}"#)
+    }
+
+    fn accounts() -> Vec<u8> {
+        http(
+            "200 OK",
+            r#"{"result":[{"accountNo":"00000000419","accountSeq":27,"accountType":"PENSION_SAVINGS"},{"accountNo":"00000000731","accountSeq":413,"accountType":"BROKERAGE"}]}"#,
+        )
+    }
+
+    fn keys() -> TossKeys {
+        TossKeys::new(
+            SecretValue::new(ID_SENTINEL.as_bytes().to_vec()),
+            SecretValue::new(SECRET_SENTINEL.as_bytes().to_vec()),
+        )
+    }
+
+    fn memory_secrets() -> Arc<MemorySecretStore> {
+        let secrets = Arc::new(MemorySecretStore::default());
+        for _ in 0_u8..24_u8 {
+            secrets.script_load().push(MemoryReply::Memory);
+            secrets.script_store().push(MemoryReply::Memory);
+        }
+        secrets
+    }
+
+    #[test]
+    fn pasted_keys_reach_fake_toss_then_ip_retry_connects_and_selects_the_brokerage_account() {
+        let server =
+            ScriptedHttpServer::start(vec![access_denied(), token_ok(), accounts(), accounts()])
+                .expect("가짜 토스");
+        let secrets = memory_secrets();
+        let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let events = Arc::new(application::EventBus::default());
+        let broker = Arc::new(
+            super::live_toss_read(
+                &broker_toss::TossEndpoint::local(server.port()).expect("주소"),
+                Arc::clone(&secrets),
+                Arc::clone(&clock),
+                Arc::clone(&events),
+            )
+            .expect("어댑터"),
+        );
+        let slot = AccountSlot::default();
+        let link = TossLink::new(
+            Arc::clone(&secrets),
+            Arc::new(super::LiveProbe(Arc::clone(&broker))),
+            Arc::new(AccountSelector::new(
+                Arc::clone(&broker),
+                slot.clone(),
+                events,
+            )),
+            clock,
+        );
+        tauri::async_runtime::block_on(async {
+            assert_eq!(
+                link.submit(keys()).await,
+                Ok(TossConnectionState::IpNotAllowed)
+            );
+            assert_eq!(slot.current(), Vec::new());
+            assert_eq!(
+                link.submit(keys()).await,
+                Ok(TossConnectionState::Connected)
+            );
+            assert_eq!(slot.current(), vec![domain::AccountId::new(413)]);
+            assert_eq!(link.check().await, Ok(TossConnectionState::Connected));
+        });
+        let requests = String::from_utf8(server.finish().expect("요청")).expect("UTF-8");
+        assert_eq!(requests.matches("grant_type=client_credentials").count(), 2);
+        assert_eq!(requests.matches("GET /api/v1/accounts").count(), 2);
+        assert!(requests.contains(ID_SENTINEL));
+        assert!(requests.contains(SECRET_SENTINEL));
+        assert!(!format!("{link:?}").contains(SECRET_SENTINEL));
+    }
+
+    #[test]
+    fn without_stored_keys_the_check_needs_keys_and_sends_nothing_to_toss() {
+        let server = ScriptedHttpServer::start(Vec::new()).expect("가짜 토스");
+        let secrets = memory_secrets();
+        let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let broker = Arc::new(
+            super::live_toss_read(
+                &broker_toss::TossEndpoint::local(server.port()).expect("주소"),
+                Arc::clone(&secrets),
+                Arc::clone(&clock),
+                Arc::new(application::EventBus::default()),
+            )
+            .expect("어댑터"),
+        );
+        let link = TossLink::new(
+            secrets,
+            Arc::new(super::LiveProbe(broker)),
+            Arc::new(src_tauri::toss_link::NoListener),
+            clock,
+        );
+        assert_eq!(
+            tauri::async_runtime::block_on(link.check()),
+            Ok(TossConnectionState::NeedsKeys)
+        );
+        assert_eq!(server.finish().expect("요청"), Vec::<u8>::new());
     }
 }

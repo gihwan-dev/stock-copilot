@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
 use application::{
-    AccessDenial, Clock, PortErrorKind, SecretKey, SecretStore, SecretValue, SystemPortError,
-    WriteCompleted,
+    AccessDenial, Clock, SecretKey, SecretStore, SecretValue, SystemPortError, WriteCompleted,
 };
-use broker_toss::{TokenError, TokenRenewal, TossAccountRead, TossHttpError};
 use domain::{Nanosecond, SpanSeconds, TimeSpan, Timestamp};
 use tokio::sync::Mutex;
 
@@ -32,37 +30,32 @@ pub enum TossLinkFailure {
 
 pub type TossLinkResult = Result<TossConnectionState, TossLinkFailure>;
 
-pub trait TossProbe: Send + Sync {
-    fn check(&self) -> BoxFuture<'_, Result<(), TokenError>>;
-    fn reconnect(&self) -> BoxFuture<'_, Result<(), TokenError>>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbeFailure {
+    MissingKeys,
+    Denied(AccessDenial),
+    RejectedKey,
+    KeyInUse,
+    Store(SystemPortError),
+    Unavailable,
 }
 
-impl<Store, Time, Renewal> TossProbe for TossAccountRead<Store, Time, Renewal>
-where
-    Store: SecretStore + 'static,
-    Time: Clock + 'static,
-    Renewal: TokenRenewal + 'static,
-{
-    fn check(&self) -> BoxFuture<'_, Result<(), TokenError>> {
-        Box::pin(self.connection_status())
-    }
+pub type ProbeResult = Result<(), ProbeFailure>;
 
-    fn reconnect(&self) -> BoxFuture<'_, Result<(), TokenError>> {
-        Box::pin(Self::reconnect(self))
-    }
+pub trait TossProbe: Send + Sync {
+    fn check(&self) -> BoxFuture<'_, ProbeResult>;
+    fn reconnect(&self) -> BoxFuture<'_, ProbeResult>;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct UnavailableProbe;
 
 impl TossProbe for UnavailableProbe {
-    fn check(&self) -> BoxFuture<'_, Result<(), TokenError>> {
-        Box::pin(std::future::ready(Err(TokenError::Http(
-            TossHttpError::Configuration,
-        ))))
+    fn check(&self) -> BoxFuture<'_, ProbeResult> {
+        Box::pin(std::future::ready(Err(ProbeFailure::Unavailable)))
     }
 
-    fn reconnect(&self) -> BoxFuture<'_, Result<(), TokenError>> {
+    fn reconnect(&self) -> BoxFuture<'_, ProbeResult> {
         self.check()
     }
 }
@@ -143,18 +136,15 @@ const fn denial_state(denial: AccessDenial) -> TossConnectionState {
     }
 }
 
-pub const fn connection_state(result: Result<(), TokenError>) -> TossLinkResult {
+pub const fn connection_state(result: ProbeResult) -> TossLinkResult {
     match result {
         Ok(()) => Ok(TossConnectionState::Connected),
-        Err(TokenError::MissingCredentials) => Ok(TossConnectionState::NeedsKeys),
-        Err(TokenError::Rejected(PortErrorKind::AccessDenied(denial))) => Ok(denial_state(denial)),
-        Err(
-            TokenError::Rejected(PortErrorKind::InvalidRequest(_))
-            | TokenError::Http(TossHttpError::InvalidCredential),
-        ) => Ok(TossConnectionState::InvalidKey),
-        Err(TokenError::RevokedRepeated) => Ok(TossConnectionState::KeyInUse),
-        Err(TokenError::Store(error)) => Err(TossLinkFailure::Store(error)),
-        Err(_) => Err(TossLinkFailure::Unavailable),
+        Err(ProbeFailure::MissingKeys) => Ok(TossConnectionState::NeedsKeys),
+        Err(ProbeFailure::Denied(denial)) => Ok(denial_state(denial)),
+        Err(ProbeFailure::RejectedKey) => Ok(TossConnectionState::InvalidKey),
+        Err(ProbeFailure::KeyInUse) => Ok(TossConnectionState::KeyInUse),
+        Err(ProbeFailure::Store(error)) => Err(TossLinkFailure::Store(error)),
+        Err(ProbeFailure::Unavailable) => Err(TossLinkFailure::Unavailable),
     }
 }
 
@@ -350,63 +340,6 @@ impl<C: Clock> Clock for SharedClock<C> {
     fn now(&self) -> Timestamp {
         self.0.now()
     }
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct NoStreamRenewal;
-
-impl TokenRenewal for NoStreamRenewal {
-    fn close(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
-        std::future::ready(Ok(()))
-    }
-
-    fn reconnect(
-        &self,
-        _token: &SecretValue,
-    ) -> impl Future<Output = Result<(), TokenError>> + Send {
-        std::future::ready(Ok(()))
-    }
-
-    fn resubscribe(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
-        std::future::ready(Ok(()))
-    }
-
-    fn reconcile_orders(
-        &self,
-        _token: &SecretValue,
-    ) -> impl Future<Output = Result<(), TokenError>> + Send {
-        std::future::ready(Ok(()))
-    }
-}
-
-pub type LiveTossRead<S, C> = TossAccountRead<SharedSecrets<S>, SharedClock<C>, NoStreamRenewal>;
-
-pub fn live_toss_read<S, C>(
-    endpoint: &broker_toss::TossEndpoint,
-    secrets: Arc<S>,
-    clock: Arc<C>,
-    events: Arc<application::EventBus>,
-) -> Result<LiveTossRead<S, C>, TossHttpError>
-where
-    S: SecretStore + 'static,
-    C: Clock + 'static,
-{
-    let shared_clock: Arc<dyn Clock> = Arc::<C>::clone(&clock);
-    let client = broker_toss::TossHttpClient::new(
-        endpoint,
-        shared_clock,
-        Arc::new(broker_toss::TokioRequestWait),
-    )?;
-    let tokens = broker_toss::TokenManager::new(
-        client,
-        SharedSecrets(secrets),
-        SharedClock(Arc::clone(&clock)),
-        NoStreamRenewal,
-        events,
-    );
-    let master = domain::MasterInstrumentFacts::try_new(Vec::new())
-        .map_err(|_error| TossHttpError::Configuration)?;
-    Ok(TossAccountRead::new(tokens, SharedClock(clock), master))
 }
 
 #[cfg(test)]

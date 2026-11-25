@@ -1,6 +1,7 @@
 pub mod ai_runtime;
 pub mod audit_queue;
 pub mod bindings;
+pub mod broker_link;
 pub mod collected_links;
 pub mod database;
 pub mod exit;

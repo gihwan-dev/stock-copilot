@@ -37,7 +37,7 @@ fn saved_data_is_ready_when_the_window_is_shown_before_any_network_call() {
             .await
             .expect("현황 저장");
         ports.portfolios.script_latest().push(MemoryReply::Memory);
-        ports.saved_accounts = vec![account.clone()];
+        ports.saved_accounts = crate::broker_link::AccountSlot::with(vec![account.clone()]);
         ports
             .broker_read
             .script_accounts()

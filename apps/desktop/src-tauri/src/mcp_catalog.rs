@@ -152,6 +152,7 @@ pub struct CatalogStores<R, E, B, W> {
     pub turns: crate::ai_runtime::ChatTurnBook,
     pub runs: RunMetadataBook,
     pub events: Arc<EventBus>,
+    pub market: crate::broker_link::BrokerMarketTools,
 }
 
 impl<R, E, B, W> std::fmt::Debug for CatalogStores<R, E, B, W> {
@@ -186,7 +187,7 @@ where
     let cursors = make_cursor_store(Arc::clone(clock));
     let ports = AnalysisCatalogPorts {
         portfolio: Arc::clone(&data),
-        market: Arc::clone(&data),
+        market: Arc::new(stores.market),
         news: Arc::new(StoredNews::new(
             Arc::clone(&stores.estimates),
             Arc::clone(clock),

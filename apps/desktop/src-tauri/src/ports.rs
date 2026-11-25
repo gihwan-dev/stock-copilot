@@ -7,7 +7,6 @@ use application::{
     ProposalRepository, SecretStore, SettingsRepository, SignalRepository, ThesisRepository,
     TransactionRepository, ValuationRepository, WarmChatRuntime,
 };
-use domain::AccountId;
 use std::sync::Arc;
 pub trait PortTypes: Send + Sync + 'static {
     type BrokerRead: BrokerRead + 'static;
@@ -65,7 +64,7 @@ pub struct Ports<P: PortTypes> {
     pub notifier: Arc<P::Notifier>,
     pub presence: Arc<P::UserPresence>,
     pub events: Arc<EventBus>,
-    pub saved_accounts: Vec<AccountId>,
+    pub saved_accounts: crate::broker_link::AccountSlot,
     pub database: Arc<DatabaseFactory>,
 }
 impl<P: PortTypes> std::fmt::Debug for Ports<P> {
