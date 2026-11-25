@@ -185,13 +185,13 @@ export const SettingsRouteView = (): ReactElement => {
       onOpenStatus={(): void => {
         go("/settings/status");
       }}
+      advanced={[
+        ...(system === "shown" ? [<SettingsSections key="sections" />] : []),
+        <RiskEditors key="risk-editors" sources={sources} />,
+      ]}
       system={
         <Stack key="system" gap="space-8">
           {[
-            ...(system === "shown"
-              ? [<SettingsSections key="sections" />]
-              : []),
-            <RiskEditors key="risk-editors" sources={sources} />,
             <UpdateCard key="updates" client={coreUpdateClient} />,
             <AboutSection key="about" />,
           ]}

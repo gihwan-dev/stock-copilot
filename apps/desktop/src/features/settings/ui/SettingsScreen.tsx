@@ -28,41 +28,34 @@ type Props = {
   readonly tossEntry: TossEntry;
   readonly onBack: () => void;
   readonly onOpenStatus: () => void;
+  readonly advanced: readonly ReactElement[];
   readonly system: ReactElement | null;
 };
 
-const SettingsBody = (props: {
+const BasicCard = (props: {
   readonly settings: SettingsView;
   readonly entry: TossEntry;
-  readonly onOpenStatus: () => void;
 }): ReactElement => {
   const orderSwitch = useOrderPermissionSwitch();
   return (
-    <Stack gap="space-6">
-      <Section title={settingsText("basicSection", "ko")}>
-        <Card>
-          <TossConnectionRow settings={props.settings} entry={props.entry} />
-          <InvestorProfileRow settings={props.settings} />
-          <OrderSwitchRow
-            settings={props.settings}
-            feedback={orderSwitch.feedback}
-            onToggle={orderSwitch.toggle}
-          />
-        </Card>
-      </Section>
-      <AdvancedSettings
-        settings={props.settings}
-        onOpenStatus={props.onOpenStatus}
-      />
-    </Stack>
+    <Section title={settingsText("basicSection", "ko")}>
+      <Card>
+        <TossConnectionRow settings={props.settings} entry={props.entry} />
+        <InvestorProfileRow settings={props.settings} />
+        <OrderSwitchRow
+          settings={props.settings}
+          feedback={orderSwitch.feedback}
+          onToggle={orderSwitch.toggle}
+        />
+      </Card>
+    </Section>
   );
 };
 
-const SettingsContent = (props: {
+const BasicContent = (props: {
   readonly view: SettingsQueryState;
   readonly entry: TossEntry;
   readonly retry: () => void;
-  readonly onOpenStatus: () => void;
 }): ReactElement => {
   switch (props.view.status) {
     case "loading":
@@ -82,13 +75,7 @@ const SettingsContent = (props: {
         />
       );
     case "ready":
-      return (
-        <SettingsBody
-          settings={props.view.data}
-          entry={props.entry}
-          onOpenStatus={props.onOpenStatus}
-        />
-      );
+      return <BasicCard settings={props.view.data} entry={props.entry} />;
   }
 };
 
@@ -104,12 +91,21 @@ export const SettingsScreen = (props: Props): ReactElement => {
     >
       <Stack gap="space-6">
         {[
-          <SettingsContent
+          <BasicContent
             key="settings"
             view={query.view}
             entry={props.tossEntry}
             retry={query.retry}
+          />,
+          <AdvancedSettings
+            key="advanced"
+            overview={
+              query.view.status === "ready"
+                ? { kind: "ready", settings: query.view.data }
+                : { kind: "missing" }
+            }
             onOpenStatus={props.onOpenStatus}
+            editors={props.advanced}
           />,
           ...(props.system === null ? [] : [props.system]),
         ]}

@@ -17,6 +17,34 @@ type Props = {
   readonly onOpenStatus: () => void;
 };
 
+type Summary =
+  | { readonly kind: "ready"; readonly settings: SettingsView }
+  | { readonly kind: "missing" };
+
+type AdvancedProps = {
+  readonly overview: Summary;
+  readonly onOpenStatus: () => void;
+  readonly editors: readonly ReactElement[];
+};
+
+const summaryCards = (
+  summary: Summary,
+  onOpenStatus: () => void,
+): readonly ReactElement[] =>
+  summary.kind === "missing"
+    ? []
+    : [
+        <AiCard key="ai" settings={summary.settings} />,
+        <NewsDataCard key="news" settings={summary.settings} />,
+        <OrderRulesCard key="orders" settings={summary.settings} />,
+        <PrinciplesCard key="principles" settings={summary.settings} />,
+        <SystemCard
+          key="system"
+          settings={summary.settings}
+          onOpenStatus={onOpenStatus}
+        />,
+      ];
+
 const toggleMessage = (state: ToggleState): SettingsMessageKey =>
   state === "on" ? "stateOn" : "stateOff";
 
@@ -152,14 +180,10 @@ const SystemCard = (props: Props): ReactElement => (
   </Card>
 );
 
-export const AdvancedSettings = (props: Props): ReactElement => (
+export const AdvancedSettings = (props: AdvancedProps): ReactElement => (
   <Disclosure title={settingsText("advancedTitle", "ko")} defaultOpen="closed">
     <Stack gap="space-4">
-      <AiCard settings={props.settings} />
-      <NewsDataCard settings={props.settings} />
-      <OrderRulesCard settings={props.settings} />
-      <PrinciplesCard settings={props.settings} />
-      <SystemCard settings={props.settings} onOpenStatus={props.onOpenStatus} />
+      {[...summaryCards(props.overview, props.onOpenStatus), ...props.editors]}
     </Stack>
   </Disclosure>
 );

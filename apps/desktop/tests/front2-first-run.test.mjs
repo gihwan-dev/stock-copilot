@@ -5,6 +5,7 @@ import { after, before, test } from "node:test";
 import { fakeSource } from "./front2-fake.mjs";
 import { desktopRoot } from "./paths.mjs";
 import { screenDom } from "./screen-dom.mjs";
+import { openAdvancedSource } from "./settings-advanced.mjs";
 
 let bundle;
 
@@ -17,6 +18,7 @@ before(async () => {
     import { mockCommands } from MOCK_IPC_ENTRY;
     import { responses } from RESPONSES_ENTRY;
     ${fakeSource}
+  ${openAdvancedSource}
     window.cleanup = cleanup;
     window.waitFor = waitFor;
     window.fireEvent = fireEvent;
@@ -24,6 +26,7 @@ before(async () => {
     window.mount = (fake, path = "/") => {
       mockCommands({ appVersion: () => responses.appVersion });
       const client = createAppQueryClient();
+      window.openAdvanced();
       const view = render(h(App, { initialPath: path, queryClient: client, settingsClient: fake }));
       return { view, client };
     };

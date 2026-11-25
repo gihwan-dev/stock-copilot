@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { fakeSource } from "./front2-fake.mjs";
 import { screenDom } from "./screen-dom.mjs";
+import { openAdvancedSource } from "./settings-advanced.mjs";
 
 let bundle;
 
@@ -14,12 +15,14 @@ before(async () => {
     import { mockCommands, events } from MOCK_IPC_ENTRY;
     import { responses } from RESPONSES_ENTRY;
     ${fakeSource}
+  ${openAdvancedSource}
     window.cleanup = cleanup;
     window.waitFor = waitFor;
     window.emitCore = (payload) => events.uiEvent.emit(payload);
     window.mount = (fake) => {
       mockCommands({ appVersion: () => responses.appVersion });
       const client = createAppQueryClient();
+      window.openAdvanced();
       return render(h(App, { initialPath: "/settings", queryClient: client, settingsClient: fake }));
     };
   `);

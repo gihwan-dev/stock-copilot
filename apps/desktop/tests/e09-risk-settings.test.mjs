@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fixtureSource, waitForText } from "./screen-fixtures.mjs";
 import { screenDom } from "./screen-dom.mjs";
+import { openAdvancedSource } from "./settings-advanced.mjs";
 
 const bundleSource = `
   import { createElement as h } from "react";
@@ -12,6 +13,7 @@ const bundleSource = `
   import { mockCommands } from MOCK_IPC_ENTRY;
   import { responses } from RESPONSES_ENTRY;
   ${fixtureSource}
+  ${openAdvancedSource}
   ${waitForText}
   window.cleanup = cleanup;
   window.clearMocks = clearMocks;
@@ -22,6 +24,7 @@ const bundleSource = `
   window.mount = (overrides, outcome) => {
     window.saved = { profile: [], order: [] };
     mockCommands({ appVersion: () => responses.appVersion });
+    window.openAdvanced();
     return render(
       h(App, {
         initialPath: "/settings",
