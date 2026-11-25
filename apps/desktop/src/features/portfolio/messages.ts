@@ -17,6 +17,7 @@ const catalog = {
     ko: "환율을 아직 받지 못해 달러 자산은 총평가에서 빠져 있어요." as UiText,
   },
   notObserved: { ko: "확인 안 됨" as UiText },
+  tradingSuspended: { ko: "거래정지" as UiText },
   cashKrw: { ko: "원화 매수가능금액" as UiText },
   cashUsd: { ko: "달러 매수가능금액" as UiText },
   errorAccessBody: {

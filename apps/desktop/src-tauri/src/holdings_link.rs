@@ -30,6 +30,7 @@ pub struct InstrumentDirectory(Arc<RwLock<BTreeMap<Symbol, DirectoryEntry>>>);
 pub struct DirectoryEntry {
     pub market: KnownMarket,
     pub name: DisplayInstrumentName,
+    pub trading: domain::MasterTradingState,
 }
 
 impl InstrumentDirectory {
@@ -43,6 +44,7 @@ impl InstrumentDirectory {
                     DirectoryEntry {
                         market: *quote.market(),
                         name: instrument.row().name.clone(),
+                        trading: instrument.trading_state(),
                     },
                 ))
             })
