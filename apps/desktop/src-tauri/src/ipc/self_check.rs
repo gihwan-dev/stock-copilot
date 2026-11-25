@@ -74,17 +74,17 @@ impl SelfCheckIpcState {
     #[must_use]
     pub fn new<R: SourceStatusRepository + 'static>(
         ai: Arc<dyn AiStatusProbe>,
-        sources: Arc<R>,
+        repository: Arc<R>,
     ) -> Self {
         Self {
             ai,
-            sources: Arc::new(RepositorySources(sources)),
+            sources: Arc::new(RepositorySources(repository)),
         }
     }
 
     #[must_use]
-    pub fn with_sources(ai: Arc<dyn AiStatusProbe>, sources: Arc<dyn SourceStatusList>) -> Self {
-        Self { ai, sources }
+    pub fn with_sources(ai: Arc<dyn AiStatusProbe>, list: Arc<dyn SourceStatusList>) -> Self {
+        Self { ai, sources: list }
     }
 }
 
@@ -278,9 +278,9 @@ const fn source_code(source: DataSource) -> &'static str {
 pub fn status_view(
     claude: ClaudeInstall,
     limit: AiLimit,
-    sources: &[SourceStatus],
+    statuses: &[SourceStatus],
 ) -> UiStatusView {
-    let mut rows: Vec<UiSourceStatus> = sources
+    let mut rows: Vec<UiSourceStatus> = statuses
         .iter()
         .map(|status| UiSourceStatus {
             source: String::from(source_code(status.source())),
@@ -339,13 +339,13 @@ pub async fn get_status<R: Runtime>(
         scope: SelfCheckScope::Current,
     } = request;
     let state = managed(&app)?;
-    let sources = state
+    let statuses = state
         .sources
         .list()
         .await
         .map_err(|error| IpcError::from(error.class()))?;
     let limit = state.ai.limit().await;
-    Ok(status_view(state.ai.install(), limit, &sources))
+    Ok(status_view(state.ai.install(), limit, &statuses))
 }
 
 #[cfg(test)]

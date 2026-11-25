@@ -17,6 +17,7 @@
 | FD-4 | 차트 색 모드는 플랫폼 훅 `useColorScheme`(data-theme 우선, 없으면 prefers-color-scheme)로 정한다. 기능 화면이 `theme="light"`를 고정해 다크 모드에서 흰 상자가 나오던 것을 고쳤다 | 차트마다 테마 prop 제거(DS 공개 props 변경 폭이 큼) |
 | FD-5 | 상태 화면의 토큰 수처럼 `ChartDecimal`을 표에 보일 때 자릿수 구분이 되도록 DS `ChartNumber`를 공개 목록에 올렸다(이야기·부하 이야기·카탈로그 항목 추가) | `DataText`에 자릿수 구분(종목 코드 "005930"까지 바뀜) |
 | FD-5 | master에서 들어온 시험 깨짐(첫 실행 종단 시험들이 새 `get_portfolio` IPC를 모킹하지 않음, 허용 목록 고정 시험·위반 예제에 `risk-schema.ts`·`status-schema.ts` 누락, DS 부트스트랩 시험의 축소 lib에 `text` 없음)을 check-lite 녹색을 위해 최소로 맞췄다 | 그대로 둠(check-lite 실패) |
+| FD-7 | master의 G-03 `ipc/self_check.rs`·`tests.rs`가 arch-check `adapter-construction`에 걸렸다. 원인은 조립 검사가 지역 변수·매크로 안 이름 `sources`를 어댑터 크레이트 `sources`로 읽는 것과 시험이 `broker_toss::TossTimestamp`를 직접 쓴 것. 변수 이름을 바꾸고 시험 시각은 `domain::Timestamp::from_parts`로 만들었다 | xtask 검사 완화(보호 파일, 오탐 범위가 넓어짐) |
 | DS-12 | 건너뜀. 컴포넌트 기준 화면은 정책(`harness/visual/policy.mjs`)상 linux/arm64 Docker 이미지에서만 만들 수 있고 호스트(darwin) 기준 화면은 거부된다. 이 기기의 Docker 데몬이 꺼져 있어 기준 화면을 만들 수 없다. 점검 하네스의 호스트 Chromium 스크린샷은 기계마다 달라 기준 화면으로 쓰지 않는다 | 호스트 스크린샷으로 기준 화면(정책 위반) |
 
 ## AI 슬롭 기준 (이 프로젝트용)
