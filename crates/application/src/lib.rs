@@ -707,6 +707,12 @@ pub use briefing_context::HoldingsBriefingContext;
 mod intraday_review;
 pub use intraday_review::{IntradayReviewOutcome, IntradayReviewSubject, RunIntradayReview};
 
+mod single_estimate;
+pub use single_estimate::{
+    EstimateRunIdentity, EstimateRunRegistry, EstimateTaskMaterialSource, EstimateTaskMaterials,
+    EstimateTrigger, RunSingleEstimate, estimate_prompt_source,
+};
+
 mod job_schedule_store;
 pub use job_schedule_store::{
     JobClockError, JobClockTime, JobCode, JobCodeError, JobFailureKind, JobHour, JobItemCount,

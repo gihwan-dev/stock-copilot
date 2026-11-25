@@ -34,7 +34,10 @@ mkdirSync(output, { recursive: true });
 const measurements = [];
 const images = {};
 try {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    args: settings.browserArgs,
+  });
   try {
     for (const component of settings.components)
       for (const theme of settings.themes) {

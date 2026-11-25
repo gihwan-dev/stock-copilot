@@ -435,6 +435,18 @@ impl<P: AiProvider> AiRunnerQueue<P> {
         decision
     }
 
+    pub async fn evaluate_scheduled_quota(&self) -> QuotaDecision {
+        let now = self.clock.now();
+        let (transition, decision) = {
+            let mut guard = self.state.lock().await;
+            let transition = guard.quota.refresh(now);
+            let decision = guard.quota.evaluate_admission(WorkCategory::Scheduled, now);
+            (transition, decision)
+        };
+        self.publish_if_changed(transition);
+        decision
+    }
+
     pub async fn snapshot(&self) -> QueueSnapshot {
         let now = self.clock.now();
         let (transition, snap) = {

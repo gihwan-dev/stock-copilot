@@ -119,6 +119,51 @@ impl<P: BriefingPort> ScheduledJob for BriefingJob<P> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EstimateCycleTally {
+    pub attempted: u32,
+    pub submitted: u32,
+}
+
+pub trait EstimateCyclePort: Send + Sync {
+    fn run_cycle(
+        &self,
+        now: Timestamp,
+    ) -> impl Future<Output = Result<EstimateCycleTally, JobError>> + Send;
+}
+
+#[derive(Debug)]
+pub struct EstimateCycleJob<P> {
+    port: Arc<P>,
+}
+
+impl<P: EstimateCyclePort> EstimateCycleJob<P> {
+    #[must_use]
+    pub const fn new(port: Arc<P>) -> Self {
+        Self { port }
+    }
+}
+
+impl<P: EstimateCyclePort> ScheduledJob for EstimateCycleJob<P> {
+    fn id(&self) -> ScheduledJobId {
+        ScheduledJobId::EstimateCycle
+    }
+
+    fn default_config(&self) -> JobConfig {
+        JobConfig {
+            missed_policy: MissedPolicy::CatchUpOnce,
+            ..ai_job(daily(1, 0))
+        }
+    }
+
+    fn run(&self, now: Timestamp) -> JobFuture<'_> {
+        Box::pin(async move {
+            let tally = self.port.run_cycle(now).await?;
+            Ok(JobRunDetail::new("estimates_submitted", tally.submitted))
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct RunBriefingRunner<A, R, X, C> {
     ai: Arc<A>,

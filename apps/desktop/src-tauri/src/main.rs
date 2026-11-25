@@ -6,6 +6,10 @@ use src_tauri::ai_runtime::{
 use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::broker_link::{AccountSelector, BrokerMarketTools};
 use src_tauri::collected_links::{CollectedLinker, TitleLinker};
+use src_tauri::estimate_flow::{
+    BackgroundQuota, CalendarDays, EstimateFlow, EstimateFlowParts, EstimateFlowSlot,
+    EstimateRunBook, ProductEstimateFlow, ProductMaterials, UnavailableEstimateFlow,
+};
 use src_tauri::holdings_link::{
     HoldingsListener, InstrumentDirectory, InstrumentMasterFeed, MasterRefresh, PortsHoldingsSync,
     SavedMaster,
@@ -33,6 +37,10 @@ use src_tauri::platform::scheduling::SpecWatchInputs;
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
+};
+use src_tauri::signal_flow::{
+    BridgedSignalPipeline, FlowReestimate, ProductSignalData, ProductSignalPipeline,
+    SignalDataParts, SignalPipelineSlot,
 };
 use src_tauri::toss_link::{
     ProbeFailure, ProbeResult, SharedClock, SharedSecrets, TossLink, TossLinkState, TossProbe,
@@ -80,27 +88,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     let ui_events = Arc::new(UiEventSlot::<tauri::Wry>::default());
     let intraday = Arc::new(IntradayWatchSlot::new());
-    let (bus, scheduler_events) = product_event_bus(ProductSubscribers {
+    let signals = Arc::new(SignalPipelineSlot::default());
+    let (events, scheduler_events) = product_event_bus(ProductSubscribers {
         notifier: Arc::clone(&notifier),
         audit: Arc::clone(&repositories),
         clock: Arc::clone(&shared_clock),
         ui_events: Arc::clone(&ui_events),
         intraday: Arc::clone(&intraday),
+        signals: Arc::clone(&signals),
     });
-    let events = Arc::new(bus);
     let toss = product_toss(&shared_clock, &events, &repositories)?;
     let turns = ChatTurnBook::new();
     let directory = InstrumentDirectory::default();
+    let estimate_runs = EstimateRunBook::new();
     let ai = assemble_ai(
         discover_ai_setup(
             &context.config().identifier,
             bundled_bridge(),
             turns.clone(),
         )
-        .with_market(BrokerMarketTools::connected(Arc::<ProductBroker>::clone(
-            &toss.broker,
-        )))
-        .with_portfolio(catalog_portfolio(&toss, &repositories, &directory)),
+        .with_market(market_tools(&toss, &shared_clock))
+        .with_portfolio(catalog_portfolio(&toss, &repositories, &directory))
+        .with_estimate_runs(estimate_runs.clone()),
         &shared_clock,
         &events,
         &repositories,
@@ -109,6 +118,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let self_check = product_self_check(&ai, &repositories);
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
     let holdings = holdings_listener(&ports, &toss, &repositories, &directory, &shared_clock);
+    let (flow, calendars) =
+        product_estimate_flow(&ports, &toss, (&directory, estimate_runs), &signals);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
             .manage(directory)
@@ -117,18 +128,126 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(toss_link_state(&toss, holdings.clone(), &shared_clock))
             .manage(holdings)
             .manage(self_check)
-            .manage(ResolutionDataSlot(Arc::new(ResolutionData::new(
-                TossResolutionSource(Arc::<ProductBroker>::clone(&toss.broker)),
-            ))))
-            .manage(ScorecardIpcState::from_repository(
-                Arc::clone(&repositories),
-                Arc::<platform_macos::SystemClock>::clone(&shared_clock),
-            ))
-            .manage(public_ip_runtime(&shared_clock)),
+            .manage(ResolutionDataSlot(calendars))
+            .manage(flow),
         ports,
         context,
     )?;
     run_primary(app)
+}
+
+struct QueueQuota(Arc<ProductQueue>);
+
+impl BackgroundQuota for QueueQuota {
+    fn admission(&self) -> BoxFuture<'_, application::CycleAdmission> {
+        Box::pin(async move {
+            if self.0.snapshot().await.active_chat.is_some() {
+                return application::CycleAdmission::Paused { resumes_at: None };
+            }
+            match self.0.evaluate_scheduled_quota().await {
+                ai_claude_code::QuotaDecision::Allowed => application::CycleAdmission::Admitted,
+                ai_claude_code::QuotaDecision::WaitScheduledBudget { .. } => {
+                    application::CycleAdmission::Paused { resumes_at: None }
+                }
+                ai_claude_code::QuotaDecision::WaitRateLimit { resumes_at, .. } => {
+                    application::CycleAdmission::Paused {
+                        resumes_at: Some(resumes_at),
+                    }
+                }
+            }
+        })
+    }
+}
+
+const ESTIMATE_MODEL_PROVIDER: &str = "claude-code";
+const ESTIMATE_MODEL_NAME: &str = "default";
+const ESTIMATE_CLI_VERSION: &str = "cli";
+const ESTIMATE_PROMPT_ID: &str = "estimate";
+const ESTIMATE_PROMPT_VERSION: &str = "v1";
+
+fn estimate_identity() -> Option<application::EstimateRunIdentity> {
+    use application::PromptHasher as _;
+    let part = |value: &str| domain::ModelIdentityPart::try_new(value).ok();
+    let digest = store_sqlite::Sha256PromptHasher
+        .digest(&application::estimate_prompt_source())
+        .ok()?;
+    Some(application::EstimateRunIdentity {
+        model: domain::CalibrationModel::new(
+            part(ESTIMATE_MODEL_PROVIDER)?,
+            part(ESTIMATE_MODEL_NAME)?,
+            part(ESTIMATE_CLI_VERSION)?,
+        ),
+        cli_version: part(ESTIMATE_CLI_VERSION)?,
+        prompt: domain::EstimatePrompt {
+            id: domain::ScorecardPromptId::try_new(ESTIMATE_PROMPT_ID).ok()?,
+            version: part(ESTIMATE_PROMPT_VERSION)?,
+            hash: domain::PromptHash::try_new(digest.as_str()).ok()?,
+        },
+    })
+}
+
+fn market_tools(toss: &ProductToss, clock: &Arc<platform_macos::SystemClock>) -> BrokerMarketTools {
+    BrokerMarketTools::connected(Arc::<ProductBroker>::clone(&toss.broker)).with_clock(Arc::<
+        platform_macos::SystemClock,
+    >::clone(
+        clock
+    ))
+}
+
+type ProductCalendars = ResolutionData<TossResolutionSource>;
+
+fn product_calendars(toss: &ProductToss) -> Arc<ProductCalendars> {
+    Arc::new(ResolutionData::new(TossResolutionSource(Arc::clone(
+        &toss.broker,
+    ))))
+}
+
+fn product_estimate_flow(
+    ports: &Ports<AppPortTypes>,
+    toss: &ProductToss,
+    (directory, runs): (&InstrumentDirectory, EstimateRunBook),
+    signals: &SignalPipelineSlot,
+) -> (EstimateFlowSlot, Arc<ProductCalendars>) {
+    let calendars = product_calendars(toss);
+    let Some(identity) = estimate_identity() else {
+        return (
+            EstimateFlowSlot(Arc::new(UnavailableEstimateFlow)),
+            calendars,
+        );
+    };
+    let days: Arc<dyn CalendarDays> = Arc::<ProductCalendars>::clone(&calendars);
+    let materials = ProductMaterials {
+        broker: Arc::clone(&toss.broker),
+        settings: Arc::clone(&ports.settings),
+        directory: directory.clone(),
+        accounts: toss.accounts.clone(),
+        days: Arc::clone(&days),
+    };
+    let flow: Arc<dyn EstimateFlow> = Arc::new(ProductEstimateFlow::new(EstimateFlowParts {
+        materials,
+        store: Arc::clone(&ports.settings),
+        portfolios: Arc::clone(&ports.portfolios),
+        ai: Arc::clone(&ports.ai_provider),
+        quota: Arc::new(QueueQuota(Arc::clone(&ports.chat_queue))),
+        clock: Arc::clone(&ports.clock),
+        runs,
+        identity,
+    }));
+    signals.bind(Arc::new(ProductSignalPipeline {
+        data: ProductSignalData::new(SignalDataParts {
+            broker: Arc::clone(&toss.broker),
+            store: Arc::clone(&ports.settings),
+            portfolios: Arc::clone(&ports.portfolios),
+            directory: directory.clone(),
+            accounts: toss.accounts.clone(),
+            days,
+        }),
+        store: Arc::clone(&ports.settings),
+        clock: Arc::clone(&ports.clock),
+        events: Arc::clone(&ports.events),
+        reestimate: FlowReestimate(Arc::clone(&flow)),
+    }));
+    (EstimateFlowSlot(flow), calendars)
 }
 
 struct ProductAiStatus {
@@ -693,7 +812,12 @@ fn product_builder(
         .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
         .manage(database_key_provision())
         .manage(ui_events)
-        .manage(CollectedLinker(Arc::new(AliasTitleLinker)));
+        .manage(CollectedLinker(Arc::new(AliasTitleLinker)))
+        .manage(ScorecardIpcState::from_repository(
+            Arc::clone(repositories),
+            Arc::<platform_macos::SystemClock>::clone(clock),
+        ))
+        .manage(public_ip_runtime(clock));
     let with_feeds = builder.manage(collector_feeds(clock));
     match spec_watch_inputs(clock) {
         Some(inputs) => with_feeds.manage(inputs),
@@ -963,11 +1087,19 @@ struct AiSetup {
     turns: ChatTurnBook,
     market: BrokerMarketTools,
     portfolio: CatalogPortfolio,
+    estimate_runs: EstimateRunBook,
 }
 
 impl AiSetup {
     fn with_market(self, market: BrokerMarketTools) -> Self {
         Self { market, ..self }
+    }
+
+    fn with_estimate_runs(self, estimate_runs: EstimateRunBook) -> Self {
+        Self {
+            estimate_runs,
+            ..self
+        }
     }
 
     fn with_portfolio(self, portfolio: CatalogPortfolio) -> Self {
@@ -1123,6 +1255,7 @@ fn product_catalog(
             events: Arc::clone(events),
             market: setup.market.clone(),
             portfolio: setup.portfolio.clone(),
+            estimate_runs: setup.estimate_runs.clone(),
         },
     )
     .ok()
@@ -1277,6 +1410,7 @@ fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBo
         turns,
         market: BrokerMarketTools::unconnected(),
         portfolio: CatalogPortfolio::default(),
+        estimate_runs: EstimateRunBook::new(),
     }
 }
 
@@ -1303,11 +1437,15 @@ struct ProductSubscribers<D> {
     clock: Arc<platform_macos::SystemClock>,
     ui_events: Arc<UiEventSlot<tauri::Wry>>,
     intraday: Arc<IntradayWatchSlot>,
+    signals: Arc<SignalPipelineSlot>,
 }
 
 fn product_event_bus<D: NotificationDelivery + 'static>(
     subscribers: ProductSubscribers<D>,
-) -> (application::EventBus, Arc<scheduler::SchedulerEventBridge>) {
+) -> (
+    Arc<application::EventBus>,
+    Arc<scheduler::SchedulerEventBridge>,
+) {
     let bridge = Arc::new(scheduler::SchedulerEventBridge::new());
     let mut builder = application::EventBusBuilder::default();
     builder.subscribe(
@@ -1318,6 +1456,10 @@ fn product_event_bus<D: NotificationDelivery + 'static>(
     builder.subscribe(
         IntradayWatchSlot::subscribed_kinds(),
         BridgedIntradayWatch(subscribers.intraday),
+    );
+    builder.subscribe(
+        SignalPipelineSlot::subscribed_kinds(),
+        BridgedSignalPipeline(subscribers.signals),
     );
     builder.subscribe(
         NotificationEventSubscriber::<
@@ -1337,7 +1479,7 @@ fn product_event_bus<D: NotificationDelivery + 'static>(
             FlushingAuditSink::new(AuditEventQueue::default(), subscribers.audit),
         ),
     );
-    (builder.build(), bridge)
+    (Arc::new(builder.build()), bridge)
 }
 
 fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseFactory {
@@ -1735,6 +1877,7 @@ mod product_bus_tests {
             clock,
             ui_events: Arc::new(UiEventSlot::<tauri::Wry>::default()),
             intraday: Arc::new(src_tauri::platform::intraday::IntradayWatchSlot::new()),
+            signals: Arc::new(src_tauri::signal_flow::SignalPipelineSlot::default()),
         });
         let _cleared = events.publish(DomainEvent::SignalCleared(instrument()));
         let _raised = events.publish(DomainEvent::SignalRaised(instrument()));
@@ -1859,6 +2002,7 @@ mod ai_composition_tests {
             turns: ChatTurnBook::new(),
             market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
             portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
+            estimate_runs: src_tauri::estimate_flow::EstimateRunBook::new(),
         };
         assemble_ai(setup, clock, events, repositories).expect("AI 조립")
     }
@@ -1968,6 +2112,7 @@ mod ai_composition_tests {
             turns: ChatTurnBook::new(),
             market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
             portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
+            estimate_runs: src_tauri::estimate_flow::EstimateRunBook::new(),
         }
     }
 
@@ -3781,5 +3926,269 @@ mod holdings_job_assembly_tests {
                 .expect("평가 이력");
             assert_eq!(history.len(), 1, "보유 저장소의 계좌가 평가됨");
         });
+    }
+}
+
+#[cfg(test)]
+mod estimate_flow_assembly_tests {
+    use application::{
+        AiEvent, AiProvider, AiRunId, AiUsage, ChatHistory, EstimateRunRegistry,
+        EstimateSubmissionRepository, EstimateTaskMaterialSource, EstimateTaskMaterials,
+        EstimateTrigger, EventBus, EventBusBuilder, EventSubscriber, InformationError,
+        IsolationCheck, RunInput, RunKind, RunSingleEstimate, RunSpec, SecretValue,
+        SingleEstimateOutcome, SubscriberFailure, SystemPortError, ToolName, TrackingTarget,
+    };
+    use domain::{DomainEvent, DomainEventKind, EstimateTask, MarketCalendar, Timestamp};
+    use mcp_server::{ToolInvocation, ToolRegistry};
+    use serde_json::{Value, json};
+    use src_tauri::estimate_flow::EstimateRunBook;
+    use std::collections::BTreeSet;
+    use std::future::Future;
+    use std::sync::{Arc, OnceLock, RwLock};
+    use store_sqlite::{SharedDatabase, SqliteRepositories};
+    use testkit_ports::SteppedClock;
+    use testkit_ports::chat_fakes::ScriptedAiEventStream;
+    use testkit_ports::estimate_fixtures::{
+        sample_day, sample_estimate_materials, sample_kr_calendars,
+    };
+
+    struct Materials;
+
+    impl EstimateTaskMaterialSource for Materials {
+        fn materials(
+            &self,
+            _target: &TrackingTarget,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<Option<EstimateTaskMaterials>, SystemPortError>> + Send
+        {
+            std::future::ready(Ok(sample_estimate_materials()))
+        }
+
+        fn calendars(
+            &self,
+            _task: &EstimateTask,
+        ) -> impl Future<Output = Result<Vec<MarketCalendar>, SystemPortError>> + Send {
+            std::future::ready(Ok(sample_kr_calendars(60, 70).expect("달력")))
+        }
+    }
+
+    #[derive(Default)]
+    struct Submitted(RwLock<Vec<DomainEvent>>);
+
+    struct Recorder(Arc<Submitted>);
+
+    impl EventSubscriber for Recorder {
+        fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            if let Ok(mut guard) = self.0.0.write() {
+                guard.push(event.clone());
+            }
+            Ok(())
+        }
+    }
+
+    struct McpSubmittingAi {
+        registry: OnceLock<ToolRegistry>,
+        results: RwLock<Vec<Value>>,
+    }
+
+    fn task_id_in(prompt: &str) -> String {
+        prompt
+            .split_once("task_id=\"")
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .map(|(id, _)| id.to_owned())
+            .expect("과제 ID")
+    }
+
+    impl McpSubmittingAi {
+        async fn call(&self, run: &AiRunId, name: &str, arguments: &Value) -> Value {
+            let registry = self.registry.get().expect("카탈로그");
+            let tool = Arc::clone(
+                registry
+                    .get(&ToolName::try_new(name).expect("이름"))
+                    .expect("도구")
+                    .1,
+            );
+            let map = arguments.as_object().cloned().expect("객체");
+            tool.invoke(ToolInvocation {
+                run_id: run,
+                arguments: &map,
+            })
+            .await
+            .expect("도구 결과")
+        }
+
+        async fn submit(&self, spec: &RunSpec) {
+            let RunInput::Analysis(prompt) = spec.input() else {
+                panic!("분석 실행");
+            };
+            let task = task_id_in(prompt.as_str());
+            let read = self
+                .call(spec.id(), "get_estimate_task", &json!({ "task_id": task }))
+                .await;
+            let submitted = self
+                .call(
+                    spec.id(),
+                    "submit_estimate",
+                    &json!({
+                        "task_id": task,
+                        "p": 41_u64,
+                        "rationale": "근거 없음",
+                        "counterargument": "반대 논거",
+                        "sources": []
+                    }),
+                )
+                .await;
+            self.results
+                .write()
+                .expect("기록")
+                .extend([read, submitted]);
+        }
+    }
+
+    impl AiProvider for McpSubmittingAi {
+        type Stream = ScriptedAiEventStream;
+
+        async fn run(&self, spec: RunSpec) -> Result<Self::Stream, InformationError> {
+            self.submit(&spec).await;
+            Ok(ScriptedAiEventStream::from_events(vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+            ]))
+        }
+
+        fn resume(
+            &self,
+            _spec: RunSpec,
+            _history: ChatHistory,
+            _message: domain::UntrustedText,
+        ) -> impl Future<Output = Result<Self::Stream, InformationError>> + Send {
+            std::future::ready(Err(InformationError::Unavailable(
+                application::ResetTime::NotProvided,
+            )))
+        }
+
+        fn usage(&self) -> impl Future<Output = Result<AiUsage, InformationError>> + Send {
+            std::future::ready(Err(InformationError::Unavailable(
+                application::ResetTime::NotProvided,
+            )))
+        }
+
+        fn interrupt(
+            &self,
+            _run: &AiRunId,
+        ) -> impl Future<Output = Result<(), InformationError>> + Send {
+            std::future::ready(Ok(()))
+        }
+
+        fn verify_isolation(
+            &self,
+            _kind: RunKind,
+        ) -> impl Future<Output = Result<IsolationCheck, InformationError>> + Send {
+            std::future::ready(Ok(IsolationCheck::Passed))
+        }
+    }
+
+    fn catalog(
+        clock: &Arc<SteppedClock>,
+        repositories: &Arc<SqliteRepositories>,
+        events: &Arc<EventBus>,
+        book: &EstimateRunBook,
+    ) -> ToolRegistry {
+        src_tauri::mcp_catalog::analysis_catalog(
+            clock,
+            src_tauri::mcp_catalog::CatalogStores {
+                theses: Arc::clone(repositories),
+                estimates: Arc::clone(repositories),
+                bodies: Arc::new(super::ProductArticleBodies { reader: None }),
+                runs: src_tauri::ai_runtime::RunMetadataBook::new(),
+                collector: Arc::new(
+                    src_tauri::ai_runtime::AiAvailability::<
+                        testkit_ports::chat_fakes::ScriptedAiProvider,
+                    >::Missing,
+                ),
+                turns: src_tauri::ai_runtime::ChatTurnBook::new(),
+                events: Arc::clone(events),
+                market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
+                portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
+                estimate_runs: book.clone(),
+            },
+        )
+        .expect("카탈로그")
+    }
+
+    fn recording_bus() -> (Arc<EventBus>, Arc<Submitted>) {
+        let recorder = Arc::new(Submitted::default());
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(
+            BTreeSet::from([DomainEventKind::EstimateSubmitted]),
+            Recorder(Arc::clone(&recorder)),
+        );
+        (Arc::new(builder.build()), recorder)
+    }
+
+    async fn open(shared: &SharedDatabase, directory: &std::path::Path, clock: &SteppedClock) {
+        let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+        src_tauri::database::prepare_directory(&path).expect("폴더");
+        let database = store_sqlite::Database::open(&path, &SecretValue::new(vec![71; 32]), clock)
+            .expect("열기");
+        assert!(shared.install(database).await.is_none());
+    }
+
+    #[test]
+    fn a_code_issued_task_is_estimated_through_the_product_catalog_and_stored() {
+        let directory = std::path::PathBuf::from("../../../target/fin-flow")
+            .join(format!("estimate-{}", std::process::id()));
+        let shared = SharedDatabase::new();
+        let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
+        let clock = Arc::new(SteppedClock::new(sample_day(60).expect("시각")));
+        let (events, recorder) = recording_bus();
+        let book = EstimateRunBook::new();
+        let ai = McpSubmittingAi {
+            registry: OnceLock::new(),
+            results: RwLock::new(Vec::new()),
+        };
+        if ai
+            .registry
+            .set(catalog(&clock, &repositories, &events, &book))
+            .is_err()
+        {
+            panic!("카탈로그는 한 번만");
+        }
+        let identity = super::estimate_identity().expect("식별");
+        let target =
+            TrackingTarget::for_holding(domain::InstrumentId::try_new("sample-a").expect("ID"));
+        tauri::async_runtime::block_on(async {
+            open(&shared, &directory, &clock).await;
+            let outcome = RunSingleEstimate {
+                materials: &Materials,
+                tasks: repositories.as_ref(),
+                ai: &ai,
+                runs: &book,
+                clock: clock.as_ref(),
+                identity: &identity,
+            }
+            .run(&target, &EstimateTrigger::Cycle)
+            .await
+            .expect("실행");
+            assert_eq!(outcome, SingleEstimateOutcome::Submitted);
+            let records = repositories
+                .submission_records(target.instrument())
+                .await
+                .expect("제출 기록");
+            assert_eq!(records.len(), 1);
+            let record = records.first().expect("기록");
+            assert_eq!(record.metadata().prompt.hash, identity.prompt.hash);
+            assert_eq!(
+                *recorder.0.read().expect("이벤트"),
+                vec![DomainEvent::EstimateSubmitted(target.instrument().clone())]
+            );
+            let results = ai.results.read().expect("결과").clone();
+            assert_eq!(
+                results.last().expect("제출 결과")["recorded"],
+                json!("estimate_only_no_order")
+            );
+            book.release(record.run());
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
     }
 }

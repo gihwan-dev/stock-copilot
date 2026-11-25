@@ -8,12 +8,104 @@
     "timezone": "Asia/Seoul",
     "time": "2026-01-02T03:04:05.000Z",
     "random": 0.3141592653589793,
+    "settle": 500,
+    "browserArgs": ["--num-raster-threads=1", "--disable-partial-raster"],
     "animations": "disabled",
     "caret": "hide",
-    "components": ["Button", "Card", "Money", "TextField"],
+    "components": [
+      "Icon",
+      "Text",
+      "Heading",
+      "Button",
+      "IconButton",
+      "Checkbox",
+      "Switch",
+      "Disclosure",
+      "SegmentedControl",
+      "Select",
+      "TextField",
+      "Card",
+      "AppFrame",
+      "AppShell",
+      "Page",
+      "Section",
+      "Grid",
+      "GridItem",
+      "Stack",
+      "Inline",
+      "Split",
+      "Toolbar",
+      "Divider",
+      "StepScreen",
+      "ListRow",
+      "Table",
+      "Dialog",
+      "EmptyState",
+      "Skeleton",
+      "Badge",
+      "StatusBar",
+      "LineChart",
+      "AreaChart",
+      "DonutChart",
+      "Treemap",
+      "CandleChart",
+      "Money",
+      "Percent",
+      "Quantity",
+      "Probability",
+      "PriceChange",
+      "DirectionBadge",
+      "DataText",
+      "TimestampText",
+      "ChartNumber",
+      "Markdown",
+      "ChatInput"
+    ],
     "themes": ["light", "dark"]
   },
   "measurements": [
+    {
+      "component": "Icon",
+      "theme": "light",
+      "bytes": 3456,
+      "first": "4f53dcbac69c04e62433c1c51108d9d48892fd9c51ee8cb4f02f65562ed2450b",
+      "second": "4f53dcbac69c04e62433c1c51108d9d48892fd9c51ee8cb4f02f65562ed2450b"
+    },
+    {
+      "component": "Icon",
+      "theme": "dark",
+      "bytes": 3492,
+      "first": "e261885937ee0a085650637e156f81175b49d0a61ec8260de86b813700499acd",
+      "second": "e261885937ee0a085650637e156f81175b49d0a61ec8260de86b813700499acd"
+    },
+    {
+      "component": "Text",
+      "theme": "light",
+      "bytes": 4807,
+      "first": "96e95122c89b190eadfd767e9b34aab090e2538ce21023ed1ed8a9408e868b1f",
+      "second": "96e95122c89b190eadfd767e9b34aab090e2538ce21023ed1ed8a9408e868b1f"
+    },
+    {
+      "component": "Text",
+      "theme": "dark",
+      "bytes": 4863,
+      "first": "3182aed572854c0a05dea126705c5e6f78869b5c0bc88034d5ea18c36d7feb37",
+      "second": "3182aed572854c0a05dea126705c5e6f78869b5c0bc88034d5ea18c36d7feb37"
+    },
+    {
+      "component": "Heading",
+      "theme": "light",
+      "bytes": 5637,
+      "first": "a62e7b3e65f7a80dff2922ab565e001790aa614c5ef7cec450211f0f2b8f97b8",
+      "second": "a62e7b3e65f7a80dff2922ab565e001790aa614c5ef7cec450211f0f2b8f97b8"
+    },
+    {
+      "component": "Heading",
+      "theme": "dark",
+      "bytes": 5704,
+      "first": "c267c1cd8b67688b785bbd261b81c691e4254d885395fb67133b04283bf08104",
+      "second": "c267c1cd8b67688b785bbd261b81c691e4254d885395fb67133b04283bf08104"
+    },
     {
       "component": "Button",
       "theme": "light",
@@ -29,46 +121,606 @@
       "second": "4c3926bdd7ffdf7d05caab0ef5c59ff402e8350d585e9cc7da03050e69ed9810"
     },
     {
-      "component": "Card",
+      "component": "IconButton",
       "theme": "light",
-      "bytes": 20559,
-      "first": "30ebd21cd6259b7cc6840752e98abf2f43ed44464aaf3a0714becc4250a3a50b",
-      "second": "30ebd21cd6259b7cc6840752e98abf2f43ed44464aaf3a0714becc4250a3a50b"
+      "bytes": 4187,
+      "first": "dacbacfbb5b4e6078359fc4c4beed4504d573140a93fcccd2503358df3be9d6c",
+      "second": "dacbacfbb5b4e6078359fc4c4beed4504d573140a93fcccd2503358df3be9d6c"
     },
     {
-      "component": "Card",
+      "component": "IconButton",
       "theme": "dark",
-      "bytes": 21037,
-      "first": "932c69b9a22da0af1ecc195800947dae1689fabb2320cc77eb253948e0f5c999",
-      "second": "932c69b9a22da0af1ecc195800947dae1689fabb2320cc77eb253948e0f5c999"
+      "bytes": 4212,
+      "first": "3fb6065f391fdb4feb924de34f0dd54ebeabf669666022fda99fbd4d4da8dcdc",
+      "second": "3fb6065f391fdb4feb924de34f0dd54ebeabf669666022fda99fbd4d4da8dcdc"
     },
     {
-      "component": "Money",
+      "component": "Checkbox",
       "theme": "light",
-      "bytes": 6489,
-      "first": "28e5f4db79c024f93c85844c447fab6b96c41cb56491f3622933753ab18eadf4",
-      "second": "28e5f4db79c024f93c85844c447fab6b96c41cb56491f3622933753ab18eadf4"
+      "bytes": 7056,
+      "first": "7cf008ea5f41f471d9e89ab85905a59b84a81b5676937be47650dbfd8145f737",
+      "second": "7cf008ea5f41f471d9e89ab85905a59b84a81b5676937be47650dbfd8145f737"
     },
     {
-      "component": "Money",
+      "component": "Checkbox",
       "theme": "dark",
-      "bytes": 6540,
-      "first": "42645f4f694ff7e25edd1422962ae02080d03be5d77cdf492f0aebc2fd3f8101",
-      "second": "42645f4f694ff7e25edd1422962ae02080d03be5d77cdf492f0aebc2fd3f8101"
+      "bytes": 7162,
+      "first": "28b881a529b885a8a9b955da7f967c9ee508bb5f3a4f9422bf138d1bbd7a3fe1",
+      "second": "28b881a529b885a8a9b955da7f967c9ee508bb5f3a4f9422bf138d1bbd7a3fe1"
+    },
+    {
+      "component": "Switch",
+      "theme": "light",
+      "bytes": 7561,
+      "first": "4c8b16e52d29b3548b393b49ac62572c0638c1feee703ea37c6ac947b67c79f5",
+      "second": "4c8b16e52d29b3548b393b49ac62572c0638c1feee703ea37c6ac947b67c79f5"
+    },
+    {
+      "component": "Switch",
+      "theme": "dark",
+      "bytes": 7708,
+      "first": "186494910505c8ea285df1183269f1a149032d6d92f82c373bbcd121fb5bc204",
+      "second": "186494910505c8ea285df1183269f1a149032d6d92f82c373bbcd121fb5bc204"
+    },
+    {
+      "component": "Disclosure",
+      "theme": "light",
+      "bytes": 5181,
+      "first": "65802af43e77da8f5aac755550c809ffe05dfc6f936f040b8bc3e57b3655659e",
+      "second": "65802af43e77da8f5aac755550c809ffe05dfc6f936f040b8bc3e57b3655659e"
+    },
+    {
+      "component": "Disclosure",
+      "theme": "dark",
+      "bytes": 5202,
+      "first": "c9cad79ce0c7e54bba24e7401542864e5d5e5828ba3274897d2c5f57d349d982",
+      "second": "c9cad79ce0c7e54bba24e7401542864e5d5e5828ba3274897d2c5f57d349d982"
+    },
+    {
+      "component": "SegmentedControl",
+      "theme": "light",
+      "bytes": 5485,
+      "first": "d77fb2d0a168a1a149f41cc0ef6fbc4110e62ed91772c1c86d0a476a6c6713b1",
+      "second": "d77fb2d0a168a1a149f41cc0ef6fbc4110e62ed91772c1c86d0a476a6c6713b1"
+    },
+    {
+      "component": "SegmentedControl",
+      "theme": "dark",
+      "bytes": 5512,
+      "first": "a7b5c763178b551ea08c8eb1a93e5b591a9d99f15c0daa15fb6454ac0dce608e",
+      "second": "a7b5c763178b551ea08c8eb1a93e5b591a9d99f15c0daa15fb6454ac0dce608e"
+    },
+    {
+      "component": "Select",
+      "theme": "light",
+      "bytes": 5946,
+      "first": "e4de71f82c0e686df094c9dd6597ed888c93b106e97f3cb8fd1c4ba9c8b5783e",
+      "second": "e4de71f82c0e686df094c9dd6597ed888c93b106e97f3cb8fd1c4ba9c8b5783e"
+    },
+    {
+      "component": "Select",
+      "theme": "dark",
+      "bytes": 5962,
+      "first": "842ab52fa7c1e72509d383a29a36e11dea629658e78f14b1e86b47ef803b2f60",
+      "second": "842ab52fa7c1e72509d383a29a36e11dea629658e78f14b1e86b47ef803b2f60"
     },
     {
       "component": "TextField",
       "theme": "light",
-      "bytes": 5201,
-      "first": "dbc23bca9e6205d149a0a1a3c6317595633027f0b210f3fd5e884bb0c2fa7920",
-      "second": "dbc23bca9e6205d149a0a1a3c6317595633027f0b210f3fd5e884bb0c2fa7920"
+      "bytes": 5210,
+      "first": "98b2b3ae711bde8861fff89237d039752e2b3e9151ab4665bc919d6da2ee09e3",
+      "second": "98b2b3ae711bde8861fff89237d039752e2b3e9151ab4665bc919d6da2ee09e3"
     },
     {
       "component": "TextField",
       "theme": "dark",
-      "bytes": 5260,
-      "first": "71489712506bf539c408d7d5093bf5e8e71b0aebf0902dfa378c3f9fe8d5e84f",
-      "second": "71489712506bf539c408d7d5093bf5e8e71b0aebf0902dfa378c3f9fe8d5e84f"
+      "bytes": 5257,
+      "first": "a09af9aa8112d55281e79bd76e60ac9a28bca2874f481edc8da9a9470aeca8d6",
+      "second": "a09af9aa8112d55281e79bd76e60ac9a28bca2874f481edc8da9a9470aeca8d6"
+    },
+    {
+      "component": "Card",
+      "theme": "light",
+      "bytes": 20552,
+      "first": "a5c55f55b285faa9d7443f5a01dc323cc4e61ad0a7d921caa4f10af7747e077e",
+      "second": "a5c55f55b285faa9d7443f5a01dc323cc4e61ad0a7d921caa4f10af7747e077e"
+    },
+    {
+      "component": "Card",
+      "theme": "dark",
+      "bytes": 21061,
+      "first": "ef6c6c38341235e24b649e43e4dafe79d529ae4a3003243b89358275f7de2217",
+      "second": "ef6c6c38341235e24b649e43e4dafe79d529ae4a3003243b89358275f7de2217"
+    },
+    {
+      "component": "AppFrame",
+      "theme": "light",
+      "bytes": 22742,
+      "first": "aa7bb980929c6a4804ceb14dcd3d600d4ee741ea8cd9af636d00fbbbcd86bf8a",
+      "second": "aa7bb980929c6a4804ceb14dcd3d600d4ee741ea8cd9af636d00fbbbcd86bf8a"
+    },
+    {
+      "component": "AppFrame",
+      "theme": "dark",
+      "bytes": 23311,
+      "first": "38369ada06e13655c22d356c9ade2036341e0ade3d0ab8e93902e9de284621a6",
+      "second": "38369ada06e13655c22d356c9ade2036341e0ade3d0ab8e93902e9de284621a6"
+    },
+    {
+      "component": "AppShell",
+      "theme": "light",
+      "bytes": 23885,
+      "first": "69de7a1afdcbda80aa4e58ac4e87530458448361d2b866d622d6483a95543b99",
+      "second": "69de7a1afdcbda80aa4e58ac4e87530458448361d2b866d622d6483a95543b99"
+    },
+    {
+      "component": "AppShell",
+      "theme": "dark",
+      "bytes": 24391,
+      "first": "622f114217d569cad302015a53cfcba94a3457c94ae840a1265c08fd5ca81d29",
+      "second": "622f114217d569cad302015a53cfcba94a3457c94ae840a1265c08fd5ca81d29"
+    },
+    {
+      "component": "Page",
+      "theme": "light",
+      "bytes": 22176,
+      "first": "c15d8a1b31c1dd9b059ade3fd2a8f27fd12d6cf30916c1c8eb2d31aa9998e459",
+      "second": "c15d8a1b31c1dd9b059ade3fd2a8f27fd12d6cf30916c1c8eb2d31aa9998e459"
+    },
+    {
+      "component": "Page",
+      "theme": "dark",
+      "bytes": 22708,
+      "first": "4651776c75493be1c3e486addfb52d87e0849a24439e7922ac842acd3a1ba437",
+      "second": "4651776c75493be1c3e486addfb52d87e0849a24439e7922ac842acd3a1ba437"
+    },
+    {
+      "component": "Section",
+      "theme": "light",
+      "bytes": 19816,
+      "first": "39a10adf7141d267106e5716caf5d29e8a44665ebd1401fd4259f99cf41bf4bf",
+      "second": "39a10adf7141d267106e5716caf5d29e8a44665ebd1401fd4259f99cf41bf4bf"
+    },
+    {
+      "component": "Section",
+      "theme": "dark",
+      "bytes": 20316,
+      "first": "c9a934d4ae144203d1cce8a37b0697456230e90015f522186aa210a4fc62769f",
+      "second": "c9a934d4ae144203d1cce8a37b0697456230e90015f522186aa210a4fc62769f"
+    },
+    {
+      "component": "Grid",
+      "theme": "light",
+      "bytes": 44075,
+      "first": "340e78a8986e65e4196f176e6e9ce536b4e8e829c87cd2fe785e722bfcf81cd0",
+      "second": "340e78a8986e65e4196f176e6e9ce536b4e8e829c87cd2fe785e722bfcf81cd0"
+    },
+    {
+      "component": "Grid",
+      "theme": "dark",
+      "bytes": 45233,
+      "first": "971cff0954a02de672fcfcf80007a44c0862213374c3bb48ac6df048e2d5617a",
+      "second": "971cff0954a02de672fcfcf80007a44c0862213374c3bb48ac6df048e2d5617a"
+    },
+    {
+      "component": "GridItem",
+      "theme": "light",
+      "bytes": 20439,
+      "first": "1b84c13ef8e1f32422027ca571f1e327926a162d95697e8cb281af6612adc3d0",
+      "second": "1b84c13ef8e1f32422027ca571f1e327926a162d95697e8cb281af6612adc3d0"
+    },
+    {
+      "component": "GridItem",
+      "theme": "dark",
+      "bytes": 20877,
+      "first": "7d973ab6c8e0fdcf4983ee9e5bb08e60e1d9ada8ff72d0569103e3699246ca3e",
+      "second": "7d973ab6c8e0fdcf4983ee9e5bb08e60e1d9ada8ff72d0569103e3699246ca3e"
+    },
+    {
+      "component": "Stack",
+      "theme": "light",
+      "bytes": 6349,
+      "first": "29c123ca1a950e750738a0cba15cec620f14362de18d28b40ae11425d5a9914d",
+      "second": "29c123ca1a950e750738a0cba15cec620f14362de18d28b40ae11425d5a9914d"
+    },
+    {
+      "component": "Stack",
+      "theme": "dark",
+      "bytes": 6413,
+      "first": "86b8363cdcaf2a844285b17e86b7ca232be3e6ba7200924f67ae64c0a0529773",
+      "second": "86b8363cdcaf2a844285b17e86b7ca232be3e6ba7200924f67ae64c0a0529773"
+    },
+    {
+      "component": "Inline",
+      "theme": "light",
+      "bytes": 6653,
+      "first": "7b530d6f6f2db0c031e03c0627b7bcafbaff46a196051ae29e46ea59b1664936",
+      "second": "7b530d6f6f2db0c031e03c0627b7bcafbaff46a196051ae29e46ea59b1664936"
+    },
+    {
+      "component": "Inline",
+      "theme": "dark",
+      "bytes": 6691,
+      "first": "6ed23ebaf49f5ae53b81ef8ec1fa8c56efb244b03525a11fd0b3039c1f76d814",
+      "second": "6ed23ebaf49f5ae53b81ef8ec1fa8c56efb244b03525a11fd0b3039c1f76d814"
+    },
+    {
+      "component": "Split",
+      "theme": "light",
+      "bytes": 21415,
+      "first": "c3a3d0d6a2794ea32aa7959aaa98f09c3f47b332bf536fd4f5043d9f0a9b3a08",
+      "second": "c3a3d0d6a2794ea32aa7959aaa98f09c3f47b332bf536fd4f5043d9f0a9b3a08"
+    },
+    {
+      "component": "Split",
+      "theme": "dark",
+      "bytes": 21605,
+      "first": "0e4e6f3c08972fd82cce54f66f63dc5025ab2405f441aa535ea415afd4cd9cb8",
+      "second": "0e4e6f3c08972fd82cce54f66f63dc5025ab2405f441aa535ea415afd4cd9cb8"
+    },
+    {
+      "component": "Toolbar",
+      "theme": "light",
+      "bytes": 5663,
+      "first": "f7fd1122197309eb9a55baf594836f01fd4e7e34e714a7f69af134769c623485",
+      "second": "f7fd1122197309eb9a55baf594836f01fd4e7e34e714a7f69af134769c623485"
+    },
+    {
+      "component": "Toolbar",
+      "theme": "dark",
+      "bytes": 5682,
+      "first": "04124e65df392364ddeb4ce98bfd6cc1b9f56e468e113a9c0311664bac0da820",
+      "second": "04124e65df392364ddeb4ce98bfd6cc1b9f56e468e113a9c0311664bac0da820"
+    },
+    {
+      "component": "Divider",
+      "theme": "light",
+      "bytes": 3243,
+      "first": "28ccc0779948b74ef17e8717ac5753375d65ca3f07e4ca0f6445d3178a3e8f1b",
+      "second": "28ccc0779948b74ef17e8717ac5753375d65ca3f07e4ca0f6445d3178a3e8f1b"
+    },
+    {
+      "component": "Divider",
+      "theme": "dark",
+      "bytes": 3251,
+      "first": "ec0d00dd0d7971dabb64e4d0fb517d1ce7f590895125bf2aa9e50d03c5f9b900",
+      "second": "ec0d00dd0d7971dabb64e4d0fb517d1ce7f590895125bf2aa9e50d03c5f9b900"
+    },
+    {
+      "component": "StepScreen",
+      "theme": "light",
+      "bytes": 27320,
+      "first": "510a568f27ab1023a86972c30808fc95a17ce9cc47dece5e95cadb1793881728",
+      "second": "510a568f27ab1023a86972c30808fc95a17ce9cc47dece5e95cadb1793881728"
+    },
+    {
+      "component": "StepScreen",
+      "theme": "dark",
+      "bytes": 27615,
+      "first": "b8974396395ed99e86b29325a33dc06212c5040129a7aac7902174e13ba110ec",
+      "second": "b8974396395ed99e86b29325a33dc06212c5040129a7aac7902174e13ba110ec"
+    },
+    {
+      "component": "ListRow",
+      "theme": "light",
+      "bytes": 9823,
+      "first": "8860350476678f74939fe0cefb9e2326db795a602d2db89f94cf14f25cafac67",
+      "second": "8860350476678f74939fe0cefb9e2326db795a602d2db89f94cf14f25cafac67"
+    },
+    {
+      "component": "ListRow",
+      "theme": "dark",
+      "bytes": 9902,
+      "first": "9ef017408a16de8cb83a1bce693cea019dba14e53ed23d5ae5b6c37cf3bae0a8",
+      "second": "9ef017408a16de8cb83a1bce693cea019dba14e53ed23d5ae5b6c37cf3bae0a8"
+    },
+    {
+      "component": "Table",
+      "theme": "light",
+      "bytes": 15237,
+      "first": "210d8e21af2dd65a1b8d77d0caa2cf8ad1e337da5c84a5e466664b33c4d22238",
+      "second": "210d8e21af2dd65a1b8d77d0caa2cf8ad1e337da5c84a5e466664b33c4d22238"
+    },
+    {
+      "component": "Table",
+      "theme": "dark",
+      "bytes": 15320,
+      "first": "a9c2a69ac9fd7df622d3fd17013bcebf792158a9fe286a3399ff9be9a3b371a6",
+      "second": "a9c2a69ac9fd7df622d3fd17013bcebf792158a9fe286a3399ff9be9a3b371a6"
+    },
+    {
+      "component": "Dialog",
+      "theme": "light",
+      "bytes": 13943,
+      "first": "3f6a9cfd4834d6d5dcb886993a4c23a69c920b0413ba4959f44ef759e7bac582",
+      "second": "3f6a9cfd4834d6d5dcb886993a4c23a69c920b0413ba4959f44ef759e7bac582"
+    },
+    {
+      "component": "Dialog",
+      "theme": "dark",
+      "bytes": 13716,
+      "first": "c285d1481f3f92c9ee5d74bbc3b42e72640de86d97a710528f38fc957c6ff97e",
+      "second": "c285d1481f3f92c9ee5d74bbc3b42e72640de86d97a710528f38fc957c6ff97e"
+    },
+    {
+      "component": "EmptyState",
+      "theme": "light",
+      "bytes": 20439,
+      "first": "40803fe0c75cc0d8e0fd6158f55c4127b0baccadc007024aa6431a64ff977a72",
+      "second": "40803fe0c75cc0d8e0fd6158f55c4127b0baccadc007024aa6431a64ff977a72"
+    },
+    {
+      "component": "EmptyState",
+      "theme": "dark",
+      "bytes": 20563,
+      "first": "4db365ae831a344fcdceb4dc86b28d012d6ba9f6a120b58e6bd558a6e8dbfebc",
+      "second": "4db365ae831a344fcdceb4dc86b28d012d6ba9f6a120b58e6bd558a6e8dbfebc"
+    },
+    {
+      "component": "Skeleton",
+      "theme": "light",
+      "bytes": 3472,
+      "first": "fd13170734dc88fa9d824b321fbb5c5e200c2bb442dd62723390d1dc2111aeb3",
+      "second": "fd13170734dc88fa9d824b321fbb5c5e200c2bb442dd62723390d1dc2111aeb3"
+    },
+    {
+      "component": "Skeleton",
+      "theme": "dark",
+      "bytes": 3519,
+      "first": "60e74203111e9232791dffdb6dad68f8399dc32fa1a91b1a6e116c66f1fccaf6",
+      "second": "60e74203111e9232791dffdb6dad68f8399dc32fa1a91b1a6e116c66f1fccaf6"
+    },
+    {
+      "component": "Badge",
+      "theme": "light",
+      "bytes": 4353,
+      "first": "6dd997f7f88902048664f32f4c07be0bc28003bf6cce2932b04b156644c20919",
+      "second": "6dd997f7f88902048664f32f4c07be0bc28003bf6cce2932b04b156644c20919"
+    },
+    {
+      "component": "Badge",
+      "theme": "dark",
+      "bytes": 4332,
+      "first": "eb79a515c76c62e58f997b3da0936c70d663d68a53aa69b023f0cac448afac5d",
+      "second": "eb79a515c76c62e58f997b3da0936c70d663d68a53aa69b023f0cac448afac5d"
+    },
+    {
+      "component": "StatusBar",
+      "theme": "light",
+      "bytes": 6883,
+      "first": "a9270a4a5d91b30de6b56a184415074f39fd09c803aacd426951c3d01f06a72e",
+      "second": "a9270a4a5d91b30de6b56a184415074f39fd09c803aacd426951c3d01f06a72e"
+    },
+    {
+      "component": "StatusBar",
+      "theme": "dark",
+      "bytes": 7036,
+      "first": "38287cd1b1d9eef3158e14a408f3bba1f74b02c19dd9686afce5b0cda76dc494",
+      "second": "38287cd1b1d9eef3158e14a408f3bba1f74b02c19dd9686afce5b0cda76dc494"
+    },
+    {
+      "component": "LineChart",
+      "theme": "light",
+      "bytes": 21984,
+      "first": "bd4d523f58033726ad4ebb60dfb75dbea9ce727626c5ad2efeb91670e473144d",
+      "second": "bd4d523f58033726ad4ebb60dfb75dbea9ce727626c5ad2efeb91670e473144d"
+    },
+    {
+      "component": "LineChart",
+      "theme": "dark",
+      "bytes": 21677,
+      "first": "9fa56acc3f7ef45e960ed8e175f5224936bbed536124e2661ccc5932ea43e730",
+      "second": "9fa56acc3f7ef45e960ed8e175f5224936bbed536124e2661ccc5932ea43e730"
+    },
+    {
+      "component": "AreaChart",
+      "theme": "light",
+      "bytes": 22123,
+      "first": "e7afe7911252c364e50e04ae4b5c275632ab02bceef9309fc11b58a7945a3309",
+      "second": "e7afe7911252c364e50e04ae4b5c275632ab02bceef9309fc11b58a7945a3309"
+    },
+    {
+      "component": "AreaChart",
+      "theme": "dark",
+      "bytes": 21576,
+      "first": "e36fb7d7eb1acaf3dc8c5a88e4bac3a576c979c0f35d6b94fbac85c0fc76af85",
+      "second": "e36fb7d7eb1acaf3dc8c5a88e4bac3a576c979c0f35d6b94fbac85c0fc76af85"
+    },
+    {
+      "component": "DonutChart",
+      "theme": "light",
+      "bytes": 33286,
+      "first": "1d686a3cbf2d19ffd18c1c149c058748baa3381b53a8bb0ba9eb016a7021dbbc",
+      "second": "1d686a3cbf2d19ffd18c1c149c058748baa3381b53a8bb0ba9eb016a7021dbbc"
+    },
+    {
+      "component": "DonutChart",
+      "theme": "dark",
+      "bytes": 33938,
+      "first": "bea562fa20af87ecf0f55c9d2dd94ea1cda1f3d68ce021681c234196a399206d",
+      "second": "bea562fa20af87ecf0f55c9d2dd94ea1cda1f3d68ce021681c234196a399206d"
+    },
+    {
+      "component": "Treemap",
+      "theme": "light",
+      "bytes": 25627,
+      "first": "6a616f0f0f4b9091b28feb4ad20f3080477a3c0e48199923ecb763b23ee455ed",
+      "second": "6a616f0f0f4b9091b28feb4ad20f3080477a3c0e48199923ecb763b23ee455ed"
+    },
+    {
+      "component": "Treemap",
+      "theme": "dark",
+      "bytes": 25876,
+      "first": "b3b4e8bbbf632bcfc5e6cfb5b376b6ee5d9a7236accc1279b83bfad3ae54860c",
+      "second": "b3b4e8bbbf632bcfc5e6cfb5b376b6ee5d9a7236accc1279b83bfad3ae54860c"
+    },
+    {
+      "component": "CandleChart",
+      "theme": "light",
+      "bytes": 14920,
+      "first": "b9596119eae43bbba997ae6c8ae0978966fe42b97c0400f2cae42024b992db20",
+      "second": "b9596119eae43bbba997ae6c8ae0978966fe42b97c0400f2cae42024b992db20"
+    },
+    {
+      "component": "CandleChart",
+      "theme": "dark",
+      "bytes": 14810,
+      "first": "01cced30977287ec8b849af76699e0229c6da3e8bb4162f9f3680379f8c86efb",
+      "second": "01cced30977287ec8b849af76699e0229c6da3e8bb4162f9f3680379f8c86efb"
+    },
+    {
+      "component": "Money",
+      "theme": "light",
+      "bytes": 6488,
+      "first": "9c3d712f8de20cc42e3507eba3f1672a16da87587c15cbbdcf519f328a7851aa",
+      "second": "9c3d712f8de20cc42e3507eba3f1672a16da87587c15cbbdcf519f328a7851aa"
+    },
+    {
+      "component": "Money",
+      "theme": "dark",
+      "bytes": 6539,
+      "first": "be87d2b9e903d53f05ede06c17f0c5063d286c3129158b1122cb1b92ed58e052",
+      "second": "be87d2b9e903d53f05ede06c17f0c5063d286c3129158b1122cb1b92ed58e052"
+    },
+    {
+      "component": "Percent",
+      "theme": "light",
+      "bytes": 4140,
+      "first": "5ab592aa64f7246143ed9118acdc1b512e607517689cd1e6e05a8581a50a21a9",
+      "second": "5ab592aa64f7246143ed9118acdc1b512e607517689cd1e6e05a8581a50a21a9"
+    },
+    {
+      "component": "Percent",
+      "theme": "dark",
+      "bytes": 4210,
+      "first": "e1d17c2ba3c5a256886a3b19b12af37e51edf6ab12bb913b5a00b7f8c7024f6a",
+      "second": "e1d17c2ba3c5a256886a3b19b12af37e51edf6ab12bb913b5a00b7f8c7024f6a"
+    },
+    {
+      "component": "Quantity",
+      "theme": "light",
+      "bytes": 5274,
+      "first": "310b15c57e4708a170044e639a07a22f29c4ae49588bfa572af6cd7e3e987e99",
+      "second": "310b15c57e4708a170044e639a07a22f29c4ae49588bfa572af6cd7e3e987e99"
+    },
+    {
+      "component": "Quantity",
+      "theme": "dark",
+      "bytes": 5337,
+      "first": "7e6608c2e33fc6917762527752f79cdb0a04a04fd9b2c365959305c521dba0a8",
+      "second": "7e6608c2e33fc6917762527752f79cdb0a04a04fd9b2c365959305c521dba0a8"
+    },
+    {
+      "component": "Probability",
+      "theme": "light",
+      "bytes": 4248,
+      "first": "c6eda4055ae0ee599434ab0a0109750f869accc0fb6adb9f10dc981981159fd7",
+      "second": "c6eda4055ae0ee599434ab0a0109750f869accc0fb6adb9f10dc981981159fd7"
+    },
+    {
+      "component": "Probability",
+      "theme": "dark",
+      "bytes": 4332,
+      "first": "12fbfd1c2951bce0851da036986541dc71a21e19e104f6278d2c7bd842a487f2",
+      "second": "12fbfd1c2951bce0851da036986541dc71a21e19e104f6278d2c7bd842a487f2"
+    },
+    {
+      "component": "PriceChange",
+      "theme": "light",
+      "bytes": 6810,
+      "first": "2fe93ab7aa67c8113d59a07f53a5776fddb5d9aa7adc75302738948cd9580a81",
+      "second": "2fe93ab7aa67c8113d59a07f53a5776fddb5d9aa7adc75302738948cd9580a81"
+    },
+    {
+      "component": "PriceChange",
+      "theme": "dark",
+      "bytes": 6791,
+      "first": "6a34315a995276afd805c7581b5124fb65f22cdec5cdbb3380f4b6ef09534f9d",
+      "second": "6a34315a995276afd805c7581b5124fb65f22cdec5cdbb3380f4b6ef09534f9d"
+    },
+    {
+      "component": "DirectionBadge",
+      "theme": "light",
+      "bytes": 4430,
+      "first": "fe1b31549d6e4ba7897061b51f316a5117f69c89f7f8af916a6c32c13fea51b4",
+      "second": "fe1b31549d6e4ba7897061b51f316a5117f69c89f7f8af916a6c32c13fea51b4"
+    },
+    {
+      "component": "DirectionBadge",
+      "theme": "dark",
+      "bytes": 4447,
+      "first": "53bda1d3dadc5b8d344e630e41c6c196bc00021645e3a888b06b17cfbcf60ef9",
+      "second": "53bda1d3dadc5b8d344e630e41c6c196bc00021645e3a888b06b17cfbcf60ef9"
+    },
+    {
+      "component": "DataText",
+      "theme": "light",
+      "bytes": 3693,
+      "first": "c0cb2d8d13b77c36207af5d5694d41cb1312a59fb8a8d22dd88d8b32d8ed8b52",
+      "second": "c0cb2d8d13b77c36207af5d5694d41cb1312a59fb8a8d22dd88d8b32d8ed8b52"
+    },
+    {
+      "component": "DataText",
+      "theme": "dark",
+      "bytes": 3703,
+      "first": "74a41147eb52d59c1e02fef4dcabd05c8d786150faf960c07e34896ebc12fc93",
+      "second": "74a41147eb52d59c1e02fef4dcabd05c8d786150faf960c07e34896ebc12fc93"
+    },
+    {
+      "component": "TimestampText",
+      "theme": "light",
+      "bytes": 4510,
+      "first": "3e428c16b8bf024ad4d7269257bd649acb9b8e4631d6e94c4b16b03f56f5b052",
+      "second": "3e428c16b8bf024ad4d7269257bd649acb9b8e4631d6e94c4b16b03f56f5b052"
+    },
+    {
+      "component": "TimestampText",
+      "theme": "dark",
+      "bytes": 4549,
+      "first": "0bda9a8e9031920a42527cad341f1e34c323ceb789238af0dbb3a2032cde3d92",
+      "second": "0bda9a8e9031920a42527cad341f1e34c323ceb789238af0dbb3a2032cde3d92"
+    },
+    {
+      "component": "ChartNumber",
+      "theme": "light",
+      "bytes": 5013,
+      "first": "9a46f8b4fee5cd8c842b2c4b851d2a44c8534dec236255abbd8c81243e2b9ee0",
+      "second": "9a46f8b4fee5cd8c842b2c4b851d2a44c8534dec236255abbd8c81243e2b9ee0"
+    },
+    {
+      "component": "ChartNumber",
+      "theme": "dark",
+      "bytes": 5032,
+      "first": "039cd4e03c8c139e3f17cb1afece51eb7e6d1ee9d6a2a176fac742b2d13552f7",
+      "second": "039cd4e03c8c139e3f17cb1afece51eb7e6d1ee9d6a2a176fac742b2d13552f7"
+    },
+    {
+      "component": "Markdown",
+      "theme": "light",
+      "bytes": 8274,
+      "first": "cf5ab9df3cab964bcf312e325f2bda62235420c16e8e95fb1360f45e5793ebd7",
+      "second": "cf5ab9df3cab964bcf312e325f2bda62235420c16e8e95fb1360f45e5793ebd7"
+    },
+    {
+      "component": "Markdown",
+      "theme": "dark",
+      "bytes": 8364,
+      "first": "c01d458486a35fcabc4e59570fd448f66cd69c0b1418b388e321cc741ba8c522",
+      "second": "c01d458486a35fcabc4e59570fd448f66cd69c0b1418b388e321cc741ba8c522"
+    },
+    {
+      "component": "ChatInput",
+      "theme": "light",
+      "bytes": 5503,
+      "first": "9a0acb298e8106909316fddc33de048035b4bb7787c4327c51965f8325674a45",
+      "second": "9a0acb298e8106909316fddc33de048035b4bb7787c4327c51965f8325674a45"
+    },
+    {
+      "component": "ChatInput",
+      "theme": "dark",
+      "bytes": 5534,
+      "first": "defe9ac34b7bbc99f38fb11ddde71957cb3a71d992b3a4144f1ea03810b8b3e2",
+      "second": "defe9ac34b7bbc99f38fb11ddde71957cb3a71d992b3a4144f1ea03810b8b3e2"
     }
   ]
 }

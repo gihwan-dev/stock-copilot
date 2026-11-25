@@ -306,7 +306,7 @@ mod estimate_outcome_arithmetic;
 pub use estimate_outcome::{
     EstimateOutcome, OutcomeAdjustment, OutcomeCorporateAction, OutcomeEvidence, OutcomeFailed,
     OutcomeFailure, OutcomePending, OutcomeState, OutcomeSuccess, OutcomeUnavailable,
-    SavedEstimateOutcome, SavedOutcomeAdjustment, SavedOutcomeEvidence,
+    SavedEstimateOutcome, SavedOutcomeAdjustment, SavedOutcomeEvidence, estimate_maturity,
 };
 mod thresholds;
 mod thresholds_arithmetic;

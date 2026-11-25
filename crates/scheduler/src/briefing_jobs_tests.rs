@@ -113,3 +113,45 @@ fn briefing_waits_for_ai_queue_admission() {
         assert!(port.calls.read().await.is_empty());
     });
 }
+
+struct ScriptedCycle {
+    result: Result<crate::EstimateCycleTally, JobError>,
+    calls: RwLock<Vec<Timestamp>>,
+}
+
+impl crate::EstimateCyclePort for ScriptedCycle {
+    async fn run_cycle(&self, now: Timestamp) -> Result<crate::EstimateCycleTally, JobError> {
+        self.calls.write().await.push(now);
+        self.result.clone()
+    }
+}
+
+#[test]
+fn estimate_cycle_is_a_nightly_ai_job_that_catches_up_once_and_reports_submissions() {
+    runtime().block_on(async {
+        let port = Arc::new(ScriptedCycle {
+            result: Ok(crate::EstimateCycleTally {
+                attempted: 3,
+                submitted: 2,
+            }),
+            calls: RwLock::new(Vec::new()),
+        });
+        let job = crate::EstimateCycleJob::new(Arc::clone(&port));
+        assert_eq!(job.id(), ScheduledJobId::EstimateCycle);
+        let config = job.default_config();
+        assert_eq!(config.schedule, ScheduleRule::DailyKst(time(1, 0)));
+        assert_eq!(config.kind, JobKind::AiBackground);
+        assert_eq!(config.missed_policy, MissedPolicy::CatchUpOnce);
+        let detail = job.run(kst(2026, 11, 26, 1, 0)).await.expect("완료");
+        assert_eq!(detail.summary_code, "estimates_submitted");
+        assert_eq!(detail.processed_items, 2);
+        let failing = crate::EstimateCycleJob::new(Arc::new(ScriptedCycle {
+            result: Err(JobError::PortUnavailable(String::from("ports"))),
+            calls: RwLock::new(Vec::new()),
+        }));
+        assert_eq!(
+            failing.run(kst(2026, 11, 26, 1, 0)).await,
+            Err(JobError::PortUnavailable(String::from("ports")))
+        );
+    });
+}

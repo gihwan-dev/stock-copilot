@@ -1,3 +1,4 @@
+import publicList from "../ds-catalog/public-list.json" with { type: "json" };
 export const settings = Object.freeze({
   image:
     "mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe",
@@ -8,9 +9,14 @@ export const settings = Object.freeze({
   timezone: "Asia/Seoul",
   time: "2026-01-02T03:04:05.000Z",
   random: 0.3141592653589793,
+  settle: 500,
+  browserArgs: Object.freeze([
+    "--num-raster-threads=1",
+    "--disable-partial-raster",
+  ]),
   animations: "disabled",
   caret: "hide",
-  components: Object.freeze(["Button", "Card", "Money", "TextField"]),
+  components: Object.freeze([...publicList.components]),
   themes: Object.freeze(["light", "dark"]),
 });
 export const baselineProblems = (paths) =>

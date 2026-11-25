@@ -263,6 +263,7 @@ fn catalog() -> ToolRegistry {
             events: Arc::new(EventBusBuilder::default().build()),
             market: crate::broker_link::BrokerMarketTools::unconnected(),
             portfolio: crate::mcp_portfolio::CatalogPortfolio::default(),
+            estimate_runs: crate::estimate_flow::EstimateRunBook::new(),
         },
     )
     .expect("제품 카탈로그")
