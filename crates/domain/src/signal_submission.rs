@@ -107,9 +107,10 @@ pub fn calibrate_signal_submission(
     if present.through().position() != head.position() {
         return Err(CalibrationError::StaleCalibration);
     }
-    let probability = present
-        .calibration()
-        .calibrate_bound(submission.probability());
+    let probability = present.calibration().calibrate_bound(
+        submission.probability(),
+        submission.task_key().task().base_probability(),
+    );
     Ok(SubmittedCalibration {
         submission,
         calibration: probability,

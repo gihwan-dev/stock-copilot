@@ -698,6 +698,4 @@ pub use collect_feed::{
 };
 
 mod briefing_context;
-pub use briefing_context::{
-    BRIEFING_INSTRUMENT_LIMIT, BRIEFING_NEWS_PER_INSTRUMENT, HoldingsBriefingContext,
-};
+pub use briefing_context::HoldingsBriefingContext;

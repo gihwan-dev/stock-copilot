@@ -20,6 +20,7 @@ pub trait PortTypes: Send + Sync + 'static {
     type ChatRunLedger: ChatRunLedger + ChatNumberEvidence + 'static;
     type ChatQueuePort: ChatQueuePort + 'static;
     type WarmChatRuntime: WarmChatRuntime + 'static;
+    type AiJobQueue: scheduler::AiJobQueue + 'static;
     type PortfolioRepository: PortfolioRepository + 'static;
     type TransactionRepository: TransactionRepository + 'static;
     type MarketDataRepository: MarketDataRepository + 'static;
@@ -47,6 +48,7 @@ pub struct Ports<P: PortTypes> {
     pub chat_ledger: Arc<P::ChatRunLedger>,
     pub chat_queue: Arc<P::ChatQueuePort>,
     pub warm_chat: Arc<P::WarmChatRuntime>,
+    pub ai_jobs: Arc<P::AiJobQueue>,
     pub portfolios: Arc<P::PortfolioRepository>,
     pub transactions: Arc<P::TransactionRepository>,
     pub market_data: Arc<P::MarketDataRepository>,
@@ -62,7 +64,7 @@ pub struct Ports<P: PortTypes> {
     pub clock: Arc<P::Clock>,
     pub notifier: Arc<P::Notifier>,
     pub presence: Arc<P::UserPresence>,
-    pub events: EventBus,
+    pub events: Arc<EventBus>,
     pub saved_accounts: Vec<AccountId>,
     pub database: Arc<DatabaseFactory>,
 }

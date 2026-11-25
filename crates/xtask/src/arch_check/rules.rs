@@ -516,23 +516,21 @@ fn order_collector_rules(table: &Table) -> Result<OrderCollectorRules, CheckFail
     })
 }
 
+const SOURCE_KEYS: [&str; 10] = [
+    "reexport",
+    "schema-surface",
+    "user-presence",
+    "identity-confirmation",
+    "order-collector",
+    "toss-order",
+    "http-write",
+    "process",
+    "http-socket",
+    "toss-host",
+];
+
 fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
-    only_keys(
-        table,
-        "source",
-        &[
-            "reexport",
-            "schema-surface",
-            "user-presence",
-            "identity-confirmation",
-            "order-collector",
-            "toss-order",
-            "http-write",
-            "process",
-            "http-socket",
-            "toss-host",
-        ],
-    )?;
+    only_keys(table, "source", &SOURCE_KEYS)?;
     let reexport = sub_table(table, "reexport")?;
     only_keys(reexport, "source.reexport", &["crates"])?;
     let presence = presence_rules(table)?;

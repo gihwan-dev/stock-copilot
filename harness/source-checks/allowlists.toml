@@ -4,8 +4,8 @@ reason = "typify가 토스 OpenAPI의 components.schemas에서 만든 생성 cra
 
 [[clock-environment]]
 path = "apps/desktop/src-tauri/src/main.rs"
-names = ["clock-env:var", "clock-env:var_os", "clock-env:vars", "clock-env:vars_os", "test-awareness:thread::current"]
-reason = "조립 지점의 환경 읽기. 벽시계 직접 읽기는 SystemClock 한 곳으로 제한 (U-01)"
+names = ["clock-env:var", "clock-env:var_os", "clock-env:vars", "clock-env:vars_os", "test-awareness:thread::current", "test-awareness:env::current_exe"]
+reason = "조립 지점의 환경 읽기. 벽시계 직접 읽기는 SystemClock 한 곳으로 제한 (U-01). 앱 실행 파일 옆 mcp-bridge 위치를 찾는다 (fin-d)"
 
 [[clock-environment]]
 path = "crates/xtask/src/main.rs"
@@ -144,3 +144,12 @@ reason = "A-11 가짜 AI CLI 진입점. 프로세스 인자와 문서(architectu
 path = "crates/mcp-server/tests/server_security.rs"
 names = ["clock-env:temp_dir"]
 reason = "M-01: Unix 도메인 소켓 테스트가 macOS sun_path 104바이트 한도 안의 짧은 임시 경로를 쓰기 위해 temp_dir을 읽는다. 제품 코드에는 허용하지 않는다"
+
+[[decimal-arithmetic]]
+path = "crates/domain/src/calibration_arithmetic.rs"
+reason = "E-91 조합 전체 표본의 선형 재보정과 기준 확률 쪽 축소, Brier 제곱 오차만 checked 연산한다. 금액으로 반환하지 않는다"
+
+[[decimal-rounding]]
+path = "crates/domain/src/calibration_arithmetic.rs"
+reason = "E-91 보정한 확률을 저장·복원에서 같은 값이 되도록 소수 6자리로 고정한다"
+

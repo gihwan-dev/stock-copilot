@@ -5,12 +5,12 @@ use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
 use domain::Timestamp;
 use scheduler::{
-    BriefingJob, DailyBackupJob, IntradayCompactionJob, RegistryError, TossSpecWatchJob,
-    TransactionsSyncJob,
+    BriefingJob, DailyBackupJob, DailyValuationJob, IntradayCompactionJob, RegistryError,
+    TossSpecWatchJob, TransactionsSyncJob,
 };
 use scheduler::{
-    DEFAULT_TICK_INTERVAL_SECONDS, DisabledAiJobQueue, JobError, JobRegistry, NoMarketCalendar,
-    PortfolioSyncJob, PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
+    DEFAULT_TICK_INTERVAL_SECONDS, JobError, JobRegistry, NoMarketCalendar, PortfolioSyncJob,
+    PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -114,7 +114,7 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     let clock: Arc<dyn application::Clock> = Arc::<P::Clock>::clone(&ports.clock);
     let Ok(scheduler) = Scheduler::new(
         Arc::clone(&ports.clock),
-        Arc::new(DisabledAiJobQueue),
+        Arc::clone(&ports.ai_jobs),
         registry,
     ) else {
         return SchedulingStart::InvalidSchedule;
@@ -171,6 +171,7 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     registry.register(BriefingJob::morning(stored()))?;
     registry.register(BriefingJob::closing_review(stored()))?;
     registry.register(BriefingJob::pre_us_market(stored()))?;
+    registry.register(DailyValuationJob::new(stored()))?;
     registry.register(TransactionsSyncJob::new(
         stored(),
         Arc::new(NoMarketCalendar),

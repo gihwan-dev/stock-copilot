@@ -1,6 +1,9 @@
+use crate::calibration_arithmetic::{
+    CalibrationNumber, CalibrationSample, average, recalibrated, squared_error, sum,
+};
 use crate::{
-    AiProbability, Amount, Horizon, InstrumentId, MoneyError, Nanosecond, Probability,
-    RatioQuotient, TimeInterval, Timestamp, UnixSeconds,
+    AiProbability, Amount, BaseProbability, Horizon, InstrumentId, MoneyError, Nanosecond,
+    Probability, Ratio, RatioQuotient, TimeInterval, Timestamp, UnixSeconds,
 };
 use rust_decimal::Decimal;
 
@@ -272,7 +275,7 @@ impl CalibrationFact {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CalibrationCount(usize);
 impl CalibrationCount {
     #[must_use]
@@ -314,6 +317,7 @@ impl EligibleCalibration {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalibrationEvidence {
     probability: Probability,
+    original: Probability,
     key: CalibrationKey,
     judgment_count: CalibrationCount,
 }
@@ -321,6 +325,10 @@ impl CalibrationEvidence {
     #[must_use]
     pub const fn probability(&self) -> Probability {
         self.probability
+    }
+    #[must_use]
+    pub const fn original_probability(&self) -> Probability {
+        self.original
     }
     #[must_use]
     pub const fn key(&self) -> &CalibrationKey {
@@ -585,31 +593,163 @@ impl Calibration {
         &self,
         key: &CalibrationKey,
         probability: AiProbability,
+        base: BaseProbability,
     ) -> Result<CalibratedProbability, CalibrationError> {
         let table = self.for_combination(key)?;
-        Ok(self.calibrate_table(&table, probability))
+        Ok(self.calibrate_table(&table, probability, base))
     }
-    pub(crate) fn calibrate_bound(&self, probability: AiProbability) -> CalibratedProbability {
-        self.calibrate_table(&self.table(), probability)
+    pub(crate) fn calibrate_bound(
+        &self,
+        probability: AiProbability,
+        base: BaseProbability,
+    ) -> CalibratedProbability {
+        self.calibrate_table(&self.table(), probability, base)
     }
     fn calibrate_table(
         &self,
         table: &CalibrationTable,
         probability: AiProbability,
+        base: BaseProbability,
     ) -> CalibratedProbability {
-        let evidence = CalibrationEvidence {
-            probability: probability.into_probability(),
+        let original = probability.into_probability();
+        let evidence = |used| CalibrationEvidence {
+            probability: used,
+            original,
             key: self.key.clone(),
             judgment_count: table.judgment_count(),
         };
         match table.readiness() {
-            CalibrationReadiness::Conservative => {
-                CalibratedProbability::InsufficientSamples(ConservativeCalibration(evidence))
-            }
+            CalibrationReadiness::Conservative => CalibratedProbability::InsufficientSamples(
+                ConservativeCalibration(evidence(original)),
+            ),
             CalibrationReadiness::MinimumReached => {
-                CalibratedProbability::EligibleBeforeE91(EligibleCalibration(evidence))
+                match shrunk_toward_base(
+                    table.selected_facts(),
+                    original,
+                    base,
+                    CalibrationPriorStrength::DEFAULT,
+                ) {
+                    Some(calibrated) => CalibratedProbability::EligibleBeforeE91(
+                        EligibleCalibration(evidence(calibrated)),
+                    ),
+                    None => CalibratedProbability::InsufficientSamples(ConservativeCalibration(
+                        evidence(original),
+                    )),
+                }
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CalibrationPriorStrength(u32);
+impl CalibrationPriorStrength {
+    pub const DEFAULT: Self = Self(30);
+    #[must_use]
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+    #[must_use]
+    pub const fn as_u32(&self) -> &u32 {
+        &self.0
+    }
+}
+
+const fn observed(outcome: CalibrationOutcome) -> CalibrationNumber {
+    match outcome {
+        CalibrationOutcome::Hit => CalibrationNumber::ONE,
+        CalibrationOutcome::Miss => CalibrationNumber::ZERO,
+    }
+}
+
+fn number(probability: Probability) -> CalibrationNumber {
+    CalibrationNumber::new(probability.as_decimal())
+}
+
+#[must_use]
+pub fn shrunk_toward_base(
+    facts: &[CalibrationFact],
+    probability: Probability,
+    base: BaseProbability,
+    strength: CalibrationPriorStrength,
+) -> Option<Probability> {
+    let samples: Vec<CalibrationSample> = facts
+        .iter()
+        .map(|fact| CalibrationSample {
+            predicted: number(fact.estimate.predicted_probability.into_probability()),
+            observed: observed(fact.outcome),
+        })
+        .collect();
+    let value = recalibrated(
+        &samples,
+        number(probability),
+        CalibrationNumber::new(base.as_decimal()),
+        CalibrationNumber::new(Decimal::from(strength.0)),
+    )?;
+    Probability::try_new(value.as_decimal()).ok()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrierScore(CalibrationNumber);
+impl BrierScore {
+    #[must_use]
+    pub fn as_ratio(&self) -> Ratio {
+        Ratio::new(self.0.as_decimal())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrierComparison {
+    pub before: BrierScore,
+    pub after: BrierScore,
+}
+
+#[must_use]
+pub fn brier_comparison(
+    calibrated: &CalibratedProbability,
+    outcome: CalibrationOutcome,
+) -> Option<BrierComparison> {
+    let evidence = match calibrated {
+        CalibratedProbability::InsufficientSamples(value) => value.evidence(),
+        CalibratedProbability::EligibleBeforeE91(value) => value.evidence(),
+    };
+    let hit = observed(outcome);
+    Some(BrierComparison {
+        before: BrierScore(squared_error(number(evidence.original), hit)?),
+        after: BrierScore(squared_error(number(evidence.probability), hit)?),
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BrierTally {
+    count: CalibrationNumber,
+    before: CalibrationNumber,
+    after: CalibrationNumber,
+    judged: CalibrationCount,
+}
+impl BrierTally {
+    #[must_use]
+    pub fn with(self, comparison: BrierComparison) -> Option<Self> {
+        Some(Self {
+            count: sum(self.count, CalibrationNumber::ONE)?,
+            before: sum(self.before, comparison.before.0)?,
+            after: sum(self.after, comparison.after.0)?,
+            judged: CalibrationCount(self.judged.0.checked_add(1)?),
+        })
+    }
+    #[must_use]
+    pub const fn judgment_count(&self) -> &CalibrationCount {
+        &self.judged
+    }
+    #[must_use]
+    pub fn mean(&self) -> Option<BrierComparison> {
+        if self.judged.0 == 0 {
+            return None;
+        }
+        Some(BrierComparison {
+            before: BrierScore(average(self.before, self.count)?),
+            after: BrierScore(average(self.after, self.count)?),
+        })
     }
 }
 fn selection_order(left: &CalibrationFact, right: &CalibrationFact) -> std::cmp::Ordering {
@@ -808,13 +948,21 @@ mod tests {
                 .collect();
             let calibration = snapshot(&rows);
             let result = calibration
-                .calibrate(&key("v1"), ai(37))
+                .calibrate(&key("v1"), ai(37), base(37))
                 .expect("같은 조합");
             assert_eq!(evidence(&result).key(), &key("v1"));
             assert_eq!(evidence(&result).judgment_count().as_usize(), count);
             assert_eq!(
-                evidence(&result).probability().as_decimal(),
+                evidence(&result).original_probability().as_decimal(),
                 Decimal::new(37, 2)
+            );
+            assert_eq!(
+                evidence(&result).probability().as_decimal(),
+                if count < 30 {
+                    Decimal::new(37, 2)
+                } else {
+                    Decimal::new(685, 3)
+                }
             );
             assert_eq!(matches_insufficient(&result), count < 30);
             match result {
@@ -822,15 +970,18 @@ mod tests {
                 CalibratedProbability::EligibleBeforeE91(_) => assert_eq!(count, 30),
             }
             assert_eq!(
-                calibration.calibrate(&key("v2"), ai(37)),
+                calibration.calibrate(&key("v2"), ai(37), base(37)),
                 Err(CalibrationError::MismatchedCombination)
             );
         }
         let empty = snapshot(&[]);
         assert_eq!(
-            empty.calibrate(&key("arbitrary"), ai(60)),
+            empty.calibrate(&key("arbitrary"), ai(60), base(40)),
             Err(CalibrationError::MismatchedCombination)
         );
+    }
+    fn base(percent: i64) -> crate::BaseProbability {
+        crate::base_probability::tests::base_value(Decimal::new(percent, 2))
     }
     fn matches_insufficient(value: &CalibratedProbability) -> bool {
         match value {
@@ -903,7 +1054,7 @@ mod tests {
             Err(CalibrationError::MismatchedCombination)
         );
         assert_eq!(
-            snapshot(&rows).calibrate(&key("v2"), ai(60)),
+            snapshot(&rows).calibrate(&key("v2"), ai(60), base(40)),
             Err(CalibrationError::MismatchedCombination)
         );
     }
@@ -911,7 +1062,7 @@ mod tests {
     fn d51_matching_empty_table_is_conservative_and_mismatch_is_error() {
         let calibration = snapshot(&[]);
         let matching = calibration
-            .calibrate(&key("v1"), ai(63))
+            .calibrate(&key("v1"), ai(63), base(40))
             .expect("같은 조합");
         assert!(matches_insufficient(&matching));
         assert_eq!(evidence(&matching).judgment_count().as_usize(), 0);
@@ -1182,5 +1333,231 @@ mod tests {
                 Ok(())
             })
             .expect("독립 제거 기준과 일치");
+    }
+}
+
+#[cfg(test)]
+mod e91_tests {
+    use super::{
+        BrierTally, CalibratedProbability, Calibration, CalibrationEstimate, CalibrationEstimateId,
+        CalibrationFact, CalibrationKey, CalibrationModel, CalibrationOutcome,
+        CalibrationPriorStrength, ModelIdentityPart, brier_comparison, shrunk_toward_base,
+    };
+    use crate::{
+        AiProbability, AiProbabilityInput, BaseProbability, Horizon, HorizonSelection,
+        InstrumentId, Nanosecond, OffsetSeconds, TimeInterval, Timestamp, UnixSeconds,
+    };
+    use proptest::test_runner::{Config, TestRunner};
+    use rust_decimal::Decimal;
+
+    fn at(seconds: i64) -> Timestamp {
+        Timestamp::from_parts(
+            UnixSeconds::new(seconds),
+            Nanosecond::new(0),
+            OffsetSeconds::new(0),
+        )
+        .expect("시각")
+    }
+    fn key() -> CalibrationKey {
+        CalibrationKey::new(
+            CalibrationModel::new(
+                ModelIdentityPart::try_new("provider").expect("제공자"),
+                ModelIdentityPart::try_new("model").expect("모델"),
+                ModelIdentityPart::try_new("v1").expect("버전"),
+            ),
+            Horizon::new(HorizonSelection::FewDays),
+        )
+    }
+    fn ai(percent: u8) -> AiProbability {
+        AiProbability::parse(&AiProbabilityInput::try_new(&percent.to_string()).expect("입력"))
+            .expect("AI 확률")
+    }
+    fn base(percent: i64) -> BaseProbability {
+        crate::base_probability::tests::base_value(Decimal::new(percent, 2))
+    }
+    fn fact(id: &str, percent: u8, outcome: CalibrationOutcome) -> CalibrationFact {
+        CalibrationFact::new(
+            CalibrationEstimate::new(
+                CalibrationEstimateId::try_new(id).expect("ID"),
+                InstrumentId::try_new(id).expect("종목"),
+                key(),
+                TimeInterval::try_new(at(0), at(10)).expect("구간"),
+                ai(percent),
+            ),
+            outcome,
+        )
+    }
+    fn identity_facts(per_percent: u8) -> Vec<CalibrationFact> {
+        (1_u8..=99_u8)
+            .flat_map(|percent| (0_u8..per_percent).map(move |index| (percent, index)))
+            .map(|(percent, index)| {
+                let hit = u16::from(index).saturating_mul(100)
+                    < u16::from(percent).saturating_mul(u16::from(per_percent));
+                fact(
+                    &format!("e{percent}-{index}"),
+                    percent,
+                    if hit {
+                        CalibrationOutcome::Hit
+                    } else {
+                        CalibrationOutcome::Miss
+                    },
+                )
+            })
+            .collect()
+    }
+    fn shrunk(facts: &[CalibrationFact], percent: u8, prior: i64) -> Decimal {
+        shrunk_toward_base(
+            facts,
+            ai(percent).into_probability(),
+            base(prior),
+            CalibrationPriorStrength::DEFAULT,
+        )
+        .expect("보정")
+        .as_decimal()
+    }
+
+    #[test]
+    fn a_single_sample_leaves_the_result_next_to_the_base_probability() {
+        let one = [fact("only", 90, CalibrationOutcome::Hit)];
+        let value = shrunk(&one, 90, 30);
+        assert_eq!(value, Decimal::new(32_2581, 6));
+        assert!((value - Decimal::new(30, 2)).abs() < Decimal::new(3, 2));
+        assert_eq!(shrunk(&[], 90, 30), Decimal::new(30, 2));
+    }
+
+    #[test]
+    fn many_well_calibrated_samples_move_the_result_toward_the_ai_estimate() {
+        let facts = identity_facts(100);
+        let value = shrunk(&facts, 80, 30);
+        assert!(value > Decimal::new(79, 2), "{value}");
+        assert!(value <= Decimal::new(80, 2), "{value}");
+        let heavier_prior = shrunk_toward_base(
+            &facts,
+            ai(80).into_probability(),
+            base(30),
+            CalibrationPriorStrength::new(9_900),
+        )
+        .expect("보정")
+        .as_decimal();
+        assert!(heavier_prior < value, "{heavier_prior} < {value}");
+        assert!(heavier_prior > Decimal::new(50, 2), "{heavier_prior}");
+        assert!(heavier_prior < Decimal::new(60, 2), "{heavier_prior}");
+    }
+
+    #[test]
+    fn overconfident_history_pulls_high_estimates_down() {
+        let facts: Vec<_> = (0_u8..60_u8)
+            .map(|index| {
+                fact(
+                    &format!("o{index}"),
+                    if index % 2 == 0 { 90 } else { 10 },
+                    if index % 3 == 0 {
+                        CalibrationOutcome::Hit
+                    } else {
+                        CalibrationOutcome::Miss
+                    },
+                )
+            })
+            .collect();
+        assert!(shrunk(&facts, 90, 40) < Decimal::new(90, 2));
+    }
+
+    #[test]
+    fn conservative_combinations_keep_the_original_and_eligible_ones_record_both() {
+        let few: Vec<_> = (0_u8..29_u8)
+            .map(|index| fact(&format!("f{index}"), 70, CalibrationOutcome::Hit))
+            .collect();
+        let conservative = Calibration::try_new(key(), &few)
+            .expect("표")
+            .calibrate(&key(), ai(70), base(30))
+            .expect("조합");
+        match &conservative {
+            CalibratedProbability::InsufficientSamples(value) => {
+                assert_eq!(value.evidence().probability(), ai(70).into_probability());
+                assert_eq!(
+                    value.evidence().original_probability(),
+                    ai(70).into_probability()
+                );
+            }
+            CalibratedProbability::EligibleBeforeE91(_) => panic!("29건은 보수 운용"),
+        }
+        let eligible = Calibration::try_new(key(), &identity_facts(10))
+            .expect("표")
+            .calibrate(&key(), ai(70), base(30))
+            .expect("조합");
+        match &eligible {
+            CalibratedProbability::EligibleBeforeE91(value) => {
+                assert_eq!(
+                    value.evidence().original_probability(),
+                    ai(70).into_probability()
+                );
+                assert_ne!(
+                    value.evidence().probability(),
+                    value.evidence().original_probability()
+                );
+            }
+            CalibratedProbability::InsufficientSamples(_) => panic!("99건은 보정 대상"),
+        }
+    }
+
+    #[test]
+    fn brier_scores_before_and_after_are_recorded_and_averaged() {
+        let eligible = Calibration::try_new(key(), &identity_facts(10))
+            .expect("표")
+            .calibrate(&key(), ai(90), base(30))
+            .expect("조합");
+        let hit = brier_comparison(&eligible, CalibrationOutcome::Hit).expect("Brier");
+        assert_eq!(hit.before.as_ratio().as_decimal(), Decimal::new(1, 2));
+        let calibrated = match &eligible {
+            CalibratedProbability::EligibleBeforeE91(value) => value.evidence().probability(),
+            CalibratedProbability::InsufficientSamples(_) => panic!("보정 대상"),
+        }
+        .as_decimal();
+        assert_eq!(
+            hit.after.as_ratio().as_decimal(),
+            (Decimal::ONE - calibrated) * (Decimal::ONE - calibrated)
+        );
+        let miss = brier_comparison(&eligible, CalibrationOutcome::Miss).expect("Brier");
+        assert_eq!(miss.before.as_ratio().as_decimal(), Decimal::new(81, 2));
+        let tally = BrierTally::default()
+            .with(hit)
+            .and_then(|next| next.with(miss))
+            .expect("합계");
+        assert_eq!(tally.judgment_count().as_usize(), 2);
+        let mean = tally.mean().expect("평균");
+        assert_eq!(mean.before.as_ratio().as_decimal(), Decimal::new(41, 2));
+        assert_eq!(BrierTally::default().mean(), None);
+    }
+
+    fn outcome_of(hit: u8) -> CalibrationOutcome {
+        if hit == 1 {
+            CalibrationOutcome::Hit
+        } else {
+            CalibrationOutcome::Miss
+        }
+    }
+    #[test]
+    fn calibrated_values_stay_between_zero_and_one_for_any_history() {
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
+            .run(
+                &(
+                    proptest::collection::vec((1_u8..=99_u8, 0_u8..2_u8), 0..80),
+                    1_u8..=99_u8,
+                    1_i64..=99_i64,
+                ),
+                |(rows, percent, prior)| {
+                    let facts: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .map(|(index, (predicted, hit))| {
+                            fact(&format!("p{index}"), *predicted, outcome_of(*hit))
+                        })
+                        .collect();
+                    let value = shrunk(&facts, percent, prior);
+                    proptest::prop_assert!(value >= Decimal::ZERO && value <= Decimal::ONE);
+                    Ok(())
+                },
+            )
+            .expect("범위");
     }
 }

@@ -17,6 +17,7 @@ impl PortTypes for TestPorts {
     type ChatRunLedger = testkit_ports::chat_fakes::MemoryChatRunLedger;
     type ChatQueuePort = testkit_ports::chat_fakes::ScriptedChatQueue;
     type WarmChatRuntime = testkit_ports::chat_fakes::ScriptedWarmChatRuntime;
+    type AiJobQueue = scheduler::DisabledAiJobQueue;
     type PortfolioRepository = testkit_ports::memory::MemoryPortfolioRepository;
     type TransactionRepository = Unavailable;
     type MarketDataRepository = Unavailable;
@@ -45,6 +46,7 @@ pub(crate) fn ports() -> Ports<TestPorts> {
         chat_ledger: Arc::new(testkit_ports::chat_fakes::MemoryChatRunLedger::default()),
         chat_queue: Arc::new(testkit_ports::chat_fakes::ScriptedChatQueue::default()),
         warm_chat: Arc::new(testkit_ports::chat_fakes::ScriptedWarmChatRuntime::default()),
+        ai_jobs: Arc::new(scheduler::DisabledAiJobQueue),
         portfolios: Arc::new(testkit_ports::memory::MemoryPortfolioRepository::default()),
         transactions: Arc::new(Unavailable),
         market_data: Arc::new(Unavailable),
@@ -60,7 +62,7 @@ pub(crate) fn ports() -> Ports<TestPorts> {
         clock: Arc::new(testkit_ports::SteppedClock::new(at(91))),
         notifier: Arc::new(Unavailable),
         presence: Arc::new(testkit_ports::ScriptedPresence::new([], [])),
-        events: application::EventBusBuilder::default().build(),
+        events: Arc::new(application::EventBusBuilder::default().build()),
         saved_accounts: Vec::new(),
         database: Arc::new(DatabaseFactory(Box::new(|_path, _key| {
             Err(failure(application::SystemFailure::InvalidData))

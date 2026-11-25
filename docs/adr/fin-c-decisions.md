@@ -21,3 +21,6 @@
 | S-14 | 멤버십이 없으면 `KeychainProfile::product_login()`으로 낮추는 사용자 서명 커밋. 실행 중 자동 전환 없음 | 실행 중 자동 전환 |
 | S-14 | S-17 최소 시험 빌드는 따로 두지 않고 서명한 제품 앱을 쓴다 | 키체인·확인 창만 있는 별도 앱 |
 | S-14 | `gen-bindings` 묶음 제외는 미룬다: 보호 파일(`generated.mjs`, Antigravity 어댑터)과 기존 테스트(`workspace_layout_tests.rs`, 어댑터 테스트)를 추가형이 아니게 바꿔야 해서 사용자 서명 커밋으로 넘긴다. 첫 서명 빌드 전에 해야 한다 | 지금 예시 대상으로 옮기기 |
+| 앱 조립 | 조립 루트가 `KeychainSecretStore<SystemKeychain>`(`tauri::is_dev()`로 프로필 선택)를 `Ports.secrets`에 넣고, DB 키 생성기 `DatabaseKeyProvision`(`generate_database_key`)을 Tauri 상태로 둔다. `build_app`은 이 상태가 있을 때만 `open_provisioned_database`(키 없음 + DB 파일 없음 → 생성·저장 후 열기, 키 없음 + DB 파일 있음 → `SecretIntegrity` 실패, 키 읽기·저장 실패 → 그 오류)로 열고, 없으면 기존 `open_database` 그대로다 | `Ports`나 `DatabaseFactory`에 필드 추가(기존 테스트 지원 코드가 바뀜), `open_database`의 `NotConfigured` 의미 변경(기존 테스트가 고정) |
+| 앱 조립 | `ProductPorts<Store, Secrets>`로 비밀 저장소 타입을 조립 루트에서 정한다. lib 쪽 파일이 어댑터 타입 이름을 쓰면 arch-check `adapter-construction`이 lib 전체를 잡는다 | `ProductPorts` 안에 어댑터 타입 고정 |
+| 앱 조립 | 키를 잃은 DB 파일은 지우거나 옮기지 않는다(ADR 0176 4) | 자동 재생성 |
