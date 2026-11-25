@@ -60,7 +60,7 @@ const bundleSource = `
           signals: cards === "never" ? fx.never : cards === "fail" ? () => fx.fail("retryable") : cards === "none" ? () => fx.ok({ cards: [] }) : () => fx.ok({ cards }),
           requestOrderApproval: (...args) => {
             window.calls.approval.push(args);
-            return fx.ok("requested");
+            return fx.ok(window.approvalAnswer ?? "requested");
           },
           skipSignal: (...args) => {
             window.calls.skipped.push(args);
@@ -189,6 +189,26 @@ test("fin-gaps: a stored proposal with sizing still pending offers the order but
     assert.equal(w.calls.approval.length, 1, "승인 요청은 제안 ID 하나만");
     assert.equal(w.calls.approval[0][0], "proposal-1");
     w.cleanup();
+    w.approvalAnswer = "hourly-limit";
+    const limited = w.mount([w.card({})]);
+    await w.waitText(limited, "예시전자");
+    w.click(limited.getByRole("button", { name: "주문" }));
+    await w.waitText(limited, "한 시간에 낼 수 있는 주문 수를 넘었어요");
+    w.cleanup();
+    w.approvalAnswer = "presence-denied";
+    const denied = w.mount([w.card({})]);
+    await w.waitText(denied, "예시전자");
+    w.click(denied.getByRole("button", { name: "주문" }));
+    const deniedText = await w.waitText(denied, "본인 확인을 하지 않아");
+    assert.equal(
+      /presence|denied|[A-Z_]{4,}/u.test(
+        deniedText.replace(/예시전자|005930|tool:q1/gu, ""),
+      ),
+      false,
+      "내부 코드 노출 없음",
+    );
+    w.cleanup();
+    w.approvalAnswer = undefined;
     const off = w.mount([w.card({ orderSwitch: "off" })]);
     const offText = await w.waitText(off, "주문 켜기");
     assert.equal(orderButtons(off), 0);

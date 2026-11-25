@@ -173,6 +173,23 @@ export type ThesisView = {
   readonly history: readonly ThesisRevision[];
 };
 
+export type OrderRequestOutcome =
+  | "requested"
+  | "outcome-unknown"
+  | "presence-denied"
+  | "switch-off"
+  | "hourly-limit"
+  | "market-closed"
+  | "dialog-in-progress"
+  | "cooldown"
+  | "already-consumed"
+  | "proposal-unavailable"
+  | "conditions-changed"
+  | "high-value-rejected"
+  | "broker-rejected"
+  | "unavailable"
+  | "other";
+
 type Load<T> = () => Promise<Result<T, IpcFailure>>;
 type LoadFor<T> = (id: EntityId) => Promise<Result<T, IpcFailure>>;
 
@@ -189,7 +206,7 @@ export type EstimateSources = {
   readonly thesis: LoadFor<ThesisView>;
   readonly requestOrderApproval: (
     proposal: EntityId,
-  ) => Promise<Result<"requested", IpcFailure>>;
+  ) => Promise<Result<OrderRequestOutcome, IpcFailure>>;
   readonly addWatchlist: (
     ticker: Ticker,
   ) => Promise<Result<WatchlistChange, IpcFailure>>;

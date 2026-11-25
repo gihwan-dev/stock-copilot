@@ -1,7 +1,7 @@
 import type { EntityId, InputValue, Result } from "../lib";
 import { commands } from "./bindings";
 import { settleCall } from "./call";
-import type { SignalsView } from "./estimate-views";
+import type { OrderRequestOutcome, SignalsView } from "./estimate-views";
 import { wireOutcome, type IpcFailure } from "./schema";
 import { settleApproval, settleSignals, settleSkip } from "./signals-schema";
 
@@ -20,7 +20,7 @@ export const skipSignal = (
 
 export const requestOrderApproval = (
   proposal: EntityId,
-): Promise<Result<"requested", IpcFailure>> =>
+): Promise<Result<OrderRequestOutcome, IpcFailure>> =>
   settleCall(
     commands.requestOrderApproval({ proposal_id: proposal }),
     (outcome) => settleApproval(wireOutcome(outcome)),

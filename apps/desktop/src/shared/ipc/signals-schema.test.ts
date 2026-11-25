@@ -70,17 +70,50 @@ test("settleSignals carries the stored proposal so the card can offer the order 
   );
 });
 
-test("settleApproval treats only a sent order as requested", () => {
+test("settleApproval turns each core answer into one card outcome", () => {
+  const answer = (
+    status:
+      | "submitted"
+      | "rejected"
+      | "broker-rejected"
+      | "outcome-unknown"
+      | "unavailable",
+    reason:
+      "none" | "switch-off" | "hourly-limit" | "high-value-rejected" | "other",
+  ): ReturnType<typeof settleApproval> =>
+    settleApproval({ status: "ok", data: wire({ status, reason }) });
+  expect(answer("submitted", "none")).toStrictEqual({
+    kind: "ok",
+    value: "requested",
+  });
+  expect(answer("rejected", "switch-off")).toStrictEqual({
+    kind: "ok",
+    value: "switch-off",
+  });
+  expect(answer("rejected", "hourly-limit")).toStrictEqual({
+    kind: "ok",
+    value: "hourly-limit",
+  });
+  expect(answer("broker-rejected", "high-value-rejected")).toStrictEqual({
+    kind: "ok",
+    value: "high-value-rejected",
+  });
+  expect(answer("broker-rejected", "other")).toStrictEqual({
+    kind: "ok",
+    value: "broker-rejected",
+  });
+  expect(answer("outcome-unknown", "none")).toStrictEqual({
+    kind: "ok",
+    value: "outcome-unknown",
+  });
+  expect(answer("rejected", "none")).toStrictEqual({
+    kind: "ok",
+    value: "other",
+  });
   expect(
     settleApproval({
       status: "ok",
-      data: wire({ status: "submitted", reason: "none" }),
-    }),
-  ).toStrictEqual({ kind: "ok", value: "requested" });
-  expect(
-    settleApproval({
-      status: "ok",
-      data: wire({ status: "rejected", reason: "switch-off" }),
+      data: wire({ status: "rejected", reason: "internal-code" }),
     }).kind,
   ).toBe("err");
 });

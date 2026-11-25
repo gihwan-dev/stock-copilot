@@ -43,6 +43,48 @@ const catalog = {
     ko: "장이 열리면 그때 가격으로 다시 확인해 주문 카드로 바꿔 드려요." as UiText,
   },
   order: { ko: "주문" as UiText },
+  outcomeRequested: {
+    ko: "주문을 보냈어요. 체결은 토스증권 앱에서 확인할 수 있어요." as UiText,
+  },
+  outcomeUnknown: {
+    ko: "주문 결과를 아직 확인하지 못했어요. 토스증권 앱의 주문 내역을 확인해 주세요." as UiText,
+  },
+  outcomeDenied: { ko: "본인 확인을 하지 않아 주문하지 않았어요." as UiText },
+  outcomeSwitchOff: {
+    ko: "주문 기능이 꺼져 있어요. 설정에서 주문 켜기를 켜 주세요." as UiText,
+  },
+  outcomeHourly: {
+    ko: "한 시간에 낼 수 있는 주문 수를 넘었어요. 잠시 뒤에 다시 해 주세요." as UiText,
+  },
+  outcomeClosed: {
+    ko: "지금은 장이 닫혀 있어요. 장이 열리면 다시 해 주세요." as UiText,
+  },
+  outcomeBusy: {
+    ko: "다른 확인 창이 열려 있어요. 그 창을 닫고 다시 해 주세요." as UiText,
+  },
+  outcomeCooldown: {
+    ko: "방금 취소한 주문이라 잠시 뒤에 다시 할 수 있어요." as UiText,
+  },
+  outcomeConsumed: { ko: "이미 보낸 주문이에요." as UiText },
+  outcomeGone: {
+    ko: "이 제안은 더 이상 유효하지 않아요. 새 신호가 오면 다시 알려 드릴게요." as UiText,
+  },
+  outcomeChanged: {
+    ko: "가격이나 잔고가 바뀌어 주문하지 않았어요. 카드를 새로 확인해 주세요." as UiText,
+  },
+  outcomeHighValue: {
+    ko: "토스증권이 고액 주문 확인을 요구해 주문하지 못했어요. 토스증권 앱에서 직접 주문해 주세요." as UiText,
+  },
+  outcomeBroker: {
+    ko: "토스증권이 주문을 받지 않았어요. 토스증권 앱에서 계좌와 종목 상태를 확인해 주세요." as UiText,
+  },
+  outcomeUnavailable: {
+    ko: "지금은 주문할 수 없어요. 잠시 뒤에 다시 해 주세요." as UiText,
+  },
+  outcomeOther: {
+    ko: "주문하지 못했어요. 잠시 뒤에 다시 해 주세요." as UiText,
+  },
+
   switchOff: {
     ko: '주문 기능이 꺼져 있어요. 설정 > 기본의 "주문 켜기"를 켜면 이 카드에서 주문할 수 있어요.' as UiText,
   },

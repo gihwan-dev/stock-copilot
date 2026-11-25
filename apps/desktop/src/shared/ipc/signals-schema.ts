@@ -10,6 +10,7 @@ import {
   type Ticker,
 } from "../lib";
 import type {
+  OrderRequestOutcome,
   SignalCardView,
   SignalSource,
   SignalsView,
@@ -103,6 +104,21 @@ const viewSchema = z
   .strictObject({ cards: z.array(cardSchema) })
   .transform((raw): SignalsView => ({ cards: raw.cards }));
 
+const rejectionReasons = {
+  none: "other",
+  "presence-denied": "presence-denied",
+  "switch-off": "switch-off",
+  "hourly-limit": "hourly-limit",
+  "dialog-in-progress": "dialog-in-progress",
+  cooldown: "cooldown",
+  "already-consumed": "already-consumed",
+  "proposal-unavailable": "proposal-unavailable",
+  "market-closed": "market-closed",
+  "conditions-changed": "conditions-changed",
+  "high-value-rejected": "high-value-rejected",
+  other: "other",
+} as const;
+
 const approvalSchema = z
   .strictObject({
     status: z.enum([
@@ -112,9 +128,37 @@ const approvalSchema = z
       "outcome-unknown",
       "unavailable",
     ]),
-    reason: z.string(),
+    reason: z.enum([
+      "none",
+      "presence-denied",
+      "switch-off",
+      "hourly-limit",
+      "dialog-in-progress",
+      "cooldown",
+      "already-consumed",
+      "proposal-unavailable",
+      "market-closed",
+      "conditions-changed",
+      "high-value-rejected",
+      "other",
+    ]),
   })
-  .transform((raw) => raw.status);
+  .transform((raw): OrderRequestOutcome => {
+    switch (raw.status) {
+      case "submitted":
+        return "requested";
+      case "outcome-unknown":
+        return "outcome-unknown";
+      case "unavailable":
+        return "unavailable";
+      case "broker-rejected":
+        return raw.reason === "high-value-rejected"
+          ? "high-value-rejected"
+          : "broker-rejected";
+      case "rejected":
+        return rejectionReasons[raw.reason];
+    }
+  });
 
 const skipSchema = z
   .strictObject({ outcome: z.literal("recorded") })
@@ -130,13 +174,5 @@ export const settleSkip = (
 
 export const settleApproval = (
   outcome: WireOutcome,
-): Result<"requested", IpcFailure> => {
-  const settled = settleWithSchema(outcome, approvalSchema);
-  if (settled.kind === "err") return settled;
-  return settled.value === "submitted" || settled.value === "outcome-unknown"
-    ? { kind: "ok", value: "requested" }
-    : {
-        kind: "err",
-        error: { kind: "command", error: { kind: "user-fixable" } },
-      };
-};
+): Result<OrderRequestOutcome, IpcFailure> =>
+  settleWithSchema(outcome, approvalSchema);

@@ -10,7 +10,11 @@ import {
   Text,
   TextField,
 } from "../../../shared/ds";
-import type { ScreenSources, SignalCardView } from "../../../shared/ipc";
+import type {
+  OrderRequestOutcome,
+  ScreenSources,
+  SignalCardView,
+} from "../../../shared/ipc";
 import {
   emptyInputValue,
   queryKeys,
@@ -19,11 +23,13 @@ import {
 } from "../../../shared/lib";
 import { detach } from "../../../shared/platform";
 import { signalText } from "../messages";
+import { OutcomeNotice } from "./OutcomeNotice";
 import { cardAction, useSignals } from "../model/signals";
 import { Facts, KeyFacts, Reasons } from "./SignalDetails";
 
 export type SignalHandlers = {
-  readonly onRequestApproval: (proposal: EntityId) => void;
+  readonly outcomeOf: (card: EntityId) => OrderRequestOutcome | undefined;
+  readonly onRequestApproval: (card: EntityId, proposal: EntityId) => void;
   readonly onSkip: (card: EntityId, reason: InputValue) => void;
 };
 
@@ -58,7 +64,7 @@ const Actions = (props: {
           <Button
             variant="primary"
             onClick={(): void => {
-              props.handlers.onRequestApproval(action.proposal);
+              props.handlers.onRequestApproval(props.card.id, action.proposal);
             }}
           >
             {signalText("order", "ko")}
@@ -109,6 +115,7 @@ const SignalCard = (props: {
       <KeyFacts card={props.card} />
       <Reasons card={props.card} />
       <Actions card={props.card} handlers={props.handlers} />
+      <OutcomeNotice outcome={props.handlers.outcomeOf(props.card.id)} />
       <Facts card={props.card} />
     </Stack>
   </Card>
@@ -124,8 +131,19 @@ const useHandlers = (sources: SignalActions): SignalHandlers => {
   const refresh = (): void => {
     detach({ kind: "invalidate-queries", client, keys: [queryKeys.signals] });
   };
+  const [outcomes, setOutcomes] = useState<
+    ReadonlyMap<EntityId, OrderRequestOutcome>
+  >(() => new Map());
   const approval = useMutation({
-    mutationFn: (proposal: EntityId) => sources.requestOrderApproval(proposal),
+    mutationFn: (input: {
+      readonly card: EntityId;
+      readonly proposal: EntityId;
+    }) => sources.requestOrderApproval(input.proposal),
+    onSuccess: (result, input): void => {
+      const outcome: OrderRequestOutcome =
+        result.kind === "ok" ? result.value : "other";
+      setOutcomes((previous) => new Map([...previous, [input.card, outcome]]));
+    },
     onSettled: refresh,
   });
   const skip = useMutation({
@@ -136,8 +154,9 @@ const useHandlers = (sources: SignalActions): SignalHandlers => {
     onSettled: refresh,
   });
   return {
-    onRequestApproval: (proposal): void => {
-      approval.mutate(proposal);
+    outcomeOf: (card) => outcomes.get(card),
+    onRequestApproval: (card, proposal): void => {
+      approval.mutate({ card, proposal });
     },
     onSkip: (card, reason): void => {
       skip.mutate({ card, reason });

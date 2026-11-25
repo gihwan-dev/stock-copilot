@@ -89,6 +89,7 @@ export type {
   SignalSource,
   SignalSourceKind,
   SignalsView,
+  OrderRequestOutcome,
   ThesisClaim,
   ThesisRevision,
   ThesisView,
