@@ -7,7 +7,7 @@ use application::{
 };
 use domain::{
     AccountId, BrokerAccountSelection, Currency, DomainEvent, InstrumentId, KnownMarket,
-    QuoteInstrument, SavedQuoteInstrument, Symbol, select_brokerage_account,
+    MaskedAccountNumber, QuoteInstrument, SavedQuoteInstrument, Symbol, select_brokerage_account,
 };
 
 use crate::ipc::state::BoxFuture;
@@ -15,7 +15,13 @@ use crate::mcp_catalog::UnconnectedToolData;
 use crate::toss_link::ConnectionListener;
 
 #[derive(Debug, Clone, Default)]
-pub struct AccountSlot(Arc<RwLock<Vec<AccountId>>>);
+pub struct AccountSlot(Arc<RwLock<Vec<AccountId>>>, Arc<RwLock<Vec<AccountLabel>>>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AccountLabel {
+    account: AccountId,
+    masked: MaskedAccountNumber,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectionChange {
@@ -26,7 +32,27 @@ pub enum SelectionChange {
 impl AccountSlot {
     #[must_use]
     pub fn with(accounts: Vec<AccountId>) -> Self {
-        Self(Arc::new(RwLock::new(accounts)))
+        Self(Arc::new(RwLock::new(accounts)), Arc::default())
+    }
+
+    pub fn label(&self, account: &AccountId, masked: &MaskedAccountNumber) {
+        let Ok(mut labels) = self.1.write() else {
+            return;
+        };
+        labels.retain(|label| label.account != *account);
+        labels.push(AccountLabel {
+            account: account.clone(),
+            masked: masked.clone(),
+        });
+    }
+
+    #[must_use]
+    pub fn masked_number(&self, account: &AccountId) -> Option<MaskedAccountNumber> {
+        let labels = self.1.read().ok()?;
+        labels
+            .iter()
+            .find(|label| label.account == *account)
+            .map(|label| label.masked.clone())
     }
 
     #[must_use]
@@ -77,7 +103,10 @@ impl<B: BrokerRead + 'static> AccountSelector<B> {
             return SelectionChange::Unchanged;
         };
         let chosen = match select_brokerage_account(&rows) {
-            BrokerAccountSelection::Selected(row) => vec![row.account().clone()],
+            BrokerAccountSelection::Selected(row) => {
+                self.slot.label(row.account(), row.masked_number());
+                vec![row.account().clone()]
+            }
             BrokerAccountSelection::NoBrokerage | BrokerAccountSelection::Empty => Vec::new(),
         };
         let change = self.slot.replace(chosen);
