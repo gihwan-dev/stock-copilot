@@ -1,18 +1,19 @@
 import { expect, test } from "vitest";
 import { text } from "../lib";
+import { wire } from "./schema";
 import { settleScorecard } from "./scorecard-schema";
 import { responses } from "./testing/responses";
 
 test("settleScorecard reads an empty scorecard", () => {
   expect(
-    settleScorecard({ status: "ok", data: responses.getScorecard }),
+    settleScorecard({ status: "ok", data: wire(responses.getScorecard) }),
   ).toStrictEqual({ kind: "ok", value: { combinations: [] } });
 });
 
 test("settleScorecard labels horizons and bins from messages and drops empty bins", () => {
   const result = settleScorecard({
     status: "ok",
-    data: {
+    data: wire({
       combinations: [
         {
           model: "claude-opus",
@@ -37,7 +38,7 @@ test("settleScorecard labels horizons and bins from messages and drops empty bin
           ],
         },
       ],
-    },
+    }),
   });
   expect(result.kind).toBe("ok");
   if (result.kind === "ok") {
@@ -51,7 +52,7 @@ test("settleScorecard labels horizons and bins from messages and drops empty bin
   expect(
     settleScorecard({
       status: "ok",
-      data: { combinations: [{ model: "m", horizon: "years" }] },
+      data: wire({ combinations: [{ model: "m", horizon: "years" }] }),
     }).kind,
   ).toBe("err");
 });

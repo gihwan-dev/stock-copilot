@@ -915,3 +915,80 @@ impl application::InformationLinks for SqliteRepositories {
         .await
     }
 }
+
+impl application::resolve_estimates::EstimateResolutionRepository for SqliteRepositories {
+    async fn pending_submissions(
+        &self,
+    ) -> Result<
+        Vec<domain::EstimateSubmissionRecord<AiRunId, application::ReasoningEffort>>,
+        SystemPortError,
+    > {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::resolve_estimates::EstimateResolutionRepository::pending_submissions(
+            &EstimateStore::new(database),
+        )
+        .await
+    }
+
+    async fn calibration(
+        &self,
+        key: &CalibrationKey,
+    ) -> Result<Option<application::resolve_estimates::ResolutionCalibration>, SystemPortError>
+    {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::resolve_estimates::EstimateResolutionRepository::calibration(
+            &EstimateStore::new(database),
+            key,
+        )
+        .await
+    }
+
+    async fn resolution(
+        &self,
+        id: &domain::CalibrationEstimateId,
+    ) -> Result<Option<EstimateOutcome>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::resolve_estimates::EstimateResolutionRepository::resolution(
+            &EstimateStore::new(database),
+            id,
+        )
+        .await
+    }
+
+    async fn record_unavailable(
+        &self,
+        record: &domain::EstimateSubmissionRecord<AiRunId, application::ReasoningEffort>,
+        reason: application::resolve_estimates::ResolutionDataIssue,
+    ) -> Result<application::resolve_estimates::ResolutionCommitOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::resolve_estimates::EstimateResolutionRepository::record_unavailable(
+            &EstimateStore::new(database),
+            record,
+            reason,
+        )
+        .await
+    }
+
+    async fn commit_resolution(
+        &self,
+        record: &domain::EstimateSubmissionRecord<AiRunId, application::ReasoningEffort>,
+        outcome: &EstimateOutcome,
+        previous: &application::resolve_estimates::ResolutionCalibration,
+        next: &Calibration,
+    ) -> Result<application::resolve_estimates::ResolutionCommitOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::resolve_estimates::EstimateResolutionRepository::commit_resolution(
+            &EstimateStore::new(database),
+            record,
+            outcome,
+            previous,
+            next,
+        )
+        .await
+    }
+}
