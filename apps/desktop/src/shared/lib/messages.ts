@@ -130,6 +130,14 @@ const catalog = {
   "status.claudeMissing": {
     ko: "Claude Code를 찾지 못했어요." as UiText,
   },
+  "horizon.hours": { ko: "몇 시간" as UiText },
+  "horizon.few-days": { ko: "며칠" as UiText },
+  "horizon.weeks-to-months": { ko: "몇 주~몇 달" as UiText },
+  "horizon.half-year-or-more": { ko: "반년 이상" as UiText },
+  "bin.below-50": { ko: "50% 미만" as UiText },
+  "bin.50-60": { ko: "50~60%" as UiText },
+  "bin.60-70": { ko: "60~70%" as UiText },
+  "bin.70-plus": { ko: "70% 이상" as UiText },
   "risk.rejectInvalidProfile": {
     ko: "이 조합으로는 저장할 수 없어요. 비중 상한을 다시 골라 주세요." as UiText,
   },

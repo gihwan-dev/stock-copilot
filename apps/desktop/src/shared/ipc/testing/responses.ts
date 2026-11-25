@@ -145,6 +145,7 @@ export const responses = {
       sector_cap: "40",
     },
   },
+  getScorecard: { combinations: [] },
   getSelfCheck: { problem: "claude-missing" },
   getSettings: {
     account_count: 0,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-scorecard"
+description = "Enables the get_scorecard command without any pre-configured scope."
+commands.allow = ["get_scorecard"]
+
+[[permission]]
+identifier = "deny-get-scorecard"
+description = "Denies the get_scorecard command without any pre-configured scope."
+commands.deny = ["get_scorecard"]

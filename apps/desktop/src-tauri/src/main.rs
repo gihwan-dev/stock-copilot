@@ -12,6 +12,7 @@ use src_tauri::holdings_link::{
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
+use src_tauri::ipc::scorecard::ScorecardIpcState;
 use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
 use src_tauri::ipc::state::BoxFuture;
 use src_tauri::mcp_catalog::{
@@ -112,6 +113,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(turns)
             .manage(link)
             .manage(self_check)
+            .manage(ScorecardIpcState::from_repository(
+                Arc::clone(&repositories),
+                Arc::<platform_macos::SystemClock>::clone(&shared_clock),
+            ))
             .manage(public_ip_runtime(&shared_clock)),
         ports,
         context,
