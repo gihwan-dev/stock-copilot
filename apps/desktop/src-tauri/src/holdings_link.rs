@@ -176,12 +176,53 @@ impl MasterRefresh {
     }
 }
 
+#[derive(Debug)]
+pub struct SyncParts<'a, B, P, C, M, R> {
+    pub broker: &'a B,
+    pub portfolios: &'a P,
+    pub clock: &'a C,
+    pub events: &'a application::EventBus,
+    pub market: &'a M,
+    pub market_data: &'a R,
+}
+
+pub async fn sync_with_rate<B, P, C, M, R>(
+    parts: &SyncParts<'_, B, P, C, M, R>,
+    account: &domain::AccountId,
+) -> Result<application::PortfolioSyncReport, application::SystemPortError>
+where
+    B: application::BrokerRead,
+    P: application::PortfolioRepository,
+    C: Clock,
+    M: application::MarketInfo,
+    R: application::MarketDataRepository,
+{
+    let report = SyncPortfolio::new(parts.broker, parts.portfolios, parts.clock, parts.events)
+        .execute(account)
+        .await?;
+    let refreshed = application::RefreshFxRate::new(parts.market, parts.market_data, parts.events)
+        .execute(
+            domain::FxPair::UsdKrw,
+            domain::FxRateKind::Mid,
+            Some(report.record.recorded_at()),
+        )
+        .await;
+    if refreshed.is_ok() {
+        let _delivery = parts
+            .events
+            .publish(domain::DomainEvent::PortfolioSyncRecorded(account.clone()));
+    }
+    Ok(report)
+}
+
 pub trait HoldingsSync: Send + Sync {
     fn sync(&self) -> BoxFuture<'_, ()>;
 }
 
 pub struct PortsHoldingsSync<P: PortTypes> {
     broker: Arc<P::BrokerRead>,
+    market: Arc<P::MarketInfo>,
+    market_data: Arc<P::MarketDataRepository>,
     portfolios: Arc<P::PortfolioRepository>,
     clock: Arc<P::Clock>,
     events: Arc<application::EventBus>,
@@ -199,6 +240,8 @@ impl<P: PortTypes> PortsHoldingsSync<P> {
     pub fn from_ports(ports: &Ports<P>) -> Self {
         Self {
             broker: Arc::clone(&ports.broker_read),
+            market: Arc::clone(&ports.market_info),
+            market_data: Arc::clone(&ports.market_data),
             portfolios: Arc::clone(&ports.portfolios),
             clock: Arc::clone(&ports.clock),
             events: Arc::clone(&ports.events),
@@ -210,14 +253,16 @@ impl<P: PortTypes> PortsHoldingsSync<P> {
 impl<P: PortTypes> HoldingsSync for PortsHoldingsSync<P> {
     fn sync(&self) -> BoxFuture<'_, ()> {
         Box::pin(async move {
-            let use_case = SyncPortfolio::new(
-                self.broker.as_ref(),
-                self.portfolios.as_ref(),
-                self.clock.as_ref(),
-                &self.events,
-            );
+            let parts = SyncParts {
+                broker: self.broker.as_ref(),
+                portfolios: self.portfolios.as_ref(),
+                clock: self.clock.as_ref(),
+                events: &self.events,
+                market: self.market.as_ref(),
+                market_data: self.market_data.as_ref(),
+            };
             for account in &self.accounts.current() {
-                let _report = use_case.execute(account).await;
+                let _report = sync_with_rate(&parts, account).await;
             }
         })
     }
