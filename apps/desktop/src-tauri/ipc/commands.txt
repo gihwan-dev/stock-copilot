@@ -16,6 +16,7 @@ get_scorecard
 get_self_check
 get_settings
 get_status
+get_thesis
 get_transactions
 get_update_status
 open_external

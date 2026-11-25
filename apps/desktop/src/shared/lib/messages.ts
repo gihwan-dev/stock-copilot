@@ -149,6 +149,16 @@ const catalog = {
   "watchlist.capacity-exceeded": {
     ko: "관심 종목은 200개까지 담을 수 있어요." as UiText,
   },
+  "thesis.claim-added": { ko: "주장 추가" as UiText },
+  "thesis.claim-judged": { ko: "주장 판정" as UiText },
+  "thesis.criterion-added": { ko: "중단 조건 추가" as UiText },
+  "thesis.criterion-judged": { ko: "중단 조건 판정" as UiText },
+  "thesis.user-confirmed": { ko: "직접 확인함" as UiText },
+  "thesis.user-rejected": { ko: "직접 되돌림" as UiText },
+  "verdict.intact": { ko: "유지" as UiText },
+  "verdict.weakened": { ko: "약해짐" as UiText },
+  "verdict.broken": { ko: "깨짐" as UiText },
+  "verdict.unverifiable": { ko: "확인 불가" as UiText },
   "watchlist.not-in-watchlist": {
     ko: "관심 종목에 없는 종목이에요." as UiText,
   },

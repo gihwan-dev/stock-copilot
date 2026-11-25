@@ -1,8 +1,13 @@
 mod codec;
 
 use crate::{Database, sql::thesis as sql};
-use application::{SystemPortError, ThesisRepository, WriteCompleted};
-use domain::{HistoryAction, HistoryEntry, InstrumentId, Thesis, ThesisPatch, UserDecision};
+use application::{
+    SystemPortError, ThesisEntryTime, ThesisHistoryTimes, ThesisRepository, WriteCompleted,
+};
+use domain::{
+    HistoryAction, HistoryEntry, InstrumentId, Nanosecond, OffsetSeconds, Thesis, ThesisPatch,
+    ThesisVersion, Timestamp, UnixSeconds, UserDecision,
+};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 #[derive(Debug)]
@@ -138,6 +143,75 @@ impl ThesisRepository for ThesisStore<'_> {
         let owned_instrument = instrument.clone();
         self.database
             .read(move |connection| load(connection, &owned_instrument))
+            .await
+    }
+}
+fn decode_time(seconds: i64, nanos: i64, offset: i64) -> rusqlite::Result<Timestamp> {
+    Timestamp::from_parts(
+        UnixSeconds::new(seconds),
+        Nanosecond::new(u32::try_from(nanos).map_err(invalid)?),
+        OffsetSeconds::new(i32::try_from(offset).map_err(invalid)?),
+    )
+    .map_err(invalid)
+}
+fn entry_times(
+    connection: &Connection,
+    instrument: &InstrumentId,
+) -> rusqlite::Result<Vec<ThesisEntryTime>> {
+    connection
+        .prepare(sql::TIMES)?
+        .query_map([instrument.as_str()], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?
+        .map(|row| {
+            let (sequence, seconds, nanos, offset) = row?;
+            Ok(ThesisEntryTime {
+                sequence: ThesisVersion::try_new(usize::try_from(sequence).map_err(invalid)?)
+                    .map_err(invalid)?,
+                recorded_at: decode_time(seconds, nanos, offset)?,
+            })
+        })
+        .collect()
+}
+impl ThesisHistoryTimes for ThesisStore<'_> {
+    async fn record_times(
+        &self,
+        instrument: &InstrumentId,
+        sequences: &[ThesisVersion],
+        recorded_at: Timestamp,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let owned_instrument = instrument.clone();
+        let owned_sequences = sequences.to_vec();
+        self.database
+            .write(move |transaction| {
+                for sequence in &owned_sequences {
+                    transaction.execute(
+                        sql::RECORD_TIME,
+                        params![
+                            owned_instrument.as_str(),
+                            i64::try_from(*sequence.as_usize()).map_err(invalid)?,
+                            recorded_at.utc_seconds().as_i64(),
+                            i64::from(*recorded_at.nanosecond().as_u32()),
+                            i64::from(*recorded_at.offset_seconds().as_i32()),
+                        ],
+                    )?;
+                }
+                Ok(WriteCompleted)
+            })
+            .await
+    }
+    async fn entry_times(
+        &self,
+        instrument: &InstrumentId,
+    ) -> Result<Vec<ThesisEntryTime>, SystemPortError> {
+        let owned_instrument = instrument.clone();
+        self.database
+            .read(move |connection| entry_times(connection, &owned_instrument))
             .await
     }
 }

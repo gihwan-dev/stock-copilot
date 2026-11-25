@@ -163,7 +163,7 @@ export type ThesisClaim = {
 
 export type ThesisRevision = {
   readonly id: EntityId;
-  readonly at: Timestamp;
+  readonly at: Timestamp | undefined;
   readonly summary: FreeText;
 };
 

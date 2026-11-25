@@ -222,6 +222,39 @@ export const responses = {
       { last_success: "2026-11-25T09:30:00+09:00", source: "yonhap" },
     ],
   },
+  getThesis: {
+    claims: [
+      { id: "claim-1", status: "confirmed", text: "메모리 가격이 반등한다" },
+      {
+        id: "claim-2",
+        status: "needs-review",
+        text: "파운드리 적자가 줄어든다",
+      },
+    ],
+    history: [
+      {
+        at: null,
+        change: "claim-added",
+        sequence: "3",
+        subject: "파운드리 적자가 줄어든다",
+        verdict: null,
+      },
+      {
+        at: null,
+        change: "user-confirmed",
+        sequence: "2",
+        subject: null,
+        verdict: null,
+      },
+      {
+        at: "2026-11-25T09:00:00+09:00",
+        change: "claim-added",
+        sequence: "1",
+        subject: "메모리 가격이 반등한다",
+        verdict: null,
+      },
+    ],
+  },
   getTransactions: {
     recorded_at: "2026-11-25T09:00:00+09:00",
     rows: [

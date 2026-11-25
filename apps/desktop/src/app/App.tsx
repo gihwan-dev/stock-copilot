@@ -15,6 +15,7 @@ import {
   getScorecard,
   getSelfCheck,
   getStatus,
+  getThesis,
   getTransactions,
   investorProfile,
   orderSettings,
@@ -55,6 +56,7 @@ const coreScreenSources: ScreenSources = {
   instrumentDetail: getInstrumentDetail,
   addWatchlist,
   removeWatchlist,
+  thesis: getThesis,
 };
 
 const CoreEventBridge = (): null => {

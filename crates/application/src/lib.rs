@@ -412,7 +412,9 @@ pub use article_tool::{
 mod estimate_tool_ports;
 pub use estimate_tool_ports::{EstimateRunContextSource, ProfileSource, ReadOnlySettings};
 mod portfolio_tool_reads;
+mod thesis_history_times;
 mod thesis_tool;
+pub use thesis_history_times::{ThesisEntryTime, ThesisHistoryTimes, TimedThesisRepository};
 pub use thesis_tool::{ThesisRunMetadata, ThesisToolPort, ThesisUpdateFailure, UpdateThesis};
 mod web_research_tool;
 pub use portfolio_tool_reads::{

@@ -1,0 +1,37 @@
+{
+  "claims": [
+    {
+      "id": "claim-1",
+      "text": "메모리 가격이 반등한다",
+      "status": "confirmed"
+    },
+    {
+      "id": "claim-2",
+      "text": "파운드리 적자가 줄어든다",
+      "status": "needs-review"
+    }
+  ],
+  "history": [
+    {
+      "sequence": "3",
+      "at": null,
+      "change": "claim-added",
+      "subject": "파운드리 적자가 줄어든다",
+      "verdict": null
+    },
+    {
+      "sequence": "2",
+      "at": null,
+      "change": "user-confirmed",
+      "subject": null,
+      "verdict": null
+    },
+    {
+      "sequence": "1",
+      "at": "2026-11-25T09:00:00+09:00",
+      "change": "claim-added",
+      "subject": "메모리 가격이 반등한다",
+      "verdict": null
+    }
+  ]
+}

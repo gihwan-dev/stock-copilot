@@ -136,6 +136,10 @@ export const commands = {
     typedError<UiWatchlistChange_Serialize, IpcError>(
       __TAURI_INVOKE("remove_watchlist", { request }),
     ),
+  getThesis: (request: GetThesisRequest) =>
+    typedError<UiThesisView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_thesis", { request }),
+    ),
 };
 
 /** Events */
@@ -624,6 +628,10 @@ export type GetStatusRequest = {
   scope: SelfCheckScope;
 };
 
+export type GetThesisRequest = {
+  symbol: string;
+};
+
 export type GetTransactionsRequest = {
   scope: TransactionsScope;
 };
@@ -907,6 +915,10 @@ export type UiBriefingsView_Serialize = {
 };
 
 export type UiCardExpiry = "5" | "10" | "15" | "30";
+
+export type UiClaimStatus = "confirmed" | "needs-review";
+
+export type UiClaimVerdict = "intact" | "weakened" | "broken" | "unverifiable";
 
 export type UiConcentration = "balanced" | "concentrated";
 
@@ -2065,6 +2077,51 @@ export type UiStatusView_Serialize = {
 
 export type UiSwitch = "off" | "on";
 
+export type UiThesisChange =
+  | "claim-added"
+  | "claim-judged"
+  | "criterion-added"
+  | "criterion-judged"
+  | "user-confirmed"
+  | "user-rejected";
+
+export type UiThesisClaim = {
+  id: string;
+  text: string;
+  status: UiClaimStatus;
+};
+
+export type UiThesisRevision =
+  UiThesisRevision_Serialize | UiThesisRevision_Deserialize;
+
+export type UiThesisRevision_Deserialize = {
+  sequence: string;
+  at?: string | null;
+  change: UiThesisChange;
+  subject?: string | null;
+  verdict?: UiClaimVerdict | null;
+};
+
+export type UiThesisRevision_Serialize = {
+  sequence: string;
+  at: string | null;
+  change: UiThesisChange;
+  subject: string | null;
+  verdict: UiClaimVerdict | null;
+};
+
+export type UiThesisView = UiThesisView_Serialize | UiThesisView_Deserialize;
+
+export type UiThesisView_Deserialize = {
+  claims: UiThesisClaim[];
+  history: UiThesisRevision_Deserialize[];
+};
+
+export type UiThesisView_Serialize = {
+  claims: UiThesisClaim[];
+  history: UiThesisRevision_Serialize[];
+};
+
 export type UiTimeAdjustment = "adjustable" | "not-adjustable";
 
 export type UiToggleState = "off" | "on";
@@ -2367,6 +2424,9 @@ export type MockCommandHandlers = {
   removeWatchlist: (args: {
     request: InstrumentRequest;
   }) => UiWatchlistChange_Serialize | Promise<UiWatchlistChange_Serialize>;
+  getThesis: (args: {
+    request: GetThesisRequest;
+  }) => UiThesisView_Serialize | Promise<UiThesisView_Serialize>;
 };
 
 /**
@@ -2574,6 +2634,8 @@ export function mockCommands(
             "remove_watchlist",
             args,
           );
+        case "get_thesis":
+          return mockCommandHandler(mockHandlers.getThesis, "get_thesis", args);
         default:
           throw new Error(`No mock handler registered for command '${cmd}'`);
       }

@@ -235,6 +235,33 @@ impl ThesisRepository for SqliteRepositories {
     }
 }
 
+impl application::ThesisHistoryTimes for SqliteRepositories {
+    async fn record_times(
+        &self,
+        instrument: &InstrumentId,
+        sequences: &[domain::ThesisVersion],
+        recorded_at: Timestamp,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ThesisHistoryTimes::record_times(
+            &ThesisStore::new(database),
+            instrument,
+            sequences,
+            recorded_at,
+        )
+        .await
+    }
+    async fn entry_times(
+        &self,
+        instrument: &InstrumentId,
+    ) -> Result<Vec<application::ThesisEntryTime>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ThesisHistoryTimes::entry_times(&ThesisStore::new(database), instrument).await
+    }
+}
+
 impl EstimateRepository for SqliteRepositories {
     async fn append_submission(
         &self,

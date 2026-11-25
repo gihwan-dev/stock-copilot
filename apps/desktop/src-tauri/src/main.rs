@@ -17,6 +17,7 @@ use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, T
 use src_tauri::ipc::scorecard::ScorecardIpcState;
 use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
 use src_tauri::ipc::state::BoxFuture;
+use src_tauri::ipc::thesis::ThesisIpcState;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
 };
@@ -157,6 +158,7 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
             Arc::<platform_macos::SystemClock>::clone(clock),
             Arc::clone(events),
         ))
+        .manage(ThesisIpcState::from_repository(Arc::clone(repositories)))
     }
 }
 
@@ -1143,7 +1145,11 @@ fn product_catalog(
     analysis_catalog(
         clock,
         CatalogStores {
-            theses: Arc::clone(repositories),
+            theses: Arc::new(application::TimedThesisRepository::new(
+                Arc::clone(repositories),
+                Arc::clone(repositories),
+                Arc::clone(clock),
+            )),
             estimates: Arc::clone(repositories),
             bodies: Arc::new(ProductArticleBodies::new(clock)),
             runs: runs.clone(),

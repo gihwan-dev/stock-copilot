@@ -36,6 +36,7 @@ const catalog = {
   thesisError: { ko: "논거 노트를 불러오지 못했어요" as UiText },
   thesisCurrent: { ko: "현재 노트" as UiText },
   thesisHistory: { ko: "바뀐 기록" as UiText },
+  thesisTimeUnknown: { ko: "시각 기록 전" as UiText },
   confirmed: { ko: "확인됨" as UiText },
   needsReview: { ko: "확인 필요" as UiText },
 } as const;

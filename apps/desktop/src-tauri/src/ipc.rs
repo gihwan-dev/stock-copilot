@@ -18,6 +18,7 @@ pub mod scorecard;
 pub mod self_check;
 pub mod settings;
 pub mod state;
+pub mod thesis;
 pub mod toss;
 pub mod transactions;
 pub mod updates;
