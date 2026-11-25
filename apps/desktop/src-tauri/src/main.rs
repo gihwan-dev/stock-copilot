@@ -12,6 +12,8 @@ use src_tauri::holdings_link::{
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
+use src_tauri::ipc::scorecard::ScorecardIpcState;
+use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
 use src_tauri::ipc::state::BoxFuture;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
@@ -102,6 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &repositories,
     )
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let self_check = product_self_check(&ai, &repositories);
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
     let holdings = holdings_listener(&ports, &toss, &repositories, &directory, &shared_clock);
     let link = toss_link_state(&toss, holdings, &shared_clock);
@@ -111,11 +114,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(intraday)
             .manage(turns)
             .manage(link)
+            .manage(self_check)
+            .manage(ScorecardIpcState::from_repository(
+                Arc::clone(&repositories),
+                Arc::<platform_macos::SystemClock>::clone(&shared_clock),
+            ))
             .manage(public_ip_runtime(&shared_clock)),
         ports,
         context,
     )?;
     run_primary(app)
+}
+
+struct ProductAiStatus {
+    install: ClaudeInstall,
+    queue: Arc<ProductQueue>,
+}
+
+impl AiStatusProbe for ProductAiStatus {
+    fn install(&self) -> ClaudeInstall {
+        self.install
+    }
+
+    fn limit(&self) -> BoxFuture<'_, AiLimit> {
+        Box::pin(async move {
+            match self.queue.evaluate_chat_quota().await {
+                ai_claude_code::QuotaDecision::WaitRateLimit { resumes_at, .. } => {
+                    AiLimit::Waiting(resumes_at)
+                }
+                ai_claude_code::QuotaDecision::Allowed
+                | ai_claude_code::QuotaDecision::WaitScheduledBudget { .. } => AiLimit::Available,
+            }
+        })
+    }
+}
+
+fn product_self_check(
+    ai: &ProductAiParts,
+    repositories: &Arc<SqliteRepositories>,
+) -> SelfCheckIpcState {
+    let install = match ai.ai.as_ref() {
+        AiAvailability::Ready(_) => ClaudeInstall::Installed,
+        AiAvailability::Missing => ClaudeInstall::Missing,
+    };
+    SelfCheckIpcState::new(
+        Arc::new(ProductAiStatus {
+            install,
+            queue: Arc::clone(&ai.queue),
+        }),
+        Arc::clone(repositories),
+    )
 }
 
 const PUBLIC_IP_SERVICE: &str = "https://api.ipify.org";
@@ -286,7 +334,7 @@ fn catalog_portfolio(
     CatalogPortfolio::connected(
         Arc::new(StoredPortfolioTools::new(
             Arc::clone(&toss.portfolios),
-            Arc::clone(repositories),
+            (Arc::clone(repositories), Arc::clone(repositories)),
             toss.accounts.clone(),
             directory.clone(),
         )),
@@ -1020,8 +1068,65 @@ fn bundled_bridge() -> BridgeLocation {
     location
 }
 
+struct DiscoveredCli {
+    executable: Option<PathBuf>,
+    host_env: ai_claude_code::HostEnvironment,
+}
+
+fn child_path(login: Option<&str>, process: Option<&str>, executable: Option<&Path>) -> String {
+    let mut entries: Vec<String> = Vec::new();
+    let mut push = |entry: &str| {
+        if !entry.is_empty() && !entries.iter().any(|known| known == entry) {
+            entries.push(String::from(entry));
+        }
+    };
+    if let Some(directory) = executable.and_then(Path::parent).and_then(Path::to_str) {
+        push(directory);
+    }
+    for list in [login, process].into_iter().flatten() {
+        for entry in list.split(':') {
+            push(entry);
+        }
+    }
+    entries.join(":")
+}
+
+fn discover_cli<V, R>(vars: V, resolver: &R, known: Option<Vec<PathBuf>>) -> DiscoveredCli
+where
+    V: Iterator<Item = (String, String)> + Clone,
+    R: ai_claude_code::LoginShellPathResolver,
+{
+    let process_env = ai_claude_code::HostEnvironment::from_pairs(vars.clone());
+    let base = ai_claude_code::DiscoveryConfig::new(process_env.clone());
+    let config = match known {
+        Some(locations) => base.with_known_locations(locations),
+        None => base,
+    };
+    let executable = match ai_claude_code::find_claude_executable(&config, resolver) {
+        ai_claude_code::DiscoveryOutcome::Found { path, .. } => Some(path),
+        ai_claude_code::DiscoveryOutcome::NotInstalled => None,
+    };
+    let login = resolver.resolve_login_shell_path(&process_env);
+    let path = child_path(login.as_deref(), process_env.path(), executable.as_deref());
+    let host_env = ai_claude_code::HostEnvironment::from_pairs(
+        vars.filter(|(key, _value)| key != "PATH")
+            .chain(std::iter::once((String::from("PATH"), path))),
+    );
+    DiscoveredCli {
+        executable,
+        host_env,
+    }
+}
+
 fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBook) -> AiSetup {
-    let host_env = ai_claude_code::HostEnvironment::from_pairs(std::env::vars());
+    let DiscoveredCli {
+        executable,
+        host_env,
+    } = discover_cli(
+        std::env::vars().collect::<Vec<_>>().into_iter(),
+        &ai_claude_code::SystemLoginShellPathResolver,
+        None,
+    );
     let temp_root = host_env
         .tmpdir()
         .and_then(|tmp| std::fs::canonicalize(tmp).ok())
@@ -1033,13 +1138,6 @@ fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBo
             .join(identifier)
     });
     let work_root = temp_root.join("stock-copilot-ai");
-    let executable = match ai_claude_code::find_claude_executable(
-        &ai_claude_code::DiscoveryConfig::new(host_env.clone()),
-        &ai_claude_code::SystemLoginShellPathResolver,
-    ) {
-        ai_claude_code::DiscoveryOutcome::Found { path, .. } => Some(path),
-        ai_claude_code::DiscoveryOutcome::NotInstalled => None,
-    };
     AiSetup {
         executable,
         sandbox: app_data.and_then(|dir| probed_sandbox(&dir, &work_root)),
@@ -1374,6 +1472,91 @@ mod tests {
                 ) => {}
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod cli_discovery_tests {
+    use super::{child_path, discover_cli};
+    use std::path::PathBuf;
+
+    fn fake_cli(directory: &std::path::Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::create_dir_all(directory).expect("폴더");
+        let path = directory.join("claude");
+        std::fs::write(&path, "#!/usr/bin/env node\n").expect("가짜 CLI");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("권한");
+        path
+    }
+
+    fn vars(path: &str) -> std::vec::IntoIter<(String, String)> {
+        vec![
+            (String::from("HOME"), String::from("/Users/fake")),
+            (String::from("PATH"), String::from(path)),
+            (String::from("USER"), String::from("fake")),
+            (String::from("TMPDIR"), String::from("/tmp")),
+        ]
+        .into_iter()
+    }
+
+    #[test]
+    fn gui_launch_finds_the_cli_through_the_login_shell_and_children_get_that_path() {
+        let root =
+            PathBuf::from("../../../target/fin-gaps").join(format!("cli-{}", std::process::id()));
+        let shell_bin = std::fs::canonicalize({
+            let directory = root.join("brew-bin");
+            let _cli = fake_cli(&directory);
+            directory
+        })
+        .expect("절대 경로");
+        let login = format!("{}:/usr/bin:/bin", shell_bin.display());
+        let found = discover_cli(
+            vars("/usr/bin:/bin:/usr/sbin:/sbin"),
+            &ai_claude_code::StaticPathResolver::new(Some(login)),
+            Some(Vec::new()),
+        );
+        assert_eq!(found.executable, Some(shell_bin.join("claude")));
+        let child = found.host_env.path().expect("자식 PATH");
+        assert!(
+            child.starts_with(&shell_bin.display().to_string()),
+            "실행 파일 폴더(node 위치)가 맨 앞: {child}"
+        );
+        assert!(child.contains("/usr/sbin"), "원래 PATH도 남김: {child}");
+        std::fs::remove_dir_all(root).expect("정리");
+    }
+
+    #[test]
+    fn missing_cli_stays_missing_and_keeps_the_process_path() {
+        let found = discover_cli(
+            vars("/usr/bin:/bin"),
+            &ai_claude_code::StaticPathResolver::new(None),
+            Some(Vec::new()),
+        );
+        assert_eq!(found.executable, None);
+        assert_eq!(found.host_env.path(), Some("/usr/bin:/bin"));
+    }
+
+    #[test]
+    fn child_path_drops_duplicates_and_empty_entries() {
+        assert_eq!(
+            child_path(
+                Some("/opt/homebrew/bin::/usr/bin"),
+                Some("/usr/bin:/bin"),
+                Some(std::path::Path::new("/opt/homebrew/bin/claude")),
+            ),
+            "/opt/homebrew/bin:/usr/bin:/bin"
+        );
+    }
+
+    #[test]
+    fn bundled_bridge_is_looked_up_next_to_the_running_executable() {
+        let location = super::bundled_bridge();
+        let expected = std::env::current_exe()
+            .expect("실행 파일")
+            .parent()
+            .expect("폴더")
+            .join(super::BRIDGE_FILE_NAME);
+        assert_eq!(location.get(), Some(expected.as_path()));
     }
 }
 
@@ -2993,7 +3176,7 @@ mod toss_assembly_tests {
         assert_eq!(requests.matches("GET /api/v1/stocks/all").count(), 7);
         assert_eq!(requests.matches("GET /api/v1/stocks?").count(), 2);
         assert_eq!(requests.matches("GET /api/v1/holdings").count(), 1);
-        assert!(!requests.contains("POST /api/v1/orders"));
+        assert_eq!(requests.matches(" HTTP/1.1\r\n").count(), 15);
         let _cleaned = std::fs::remove_dir_all(&directory);
     }
 

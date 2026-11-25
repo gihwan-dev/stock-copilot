@@ -107,6 +107,22 @@ const parseTokenKey = (key: string): CandleThemePalette | undefined => {
   );
 };
 
+const readColorScheme = (): "light" | "dark" => {
+  const forced = document.documentElement.getAttribute("data-theme");
+  if (forced === "dark" || forced === "light") return forced;
+  return typeof matchMedia === "function" &&
+    matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+};
+
+export const useColorScheme = (): "light" | "dark" =>
+  useSyncExternalStore(
+    subscribeRootTheme,
+    readColorScheme,
+    (): "light" | "dark" => "light",
+  );
+
 export const useCanvasChartTheme = (
   theme: "light" | "dark",
 ): CandleThemePalette | undefined => {

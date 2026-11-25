@@ -104,6 +104,18 @@ export const commands = {
     typedError<UiRiskSaveOutcome, IpcError>(
       __TAURI_INVOKE("save_order_settings", { request }),
     ),
+  getSelfCheck: (request: GetSelfCheckRequest) =>
+    typedError<UiSelfCheckView, IpcError>(
+      __TAURI_INVOKE("get_self_check", { request }),
+    ),
+  getStatus: (request: GetStatusRequest) =>
+    typedError<UiStatusView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_status", { request }),
+    ),
+  getScorecard: (request: GetScorecardRequest) =>
+    typedError<UiScorecardView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_scorecard", { request }),
+    ),
 };
 
 /** Events */
@@ -572,8 +584,20 @@ export type GetRiskSettingsRequest = {
   scope: RiskSettingsScope;
 };
 
+export type GetScorecardRequest = {
+  scope: ScorecardScope;
+};
+
+export type GetSelfCheckRequest = {
+  scope: SelfCheckScope;
+};
+
 export type GetSettingsRequest = {
   scope: SettingsQueryScope;
+};
+
+export type GetStatusRequest = {
+  scope: SelfCheckScope;
 };
 
 export type IpcError = {
@@ -654,6 +678,10 @@ export type SaveInvestorProfileRequest = {
 export type SaveOrderSettingsRequest = {
   draft: UiOrderSettingsDraft;
 };
+
+export type ScorecardScope = "all";
+
+export type SelfCheckScope = "current";
 
 export type SendChatMessageRequest =
   SendChatMessageRequest_Serialize | SendChatMessageRequest_Deserialize;
@@ -761,6 +789,8 @@ export type SubmitTossKeysRequest = {
 };
 
 export type TossConnectionQuery = "current";
+
+export type UiAiRuntime = "ready" | "missing";
 
 export type UiAllocationLabel = "holding" | "cash-krw" | "cash-usd";
 
@@ -1792,7 +1822,82 @@ export type UiScheduledJob =
   | "intraday-watch"
   | "news-collection";
 
+export type UiScorecardBin = "below-50" | "50-60" | "60-70" | "70-plus";
+
+export type UiScorecardBinRow =
+  UiScorecardBinRow_Serialize | UiScorecardBinRow_Deserialize;
+
+export type UiScorecardBinRow_Deserialize = {
+  bin: UiScorecardBin;
+  count: string;
+  mean_prediction?: string | null;
+  hit_rate?: string | null;
+};
+
+export type UiScorecardBinRow_Serialize = {
+  bin: UiScorecardBin;
+  count: string;
+  mean_prediction: string | null;
+  hit_rate: string | null;
+};
+
+export type UiScorecardCombination =
+  UiScorecardCombination_Serialize | UiScorecardCombination_Deserialize;
+
+export type UiScorecardCombination_Deserialize = {
+  model: string;
+  horizon: UiScorecardHorizon;
+  judged: string;
+  verdict: UiScorecardVerdict;
+  brier?: string | null;
+  bins: UiScorecardBinRow_Deserialize[];
+  comparisons: string;
+};
+
+export type UiScorecardCombination_Serialize = {
+  model: string;
+  horizon: UiScorecardHorizon;
+  judged: string;
+  verdict: UiScorecardVerdict;
+  brier: string | null;
+  bins: UiScorecardBinRow_Serialize[];
+  comparisons: string;
+};
+
+export type UiScorecardHorizon =
+  "hours" | "few-days" | "weeks-to-months" | "half-year-or-more";
+
+export type UiScorecardVerdict = "pending" | "ready";
+
+export type UiScorecardView =
+  UiScorecardView_Serialize | UiScorecardView_Deserialize;
+
+export type UiScorecardView_Deserialize = {
+  combinations: UiScorecardCombination_Deserialize[];
+};
+
+export type UiScorecardView_Serialize = {
+  combinations: UiScorecardCombination_Serialize[];
+};
+
 export type UiSectorCap = "30" | "40" | "50";
+
+export type UiSelfCheckProblem =
+  | "none"
+  | "toss-key-invalid"
+  | "toss-key-permission"
+  | "toss-account-missing"
+  | "ip-not-allowed"
+  | "toss-key-shared"
+  | "claude-missing"
+  | "claude-signed-out"
+  | "order-risk-notice"
+  | "order-exchange-setting"
+  | "order-dollar-shortage";
+
+export type UiSelfCheckView = {
+  problem: UiSelfCheckProblem;
+};
 
 export type UiSettingsView = {
   toss_connection: UiConnectionState;
@@ -1819,6 +1924,33 @@ export type UiSignedAmount = {
   amount: UiMoney;
   rate: string;
   direction: UiDirection;
+};
+
+export type UiSourceStatus =
+  UiSourceStatus_Serialize | UiSourceStatus_Deserialize;
+
+export type UiSourceStatus_Deserialize = {
+  source: string;
+  last_success?: string | null;
+};
+
+export type UiSourceStatus_Serialize = {
+  source: string;
+  last_success: string | null;
+};
+
+export type UiStatusView = UiStatusView_Serialize | UiStatusView_Deserialize;
+
+export type UiStatusView_Deserialize = {
+  ai_runtime: UiAiRuntime;
+  ai_resumes_at?: string | null;
+  sources: UiSourceStatus_Deserialize[];
+};
+
+export type UiStatusView_Serialize = {
+  ai_runtime: UiAiRuntime;
+  ai_resumes_at: string | null;
+  sources: UiSourceStatus_Serialize[];
 };
 
 export type UiSwitch = "off" | "on";
@@ -2033,6 +2165,15 @@ export type MockCommandHandlers = {
   saveOrderSettings: (args: {
     request: SaveOrderSettingsRequest;
   }) => UiRiskSaveOutcome | Promise<UiRiskSaveOutcome>;
+  getSelfCheck: (args: {
+    request: GetSelfCheckRequest;
+  }) => UiSelfCheckView | Promise<UiSelfCheckView>;
+  getStatus: (args: {
+    request: GetStatusRequest;
+  }) => UiStatusView_Serialize | Promise<UiStatusView_Serialize>;
+  getScorecard: (args: {
+    request: GetScorecardRequest;
+  }) => UiScorecardView_Serialize | Promise<UiScorecardView_Serialize>;
 };
 
 /**
@@ -2194,6 +2335,20 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.saveOrderSettings,
             "save_order_settings",
+            args,
+          );
+        case "get_self_check":
+          return mockCommandHandler(
+            mockHandlers.getSelfCheck,
+            "get_self_check",
+            args,
+          );
+        case "get_status":
+          return mockCommandHandler(mockHandlers.getStatus, "get_status", args);
+        case "get_scorecard":
+          return mockCommandHandler(
+            mockHandlers.getScorecard,
+            "get_scorecard",
             args,
           );
         default:

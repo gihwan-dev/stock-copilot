@@ -41,7 +41,7 @@ const noBriefings = {
 };
 
 const openDetail = async (helpers) => {
-  await helpers.click("상세 보기");
+  await helpers.clickFirst('button[aria-label="상세 보기"]');
   await helpers.pause(200);
 };
 

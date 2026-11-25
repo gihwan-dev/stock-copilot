@@ -22,30 +22,32 @@ use crate::ipc::state::BoxFuture;
 #[cfg(test)]
 mod tests;
 
-pub struct StoredPortfolioTools<P, S> {
+pub struct StoredPortfolioTools<P, S, T = S> {
     portfolios: Arc<P>,
     store: Arc<S>,
+    transactions: Arc<T>,
     accounts: AccountSlot,
     directory: InstrumentDirectory,
 }
 
-impl<P, S> std::fmt::Debug for StoredPortfolioTools<P, S> {
+impl<P, S, T> std::fmt::Debug for StoredPortfolioTools<P, S, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("StoredPortfolioTools(<redacted>)")
     }
 }
 
-impl<P, S> StoredPortfolioTools<P, S> {
+impl<P, S, T> StoredPortfolioTools<P, S, T> {
     #[must_use]
-    pub const fn new(
+    pub fn new(
         portfolios: Arc<P>,
-        store: Arc<S>,
+        (store, transactions): (Arc<S>, Arc<T>),
         accounts: AccountSlot,
         directory: InstrumentDirectory,
     ) -> Self {
         Self {
             portfolios,
             store,
+            transactions,
             accounts,
             directory,
         }
@@ -212,10 +214,11 @@ fn transaction_line(row: &domain::StoredTransaction) -> TransactionToolLine {
     }
 }
 
-impl<P, S> StoredPortfolioTools<P, S>
+impl<P, S, T> StoredPortfolioTools<P, S, T>
 where
     P: PortfolioRepository,
-    S: MarketDataRepository + TransactionRepository,
+    S: MarketDataRepository,
+    T: TransactionRepository,
 {
     fn account(&self) -> Option<(AccountId, MaskedAccountNumber)> {
         let account = self.accounts.current().into_iter().next()?;
@@ -316,8 +319,7 @@ where
         let Some((account, masked)) = self.account() else {
             return Ok(None);
         };
-        let Some(record) = TransactionRepository::latest(self.store.as_ref(), &account).await?
-        else {
+        let Some(record) = self.transactions.latest(&account).await? else {
             return Ok(None);
         };
         let rows = match record.outcome() {
@@ -372,10 +374,11 @@ pub trait PortfolioToolSource: Send + Sync {
     fn held(&self) -> BoxFuture<'_, Vec<Symbol>>;
 }
 
-impl<P, S> StoredPortfolioTools<P, S>
+impl<P, S, T> StoredPortfolioTools<P, S, T>
 where
     P: PortfolioRepository,
     S: Send + Sync,
+    T: Send + Sync,
 {
     async fn held_symbols(&self) -> Vec<Symbol> {
         let Some(account) = self.accounts.current().into_iter().next() else {
@@ -395,10 +398,11 @@ where
     }
 }
 
-impl<P, S> PortfolioToolSource for StoredPortfolioTools<P, S>
+impl<P, S, T> PortfolioToolSource for StoredPortfolioTools<P, S, T>
 where
     P: PortfolioRepository + 'static,
-    S: MarketDataRepository + TransactionRepository + 'static,
+    S: MarketDataRepository + 'static,
+    T: TransactionRepository + 'static,
 {
     fn portfolio(&self) -> BoxFuture<'_, Read<PortfolioToolView>> {
         Box::pin(self.read_portfolio())

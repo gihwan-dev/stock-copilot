@@ -13,7 +13,9 @@ export const sizes = Object.freeze({
   wide: { width: 1440, height: 900 },
   medium: { width: 1024, height: 700 },
   minimum: { width: 960, height: 640 },
+  tall: { width: 1440, height: 2600 },
 });
+export const checkedSizes = Object.freeze(["wide", "medium", "minimum"]);
 export const themes = Object.freeze(["light", "dark"]);
 
 export const launchBrowser = async () => {
@@ -111,7 +113,7 @@ export const auditWith = async (target, options = {}) => {
   const names = options.scenarios ?? (await scenarioIndex(target)).names;
   const results = [];
   for (const scenario of names)
-    for (const size of options.sizes ?? Object.keys(sizes))
+    for (const size of options.sizes ?? checkedSizes)
       for (const theme of options.themes ?? themes) {
         const shot =
           options.shots === undefined
@@ -139,7 +141,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   mkdirSync(shots, { recursive: true });
   const results = await auditAll({
     shots,
-    sizes: ["wide", "medium"],
+    sizes: ["wide", "medium", "tall"],
   });
   const failing = results.filter((row) => row.findings.length !== 0);
   for (const row of failing)

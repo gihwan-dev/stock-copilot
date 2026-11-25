@@ -13,6 +13,8 @@ pub mod public_ip;
 pub mod registry;
 pub mod risk_editor;
 pub mod schedule;
+pub mod scorecard;
+pub mod self_check;
 pub mod settings;
 pub mod state;
 pub mod toss;

@@ -56,7 +56,7 @@ export const HoldingsCard = (props: {
     {props.holdings.length === 0 ? (
       <TableRoot empty={portfolioText("holdingsEmpty", "ko")} />
     ) : (
-      <TableRoot caption={portfolioText("holdingsTitle", "ko")}>
+      <TableRoot>
         <TableHead>
           <TableRow>
             <TableHeader>{portfolioText("nameColumn", "ko")}</TableHeader>

@@ -17,7 +17,6 @@ const catalog = {
   kindWithdrawal: { ko: "출금" as UiText },
   kindFee: { ko: "수수료" as UiText },
   kindOther: { ko: "기타" as UiText },
-  present: { ko: "정상" as UiText },
   vanished: { ko: "토스에서 사라짐" as UiText },
   vanishedNotice: {
     ko: "토스 거래내역에서 더 이상 보이지 않는 행은 지우지 않고 '토스에서 사라짐'으로 남겨 둬요." as UiText,

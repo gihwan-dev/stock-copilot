@@ -1,7 +1,6 @@
 import type { Locale, UiText } from "../../shared/lib";
 
 const catalog = {
-  overviewSection: { ko: "현황" as UiText },
   totalTitle: { ko: "총평가" as UiText },
   totalApproximate: { ko: "근사값" as UiText },
   totalHint: {

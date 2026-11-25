@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use application::{
-    AllocationAxis, PerformancePeriod, PortfolioToolReads, SampleSufficiency, SecretValue,
-};
+use application::{AllocationAxis, PerformancePeriod, PortfolioToolReads, SampleSufficiency};
 use domain::{
     AccountId, AcquisitionPrice, BuyingPower, CommonShare, Currency, DisplayInstrumentName,
     Holding, HoldingObservation, InstrumentId, KoreanMasterDetail, LiquidationTrading,
@@ -10,8 +8,9 @@ use domain::{
     MasterSecurityType, Money, Nanosecond, NumericInput, NxtTrading, OffsetSeconds, Portfolio,
     Price, Quantity, Symbol, SyncOutcome, SyncRecord, Timestamp, TradingSuspension, UnixSeconds,
 };
-use store_sqlite::{Database, DatabasePath, SharedDatabase, SqliteRepositories};
-use testkit_ports::memory::{MemoryPortfolioRepository, MemoryReply};
+use testkit_ports::memory::{
+    MemoryMarketDataRepository, MemoryPortfolioRepository, MemoryReply, MemoryTransactionRepository,
+};
 
 use super::{CatalogPortfolio, PortfolioToolSource, StoredPortfolioTools};
 use crate::broker_link::AccountSlot;
@@ -77,44 +76,35 @@ fn portfolio() -> Portfolio {
 }
 
 struct Fixture {
-    tools: StoredPortfolioTools<MemoryPortfolioRepository, SqliteRepositories>,
+    tools: StoredPortfolioTools<
+        MemoryPortfolioRepository,
+        MemoryMarketDataRepository,
+        MemoryTransactionRepository,
+    >,
     portfolios: Arc<MemoryPortfolioRepository>,
+    market: Arc<MemoryMarketDataRepository>,
+    transactions: Arc<MemoryTransactionRepository>,
     accounts: AccountSlot,
-    shared: SharedDatabase,
-    directory: std::path::PathBuf,
 }
 
-fn fixture(name: &str) -> Fixture {
-    let directory = std::path::PathBuf::from("../../../target/fin-hold")
-        .join(format!("{name}-{}", std::process::id()));
-    let shared = SharedDatabase::new();
-    let path = DatabasePath::new(directory.join("store.db"));
-    crate::database::prepare_directory(&path).expect("폴더");
-    let clock = testkit_ports::SteppedClock::new(at(1_790_000_000));
-    let database = Database::open(&path, &SecretValue::new(vec![9; 32]), &clock).expect("열기");
-    assert!(tauri::async_runtime::block_on(shared.install(database)).is_none());
+fn fixture() -> Fixture {
     let portfolios = Arc::new(MemoryPortfolioRepository::default());
+    let market = Arc::new(MemoryMarketDataRepository::default());
+    let transactions = Arc::new(MemoryTransactionRepository::default());
     let accounts = AccountSlot::default();
     let names = InstrumentDirectory::default();
     names.replace(&[samsung()]);
     Fixture {
         tools: StoredPortfolioTools::new(
             Arc::clone(&portfolios),
-            Arc::new(SqliteRepositories::new(shared.clone())),
+            (Arc::clone(&market), Arc::clone(&transactions)),
             accounts.clone(),
             names,
         ),
         portfolios,
+        market,
+        transactions,
         accounts,
-        shared,
-        directory,
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _closed = tauri::async_runtime::block_on(self.shared.close());
-        let _cleaned = std::fs::remove_dir_all(&self.directory);
     }
 }
 
@@ -127,6 +117,14 @@ fn select(fixture: &Fixture, outcome: &SyncOutcome<Portfolio>) {
     );
     for _ in 0_u8..8_u8 {
         fixture
+            .market
+            .script_fx_rate()
+            .push(MemoryReply::Return(Ok(None)));
+        fixture
+            .transactions
+            .script_latest()
+            .push(MemoryReply::Return(Ok(None)));
+        fixture
             .portfolios
             .script_latest()
             .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
@@ -138,7 +136,7 @@ fn select(fixture: &Fixture, outcome: &SyncOutcome<Portfolio>) {
 
 #[test]
 fn without_a_selected_account_every_tool_reports_no_data() {
-    let fixture = fixture("tools-empty");
+    let fixture = fixture();
     tauri::async_runtime::block_on(async {
         assert_eq!(
             PortfolioToolSource::portfolio(&fixture.tools).await,
@@ -162,7 +160,7 @@ fn without_a_selected_account_every_tool_reports_no_data() {
 
 #[test]
 fn stored_holdings_feed_the_four_portfolio_tools_with_masked_account_and_names() {
-    let fixture = fixture("tools-filled");
+    let fixture = fixture();
     select(&fixture, &SyncOutcome::Complete(portfolio()));
     tauri::async_runtime::block_on(async {
         let view = PortfolioToolSource::portfolio(&fixture.tools)
@@ -204,7 +202,7 @@ fn stored_holdings_feed_the_four_portfolio_tools_with_masked_account_and_names()
 
 #[test]
 fn failed_sync_is_an_unavailable_tool_and_an_unconnected_catalog_stays_closed() {
-    let fixture = fixture("tools-failed");
+    let fixture = fixture();
     select(&fixture, &SyncOutcome::Failed);
     tauri::async_runtime::block_on(async {
         let _failed = PortfolioToolSource::portfolio(&fixture.tools)

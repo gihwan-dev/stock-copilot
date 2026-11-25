@@ -11,7 +11,19 @@ import {
 } from "../../../shared/ds";
 import type { ScorecardCombination } from "../../../shared/ipc";
 import type { PercentDisplay, UiText } from "../../../shared/lib";
+import { useColorScheme } from "../../../shared/platform";
 import { scorecardText } from "../messages";
+
+const ReliabilityChart = (props: {
+  readonly data: readonly ChartPoint[];
+}): ReactElement => (
+  <LineChart
+    data={props.data}
+    label={scorecardText("scorecard.reliability", "ko")}
+    empty={scorecardText("scorecard.reliabilityEmpty", "ko")}
+    theme={useColorScheme()}
+  />
+);
 
 const TableRoot = Table.Root;
 const TableHead = Table.Head;
@@ -130,12 +142,7 @@ export const CombinationView = (props: {
           <DataText value={props.combination.brier} variant="body-sm" />
         )}
       </Line>
-      <LineChart
-        data={points}
-        label={scorecardText("scorecard.reliability", "ko")}
-        empty={scorecardText("scorecard.reliabilityEmpty", "ko")}
-        theme="light"
-      />
+      <ReliabilityChart data={points} />
       <Bins combination={props.combination} />
       <Returns combination={props.combination} />
       <Line label={scorecardText("scorecard.comparisons", "ko")}>

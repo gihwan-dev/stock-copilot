@@ -17,7 +17,7 @@ import {
 } from "../../../shared/ds";
 import type { InstrumentDetailView, ScreenSources } from "../../../shared/ipc";
 import type { EntityId, UiText } from "../../../shared/lib";
-import { useCanvasChartTheme } from "../../../shared/platform";
+import { useCanvasChartTheme, useColorScheme } from "../../../shared/platform";
 import { instrumentsText } from "../messages";
 import { useInstrumentDetail, useWatchlistActions } from "../model/instruments";
 import { ThesisNotes } from "./ThesisNotes";
@@ -42,11 +42,12 @@ const Line = (props: {
 const Chart = (props: {
   readonly view: InstrumentDetailView;
 }): ReactElement => {
-  const palette = useCanvasChartTheme("light");
+  const scheme = useColorScheme();
+  const palette = useCanvasChartTheme(scheme);
   const points: readonly CandlePoint[] = props.view.candles.map(
     (candle): CandlePoint => ({
       id: candle.id,
-      label: instrumentsText("chartLabel", "ko"),
+      label: candle.label,
       open: candle.open,
       high: candle.high,
       low: candle.low,
@@ -60,14 +61,14 @@ const Chart = (props: {
           data={points}
           label={instrumentsText("chartLabel", "ko")}
           empty={instrumentsText("chartEmpty", "ko")}
-          theme="light"
+          theme={scheme}
         />
       ) : (
         <CandleChart
           data={points}
           label={instrumentsText("chartLabel", "ko")}
           empty={instrumentsText("chartEmpty", "ko")}
-          theme="light"
+          theme={scheme}
           palette={palette}
         />
       )}
@@ -103,11 +104,18 @@ const Holding = (props: {
 const Ready = (props: {
   readonly view: InstrumentDetailView;
   readonly sources: DetailSources;
+  readonly onClose: () => void;
 }): ReactElement => {
   const actions = useWatchlistActions(props.sources);
   return (
     <Stack gap="space-4">
-      <Card title={instrumentsText("quoteTitle", "ko")}>
+      <Card
+        title={instrumentsText("quoteTitle", "ko")}
+        actions={{
+          label: instrumentsText("close", "ko"),
+          onPress: props.onClose,
+        }}
+      >
         <Stack gap="space-1">
           <Inline gap="space-2" align="center" wrap="wrap">
             <DataText value={props.view.name} />
@@ -181,12 +189,11 @@ export const InstrumentDetail = (props: {
       );
     case "ready":
       return (
-        <Stack gap="space-4">
-          <Button variant="ghost" onClick={props.onClose}>
-            {instrumentsText("close", "ko")}
-          </Button>
-          <Ready view={detail.view.data} sources={props.sources} />
-        </Stack>
+        <Ready
+          view={detail.view.data}
+          sources={props.sources}
+          onClose={props.onClose}
+        />
       );
   }
 };

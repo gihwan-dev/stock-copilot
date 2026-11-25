@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   auditWith,
+  checkedSizes,
   inspectPage,
   launchBrowser,
   scenarioIndex,
@@ -87,7 +88,7 @@ test("screen audit: every route and state fills the window at every size and the
       assert.ok(index.paths.includes(route), `장면 없는 경로: ${route}`);
     assert.ok(index.names.length >= 20, `장면 수: ${index.names.length}`);
     return auditWith(target, {
-      sizes: Object.keys(sizes),
+      sizes: [...checkedSizes],
       themes: [...themes],
     });
   });

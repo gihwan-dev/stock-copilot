@@ -81,7 +81,7 @@ test("U-11 transactions screen shows loading, empty, error and ready states and 
     );
     assert.equal(body.length, 2);
     assert.ok(body[0].includes("매수"));
-    assert.ok(body[0].includes("정상"));
+    assert.equal(body[0].includes("정상"), false);
     assert.equal(body[0].includes("토스에서 사라짐"), false);
     assert.ok(body[1].includes("배당"));
     assert.ok(body[1].includes("토스에서 사라짐"));
