@@ -51,7 +51,7 @@ sh docs/measurements/claude-isolation-check.sh app-collection
 
 - `app-collection`은 위 통과 조건을 모두 지킨다. S-04의 "`--restricted`가 사용자 메모리·전역 CLAUDE.md를 막는가"는 막는다로 닫는다.
 - `plugins`의 셋은 모두 Claude Code 내장 `cc-plugin-*`다. R-02 실측(빈 설정 폴더에서도 같은 내장 4개가 나옴)과 같고, 사용자가 설치한 플러그인은 아니다. 앱의 사전 점검은 init `plugins`가 내장 허용 목록(`apps/desktop/src-tauri/src/main.rs`의 `ALLOWED_BUILTIN_PLUGINS`) 밖이거나 `plugin_errors`가 있으면 요청 전에 끝낸다(`isolation.rs`). 따라서 격리 구멍으로 보지 않고 실행 옵션은 바꾸지 않는다. 판단은 [fin-aiiso 결정](../adr/fin-aiiso-decisions.md)에 적었다.
-- `sources-none-webfetch`는 사용자 메모리를 막지 못한다. `--restricted`를 빼는 조합은 쓰지 않는다([ADR 0178](../adr/0178-collection-web-reading.md)).
+- `sources-none-webfetch`는 사용자 메모리를 막지 못한다. `--restricted`를 빼는 조합은 쓰지 않는다([ADR 0179](../adr/0179-collection-webfetch-after-measurement.md)).
 
 ## 남은 위험: 계정 문맥 주입
 
@@ -59,7 +59,7 @@ sh docs/measurements/claude-isolation-check.sh app-collection
 
 - 수집 실행이 아는 것은 종목명, 종목 코드, 주제어와 이 계정 식별자뿐이다. 보유 수량·금액·계좌는 모른다(design 4.4).
 - 수집 실행의 도구는 WebSearch 하나다. 임의 주소로 요청을 보낼 도구가 없어서, 웹 결과 속 주입 문장이 계정 식별자를 바깥 서버로 보내게 할 길이 검색어뿐이다. 검색은 같은 구독 제공자의 서버가 실행한다.
-- 그래서 지금 위험은 받아들이고, 수집 실행에 임의 주소를 읽는 도구(WebFetch)를 주지 않는 이유 하나로 더한다([ADR 0178](../adr/0178-collection-web-reading.md)).
+- 그래서 지금 위험은 받아들이고, 수집 실행에 임의 주소를 읽는 도구(WebFetch)를 주지 않는 이유 하나로 더한다([ADR 0179](../adr/0179-collection-webfetch-after-measurement.md)).
 - Claude Code 버전을 올릴 때 계정 문맥을 끄는 옵션이 생겼는지 확인하고, 생기면 `build_profile_args`에 넣는다.
 
 ## 참고
