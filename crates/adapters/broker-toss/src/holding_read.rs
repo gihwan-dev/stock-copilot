@@ -2,8 +2,8 @@ use crate::account_read::invalid;
 use application::{HoldingsObservation, ReadEndpoint, ResponseMismatch};
 use domain::{
     AcquisitionPrice, Currency, CurrencyAmounts, DailyProfitLoss, Holding, HoldingObservation,
-    KnownMarket, MasterInstrumentFacts, Money, NumericInput, OrderSide, PortfolioDailyProfitLoss,
-    Price, Quantity, Ratio, ReportedHolding, ReportedPortfolio, Symbol, Timestamp,
+    KnownMarket, MasterInstrumentFacts, Money, NumericInput, PortfolioDailyProfitLoss, Price,
+    Quantity, Ratio, ReportedHolding, ReportedPortfolio, Symbol, Timestamp,
 };
 use serde_json::Value;
 
@@ -96,10 +96,7 @@ fn holding(
                     .is_ok_and(|instrument| *instrument.market() == parsed.market)
         })
         .ok_or_else(|| master_errors.missing(ReadEndpoint::Holdings, failure()))?;
-    let instrument = identified
-        .order_gate_facts()
-        .and_then(|gate| gate.instrument_for(OrderSide::Sell))
-        .map_err(|_error| failure())?;
+    let instrument = identified.held_instrument().map_err(|_error| failure())?;
     Holding::new(
         instrument,
         parsed.quantity,

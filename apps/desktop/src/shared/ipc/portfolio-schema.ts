@@ -61,6 +61,7 @@ const holdingSchema = z
   .strictObject({
     symbol: z.string().min(1).max(32),
     name: freeTextSchema,
+    trading: z.enum(["trading", "suspended"]),
     quantity: quantitySchema,
     value: moneySchema,
     profit: signedSchema,
@@ -76,6 +77,7 @@ const holdingSchema = z
       id: id.data,
       name: raw.name,
       ticker: ticker.data,
+      trading: raw.trading,
       quantity: raw.quantity,
       value: raw.value,
       profit: raw.profit,

@@ -3049,7 +3049,7 @@ mod toss_assembly_tests {
     fn holdings() -> Vec<u8> {
         let recorded: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(
-                "../../../crates/adapters/broker-toss/tests/recordings/t05-holdings-kr.json",
+                "../../../crates/adapters/broker-toss/tests/recordings/t05-holdings.json",
             )
             .expect("녹화"),
         )
@@ -3086,6 +3086,9 @@ mod toss_assembly_tests {
             holdings(),
             buying_power("KRW", "5000000"),
             buying_power("USD", "3500.525"),
+            ok(
+                &serde_json::json!({"result":{"baseCurrency":"USD","quoteCurrency":"KRW","rate":"1381.7","midRate":"1374.2","basisPoint":"54.58","rateChangeType":"UP","validFrom":"2000-01-01T00:00:00+09:00","validUntil":"2100-01-01T00:00:00+09:00"}}),
+            ),
         ]
     }
 
@@ -3146,6 +3149,7 @@ mod toss_assembly_tests {
             shared_clock,
         );
         let sync = HoldingsSyncFor {
+            store: Arc::clone(repositories),
             broker: Arc::clone(broker),
             portfolios: Arc::clone(&portfolios),
             clock,
@@ -3178,10 +3182,21 @@ mod toss_assembly_tests {
         let domain::SyncOutcome::Complete(portfolio) = record.outcome() else {
             panic!("완료여야 함: {:?}", record.outcome());
         };
-        assert_eq!(portfolio.holdings().len(), 1);
+        assert_eq!(portfolio.holdings().len(), 2);
+        let stored = application::GetPortfolioView::new(parts.portfolios.as_ref(), repositories)
+            .execute(&domain::AccountId::new(413))
+            .await
+            .expect("현황");
+        let application::StoredView::Recorded(view) = stored else {
+            panic!("기록된 현황");
+        };
+        let domain::SyncOutcome::Complete(valuation) = view.outcome() else {
+            panic!("완료된 평가");
+        };
         assert_eq!(
-            portfolio.holdings()[0].instrument().symbol().as_str(),
-            "005930"
+            valuation.assets().completeness(),
+            domain::TotalCompleteness::Complete,
+            "환율이 있어 달러 자산까지 총평가에 들어감"
         );
         let name = |symbol: &str| {
             parts
@@ -3237,11 +3252,13 @@ mod toss_assembly_tests {
         assert_eq!(requests.matches("GET /api/v1/stocks/all").count(), 7);
         assert_eq!(requests.matches("GET /api/v1/stocks?").count(), 2);
         assert_eq!(requests.matches("GET /api/v1/holdings").count(), 1);
-        assert_eq!(requests.matches(" HTTP/1.1\r\n").count(), 15);
+        assert_eq!(requests.matches(" HTTP/1.1\r\n").count(), 16);
+        assert_eq!(requests.matches("GET /api/v1/exchange-rate").count(), 1);
         let _cleaned = std::fs::remove_dir_all(&directory);
     }
 
     struct HoldingsSyncFor {
+        store: Arc<store_sqlite::SqliteRepositories>,
         broker: Arc<TestBroker>,
         portfolios: Arc<store_sqlite::SqlitePortfolioStore>,
         clock: Arc<platform_macos::SystemClock>,
@@ -3251,14 +3268,18 @@ mod toss_assembly_tests {
 
     impl HoldingsSyncFor {
         async fn sync_accounts(&self) {
-            let use_case = application::SyncPortfolio::new(
-                self.broker.as_ref(),
-                self.portfolios.as_ref(),
-                self.clock.as_ref(),
-                &self.events,
-            );
+            let parts = src_tauri::holdings_link::SyncParts {
+                broker: self.broker.as_ref(),
+                portfolios: self.portfolios.as_ref(),
+                clock: self.clock.as_ref(),
+                events: &self.events,
+                market: self.broker.as_ref(),
+                market_data: self.store.as_ref(),
+            };
             for account in &self.slot.current() {
-                let _report = use_case.execute(account).await.expect("동기화");
+                let _report = src_tauri::holdings_link::sync_with_rate(&parts, account)
+                    .await
+                    .expect("동기화");
             }
         }
     }

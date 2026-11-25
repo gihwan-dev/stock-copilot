@@ -68,10 +68,19 @@ pub struct UiSignedAmount {
     pub direction: UiDirection,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum UiTrading {
+    #[serde(rename = "trading")]
+    Trading,
+    #[serde(rename = "suspended")]
+    Suspended,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct UiHolding {
     pub symbol: String,
     pub name: String,
+    pub trading: UiTrading,
     pub quantity: String,
     pub value: UiMoney,
     pub profit: UiSignedAmount,
@@ -216,6 +225,10 @@ fn holding_row(holding: &ValuedHolding, directory: &InstrumentDirectory) -> Opti
     Some(UiHolding {
         symbol: symbol.as_str().to_owned(),
         name: display_name(symbol, directory),
+        trading: match directory.entry(symbol).map(|entry| entry.trading) {
+            Some(domain::MasterTradingState::Suspended) => UiTrading::Suspended,
+            Some(domain::MasterTradingState::Trading) | None => UiTrading::Trading,
+        },
         quantity: holding
             .holding()
             .quantity()

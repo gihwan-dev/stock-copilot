@@ -6,7 +6,6 @@ use crate::platform::job_settings::{
 };
 use crate::platform::scheduled_ports::{AppSpecWatch, AppStoredJobs};
 use crate::ports::{PortTypes, Ports};
-use application::SyncPortfolio;
 use domain::Timestamp;
 use scheduler::{
     BriefingJob, DailyBackupJob, DailyValuationJob, IntradayCompactionJob, RegistryError,
@@ -51,16 +50,18 @@ impl<R: Runtime, P: PortTypes> PortfolioSyncPort for AppPortfolioSync<R, P> {
             .app
             .try_state::<Ports<P>>()
             .ok_or_else(|| JobError::PortUnavailable(String::from("ports")))?;
-        let use_case = SyncPortfolio::new(
-            ports.broker_read.as_ref(),
-            ports.portfolios.as_ref(),
-            ports.clock.as_ref(),
-            &ports.events,
-        );
+        let sources = crate::holdings_link::SyncParts {
+            broker: ports.broker_read.as_ref(),
+            portfolios: ports.portfolios.as_ref(),
+            clock: ports.clock.as_ref(),
+            events: &ports.events,
+            market: ports.market_info.as_ref(),
+            market_data: ports.market_data.as_ref(),
+        };
         let mut synced = 0_u32;
         let mut first_failure = None;
         for account in &ports.saved_accounts.current() {
-            match use_case.execute(account).await {
+            match crate::holdings_link::sync_with_rate(&sources, account).await {
                 Ok(_report) => synced = synced.saturating_add(1),
                 Err(error) => {
                     first_failure = first_failure

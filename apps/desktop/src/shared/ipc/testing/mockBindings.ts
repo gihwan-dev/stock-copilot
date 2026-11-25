@@ -1653,6 +1653,7 @@ export type UiFxPair = "UsdKrw" | "KrwUsd";
 export type UiHolding = {
   symbol: string;
   name: string;
+  trading: UiTrading;
   quantity: string;
   value: UiMoney;
   profit: UiSignedAmount;
@@ -1973,6 +1974,8 @@ export type UiTossConnectionState =
   | "key-in-use";
 
 export type UiTotalCoverage = "complete" | "partial";
+
+export type UiTrading = "trading" | "suspended";
 
 export type UiUpdateFailure = "check" | "download" | "install";
 

@@ -427,7 +427,7 @@ mod tests {
         }
     }
     #[test]
-    fn unresolved_and_suspended_master_fail_without_dropping_rows() {
+    fn suspended_holdings_still_convert_while_an_unresolved_master_fails() {
         let clock = crate::support::time();
         let mut rows = master(clock.now())
             .instruments()
@@ -441,9 +441,12 @@ mod tests {
                 .collect(),
         )
         .expect("facts");
-        for facts in [
-            suspended,
-            MasterInstrumentFacts::try_new(vec![]).expect("empty master"),
+        for (facts, converted) in [
+            (suspended, true),
+            (
+                MasterInstrumentFacts::try_new(vec![]).expect("empty master"),
+                false,
+            ),
         ] {
             let server = ScriptedHttpServer::start(vec![
                 issued(),
@@ -467,12 +470,15 @@ mod tests {
                 Time(Arc::clone(&clock)),
                 facts,
             );
-            assert_eq!(
-                run(reader.holdings(&AccountId::new(413)))
-                    .expect_err("unresolved")
-                    .kind(),
-                PortErrorKind::InvalidResponse(ResponseMismatch::Validation)
-            );
+            let result = run(reader.holdings(&AccountId::new(413)));
+            if converted {
+                assert_eq!(result.expect("suspended converts").holdings().len(), 2);
+            } else {
+                assert_eq!(
+                    result.expect_err("unresolved").kind(),
+                    PortErrorKind::InvalidResponse(ResponseMismatch::Validation)
+                );
+            }
             server.finish().expect("finish");
         }
     }
