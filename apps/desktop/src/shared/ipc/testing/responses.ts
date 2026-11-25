@@ -3,6 +3,27 @@ export const responses = {
   cancelChatTurn: { outcome: "NotRunning", turn_id: "turn-1" },
   checkTossConnection: { state: "connected" },
   copyText: { status: "copied" },
+  getAllocation: {
+    concentration: "concentrated",
+    instruments: [
+      {
+        id: "KR-005930",
+        kind: "holding",
+        level: "over-cap",
+        name: "삼성전자",
+        value: { amount: "7200000", currency: "KRW" },
+        weight: "59.02",
+      },
+      {
+        id: "cash-Krw",
+        kind: "cash-krw",
+        level: "normal",
+        name: "",
+        value: { amount: "5000000", currency: "KRW" },
+        weight: "40.98",
+      },
+    ],
+  },
   getBriefings: {
     latest: {
       body: "밤사이 미국장은 올랐습니다 [1]",
@@ -72,6 +93,42 @@ export const responses = {
       },
     ],
   },
+  getPortfolio: {
+    currencies: [
+      {
+        buying_power: { amount: "5000000", currency: "KRW" },
+        currency: "KRW",
+        holdings: { amount: "7200000", currency: "KRW" },
+      },
+      {
+        buying_power: { amount: "0.00", currency: "USD" },
+        currency: "USD",
+        holdings: { amount: "0.00", currency: "USD" },
+      },
+    ],
+    exchange_rate_at: null,
+    holdings: [
+      {
+        name: "삼성전자",
+        profit: {
+          amount: { amount: "700000", currency: "KRW" },
+          direction: "up",
+          rate: "10.77",
+        },
+        quantity: "100",
+        symbol: "005930",
+        value: { amount: "7200000", currency: "KRW" },
+      },
+    ],
+    recorded_at: "2026-11-25T09:00:00+09:00",
+    today: {
+      amount: { amount: "-100000", currency: "KRW" },
+      direction: "down",
+      rate: "-1.41",
+    },
+    total: { amount: "12200000", currency: "KRW" },
+    total_coverage: "complete",
+  },
   getPublicIp: { address: "203.0.113.10" },
   getRiskSettings: {
     order: {
@@ -88,6 +145,7 @@ export const responses = {
       sector_cap: "40",
     },
   },
+  getSelfCheck: { problem: "claude-missing" },
   getSettings: {
     account_count: 0,
     ai_budget_percent: "70",
@@ -107,6 +165,14 @@ export const responses = {
     risk_appetite: "neutral",
     sector_cap_percent: "40",
     toss_connection: "needs-key",
+  },
+  getStatus: {
+    ai_resumes_at: "2026-11-25T15:00:00+09:00",
+    ai_runtime: "ready",
+    sources: [
+      { last_success: null, source: "kind-disclosure" },
+      { last_success: "2026-11-25T09:30:00+09:00", source: "yonhap" },
+    ],
   },
   getUpdateStatus: { current_version: "0.1.0", state: "off" },
   ipcErrors: [

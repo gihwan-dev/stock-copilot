@@ -268,8 +268,8 @@ fn validate_adjusted_moves<S: SecretStore, T: Clock, R: TokenRenewal>(
         PriceAdjustment::Raw => return Ok(()),
         PriceAdjustment::Adjusted(_) => {}
     }
-    let master = reader
-        .market_master()
+    let facts = reader.market_master();
+    let master = facts
         .instruments()
         .iter()
         .find(|entry| {

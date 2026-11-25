@@ -320,9 +320,24 @@ pub(crate) async fn fetch<
     reader: &TossInstrumentRead<S, T, R, A, I>,
     market: KnownMarket,
 ) -> Result<InstrumentMaster, PortError> {
-    let session = reader.authority.begin(market).await.map_err(not_ready)?;
-    let stocks = listed(&reader.reader, market).await?;
-    let prepared = details(&reader.reader, &stocks).await?;
+    fetch_parts(&reader.reader, &reader.authority, &reader.issuer, market).await
+}
+
+pub(crate) async fn fetch_parts<
+    S: SecretStore,
+    T: Clock,
+    R: TokenRenewal,
+    A: InstrumentMasterAuthority,
+    I: InstrumentIdIssuer,
+>(
+    reader: &crate::TossAccountRead<S, T, R>,
+    authority: &A,
+    issuer: &I,
+    market: KnownMarket,
+) -> Result<InstrumentMaster, PortError> {
+    let session = authority.begin(market).await.map_err(not_ready)?;
+    let stocks = listed(reader, market).await?;
+    let prepared = details(reader, &stocks).await?;
     let observations = prepared
         .iter()
         .map(|item| InstrumentMasterObservation {
@@ -343,7 +358,7 @@ pub(crate) async fn fetch<
     let conflicts = domain::instrument_source_conflicts(&sources);
     let mut entries = Vec::new();
     for (item, conflict) in prepared.into_iter().zip(conflicts) {
-        entries.push(mapped_entry(&session, &reader.issuer, item, conflict).await?);
+        entries.push(mapped_entry(&session, issuer, item, conflict).await?);
     }
     let master = InstrumentMaster::try_new(entries).map_err(|_error| invalid())?;
     Ok(master)

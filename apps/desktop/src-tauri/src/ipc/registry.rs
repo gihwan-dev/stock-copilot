@@ -2,8 +2,8 @@ use tauri::Runtime;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
-    app_version, briefing, chat, open_external, order_approval, public_ip, risk_editor, schedule,
-    settings, toss, updates,
+    app_version, briefing, chat, open_external, order_approval, portfolio, public_ip, risk_editor,
+    schedule, self_check, settings, toss, updates,
 };
 
 #[must_use]
@@ -23,6 +23,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         open_external::open_external::<tauri::Wry>,
         order_approval::request_order_approval::<tauri::Wry>,
         briefing::get_briefings::<tauri::Wry>,
+        portfolio::get_portfolio::<tauri::Wry>,
+        portfolio::get_allocation::<tauri::Wry>,
         schedule::get_job_schedules::<tauri::Wry>,
         schedule::set_job_schedule::<tauri::Wry>,
         public_ip::get_public_ip::<tauri::Wry>,
@@ -33,7 +35,9 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         updates::restart_to_update::<tauri::Wry>,
         risk_editor::get_risk_settings::<tauri::Wry>,
         risk_editor::save_investor_profile::<tauri::Wry>,
-        risk_editor::save_order_settings::<tauri::Wry>
+        risk_editor::save_order_settings::<tauri::Wry>,
+        self_check::get_self_check::<tauri::Wry>,
+        self_check::get_status::<tauri::Wry>
     ];
     Builder::<R>::new()
         .commands(commands)

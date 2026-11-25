@@ -5,6 +5,7 @@ pub mod broker_link;
 pub mod collected_links;
 pub mod database;
 pub mod exit;
+pub mod holdings_link;
 pub mod ipc;
 pub mod lifecycle;
 pub mod mcp_catalog;

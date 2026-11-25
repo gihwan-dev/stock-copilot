@@ -29,6 +29,26 @@ const currencyKeys = {
   USD: "currencyUsd",
 } as const satisfies Record<Currency, PortfolioMessageKey>;
 
+const TodayLine = (props: { readonly view: PortfolioView }): ReactElement => (
+  <Inline gap="space-2" align="center" wrap="wrap">
+    <Text variant="body-sm" tone="ink-muted">
+      {portfolioText("todayTitle", "ko")}
+    </Text>
+    {props.view.today === undefined ? (
+      <Text variant="body-sm" tone="ink-muted">
+        {portfolioText("todayPending", "ko")}
+      </Text>
+    ) : (
+      <PriceChange
+        amount={props.view.today.amount}
+        rate={props.view.today.rate}
+        direction={props.view.today.direction}
+        emphasis="large"
+      />
+    )}
+  </Inline>
+);
+
 const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
   <Card title={portfolioText("totalTitle", "ko")}>
     <Stack gap="space-3">
@@ -43,17 +63,7 @@ const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
             {portfolioText("totalApproximate", "ko")}
           </Badge>
         </Inline>,
-        <Inline key="today" gap="space-2" align="center" wrap="wrap">
-          <Text variant="body-sm" tone="ink-muted">
-            {portfolioText("todayTitle", "ko")}
-          </Text>
-          <PriceChange
-            amount={props.view.today.amount}
-            rate={props.view.today.rate}
-            direction={props.view.today.direction}
-            emphasis="large"
-          />
-        </Inline>,
+        <TodayLine key="today" view={props.view} />,
         <Inline key="recorded" gap="space-2" align="center" wrap="wrap">
           <Text variant="caption" tone="ink-muted">
             {portfolioText("recordedAt", "ko")}
@@ -63,6 +73,13 @@ const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
         <Text key="hint" variant="caption" tone="ink-muted">
           {portfolioText("totalHint", "ko")}
         </Text>,
+        ...(props.view.totalCoverage === "partial"
+          ? [
+              <Text key="partial" variant="caption" tone="ink-muted">
+                {portfolioText("totalPartial", "ko")}
+              </Text>,
+            ]
+          : []),
         ...(props.view.exchangeRate === undefined
           ? []
           : [
@@ -89,7 +106,13 @@ const CurrencyRow = (props: {
       <Money value={props.value.holdings} />
     </TableCell>
     <TableCell align="end">
-      <Money value={props.value.buyingPower} />
+      {props.value.buyingPower === undefined ? (
+        <Text variant="caption" tone="ink-muted">
+          {portfolioText("notObserved", "ko")}
+        </Text>
+      ) : (
+        <Money value={props.value.buyingPower} />
+      )}
     </TableCell>
   </TableRow>
 );

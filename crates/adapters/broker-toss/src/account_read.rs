@@ -37,7 +37,7 @@ impl MasterErrorMode {
 pub struct TossAccountRead<Store, Time, Renewal> {
     tokens: TokenManager<Store, Time, Renewal>,
     clock: Time,
-    master: MasterInstrumentFacts,
+    master: std::sync::RwLock<std::sync::Arc<MasterInstrumentFacts>>,
     candle_sessions: Vec<domain::MarketSession>,
 }
 impl<Store, Time, Renewal> std::fmt::Debug for TossAccountRead<Store, Time, Renewal> {
@@ -70,7 +70,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
         Self {
             tokens,
             clock,
-            master,
+            master: std::sync::RwLock::new(std::sync::Arc::new(master)),
             candle_sessions: Vec::new(),
         }
     }
@@ -117,7 +117,12 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
         let request = ReadRequest::new(ReadRoute::Holdings)
             .with_account(SecretValue::new(account.as_i64().to_string().into_bytes()));
         let value = self.read(request, ReadEndpoint::Holdings).await?;
-        crate::holding_read::holdings(&value, &self.master, self.clock.now(), master_errors)
+        crate::holding_read::holdings(
+            &value,
+            &self.market_master(),
+            self.clock.now(),
+            master_errors,
+        )
     }
     pub(crate) async fn fetch_transactions(
         &self,
@@ -133,12 +138,33 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
         self
     }
     #[must_use]
-    pub fn with_market_master(mut self, master: MasterInstrumentFacts) -> Self {
-        self.master = master;
+    pub fn with_market_master(self, master: MasterInstrumentFacts) -> Self {
+        self.replace_market_master(master);
         self
     }
-    pub(crate) fn market_master(&self) -> &MasterInstrumentFacts {
-        &self.master
+    pub fn replace_market_master(&self, master: MasterInstrumentFacts) {
+        let replacement = std::sync::Arc::new(master);
+        match self.master.write() {
+            Ok(mut guard) => *guard = replacement,
+            Err(poisoned) => *poisoned.into_inner() = replacement,
+        }
+    }
+    pub(crate) fn market_master(&self) -> std::sync::Arc<MasterInstrumentFacts> {
+        match self.master.read() {
+            Ok(guard) => std::sync::Arc::clone(&guard),
+            Err(poisoned) => std::sync::Arc::clone(&poisoned.into_inner()),
+        }
+    }
+    pub async fn instrument_master<
+        Authority: application::InstrumentMasterAuthority,
+        Issuer: application::InstrumentIdIssuer,
+    >(
+        &self,
+        authority: &Authority,
+        issuer: &Issuer,
+        market: domain::KnownMarket,
+    ) -> Result<domain::InstrumentMaster, PortError> {
+        crate::instrument_master::fetch_parts(self, authority, issuer, market).await
     }
     pub async fn reconnect(&self) -> Result<(), crate::TokenError> {
         self.tokens

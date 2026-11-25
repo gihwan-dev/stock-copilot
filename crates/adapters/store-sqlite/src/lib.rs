@@ -241,8 +241,14 @@ pub use briefing::BriefingStore;
 
 mod shared;
 pub use shared::{SharedClosure, SharedDatabase, SqliteRepositories, not_opened};
+mod shared_master;
+pub use shared_master::SqliteMasterSession;
+mod portfolio_store;
+pub use portfolio_store::SqlitePortfolioStore;
 #[cfg(test)]
 mod briefing_tests;
+#[cfg(test)]
+mod portfolio_store_tests;
 #[cfg(test)]
 mod shared_tests;
 
