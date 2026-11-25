@@ -4,6 +4,7 @@ use src_tauri::ai_runtime::{
     McpServerHostParts, RunMetadataBook,
 };
 use src_tauri::audit_queue::AuditEventQueue;
+use src_tauri::collected_links::{CollectedLinker, TitleLinker};
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::mcp_catalog::{
@@ -171,7 +172,8 @@ fn product_builder(
         .manage(Arc::clone(repositories))
         .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
         .manage(database_key_provision())
-        .manage(ui_events);
+        .manage(ui_events)
+        .manage(CollectedLinker(Arc::new(AliasTitleLinker)));
     let with_feeds = builder.manage(collector_feeds(clock));
     match spec_watch_inputs(clock) {
         Some(inputs) => with_feeds.manage(inputs),
@@ -470,6 +472,33 @@ fn assemble_ai(
         grants: tokio::sync::Mutex::new(BTreeMap::new()),
     });
     Ok(ProductAiParts { ai, queue, jobs })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AliasTitleLinker;
+
+impl TitleLinker for AliasTitleLinker {
+    fn instruments_in(
+        &self,
+        title: &domain::UntrustedText,
+        aliases: &[application::StockAlias],
+    ) -> Vec<domain::InstrumentId> {
+        let entries = aliases
+            .iter()
+            .filter_map(|alias| {
+                sources::MatchDictionaryEntry::new(
+                    alias.instrument.clone(),
+                    alias.alias.as_str(),
+                    sources::MatchNameKind::Alias,
+                    sources::MatchNameAmbiguity::Distinct,
+                )
+            })
+            .collect();
+        sources::StockMatcher::new(entries)
+            .match_title(title)
+            .matched()
+            .to_vec()
+    }
 }
 
 struct ProductArticleBodies {
@@ -1501,6 +1530,29 @@ mod ai_composition_tests {
                 Ok(scheduler::AiQueueAdmission::Admitted)
             );
         });
+    }
+
+    #[test]
+    fn alias_linker_matches_collected_titles_with_the_shared_stock_matcher() {
+        use src_tauri::collected_links::TitleLinker;
+        let samsung = domain::InstrumentId::try_new("005930").expect("종목");
+        let aliases = [application::StockAlias {
+            instrument: samsung.clone(),
+            alias: application::AliasName::try_new("삼성전자").expect("약칭"),
+        }];
+        let title = |raw: &str| domain::UntrustedText::try_new(raw).expect("제목");
+        assert_eq!(
+            super::AliasTitleLinker.instruments_in(&title("삼성전자, 4분기 실적 발표"), &aliases),
+            vec![samsung]
+        );
+        assert_eq!(
+            super::AliasTitleLinker.instruments_in(&title("환율 하락"), &aliases),
+            Vec::<domain::InstrumentId>::new()
+        );
+        assert_eq!(
+            super::AliasTitleLinker.instruments_in(&title("삼성전자"), &[]),
+            Vec::<domain::InstrumentId>::new()
+        );
     }
 
     #[test]

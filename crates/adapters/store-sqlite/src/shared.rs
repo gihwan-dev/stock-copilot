@@ -848,3 +848,20 @@ impl application::WatchlistRepository for SqliteRepositories {
         .await
     }
 }
+
+impl application::InformationLinks for SqliteRepositories {
+    async fn set_instruments(
+        &self,
+        item: &application::InformationKey,
+        instruments: &[InstrumentId],
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::InformationLinks::set_instruments(
+            &InformationStore::new(database),
+            item,
+            instruments,
+        )
+        .await
+    }
+}
