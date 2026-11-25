@@ -452,3 +452,34 @@ fn populated_index_survives_database_reopen_and_integrity_check() {
         Ok(vec![CollectedEntry::News(item)])
     );
 }
+
+#[test]
+fn collected_url_catalog_knows_only_urls_the_app_collected() {
+    use application::CollectedUrlCatalog;
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = InformationStore::new(&database);
+    let item = news(
+        NewsSource::Yonhap,
+        "https://www.yna.co.kr/view/AKR1",
+        "기사",
+        None,
+    );
+    rt.block_on(store.store(&item)).expect("save");
+    let parse = |raw: &str| {
+        domain::ParsedExternalUrl::parse(&domain::ExternalUrlInput::new(raw)).expect("주소")
+    };
+    let known = rt
+        .block_on(store.find_collected(&parse("https://www.yna.co.kr/view/AKR1")))
+        .expect("조회");
+    assert_eq!(
+        known,
+        Some(NormalizedUrl::try_new("https://www.yna.co.kr/view/AKR1").expect("url"))
+    );
+    let unknown = rt
+        .block_on(store.find_collected(&parse("https://evil.example/view/AKR1")))
+        .expect("조회");
+    assert_eq!(unknown, None);
+}

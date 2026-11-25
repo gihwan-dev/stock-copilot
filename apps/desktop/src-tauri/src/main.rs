@@ -164,6 +164,39 @@ fn product_self_check(
     )
 }
 
+const OPEN_COMMAND: &str = "/usr/bin/open";
+
+struct MacUrlOpener;
+
+fn open_url(
+    url: &str,
+) -> Result<application::ExternalUrlOpened, application::ExternalUrlOpenerError> {
+    let status = std::process::Command::new(OPEN_COMMAND)
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|_error| application::ExternalUrlOpenerError::LaunchFailed)?;
+    if status.success() {
+        Ok(application::ExternalUrlOpened)
+    } else {
+        Err(application::ExternalUrlOpenerError::LaunchFailed)
+    }
+}
+
+impl application::ExternalUrlOpener for MacUrlOpener {
+    async fn open(
+        &self,
+        url: &domain::AuthorizedExternalUrl,
+    ) -> Result<application::ExternalUrlOpened, application::ExternalUrlOpenerError> {
+        let target = String::from(url.canonical_url().as_str());
+        tauri::async_runtime::spawn_blocking(move || open_url(&target))
+            .await
+            .map_err(|_error| application::ExternalUrlOpenerError::LaunchFailed)?
+    }
+}
+
 const PUBLIC_IP_SERVICE: &str = "https://api.ipify.org";
 const CLIPBOARD_COMMAND: &str = "/usr/bin/pbcopy";
 
@@ -535,8 +568,8 @@ fn product_builder(
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ExternalLinkRuntime::new(
-            Arc::new(Unavailable),
-            Arc::new(Unavailable),
+            Arc::clone(repositories),
+            Arc::new(MacUrlOpener),
         ))
         .manage(scheduler_events)
         .manage(Arc::clone(repositories))

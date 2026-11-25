@@ -777,6 +777,18 @@ impl application::CollectedTimes for SqliteRepositories {
     }
 }
 
+impl application::CollectedUrlCatalog for SqliteRepositories {
+    async fn find_collected(
+        &self,
+        url: &domain::ParsedExternalUrl,
+    ) -> Result<Option<domain::NormalizedUrl>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedUrlCatalog::find_collected(&InformationStore::new(database), url)
+            .await
+    }
+}
+
 impl application::CollectedItemReads for SqliteRepositories {
     async fn collected_since(
         &self,
