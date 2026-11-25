@@ -557,3 +557,237 @@ where
         self.draft_inputs(instrument, account, current, now)
     }
 }
+
+const OPEN_POLL_SECONDS: u64 = 60;
+const MAX_OPEN_WAITS: u8 = 3;
+const SHORT_ID_CHARS: usize = 8;
+
+pub trait SignalPipelineRun: Send + Sync {
+    fn on_submitted(&self, instrument: InstrumentId) -> crate::ipc::state::BoxFuture<'_, ()>;
+}
+
+#[derive(Default)]
+pub struct SignalPipelineSlot(std::sync::OnceLock<Arc<dyn SignalPipelineRun>>);
+
+impl std::fmt::Debug for SignalPipelineSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SignalPipelineSlot")
+    }
+}
+
+impl SignalPipelineSlot {
+    #[must_use]
+    pub fn subscribed_kinds() -> std::collections::BTreeSet<domain::DomainEventKind> {
+        std::collections::BTreeSet::from([domain::DomainEventKind::EstimateSubmitted])
+    }
+
+    pub fn bind(&self, run: Arc<dyn SignalPipelineRun>) {
+        let _first = self.0.set(run);
+    }
+
+    #[must_use]
+    pub fn bound(&self) -> Option<Arc<dyn SignalPipelineRun>> {
+        self.0.get().map(Arc::clone)
+    }
+}
+
+#[derive(Debug)]
+pub struct BridgedSignalPipeline(pub Arc<SignalPipelineSlot>);
+
+impl application::EventSubscriber for BridgedSignalPipeline {
+    fn on_event(&self, event: &domain::DomainEvent) -> Result<(), application::SubscriberFailure> {
+        if let (domain::DomainEvent::EstimateSubmitted(submitted), Some(run)) =
+            (event, self.0.bound())
+        {
+            let instrument = submitted.clone();
+            let _spawned = tauri::async_runtime::spawn(async move {
+                run.on_submitted(instrument).await;
+            });
+        }
+        Ok(())
+    }
+}
+
+fn short_id(instrument: &InstrumentId) -> String {
+    instrument
+        .as_str()
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .take(SHORT_ID_CHARS)
+        .collect()
+}
+
+#[must_use]
+pub fn occurrence_id(
+    instrument: &InstrumentId,
+    now: Timestamp,
+) -> Option<domain::BuySignalOccurrenceId> {
+    domain::BuySignalOccurrenceId::try_new(&format!(
+        "occ-{}-{}-{}",
+        short_id(instrument),
+        now.utc_seconds().as_i64(),
+        now.nanosecond().as_u32()
+    ))
+    .ok()
+}
+
+#[must_use]
+pub fn proposal_id(instrument: &InstrumentId, now: Timestamp) -> Option<domain::ProposalId> {
+    domain::ClientOrderId::try_new(&format!(
+        "p-{}-{}{:09}",
+        short_id(instrument),
+        now.utc_seconds().as_i64(),
+        now.nanosecond().as_u32()
+    ))
+    .ok()
+    .map(domain::ProposalId::new)
+}
+
+pub struct FlowReestimate(pub Arc<dyn crate::estimate_flow::EstimateFlow>);
+
+impl std::fmt::Debug for FlowReestimate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FlowReestimate")
+    }
+}
+
+impl application::ReestimateScheduler for FlowReestimate {
+    fn schedule(
+        &self,
+        instrument: &InstrumentId,
+        _task: &domain::IssuedEstimateTaskId,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        let flow = Arc::clone(&self.0);
+        let subject = application::IntradayReviewSubject::PriceMove(instrument.clone());
+        let _spawned = tauri::async_runtime::spawn(async move {
+            let _outcome = flow.intraday(&subject).await;
+        });
+        std::future::ready(Ok(application::WriteCompleted))
+    }
+}
+
+pub struct ProductSignalPipeline<B, S, F, C> {
+    pub data: ProductSignalData<B, S, F>,
+    pub store: Arc<S>,
+    pub clock: Arc<C>,
+    pub events: Arc<application::EventBus>,
+    pub reestimate: FlowReestimate,
+}
+
+impl<B, S, F, C> std::fmt::Debug for ProductSignalPipeline<B, S, F, C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProductSignalPipeline")
+    }
+}
+
+fn next_regular_open(calendar: &domain::MarketCalendar, now: Timestamp) -> Option<Timestamp> {
+    [calendar.today(), calendar.next_business_day()]
+        .into_iter()
+        .filter_map(|row| {
+            row.sessions()
+                .iter()
+                .find(|segment| segment.state() == domain::MarketState::RegularMarket)
+                .map(|segment| segment.session().interval().start())
+        })
+        .find(|start| *start > now)
+}
+
+impl<B, S, F, C> ProductSignalPipeline<B, S, F, C>
+where
+    B: BrokerRead + MarketInfo + 'static,
+    S: EstimateResolutionRepository
+        + EstimateRepository
+        + MarketDataRepository
+        + SettingsRepository
+        + application::SignalRepository
+        + application::SignalInvalidationRepository
+        + application::EstimateSubmissionRepository
+        + application::ProposalRepository
+        + 'static,
+    F: PortfolioRepository + 'static,
+    C: application::Clock + 'static,
+{
+    async fn evaluate(&self, instrument: &InstrumentId) -> Option<()> {
+        let now = self.clock.now();
+        let occurrence = occurrence_id(instrument, now)?;
+        application::EvaluateSignals::new(self.store.as_ref(), &self.data, &self.events)
+            .execute(instrument, now, occurrence)
+            .await
+            .ok()
+            .map(|_outcome| ())
+    }
+
+    async fn draft(&self, instrument: &InstrumentId) -> Option<application::DraftProposalOutcome> {
+        let account = self.data.parts.accounts.current().into_iter().next()?;
+        let id = proposal_id(instrument, self.clock.now())?;
+        application::DraftProposal::new(
+            self.store.as_ref(),
+            &self.data,
+            &self.reestimate,
+            self.clock.as_ref(),
+            &self.events,
+        )
+        .execute(instrument, &account, id)
+        .await
+        .ok()
+    }
+
+    async fn wait_for_open(&self, instrument: &InstrumentId) -> Option<()> {
+        let master = self.data.parts.directory.master(instrument)?;
+        let quote = master.quote_instrument().ok()?;
+        let now = self.clock.now();
+        let calendar = self
+            .data
+            .parts
+            .days
+            .calendar_on(*quote.market(), now.offset_calendar_date())
+            .await
+            .ok()?;
+        let open = next_regular_open(&calendar, now)?;
+        while self.clock.now() < open {
+            tokio::time::sleep(std::time::Duration::from_secs(OPEN_POLL_SECONDS)).await;
+        }
+        Some(())
+    }
+
+    pub async fn run(&self, instrument: InstrumentId) {
+        if self.evaluate(&instrument).await.is_none() {
+            return;
+        }
+        for _ in 0..MAX_OPEN_WAITS {
+            let closed = match self.draft(&instrument).await {
+                Some(application::DraftProposalOutcome::MarketClosed) => true,
+                Some(
+                    application::DraftProposalOutcome::Created { .. }
+                    | application::DraftProposalOutcome::Existing { .. }
+                    | application::DraftProposalOutcome::NoSignal
+                    | application::DraftProposalOutcome::ReestimateScheduled { .. },
+                )
+                | None => false,
+            };
+            if !closed || self.wait_for_open(&instrument).await.is_none() {
+                return;
+            }
+        }
+    }
+}
+
+impl<B, S, F, C> SignalPipelineRun for ProductSignalPipeline<B, S, F, C>
+where
+    B: BrokerRead + MarketInfo + 'static,
+    S: EstimateResolutionRepository
+        + EstimateRepository
+        + MarketDataRepository
+        + SettingsRepository
+        + application::SignalRepository
+        + application::SignalInvalidationRepository
+        + application::EstimateSubmissionRepository
+        + application::ProposalRepository
+        + 'static,
+    F: PortfolioRepository + 'static,
+    C: application::Clock + 'static,
+{
+    fn on_submitted(&self, instrument: InstrumentId) -> crate::ipc::state::BoxFuture<'_, ()> {
+        Box::pin(self.run(instrument))
+    }
+}

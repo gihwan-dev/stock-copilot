@@ -7,8 +7,8 @@ use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::broker_link::{AccountSelector, BrokerMarketTools};
 use src_tauri::collected_links::{CollectedLinker, TitleLinker};
 use src_tauri::estimate_flow::{
-    BackgroundQuota, EstimateFlowParts, EstimateFlowSlot, EstimateRunBook, ProductEstimateFlow,
-    ProductMaterials, UnavailableEstimateFlow,
+    BackgroundQuota, CalendarDays, EstimateFlow, EstimateFlowParts, EstimateFlowSlot,
+    EstimateRunBook, ProductEstimateFlow, ProductMaterials, UnavailableEstimateFlow,
 };
 use src_tauri::holdings_link::{
     HoldingsListener, InstrumentDirectory, InstrumentMasterFeed, MasterRefresh, PortsHoldingsSync,
@@ -37,6 +37,10 @@ use src_tauri::platform::scheduling::SpecWatchInputs;
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
+};
+use src_tauri::signal_flow::{
+    BridgedSignalPipeline, FlowReestimate, ProductSignalData, ProductSignalPipeline,
+    SignalDataParts, SignalPipelineSlot,
 };
 use src_tauri::toss_link::{
     ProbeFailure, ProbeResult, SharedClock, SharedSecrets, TossLink, TossLinkState, TossProbe,
@@ -84,14 +88,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     let ui_events = Arc::new(UiEventSlot::<tauri::Wry>::default());
     let intraday = Arc::new(IntradayWatchSlot::new());
-    let (bus, scheduler_events) = product_event_bus(ProductSubscribers {
+    let signals = Arc::new(SignalPipelineSlot::default());
+    let (events, scheduler_events) = product_event_bus(ProductSubscribers {
         notifier: Arc::clone(&notifier),
         audit: Arc::clone(&repositories),
         clock: Arc::clone(&shared_clock),
         ui_events: Arc::clone(&ui_events),
         intraday: Arc::clone(&intraday),
+        signals: Arc::clone(&signals),
     });
-    let events = Arc::new(bus);
     let toss = product_toss(&shared_clock, &events, &repositories)?;
     let turns = ChatTurnBook::new();
     let directory = InstrumentDirectory::default();
@@ -115,8 +120,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let self_check = product_self_check(&ai, &repositories);
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
     let holdings = holdings_listener(&ports, &toss, &repositories, &directory, &shared_clock);
-    let calendars = product_calendars(&toss);
-    let flow = product_estimate_flow(&ports, &toss, (&directory, estimate_runs), &calendars);
+    let (flow, calendars) =
+        product_estimate_flow(&ports, &toss, (&directory, estimate_runs), &signals);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
             .manage(directory)
@@ -195,19 +200,24 @@ fn product_estimate_flow(
     ports: &Ports<AppPortTypes>,
     toss: &ProductToss,
     (directory, runs): (&InstrumentDirectory, EstimateRunBook),
-    calendars: &Arc<ProductCalendars>,
-) -> EstimateFlowSlot {
+    signals: &SignalPipelineSlot,
+) -> (EstimateFlowSlot, Arc<ProductCalendars>) {
+    let calendars = product_calendars(toss);
     let Some(identity) = estimate_identity() else {
-        return EstimateFlowSlot(Arc::new(UnavailableEstimateFlow));
+        return (
+            EstimateFlowSlot(Arc::new(UnavailableEstimateFlow)),
+            calendars,
+        );
     };
+    let days: Arc<dyn CalendarDays> = Arc::<ProductCalendars>::clone(&calendars);
     let materials = ProductMaterials {
         broker: Arc::clone(&toss.broker),
         settings: Arc::clone(&ports.settings),
         directory: directory.clone(),
         accounts: toss.accounts.clone(),
-        days: Arc::<ProductCalendars>::clone(calendars),
+        days: Arc::clone(&days),
     };
-    let flow = ProductEstimateFlow::new(EstimateFlowParts {
+    let flow: Arc<dyn EstimateFlow> = Arc::new(ProductEstimateFlow::new(EstimateFlowParts {
         materials,
         store: Arc::clone(&ports.settings),
         portfolios: Arc::clone(&ports.portfolios),
@@ -216,8 +226,22 @@ fn product_estimate_flow(
         clock: Arc::clone(&ports.clock),
         runs,
         identity,
-    });
-    EstimateFlowSlot(Arc::new(flow))
+    }));
+    signals.bind(Arc::new(ProductSignalPipeline {
+        data: ProductSignalData::new(SignalDataParts {
+            broker: Arc::clone(&toss.broker),
+            store: Arc::clone(&ports.settings),
+            portfolios: Arc::clone(&ports.portfolios),
+            directory: directory.clone(),
+            accounts: toss.accounts.clone(),
+            days,
+        }),
+        store: Arc::clone(&ports.settings),
+        clock: Arc::clone(&ports.clock),
+        events: Arc::clone(&ports.events),
+        reestimate: FlowReestimate(Arc::clone(&flow)),
+    }));
+    (EstimateFlowSlot(flow), calendars)
 }
 
 struct ProductAiStatus {
@@ -1407,11 +1431,15 @@ struct ProductSubscribers<D> {
     clock: Arc<platform_macos::SystemClock>,
     ui_events: Arc<UiEventSlot<tauri::Wry>>,
     intraday: Arc<IntradayWatchSlot>,
+    signals: Arc<SignalPipelineSlot>,
 }
 
 fn product_event_bus<D: NotificationDelivery + 'static>(
     subscribers: ProductSubscribers<D>,
-) -> (application::EventBus, Arc<scheduler::SchedulerEventBridge>) {
+) -> (
+    Arc<application::EventBus>,
+    Arc<scheduler::SchedulerEventBridge>,
+) {
     let bridge = Arc::new(scheduler::SchedulerEventBridge::new());
     let mut builder = application::EventBusBuilder::default();
     builder.subscribe(
@@ -1422,6 +1450,10 @@ fn product_event_bus<D: NotificationDelivery + 'static>(
     builder.subscribe(
         IntradayWatchSlot::subscribed_kinds(),
         BridgedIntradayWatch(subscribers.intraday),
+    );
+    builder.subscribe(
+        SignalPipelineSlot::subscribed_kinds(),
+        BridgedSignalPipeline(subscribers.signals),
     );
     builder.subscribe(
         NotificationEventSubscriber::<
@@ -1441,7 +1473,7 @@ fn product_event_bus<D: NotificationDelivery + 'static>(
             FlushingAuditSink::new(AuditEventQueue::default(), subscribers.audit),
         ),
     );
-    (builder.build(), bridge)
+    (Arc::new(builder.build()), bridge)
 }
 
 fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseFactory {
@@ -1839,6 +1871,7 @@ mod product_bus_tests {
             clock,
             ui_events: Arc::new(UiEventSlot::<tauri::Wry>::default()),
             intraday: Arc::new(src_tauri::platform::intraday::IntradayWatchSlot::new()),
+            signals: Arc::new(src_tauri::signal_flow::SignalPipelineSlot::default()),
         });
         let _cleared = events.publish(DomainEvent::SignalCleared(instrument()));
         let _raised = events.publish(DomainEvent::SignalRaised(instrument()));
