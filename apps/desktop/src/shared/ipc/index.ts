@@ -194,3 +194,4 @@ export {
   saveOrderSettings,
 } from "./risk-call";
 export { getSelfCheck, getStatus } from "./status-call";
+export { getScorecard } from "./scorecard-call";
