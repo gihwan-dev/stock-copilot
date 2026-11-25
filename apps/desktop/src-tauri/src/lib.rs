@@ -1,9 +1,11 @@
+pub mod ai_runtime;
 pub mod audit_queue;
 pub mod bindings;
 pub mod database;
 pub mod exit;
 pub mod ipc;
 pub mod lifecycle;
+pub mod mcp_catalog;
 pub mod platform;
 pub mod ports;
 pub mod product_events;

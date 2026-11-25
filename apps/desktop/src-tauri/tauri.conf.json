@@ -24,6 +24,16 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["app"],
+    "icon": ["icons/icon.png"],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "hardenedRuntime": true,
+      "entitlements": "Entitlements.plist",
+      "files": {
+        "embedded.provisionprofile": "signing/embedded.provisionprofile"
+      }
+    }
   }
 }

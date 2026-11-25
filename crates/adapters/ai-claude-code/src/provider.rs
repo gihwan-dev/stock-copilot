@@ -1,3 +1,4 @@
+use crate::attachment::RunMcpAttachment;
 use crate::command::{
     CommandBuildError, CommandPlan, CommandPlanInput, HostEnvironment, McpBridgeConfig,
     McpConfigSource, RunWorkspace, TokenEnvInclusion, build_command_plan, prepare_run_workspace,
@@ -219,6 +220,16 @@ impl ClaudeCodeConfig {
         work_dir: &Path,
         mcp_config_path: &Path,
     ) -> Result<CommandPlan, CommandBuildError> {
+        self.plan_with_token(spec, work_dir, mcp_config_path, self.mcp_token.as_ref())
+    }
+
+    fn plan_with_token(
+        &self,
+        spec: &RunSpec,
+        work_dir: &Path,
+        mcp_config_path: &Path,
+        mcp_token: Option<&SecretValue>,
+    ) -> Result<CommandPlan, CommandBuildError> {
         let model = self.model_defaults.resolve(spec.model());
         let input = CommandPlanInput {
             executable: &self.executable_path,
@@ -231,7 +242,7 @@ impl ClaudeCodeConfig {
             analysis_tools: &self.analysis_tools,
             collection_json_schema: self.collection_json_schema.as_deref(),
             host_env: self.host_env.as_ref(),
-            mcp_token: self.mcp_token.as_ref(),
+            mcp_token,
         };
         let plan = build_command_plan(&input)?;
         Ok(match &self.sandbox {
@@ -240,9 +251,22 @@ impl ClaudeCodeConfig {
         })
     }
 
-    fn mcp_source_for(&self, kind: RunKind) -> Result<McpConfigSource<'_>, CommandBuildError> {
+    fn mcp_source_for<'a>(
+        &'a self,
+        kind: RunKind,
+        attachment: Option<&'a RunMcpAttachment>,
+    ) -> Result<McpConfigSource<'a>, CommandBuildError> {
         if kind == RunKind::Collection {
-            return Ok(McpConfigSource::Empty);
+            return match attachment {
+                Some(_) => Err(CommandBuildError::McpAttachedToCollection),
+                None => Ok(McpConfigSource::Empty),
+            };
+        }
+        if let Some(attached) = attachment {
+            if attached.bridge().server_name() != self.expected_mcp_server {
+                return Err(CommandBuildError::InvalidMcpServerName);
+            }
+            return Ok(McpConfigSource::Bridge(attached.bridge()));
         }
         if let Some(bridge) = self.mcp_bridge.as_ref() {
             if bridge.server_name() != self.expected_mcp_server {
@@ -322,10 +346,19 @@ impl ClaudeCodeProvider {
         &self,
         spec: &RunSpec,
     ) -> Result<(RunWorkspace, SpawnSpec, TokenEnvInclusion), CommandBuildError> {
-        let mcp_source = self.config.mcp_source_for(spec.kind())?;
-        let token_for_workspace = match spec.kind() {
-            RunKind::Analysis => self.config.mcp_token.as_ref(),
-            RunKind::Collection => None,
+        self.prepare_spawn_with(spec, None)
+    }
+
+    fn prepare_spawn_with(
+        &self,
+        spec: &RunSpec,
+        attachment: Option<&RunMcpAttachment>,
+    ) -> Result<(RunWorkspace, SpawnSpec, TokenEnvInclusion), CommandBuildError> {
+        let mcp_source = self.config.mcp_source_for(spec.kind(), attachment)?;
+        let token_for_workspace = match (spec.kind(), attachment) {
+            (RunKind::Analysis, Some(attached)) => Some(attached.token()),
+            (RunKind::Analysis, None) => self.config.mcp_token.as_ref(),
+            (RunKind::Collection, _) => None,
         };
         let workspace = prepare_run_workspace(
             &self.config.work_dir,
@@ -333,10 +366,11 @@ impl ClaudeCodeProvider {
             mcp_source,
             token_for_workspace,
         )?;
-        let plan = self.config.preview_command_plan(
+        let plan = self.config.plan_with_token(
             spec,
             workspace.work_dir(),
             workspace.mcp_config_path(),
+            token_for_workspace,
         )?;
         let (executable, args, work_dir, env, token_inclusion) = plan.into_parts();
         let spawn_spec = SpawnSpec {
@@ -353,15 +387,28 @@ impl ClaudeCodeProvider {
         spec: &RunSpec,
         prompt_text: Option<String>,
     ) -> Result<ClaudeEventStream, InformationError> {
+        self.spawn_stream_with(spec, prompt_text, None).await
+    }
+
+    async fn spawn_stream_with(
+        &self,
+        spec: &RunSpec,
+        prompt_text: Option<String>,
+        mut attachment: Option<RunMcpAttachment>,
+    ) -> Result<ClaudeEventStream, InformationError> {
         let (workspace, spawn_spec, token_inclusion) = self
-            .prepare_spawn(spec)
+            .prepare_spawn_with(spec, attachment.as_ref())
             .map_err(CommandBuildError::to_information_error)?;
-        let token_for_child = match token_inclusion {
-            TokenEnvInclusion::Included => self.config.mcp_token.as_ref(),
-            TokenEnvInclusion::Omitted => None,
+        let token_for_child = match (token_inclusion, attachment.as_ref()) {
+            (TokenEnvInclusion::Included, Some(attached)) => Some(attached.token()),
+            (TokenEnvInclusion::Included, None) => self.config.mcp_token.as_ref(),
+            (TokenEnvInclusion::Omitted, _) => None,
         };
         let spawned = spawn_isolated_child(&spawn_spec, token_for_child)
             .map_err(|_error| InformationError::Unavailable(ResetTime::NotProvided))?;
+        if let Some(notice) = attachment.as_mut().and_then(RunMcpAttachment::take_notice) {
+            notice.notify(spawned.pid);
+        }
         let run_id_key = String::from(spec.id().as_str());
         self.active_runs
             .register(run_id_key.clone(), Arc::clone(&spawned.shared))
@@ -401,6 +448,75 @@ impl ClaudeCodeProvider {
             _cancel_guard: cancel_guard,
         })
     }
+
+    pub async fn run_attached(
+        &self,
+        spec: RunSpec,
+        attachment: RunMcpAttachment,
+    ) -> Result<ClaudeEventStream, InformationError> {
+        let prompt_text = format_run_input(spec.input());
+        self.spawn_stream_with(&spec, Some(prompt_text), Some(attachment))
+            .await
+    }
+
+    pub async fn resume_attached(
+        &self,
+        spec: RunSpec,
+        history: ChatHistory,
+        message: UntrustedText,
+        attachment: RunMcpAttachment,
+    ) -> Result<ClaudeEventStream, InformationError> {
+        let prompt_text = format_resumed_prompt(&history, &message);
+        self.spawn_stream_with(&spec, Some(prompt_text), Some(attachment))
+            .await
+    }
+
+    pub async fn verify_isolation_attached(
+        &self,
+        attachment: RunMcpAttachment,
+    ) -> Result<IsolationCheck, InformationError> {
+        self.probe_isolation(RunKind::Analysis, Some(attachment))
+            .await
+    }
+
+    async fn probe_isolation(
+        &self,
+        kind: RunKind,
+        attachment: Option<RunMcpAttachment>,
+    ) -> Result<IsolationCheck, InformationError> {
+        let seq = PROBE_SEQUENCE.fetch_add(1_u64, std::sync::atomic::Ordering::Relaxed);
+        let probe_id = AiRunId::try_new(&format!("isolation-probe-{seq}"))
+            .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))?;
+        let prompt = application::AnalysisPrompt::try_new(PREFLIGHT_MESSAGE)
+            .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))?;
+        let (input, purpose) = match kind {
+            RunKind::Analysis => (RunInput::Analysis(prompt), application::RunPurpose::Chat),
+            RunKind::Collection => (
+                RunInput::Collection(CollectionQuery::CodeTopics {
+                    instruments: Vec::new(),
+                    topics: Vec::new(),
+                }),
+                application::RunPurpose::WebCollection,
+            ),
+        };
+        let probe_spec = RunSpec::new(
+            probe_id,
+            input,
+            ModelSelection::Default,
+            ReasoningEffort::Default,
+            purpose,
+        );
+        let mut stream = self
+            .spawn_stream_with(&probe_spec, None, attachment)
+            .await?;
+        let Some(AiEvent::IsolationChecked(check)) = stream.next().await? else {
+            return Err(InformationError::InvalidResponse(
+                ResponseMismatch::Validation,
+            ));
+        };
+        while stream.next().await?.is_some() {}
+        Ok(check)
+    }
 }
 
 impl AiProvider for ClaudeCodeProvider {
@@ -436,36 +552,7 @@ impl AiProvider for ClaudeCodeProvider {
     }
 
     async fn verify_isolation(&self, kind: RunKind) -> Result<IsolationCheck, InformationError> {
-        let seq = PROBE_SEQUENCE.fetch_add(1_u64, std::sync::atomic::Ordering::Relaxed);
-        let probe_id = AiRunId::try_new(&format!("isolation-probe-{seq}"))
-            .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))?;
-        let prompt = application::AnalysisPrompt::try_new(PREFLIGHT_MESSAGE)
-            .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))?;
-        let (input, purpose) = match kind {
-            RunKind::Analysis => (RunInput::Analysis(prompt), application::RunPurpose::Chat),
-            RunKind::Collection => (
-                RunInput::Collection(CollectionQuery::CodeTopics {
-                    instruments: Vec::new(),
-                    topics: Vec::new(),
-                }),
-                application::RunPurpose::WebCollection,
-            ),
-        };
-        let probe_spec = RunSpec::new(
-            probe_id,
-            input,
-            ModelSelection::Default,
-            ReasoningEffort::Default,
-            purpose,
-        );
-        let mut stream = self.spawn_stream(&probe_spec, None).await?;
-        let Some(AiEvent::IsolationChecked(check)) = stream.next().await? else {
-            return Err(InformationError::InvalidResponse(
-                ResponseMismatch::Validation,
-            ));
-        };
-        while stream.next().await?.is_some() {}
-        Ok(check)
+        self.probe_isolation(kind, None).await
     }
 }
 

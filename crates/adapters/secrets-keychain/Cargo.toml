@@ -6,3 +6,10 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+application = { path = "../../application" }
+security-framework = { version = "=3.7.0", default-features = false, features = ["OSX_10_15"] }
+
+[dev-dependencies]
+testkit-ports = { path = "../../testkit-ports" }
