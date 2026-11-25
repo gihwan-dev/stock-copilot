@@ -50,7 +50,7 @@ impl<R: Runtime, P: PortTypes> PortfolioSyncPort for AppPortfolioSync<R, P> {
             .app
             .try_state::<Ports<P>>()
             .ok_or_else(|| JobError::PortUnavailable(String::from("ports")))?;
-        let parts = crate::holdings_link::SyncParts {
+        let sync_parts = crate::holdings_link::SyncParts {
             broker: ports.broker_read.as_ref(),
             portfolios: ports.portfolios.as_ref(),
             clock: ports.clock.as_ref(),
@@ -61,7 +61,7 @@ impl<R: Runtime, P: PortTypes> PortfolioSyncPort for AppPortfolioSync<R, P> {
         let mut synced = 0_u32;
         let mut first_failure = None;
         for account in &ports.saved_accounts.current() {
-            match crate::holdings_link::sync_with_rate(&parts, account).await {
+            match crate::holdings_link::sync_with_rate(&sync_parts, account).await {
                 Ok(_report) => synced = synced.saturating_add(1),
                 Err(error) => {
                     first_failure = first_failure
