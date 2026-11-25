@@ -301,7 +301,14 @@ impl AiControls for QueueControls {
         percent: application::ScheduledBudgetPercent,
     ) -> BoxFuture<'_, BudgetApplied> {
         Box::pin(async move {
-            match self.0.set_scheduled_cap_percent(percent.as_percent()).await {
+            let cap = match percent {
+                application::ScheduledBudgetPercent::Fifty => 50,
+                application::ScheduledBudgetPercent::Sixty => 60,
+                application::ScheduledBudgetPercent::Seventy => 70,
+                application::ScheduledBudgetPercent::Eighty => 80,
+                application::ScheduledBudgetPercent::Ninety => 90,
+            };
+            match self.0.set_scheduled_cap_percent(cap).await {
                 Ok(_transition) => BudgetApplied::Applied,
                 Err(_invalid) => BudgetApplied::Refused,
             }

@@ -81,6 +81,16 @@ fn effort(raw: &str) -> rusqlite::Result<AiEffortChoice> {
     .ok_or_else(|| invalid(()))
 }
 
+const fn budget_text(value: ScheduledBudgetPercent) -> &'static str {
+    match value {
+        ScheduledBudgetPercent::Fifty => "50",
+        ScheduledBudgetPercent::Sixty => "60",
+        ScheduledBudgetPercent::Seventy => "70",
+        ScheduledBudgetPercent::Eighty => "80",
+        ScheduledBudgetPercent::Ninety => "90",
+    }
+}
+
 fn budget(raw: &str) -> rusqlite::Result<ScheduledBudgetPercent> {
     [
         ScheduledBudgetPercent::Fifty,
@@ -90,13 +100,13 @@ fn budget(raw: &str) -> rusqlite::Result<ScheduledBudgetPercent> {
         ScheduledBudgetPercent::Ninety,
     ]
     .into_iter()
-    .find(|candidate| candidate.as_percent().to_string() == raw)
+    .find(|candidate| budget_text(*candidate) == raw)
     .ok_or_else(|| invalid(()))
 }
 
 pub(crate) fn encode(preferences: &AiPreferences) -> String {
     let mut payload = String::from("budget:");
-    payload.push_str(&preferences.budget().as_percent().to_string());
+    payload.push_str(budget_text(preferences.budget()));
     payload.push_str("\ndir:");
     payload.push_str(preferences.config_dir().map_or("", ClaudeConfigDir::as_str));
     for preference in preferences.tasks() {
