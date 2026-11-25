@@ -1,8 +1,8 @@
-use crate::{ReadRequest, ReadRoute, TokenRenewal, TossAccountRead, TossDate};
+use crate::{QueryKey, ReadRequest, ReadRoute, TokenRenewal, TossAccountRead, TossDate};
 use application::{Clock, PortError, ReadEndpoint, SecretStore};
 use domain::{
-    AuctionBoundary, KnownMarket, MarketCalendar, MarketSession, SessionData, SessionInformation,
-    TimeInterval,
+    AuctionBoundary, CalendarDate, KnownMarket, MarketCalendar, MarketSession, SessionData,
+    SessionInformation, TimeInterval,
 };
 use serde_json::Value;
 const ENDPOINT: ReadEndpoint = ReadEndpoint::Calendar;
@@ -11,13 +11,40 @@ pub(crate) async fn fetch<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     market: KnownMarket,
 ) -> Result<MarketCalendar, PortError> {
+    fetch_request(reader, market, None).await
+}
+
+pub(crate) async fn fetch_on<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    market: KnownMarket,
+    date: CalendarDate,
+) -> Result<MarketCalendar, PortError> {
+    fetch_request(reader, market, Some(date)).await
+}
+
+fn date_text(value: CalendarDate) -> String {
+    format!(
+        "{:04}-{:02}-{:02}",
+        value.year().as_i32(),
+        value.month().as_u8(),
+        value.day().as_u8()
+    )
+}
+
+async fn fetch_request<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    market: KnownMarket,
+    date: Option<CalendarDate>,
+) -> Result<MarketCalendar, PortError> {
     let route = match market {
         KnownMarket::Kr => ReadRoute::CalendarKr,
         KnownMarket::Us => ReadRoute::CalendarUs,
     };
-    let value = reader
-        .market_read(ReadRequest::new(route), ENDPOINT)
-        .await?;
+    let request = match date {
+        Some(day) => ReadRequest::new(route).with_query(QueryKey::Date, date_text(day)),
+        None => ReadRequest::new(route),
+    };
+    let value = reader.market_read(request, ENDPOINT).await?;
     fields(&value, &["previousBusinessDay", "today", "nextBusinessDay"])?;
     let previous = day(required(&value, "previousBusinessDay")?, market)?;
     let today = day(required(&value, "today")?, market)?;

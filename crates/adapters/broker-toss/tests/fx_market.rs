@@ -310,6 +310,27 @@ mod tests {
         }
     }
     #[test]
+    fn calendar_on_asks_toss_for_the_given_business_day() {
+        let fixture = recording("kr");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &fixture["body"])])
+                .expect("server");
+        let date = domain::CalendarDate::from_parts(
+            domain::CalendarYear::new(2026),
+            domain::MonthNumber::new(3),
+            domain::DayNumber::new(25),
+        )
+        .expect("날짜");
+        let calendar = run(adapter(&server).calendar_on(KnownMarket::Kr, date)).expect("calendar");
+        assert_eq!(calendar.today().date(), date);
+        let captured = server.finish().expect("requests");
+        assert!(
+            String::from_utf8_lossy(&captured)
+                .contains("/api/v1/market-calendar/KR?date=2026-03-25"),
+            "날짜 인자"
+        );
+    }
+    #[test]
     fn calendars_reject_invalid_or_missing_time_and_date_order() {
         for (name, path, value) in [
             (

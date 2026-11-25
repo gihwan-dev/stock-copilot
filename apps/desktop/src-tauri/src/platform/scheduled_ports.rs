@@ -14,7 +14,9 @@ use scheduler::{
     DatabaseBackupPort, IntradayCompactionPort, JobError, SpecWatchPort, SpecWatchResult,
     TransactionSyncPort, TransactionSyncTally,
 };
-use scheduler::{DailyValuationPort, IntradayReviewPort, WatchCause};
+use scheduler::{
+    DailyValuationPort, EstimateResolutionPort, IntradayReviewPort, ResolutionTally, WatchCause,
+};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use store_sqlite::SqliteRepositories;
@@ -300,5 +302,45 @@ impl<R: Runtime, P: PortTypes> IntradayReviewPort for AppStoredJobs<R, P> {
                 Err(JobError::ExecutionFailed(format!("{outcome:?}")))
             }
         }
+    }
+}
+
+impl<R: Runtime, P: PortTypes> EstimateResolutionPort for AppStoredJobs<R, P> {
+    async fn resolve_due(&self, now: Timestamp) -> Result<ResolutionTally, JobError> {
+        use application::resolve_estimates::{ResolutionStatus, ResolveEstimates};
+        let ports = self.ports()?;
+        let slot = self
+            .app
+            .try_state::<crate::platform::resolution::ResolutionDataSlot>()
+            .map(|state| state.inner().clone())
+            .ok_or_else(|| JobError::PortUnavailable(String::from("resolution-data")))?;
+        let data = crate::platform::resolution::SlotData(slot.0.as_ref());
+        let reports = ResolveEstimates::new(&self.repositories, &data, &ports.events)
+            .execute(now)
+            .await
+            .map_err(storage)?;
+        let mut tally = ResolutionTally::default();
+        for report in reports {
+            match report.status {
+                ResolutionStatus::Resolved { brier, .. } => {
+                    tally.resolved = tally.resolved.saturating_add(1);
+                    tally.brier = brier
+                        .and_then(|comparison| tally.brier.clone().with(comparison))
+                        .unwrap_or_else(|| tally.brier.clone());
+                }
+                ResolutionStatus::AlreadyResolved => {
+                    tally.resolved = tally.resolved.saturating_add(1);
+                }
+                ResolutionStatus::Ongoing => tally.ongoing = tally.ongoing.saturating_add(1),
+                ResolutionStatus::Unavailable(_)
+                | ResolutionStatus::Storage(_)
+                | ResolutionStatus::Calibration(_)
+                | ResolutionStatus::MissingFact
+                | ResolutionStatus::Conflict => {
+                    tally.unavailable = tally.unavailable.saturating_add(1);
+                }
+            }
+        }
+        Ok(tally)
     }
 }

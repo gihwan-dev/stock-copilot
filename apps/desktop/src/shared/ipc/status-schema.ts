@@ -6,17 +6,12 @@ import {
   parseTimestamp,
   text,
   type FreeText,
-  type MessageKey,
   type Result,
   type Timestamp,
   type UiText,
 } from "../lib";
-import { settleWithSchema, type IpcFailure } from "./schema";
+import { settleWithSchema, type IpcFailure, type WireOutcome } from "./schema";
 import type { SelfCheckView, StatusView } from "./screen-sources";
-
-type CommandOutcome =
-  | { readonly status: "ok"; readonly data: unknown }
-  | { readonly status: "error"; readonly error: unknown };
 
 const sourceKeys = {
   "kind-disclosure": "source.kind-disclosure",
@@ -36,11 +31,9 @@ const sourceKeys = {
   "federal-reserve": "source.federal-reserve",
   "us-treasury": "source.us-treasury",
   fred: "source.fred",
-} as const satisfies Record<string, MessageKey>;
+} as const;
 
-type SourceCode = keyof typeof sourceKeys;
-
-const sourceCodes: readonly [SourceCode, ...SourceCode[]] = [
+const sourceCodes = [
   "kind-disclosure",
   "dart-disclosure-api",
   "dart-disclosure-rss",
@@ -58,7 +51,7 @@ const sourceCodes: readonly [SourceCode, ...SourceCode[]] = [
   "federal-reserve",
   "us-treasury",
   "fred",
-];
+] as const;
 
 const asFreeText = (value: UiText): FreeText => {
   const parsed = parseFreeText(value);
@@ -144,10 +137,10 @@ const statusSchema = z
   });
 
 export const settleSelfCheck = (
-  outcome: CommandOutcome,
+  outcome: WireOutcome,
 ): Result<SelfCheckView, IpcFailure> =>
   settleWithSchema(outcome, selfCheckSchema);
 
 export const settleStatus = (
-  outcome: CommandOutcome,
+  outcome: WireOutcome,
 ): Result<StatusView, IpcFailure> => settleWithSchema(outcome, statusSchema);

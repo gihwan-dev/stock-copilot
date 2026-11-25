@@ -249,6 +249,13 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
         stored(),
         Arc::new(NoMarketCalendar),
     ))?;
+    if app
+        .try_state::<crate::platform::resolution::ResolutionDataSlot>()
+        .is_some()
+    {
+        registry.register(scheduler::EstimateResolutionJob::domestic(stored()))?;
+        registry.register(scheduler::EstimateResolutionJob::us(stored()))?;
+    }
     if let Some(inputs) = spec_watch {
         registry.register(TossSpecWatchJob::new(Arc::new(AppSpecWatch::new(
             AppStoredJobs::<R, P>::new(app.clone(), repositories.clone()),

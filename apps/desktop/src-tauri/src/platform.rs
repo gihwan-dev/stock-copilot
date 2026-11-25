@@ -7,6 +7,7 @@ pub mod notifier;
 pub mod peer_process;
 pub mod process_cleanup;
 pub mod residency;
+pub mod resolution;
 pub mod scheduled_ports;
 pub mod scheduling;
 pub mod single_instance;
