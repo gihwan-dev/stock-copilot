@@ -431,7 +431,7 @@ fn repository_passes_disable_check() {
 }
 
 #[test]
-fn disable_report_lists_the_main_rs_and_local_auth_expects() {
+fn disable_report_lists_the_three_main_rs_expects() {
     let root = repository_root();
     let (ipc, found): (Vec<Row>, Vec<Row>) = repository_rows(&root)
         .expect("collect rows")
