@@ -14,6 +14,7 @@ import { ScorecardPanel } from "../features/scorecard";
 import { SignalCards } from "../features/signal";
 import { StatusScreen } from "../features/status";
 import { TransactionsScreen } from "../features/transactions";
+import { UpdateBar, UpdateCard } from "../features/updates";
 import {
   AppShell,
   Card,
@@ -23,6 +24,7 @@ import {
   Stack,
   Text,
 } from "../shared/ds";
+import { coreUpdateClient } from "../shared/ipc";
 import { queryKeys, text, type EntityId } from "../shared/lib";
 import { detach } from "../shared/platform";
 import { useNavigate, useSources, useSystemSettings } from "./context";
@@ -48,13 +50,16 @@ export const ShellLayout = (): ReactElement => {
       list={<InstrumentList sources={sources} onSelect={setShown} />}
       chat={<ChatSlot />}
       status={
-        <SelfCheckBar
-          load={sources.selfCheck}
-          onOpenSettings={(): void => {
-            setShown(undefined);
-            go("/settings");
-          }}
-        />
+        <>
+          <UpdateBar client={coreUpdateClient} />
+          <SelfCheckBar
+            load={sources.selfCheck}
+            onOpenSettings={(): void => {
+              setShown(undefined);
+              go("/settings");
+            }}
+          />
+        </>
       }
     >
       {shown === undefined ? (
@@ -187,6 +192,7 @@ export const SettingsRouteView = (): ReactElement => {
               ? [<SettingsSections key="sections" />]
               : []),
             <RiskEditors key="risk-editors" sources={sources} />,
+            <UpdateCard key="updates" client={coreUpdateClient} />,
             <AboutSection key="about" />,
           ]}
         </Stack>
