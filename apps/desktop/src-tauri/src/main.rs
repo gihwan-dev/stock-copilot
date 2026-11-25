@@ -603,7 +603,7 @@ fn claude_ai(
     events: &Arc<application::EventBus>,
     repositories: &Arc<SqliteRepositories>,
 ) -> Option<McpAttachedAi<ProductClaude, ProductMcpHost>> {
-    let runs = RunMetadataBook::new();
+    let runs = RunMetadataBook::new().with_hasher(Arc::new(store_sqlite::Sha256PromptHasher));
     let collector = LateAi::<ai_claude_code::ClaudeCodeProvider>::new();
     let registry = product_catalog(&setup, clock, events, repositories, (&runs, &collector))?;
     let base = ai_claude_code::ClaudeCodeConfig::new(

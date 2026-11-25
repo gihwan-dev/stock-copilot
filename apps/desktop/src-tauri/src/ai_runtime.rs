@@ -114,8 +114,21 @@ impl<S: AiEventStream, M: Send> AiEventStream for AttachedStream<S, M> {
 
 type MetadataMap = BTreeMap<String, ThesisRunMetadata>;
 
-#[derive(Debug, Clone, Default)]
-pub struct RunMetadataBook(Arc<RwLock<MetadataMap>>);
+type SharedHasher = Arc<dyn application::PromptHasher + Send + Sync>;
+
+#[derive(Clone, Default)]
+pub struct RunMetadataBook {
+    map: Arc<RwLock<MetadataMap>>,
+    hasher: Option<SharedHasher>,
+}
+
+impl fmt::Debug for RunMetadataBook {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RunMetadataBook")
+            .field("hashing", &self.hasher.is_some())
+            .finish_non_exhaustive()
+    }
+}
 
 fn model_label(model: &ModelSelection) -> &str {
     match model {
@@ -132,15 +145,35 @@ impl RunMetadataBook {
         Self::default()
     }
 
+    #[must_use]
+    pub fn with_hasher(mut self, hasher: SharedHasher) -> Self {
+        self.hasher = Some(hasher);
+        self
+    }
+
+    fn prompt_version(&self, spec: &RunSpec) -> String {
+        let purpose = format!("{:?}", spec.purpose());
+        let digest = match (spec.input(), self.hasher.as_ref()) {
+            (application::RunInput::Analysis(prompt), Some(hasher)) => hasher
+                .digest(&application::PromptSource::new(prompt.as_str()))
+                .ok(),
+            (application::RunInput::Analysis(_) | application::RunInput::Collection(_), _) => None,
+        };
+        match digest.as_ref().and_then(|value| value.as_str().get(..16)) {
+            Some(short) => format!("{purpose}@sha256:{short}"),
+            None => purpose,
+        }
+    }
+
     fn record(&self, spec: &RunSpec) -> RunEntry {
         let metadata = UntrustedText::try_new(model_label(spec.model()))
             .ok()
-            .zip(UntrustedText::try_new(&format!("{:?}", spec.purpose())).ok())
+            .zip(UntrustedText::try_new(&self.prompt_version(spec)).ok())
             .map(|(model, prompt_version)| ThesisRunMetadata {
                 model,
                 prompt_version,
             });
-        if let (Some(entry), Ok(mut map)) = (metadata, self.0.write()) {
+        if let (Some(entry), Ok(mut map)) = (metadata, self.map.write()) {
             let _previous = map.insert(spec.id().as_str().to_owned(), entry);
         }
         RunEntry {
@@ -151,7 +184,7 @@ impl RunMetadataBook {
 
     #[must_use]
     pub fn thesis_metadata(&self, run: &AiRunId) -> Option<ThesisRunMetadata> {
-        self.0.read().ok()?.get(run.as_str()).cloned()
+        self.map.read().ok()?.get(run.as_str()).cloned()
     }
 }
 
@@ -163,7 +196,7 @@ pub struct RunEntry {
 
 impl Drop for RunEntry {
     fn drop(&mut self) {
-        if let Ok(mut map) = self.book.0.write() {
+        if let Ok(mut map) = self.book.map.write() {
             let _removed = map.remove(&self.run);
         }
     }
