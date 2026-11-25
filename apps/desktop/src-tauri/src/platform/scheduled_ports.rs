@@ -1,10 +1,14 @@
 use crate::ports::{PortTypes, Ports};
+use application::MarketInfo as _;
 use application::{
     BriefingOutcome, CheckTossSpec, FullInspectionRun, HoldingsBriefingContext, RunBriefing,
-    RunFullInspection, SecretKey, SecretStore, SpecDriftStatus, TossSpecBaseline, TossSpecSource,
-    TransactionSchedule,
+    RunFullInspection, SecretKey, SecretStore, SpecDriftStatus, TakeValuationSnapshot,
+    TossSpecBaseline, TossSpecSource, TransactionSchedule,
 };
-use domain::{BriefingKind, InspectionRangeDays, Timestamp};
+use domain::{
+    BriefingKind, CalendarDate, InspectionRangeDays, KnownMarket, SnapshotCalendar, Timestamp,
+};
+use scheduler::DailyValuationPort;
 use scheduler::{
     BackupResult, BackupRetention, BriefingPort, BriefingRunResult, CompactionResult,
     DatabaseBackupPort, IntradayCompactionPort, JobError, SpecWatchPort, SpecWatchResult,
@@ -217,5 +221,55 @@ impl<R: Runtime, P: PortTypes> BriefingPort for AppStoredJobs<R, P> {
             BriefingOutcome::Completed { .. } => Ok(BriefingRunResult::Completed),
             BriefingOutcome::Failed(_) => Ok(BriefingRunResult::Failed),
         }
+    }
+}
+
+impl<R: Runtime, P: PortTypes> DailyValuationPort for AppStoredJobs<R, P> {
+    async fn record_today(&self, _now: Timestamp) -> Result<(), JobError> {
+        let ports = self.ports()?;
+        let unavailable = |_error| JobError::PortUnavailable(String::from("market-calendar"));
+        let kr = ports
+            .market_info
+            .calendar(KnownMarket::Kr)
+            .await
+            .map_err(unavailable)?;
+        let us = ports
+            .market_info
+            .calendar(KnownMarket::Us)
+            .await
+            .map_err(unavailable)?;
+        let calendar = SnapshotCalendar::new(&kr, &us)
+            .map_err(|error| JobError::ExecutionFailed(format!("{error:?}")))?;
+        let use_case = TakeValuationSnapshot::new(
+            ports.portfolios.as_ref(),
+            &self.repositories,
+            &self.repositories,
+            ports.clock.as_ref(),
+            &ports.events,
+        );
+        let mut first_failure = None;
+        for account in &ports.saved_accounts {
+            if let Err(error) = use_case.execute(account, &calendar).await {
+                first_failure =
+                    first_failure.or_else(|| Some(JobError::ExecutionFailed(format!("{error:?}"))));
+            }
+        }
+        first_failure.map_or(Ok(()), Err)
+    }
+
+    fn missing_days(
+        &self,
+        _now: Timestamp,
+    ) -> impl Future<Output = Result<Vec<CalendarDate>, JobError>> + Send {
+        std::future::ready(Ok(Vec::new()))
+    }
+
+    fn recompute_day(
+        &self,
+        _day: CalendarDate,
+    ) -> impl Future<Output = Result<(), JobError>> + Send {
+        std::future::ready(Err(JobError::PortUnavailable(String::from(
+            "valuation-backfill",
+        ))))
     }
 }
