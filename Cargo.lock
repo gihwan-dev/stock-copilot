@@ -3791,6 +3791,7 @@ dependencies = [
  "mcp-server",
  "platform-macos",
  "scheduler",
+ "secrets-keychain",
  "serde",
  "serde_json",
  "sources",

@@ -11,6 +11,63 @@ impl std::fmt::Debug for DatabaseFactory {
     }
 }
 
+pub struct DatabaseKeyProvision(
+    pub Box<dyn Fn() -> Result<SecretValue, SystemPortError> + Send + Sync>,
+);
+impl std::fmt::Debug for DatabaseKeyProvision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("DatabaseKeyProvision")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyProvisioning {
+    Existing,
+    Created,
+}
+
+pub async fn provision_database_key<S: SecretStore>(
+    secrets: &S,
+    provision: &DatabaseKeyProvision,
+    path: &DatabasePath,
+) -> Result<KeyProvisioning, SystemPortError> {
+    if let Some(_existing) = secrets.load(SecretKey::DatabaseEncryptionKey).await? {
+        return Ok(KeyProvisioning::Existing);
+    }
+    match path.as_path().try_exists() {
+        Ok(false) => {}
+        Ok(true) => {
+            return Err(SystemPortError::new(
+                application::SystemPort::SecretStore,
+                application::SystemFailure::SecretIntegrity,
+            ));
+        }
+        Err(_error) => {
+            return Err(SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::Unavailable(application::RetryDelay::Unknown),
+            ));
+        }
+    }
+    let key = (provision.0)()?;
+    secrets.store(SecretKey::DatabaseEncryptionKey, key).await?;
+    Ok(KeyProvisioning::Created)
+}
+
+pub async fn open_provisioned_database<S: SecretStore>(
+    secrets: &S,
+    provision: &DatabaseKeyProvision,
+    factory: Arc<DatabaseFactory>,
+    path: DatabasePath,
+) -> DatabaseState {
+    match provision_database_key(secrets, provision, &path).await {
+        Ok(KeyProvisioning::Existing | KeyProvisioning::Created) => {
+            open_database(secrets, factory, move || Ok(path)).await
+        }
+        Err(error) => DatabaseState::Failed(error),
+    }
+}
+
 #[derive(Debug)]
 pub enum DatabaseState {
     NotConfigured,

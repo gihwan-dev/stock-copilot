@@ -8,10 +8,12 @@ use application::{
     ValuationRepository,
 };
 use std::marker::PhantomData;
-type PortMarker<Store, Ai, Queue, Jobs> = fn() -> (Store, Ai, Queue, Jobs);
+type PortMarker<Store, Secrets, Ai, Queue, Jobs> = fn() -> (Store, Secrets, Ai, Queue, Jobs);
 #[derive(Debug)]
-pub struct ProductPorts<Store, Ai, Queue, Jobs>(PhantomData<PortMarker<Store, Ai, Queue, Jobs>>);
-impl<Store, Ai, Queue, Jobs> PortTypes for ProductPorts<Store, Ai, Queue, Jobs>
+pub struct ProductPorts<Store, Secrets, Ai, Queue, Jobs>(
+    PhantomData<PortMarker<Store, Secrets, Ai, Queue, Jobs>>,
+);
+impl<Store, Secrets, Ai, Queue, Jobs> PortTypes for ProductPorts<Store, Secrets, Ai, Queue, Jobs>
 where
     Ai: AiProvider + 'static,
     Queue: ChatQueuePort + 'static,
@@ -30,6 +32,7 @@ where
         + SettingsRepository
         + AuditLog
         + 'static,
+    Secrets: application::SecretStore + 'static,
 {
     type BrokerRead = Unavailable;
     type MarketInfo = Unavailable;
@@ -53,7 +56,7 @@ where
     type ValuationRepository = Store;
     type SettingsRepository = Store;
     type AuditLog = Store;
-    type SecretStore = Unavailable;
+    type SecretStore = Secrets;
     type Clock = platform_macos::SystemClock;
     type Notifier = FilteredNotifier<UnavailableNotificationDelivery>;
     type UserPresence =
