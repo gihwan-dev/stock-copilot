@@ -1,13 +1,14 @@
-use application::{AiRunId, EstimateRunContext, ReasoningEffort};
+use application::{AiRunId, EstimateRunContext, EstimateTaskMaterials, ReasoningEffort};
 use domain::{
     AdjustmentBasis, CalibrationModel, Candle, CandleObservation, CandlePeriod, CandleStatus,
     CandleTime, CommissionRateFact, CommissionValidity, CommonShare, CostEligibleTask, CostRate,
     Currency, DisplayInstrumentName, EstimateContext, EstimateCostPeriod, EstimateMetadata,
     EstimatePrompt, EstimateTask, EvidenceBundleId, Horizon, HorizonSelection, HoursPermission,
-    InstrumentId, KoreanMasterDetail, LiquidationTrading, ListingStatus, Market, MasterCode,
-    MasterInstrument, MasterInstrumentRow, MasterSecurityType, ModelIdentityPart, Nanosecond,
-    NumericInput, NxtTrading, OffsetSeconds, Ohlcv, Price, PriceAdjustment, PromptHash, Quantity,
-    Ratio, RiskAppetite, ScorecardPromptId, Symbol, Timestamp, TradeCost, TradeTaxFact,
+    InstrumentId, InvestorProfile, KoreanMasterDetail, LiquidationTrading, ListingStatus, Market,
+    MarketCalendar, MarketSession, MasterCode, MasterInstrument, MasterInstrumentRow,
+    MasterSecurityType, ModelIdentityPart, Nanosecond, NumericInput, NxtTrading, OffsetSeconds,
+    Ohlcv, Price, PriceAdjustment, PromptHash, Quantity, Ratio, RiskAppetite, ScorecardPromptId,
+    SessionData, SessionInformation, Symbol, TimeInterval, Timestamp, TradeCost, TradeTaxFact,
     TradingSuspension, UnixSeconds, Volatility,
 };
 
@@ -157,4 +158,69 @@ pub fn sample_day(value: i64) -> Option<Timestamp> {
 #[must_use]
 pub fn sample_local(time: Timestamp) -> Option<Timestamp> {
     local(time)
+}
+
+#[must_use]
+pub fn sample_master() -> Option<MasterInstrument> {
+    master()
+}
+
+#[must_use]
+pub fn sample_estimate_materials() -> Option<EstimateTaskMaterials> {
+    let source = master()?;
+    let candles = (0_i64..61_i64)
+        .map(|index| candle(&source, index))
+        .collect::<Option<Vec<_>>>()?;
+    let zero = CostRate::try_new(ratio("0")?).ok()?;
+    Some(EstimateTaskMaterials {
+        context: EstimateContext::new(
+            source
+                .price_observation(price("100")?, local(day(60)?)?)
+                .ok()?,
+            day(60)?,
+        ),
+        volatility: Volatility::calculate(&candles).ok()?,
+        profile: InvestorProfile::default()
+            .with_horizon(Horizon::new(HorizonSelection::FewDays))
+            .ok()?,
+        commission: Some(CommissionRateFact::from_commissions_result(
+            Market::Kr,
+            zero,
+            CommissionValidity::try_new(None, None).ok()?,
+        )),
+        tax: Some(TradeTaxFact::from_schedule_result(Market::Kr, zero, zero)),
+    })
+}
+
+fn kr_row(index: i64) -> Option<MarketSession> {
+    let open = local(day(index)?)?;
+    let close = local(at(day(index)?
+        .utc_seconds()
+        .as_i64()
+        .checked_add(23_400_i64)?)?)?;
+    MarketSession::try_new(
+        open.offset_calendar_date(),
+        SessionInformation::Kr {
+            pre_market: None,
+            regular_market: Some(
+                SessionData::try_new(TimeInterval::try_new(open, close).ok()?, None).ok()?,
+            ),
+            after_market: None,
+        },
+    )
+    .ok()
+}
+
+#[must_use]
+pub fn sample_kr_calendars(first: i64, last: i64) -> Option<Vec<MarketCalendar>> {
+    (first..=last)
+        .map(|index| {
+            MarketCalendar::try_new(
+                kr_row(index.checked_sub(1)?)?,
+                kr_row(index)?,
+                kr_row(index.checked_add(1)?)?,
+            )
+            .ok()
+        })
+        .collect()
 }
