@@ -177,27 +177,29 @@ export const SettingsRouteView = (): ReactElement => {
   const system = useSystemSettings();
   const tossEntry = useKeyEntry();
   return (
-    <SettingsScreen
-      tossEntry={tossEntry}
-      onBack={(): void => {
-        go("/");
-      }}
-      onOpenStatus={(): void => {
-        go("/settings/status");
-      }}
-      advanced={[
-        ...(system === "shown" ? [<SettingsSections key="sections" />] : []),
-        <RiskEditors key="risk-editors" sources={sources} />,
-      ]}
-      system={
-        <Stack key="system" gap="space-8">
-          {[
-            <UpdateCard key="updates" client={coreUpdateClient} />,
-            <AboutSection key="about" />,
-          ]}
-        </Stack>
-      }
-    />
+    <AppShell>
+      <SettingsScreen
+        tossEntry={tossEntry}
+        onBack={(): void => {
+          go("/");
+        }}
+        onOpenStatus={(): void => {
+          go("/settings/status");
+        }}
+        advanced={[
+          ...(system === "shown" ? [<SettingsSections key="sections" />] : []),
+          <RiskEditors key="risk-editors" sources={sources} />,
+        ]}
+        system={
+          <Stack key="system" gap="space-8">
+            {[
+              <UpdateCard key="updates" client={coreUpdateClient} />,
+              <AboutSection key="about" />,
+            ]}
+          </Stack>
+        }
+      />
+    </AppShell>
   );
 };
 
@@ -205,11 +207,13 @@ export const StatusView = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
   return (
-    <StatusScreen
-      load={sources.status}
-      onBack={(): void => {
-        go("/settings");
-      }}
-    />
+    <AppShell>
+      <StatusScreen
+        load={sources.status}
+        onBack={(): void => {
+          go("/settings");
+        }}
+      />
+    </AppShell>
   );
 };

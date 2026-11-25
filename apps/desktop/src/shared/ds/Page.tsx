@@ -11,7 +11,7 @@ type Props = LayoutChildren & {
 };
 
 export const Page = (props: Props): ReactElement => (
-  <div className="@container flex flex-col w-full max-w-full scroll-flex bg-bg">
+  <div className="@container flex flex-col w-full max-w-full scroll-flex">
     <header className="flex flex-wrap items-center gap-space-2 px-space-3 @content-medium:px-space-6 py-space-1 min-h-toolbar-height border-b-hairline border-solid border-line bg-surface w-full max-w-full scroll-flex">
       <div className="flex-1 wrap-slot scroll-flex py-gap-hairline">
         <Heading level={1}>{props.title}</Heading>

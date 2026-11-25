@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { AppFrame } from "../AppFrame";
 import { AppShell } from "../AppShell";
 import { Button } from "../Button";
 import { Card } from "../Card";
@@ -17,6 +18,7 @@ import { Toolbar } from "../Toolbar";
 import { stressFixtures } from "./stress";
 
 type Component =
+  | "AppFrame"
   | "AppShell"
   | "Page"
   | "Section"
@@ -40,28 +42,46 @@ const action = { label, onPress: (): void => undefined };
 
 export const layoutStressStories: readonly Story[] = [
   {
+    component: "AppFrame",
+    render: (): ReactElement => (
+      <AppFrame>
+        <StepScreen
+          progress={["now", "next"]}
+          progressLabel={label}
+          title={label}
+          description={stressFixtures.paragraph}
+          primary={action}
+        >
+          <Text>{stressFixtures.paragraph}</Text>
+        </StepScreen>
+      </AppFrame>
+    ),
+  },
+  {
     component: "AppShell",
     render: (): ReactElement => (
-      <AppShell
-        list={
-          <Stack gap="space-2">
-            <Text>{label}</Text>
-            <Text>{stressFixtures.english}</Text>
-          </Stack>
-        }
-        chat={
-          <Stack gap="space-2">
-            <Text>{label}</Text>
-            <Text>{stressFixtures.paragraph}</Text>
-          </Stack>
-        }
-      >
-        <Page title={label} actions={action}>
-          <Section title={label}>
-            <Text>{stressFixtures.paragraph}</Text>
-          </Section>
-        </Page>
-      </AppShell>
+      <AppFrame>
+        <AppShell
+          list={
+            <Stack gap="space-2">
+              <Text>{label}</Text>
+              <Text>{stressFixtures.english}</Text>
+            </Stack>
+          }
+          chat={
+            <Stack gap="space-2">
+              <Text>{label}</Text>
+              <Text>{stressFixtures.paragraph}</Text>
+            </Stack>
+          }
+        >
+          <Page title={label} actions={action}>
+            <Section title={label}>
+              <Text>{stressFixtures.paragraph}</Text>
+            </Section>
+          </Page>
+        </AppShell>
+      </AppFrame>
     ),
   },
   {
@@ -160,16 +180,18 @@ export const layoutStressStories: readonly Story[] = [
   {
     component: "StepScreen",
     render: (): ReactElement => (
-      <StepScreen
-        progress={["passed", "now", "next"]}
-        progressLabel={label}
-        title={label}
-        description={stressFixtures.english}
-        primary={action}
-        secondary={{ label: stressFixtures.english, onPress: action.onPress }}
-      >
-        <Text>{stressFixtures.english}</Text>
-      </StepScreen>
+      <AppFrame>
+        <StepScreen
+          progress={["passed", "now", "next"]}
+          progressLabel={label}
+          title={label}
+          description={stressFixtures.english}
+          primary={action}
+          secondary={{ label: stressFixtures.english, onPress: action.onPress }}
+        >
+          <Text>{stressFixtures.english}</Text>
+        </StepScreen>
+      </AppFrame>
     ),
   },
   {

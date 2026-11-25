@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { text, type UiText } from "../lib";
+import { AppFrame } from "./AppFrame";
 import { AppShell } from "./AppShell";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
@@ -18,6 +19,7 @@ import { Text } from "./Text";
 import { Toolbar } from "./Toolbar";
 
 type Component =
+  | "AppFrame"
   | "AppShell"
   | "Page"
   | "Section"
@@ -48,9 +50,7 @@ const month = text("ds.month", "ko");
 const year = text("ds.year", "ko");
 const action: Action = {
   label: text("ds.retry", "ko"),
-  onPress: (): void => {
-    return;
-  },
+  onPress: (): void => undefined,
 };
 
 const entry = (
@@ -86,6 +86,11 @@ const sampleChat = (lead: UiText): ReactElement => (
 );
 
 export const layoutComponentStories: readonly Story[] = [
+  entry("AppFrame", "normal", (): ReactElement => (
+    <AppFrame>
+      <AppShell>{sampleShellPage(companyTwo)}</AppShell>
+    </AppFrame>
+  )),
   entry("AppShell", "normal", (): ReactElement => (
     <AppShell
       list={sampleList(companyTwo)}

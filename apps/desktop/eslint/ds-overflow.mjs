@@ -31,7 +31,7 @@ export const LENGTH_FILES = ds([
   "ChatInput",
   "Disclosure",
 ]);
-export const VIEWPORT_FILES = ds(["AppShell", "StepScreen"]);
+export const VIEWPORT_FILES = ds(["AppFrame"]);
 export const NOWRAP_FILES = ds([
   "Numbers",
   "Table",
@@ -82,7 +82,8 @@ export const LENGTH_EXCEPTIONS = [
     "src/shared/ds/Divider.tsx",
     ["h-border-hairline", "w-border-hairline", "min-h-control-height-sm"],
   ],
-  ["src/shared/ds/StepScreen.tsx", ["max-w-dialog-width", "h-screen"]],
+  ["src/shared/ds/StepScreen.tsx", ["max-w-dialog-width"]],
+  ["src/shared/ds/AppFrame.tsx", ["h-screen"]],
 ];
 const lengthException = (file) =>
   LENGTH_EXCEPTIONS.find(([path]) => path === file)?.[1] ?? [];
