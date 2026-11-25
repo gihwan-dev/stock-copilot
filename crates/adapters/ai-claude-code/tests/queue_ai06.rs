@@ -289,6 +289,7 @@ mod tests {
             assert_eq!(budget_events.load(Ordering::SeqCst), 1_usize);
             let blocked = queue.request_scheduled_slot("est").await.expect("cap");
             assert_eq!(admission_kind(&blocked), AdmissionKind::BudgetReached);
+            assert!(matches_budget_wait(&queue.evaluate_scheduled_quota().await));
             assert_eq!(queue.evaluate_chat_quota().await, QuotaDecision::Allowed);
             let chat = expect_chat_acquired(queue.acquire_chat_slot().await.expect("chat ok"));
             let _rel = queue.release_chat_slot(chat.credentials.run_id()).await;
@@ -297,8 +298,19 @@ mod tests {
                 QuotaTransition::Changed
             );
             assert_eq!(budget_events.load(Ordering::SeqCst), 2_usize);
+            assert_eq!(
+                queue.evaluate_scheduled_quota().await,
+                QuotaDecision::Allowed
+            );
             let _ok = expect_admitted(queue.request_scheduled_slot("est").await.expect("ok"));
         });
+    }
+
+    fn matches_budget_wait(decision: &QuotaDecision) -> bool {
+        match decision {
+            QuotaDecision::WaitScheduledBudget { .. } => true,
+            QuotaDecision::Allowed | QuotaDecision::WaitRateLimit { .. } => false,
+        }
     }
 
     #[test]

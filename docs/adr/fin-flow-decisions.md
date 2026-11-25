@@ -10,4 +10,5 @@
 | FF-2 | 단일 추정 실행 `RunSingleEstimate`(application): 재료 포트 → 만기용 달력 → `CreateEstimateTask` → 실행 맥락 등록 → 분석 실행(프롬프트에는 과제 ID와 종목 식별자만) → 맥락 해제 → 과제가 소비됐으면 `Submitted`. 재료·달력이 없거나 과제가 건너뛰어지면 AI를 띄우지 않는다 | 과제를 만들지 않고 AI가 종목을 고름(SEC-4 위반) |
 | FF-2 | 실행·과제 ID는 `est-<계기>-<종목 ID 앞 24자>-<UTC 초>`로 같은 문자열을 쓴다(과제 ID 64자 제한). 같은 종목·같은 초의 두 번째 발급은 `AlreadyIssued`로 실패 | 난수 ID(application에서 난수 금지) |
 | FF-2 | 추정 프롬프트는 application 상수(`prompts/estimate/v1.md`의 요지)로 두고, 기록용 `EstimatePrompt`는 id `estimate`, 버전 `v1`, 해시는 상수 원문의 SHA-256이다. 배포 앱에 프롬프트 파일이 들어가지 않아 파일을 읽지 않는다 | 실행 때 파일 읽기 |
+| FF-3 | 종목 추정 순환은 스케줄러 AI 작업(`EstimateCycleJob`, 매일 01:00 KST, 놓치면 한 번 따라잡음)이다. 종목마다 예약 작업 한도를 다시 본다(AI 대기열 `evaluate_scheduled_quota`): 채팅 중이거나 한도·속도 제한이면 멈추고 다음 실행이 멈춘 종목 다음부터 잇는다 | 시각 없이 한도가 남을 때마다 실행(채팅 선점과 겹침) |
 | FF-2 | 보정 조합의 모델 식별은 `claude-code`/`default`/`cli`로 고정한다. 실행 중 `ActualModel` 이벤트와 MCP 제출이 경쟁해 같은 실행의 모델이 어긋날 수 있어서다. 실제 모델별 분리는 후속 | 실제 모델 이벤트로 갱신 |
