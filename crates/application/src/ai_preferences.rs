@@ -48,19 +48,6 @@ pub enum ScheduledBudgetPercent {
     Ninety,
 }
 
-impl ScheduledBudgetPercent {
-    #[must_use]
-    pub const fn as_percent(self) -> u8 {
-        match self {
-            Self::Fifty => 50,
-            Self::Sixty => 60,
-            Self::Seventy => 70,
-            Self::Eighty => 80,
-            Self::Ninety => 90,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AiTaskPreference {
     pub task: AiTask,

@@ -8,7 +8,6 @@ fn initial_preferences_cover_every_task_once_with_a_seventy_percent_budget() {
     let initial = AiPreferences::initial();
     assert_eq!(initial.tasks().len(), AiTask::ALL.len());
     assert_eq!(initial.budget(), ScheduledBudgetPercent::Seventy);
-    assert_eq!(initial.budget().as_percent(), 70);
     assert_eq!(initial.config_dir(), None);
 }
 
@@ -32,7 +31,7 @@ fn setting_a_task_replaces_only_that_task_and_restore_fills_missing_tasks() {
     assert_eq!(preferences.tasks().len(), AiTask::ALL.len());
     let restored = AiPreferences::restore(&[chosen], ScheduledBudgetPercent::Ninety, None);
     assert_eq!(restored.tasks(), preferences.tasks());
-    assert_eq!(restored.budget().as_percent(), 90);
+    assert_eq!(restored.budget(), ScheduledBudgetPercent::Ninety);
 }
 
 #[test]
