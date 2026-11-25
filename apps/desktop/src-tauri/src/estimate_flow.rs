@@ -21,6 +21,9 @@ use crate::broker_link::AccountSlot;
 use crate::holdings_link::InstrumentDirectory;
 use crate::ipc::state::BoxFuture;
 
+#[cfg(test)]
+mod tests;
+
 const FIRST_CALENDAR_DAYS: usize = 8;
 const MORE_CALENDAR_DAYS: usize = 20;
 const MAX_CALENDAR_DAYS: usize = 140;

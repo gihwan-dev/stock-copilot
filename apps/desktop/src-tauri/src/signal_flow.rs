@@ -24,6 +24,9 @@ use crate::broker_link::AccountSlot;
 use crate::estimate_flow::{CalendarDays, task_calendars, trade_tax};
 use crate::holdings_link::InstrumentDirectory;
 
+#[cfg(test)]
+mod tests;
+
 const CANDLE_LOOKBACK_DAYS: u64 = 150;
 const DAY_SECONDS: u64 = 86_400;
 const SECTOR_REFRESH_SECONDS: i64 = 86_400;

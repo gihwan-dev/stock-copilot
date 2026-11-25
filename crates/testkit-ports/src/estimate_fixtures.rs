@@ -74,6 +74,10 @@ fn master() -> Option<MasterInstrument> {
 }
 
 fn candle(source: &MasterInstrument, index: i64) -> Option<Candle> {
+    candle_observed(source, index, day(61)?)
+}
+
+fn candle_observed(source: &MasterInstrument, index: i64, observed: Timestamp) -> Option<Candle> {
     let fixture = price(if index.rem_euclid(2) == 0 {
         "100"
     } else {
@@ -82,9 +86,9 @@ fn candle(source: &MasterInstrument, index: i64) -> Option<Candle> {
     Candle::try_new(
         source.row().instrument_id.clone(),
         CandleTime::try_new(local_midnight(index)?, CandlePeriod::Daily).ok()?,
-        PriceAdjustment::Adjusted(AdjustmentBasis::new(day(61)?)),
+        PriceAdjustment::Adjusted(AdjustmentBasis::new(observed)),
         Ohlcv::try_new(fixture, fixture, fixture, fixture, quantity("13")?).ok()?,
-        CandleObservation::new(day(61)?, CandleStatus::Finalized),
+        CandleObservation::new(observed, CandleStatus::Finalized),
     )
     .ok()
 }
@@ -222,5 +226,14 @@ pub fn sample_kr_calendars(first: i64, last: i64) -> Option<Vec<MarketCalendar>>
             )
             .ok()
         })
+        .collect()
+}
+
+#[must_use]
+pub fn sample_daily_candles(count: i64) -> Option<Vec<Candle>> {
+    let source = master()?;
+    let observed = day(count)?;
+    (0_i64..count)
+        .map(|index| candle_observed(&source, index, observed))
         .collect()
 }

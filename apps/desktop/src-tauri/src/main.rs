@@ -3922,3 +3922,267 @@ mod holdings_job_assembly_tests {
         });
     }
 }
+
+#[cfg(test)]
+mod estimate_flow_assembly_tests {
+    use application::{
+        AiEvent, AiProvider, AiRunId, AiUsage, ChatHistory, EstimateRunRegistry,
+        EstimateSubmissionRepository, EstimateTaskMaterialSource, EstimateTaskMaterials,
+        EstimateTrigger, EventBus, EventBusBuilder, EventSubscriber, InformationError,
+        IsolationCheck, RunInput, RunKind, RunSingleEstimate, RunSpec, SecretValue,
+        SingleEstimateOutcome, SubscriberFailure, SystemPortError, ToolName, TrackingTarget,
+    };
+    use domain::{DomainEvent, DomainEventKind, EstimateTask, MarketCalendar, Timestamp};
+    use mcp_server::{ToolInvocation, ToolRegistry};
+    use serde_json::{Value, json};
+    use src_tauri::estimate_flow::EstimateRunBook;
+    use std::collections::BTreeSet;
+    use std::future::Future;
+    use std::sync::{Arc, OnceLock, RwLock};
+    use store_sqlite::{SharedDatabase, SqliteRepositories};
+    use testkit_ports::SteppedClock;
+    use testkit_ports::chat_fakes::ScriptedAiEventStream;
+    use testkit_ports::estimate_fixtures::{
+        sample_day, sample_estimate_materials, sample_kr_calendars,
+    };
+
+    struct Materials;
+
+    impl EstimateTaskMaterialSource for Materials {
+        fn materials(
+            &self,
+            _target: &TrackingTarget,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<Option<EstimateTaskMaterials>, SystemPortError>> + Send
+        {
+            std::future::ready(Ok(sample_estimate_materials()))
+        }
+
+        fn calendars(
+            &self,
+            _task: &EstimateTask,
+        ) -> impl Future<Output = Result<Vec<MarketCalendar>, SystemPortError>> + Send {
+            std::future::ready(Ok(sample_kr_calendars(60, 70).expect("달력")))
+        }
+    }
+
+    #[derive(Default)]
+    struct Submitted(RwLock<Vec<DomainEvent>>);
+
+    struct Recorder(Arc<Submitted>);
+
+    impl EventSubscriber for Recorder {
+        fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            if let Ok(mut guard) = self.0.0.write() {
+                guard.push(event.clone());
+            }
+            Ok(())
+        }
+    }
+
+    struct McpSubmittingAi {
+        registry: OnceLock<ToolRegistry>,
+        results: RwLock<Vec<Value>>,
+    }
+
+    fn task_id_in(prompt: &str) -> String {
+        prompt
+            .split_once("task_id=\"")
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .map(|(id, _)| id.to_owned())
+            .expect("과제 ID")
+    }
+
+    impl McpSubmittingAi {
+        async fn call(&self, run: &AiRunId, name: &str, arguments: &Value) -> Value {
+            let registry = self.registry.get().expect("카탈로그");
+            let tool = Arc::clone(
+                registry
+                    .get(&ToolName::try_new(name).expect("이름"))
+                    .expect("도구")
+                    .1,
+            );
+            let map = arguments.as_object().cloned().expect("객체");
+            tool.invoke(ToolInvocation {
+                run_id: run,
+                arguments: &map,
+            })
+            .await
+            .expect("도구 결과")
+        }
+
+        async fn submit(&self, spec: &RunSpec) {
+            let RunInput::Analysis(prompt) = spec.input() else {
+                panic!("분석 실행");
+            };
+            let task = task_id_in(prompt.as_str());
+            let read = self
+                .call(spec.id(), "get_estimate_task", &json!({ "task_id": task }))
+                .await;
+            let submitted = self
+                .call(
+                    spec.id(),
+                    "submit_estimate",
+                    &json!({
+                        "task_id": task,
+                        "p": 41_u64,
+                        "rationale": "근거 없음",
+                        "counterargument": "반대 논거",
+                        "sources": []
+                    }),
+                )
+                .await;
+            self.results
+                .write()
+                .expect("기록")
+                .extend([read, submitted]);
+        }
+    }
+
+    impl AiProvider for McpSubmittingAi {
+        type Stream = ScriptedAiEventStream;
+
+        async fn run(&self, spec: RunSpec) -> Result<Self::Stream, InformationError> {
+            self.submit(&spec).await;
+            Ok(ScriptedAiEventStream::from_events(vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+            ]))
+        }
+
+        fn resume(
+            &self,
+            _spec: RunSpec,
+            _history: ChatHistory,
+            _message: domain::UntrustedText,
+        ) -> impl Future<Output = Result<Self::Stream, InformationError>> + Send {
+            std::future::ready(Err(InformationError::Unavailable(
+                application::ResetTime::NotProvided,
+            )))
+        }
+
+        fn usage(&self) -> impl Future<Output = Result<AiUsage, InformationError>> + Send {
+            std::future::ready(Err(InformationError::Unavailable(
+                application::ResetTime::NotProvided,
+            )))
+        }
+
+        fn interrupt(
+            &self,
+            _run: &AiRunId,
+        ) -> impl Future<Output = Result<(), InformationError>> + Send {
+            std::future::ready(Ok(()))
+        }
+
+        fn verify_isolation(
+            &self,
+            _kind: RunKind,
+        ) -> impl Future<Output = Result<IsolationCheck, InformationError>> + Send {
+            std::future::ready(Ok(IsolationCheck::Passed))
+        }
+    }
+
+    fn catalog(
+        clock: &Arc<SteppedClock>,
+        repositories: &Arc<SqliteRepositories>,
+        events: &Arc<EventBus>,
+        book: &EstimateRunBook,
+    ) -> ToolRegistry {
+        src_tauri::mcp_catalog::analysis_catalog(
+            clock,
+            src_tauri::mcp_catalog::CatalogStores {
+                theses: Arc::clone(repositories),
+                estimates: Arc::clone(repositories),
+                bodies: Arc::new(super::ProductArticleBodies { reader: None }),
+                runs: src_tauri::ai_runtime::RunMetadataBook::new(),
+                collector: Arc::new(
+                    src_tauri::ai_runtime::AiAvailability::<
+                        testkit_ports::chat_fakes::ScriptedAiProvider,
+                    >::Missing,
+                ),
+                turns: src_tauri::ai_runtime::ChatTurnBook::new(),
+                events: Arc::clone(events),
+                market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
+                portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
+                estimate_runs: book.clone(),
+            },
+        )
+        .expect("카탈로그")
+    }
+
+    fn recording_bus() -> (Arc<EventBus>, Arc<Submitted>) {
+        let recorder = Arc::new(Submitted::default());
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(
+            BTreeSet::from([DomainEventKind::EstimateSubmitted]),
+            Recorder(Arc::clone(&recorder)),
+        );
+        (Arc::new(builder.build()), recorder)
+    }
+
+    async fn open(shared: &SharedDatabase, directory: &std::path::Path, clock: &SteppedClock) {
+        let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+        src_tauri::database::prepare_directory(&path).expect("폴더");
+        let database = store_sqlite::Database::open(&path, &SecretValue::new(vec![71; 32]), clock)
+            .expect("열기");
+        assert!(shared.install(database).await.is_none());
+    }
+
+    #[test]
+    fn a_code_issued_task_is_estimated_through_the_product_catalog_and_stored() {
+        let directory = std::path::PathBuf::from("../../../target/fin-flow")
+            .join(format!("estimate-{}", std::process::id()));
+        let shared = SharedDatabase::new();
+        let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
+        let clock = Arc::new(SteppedClock::new(sample_day(60).expect("시각")));
+        let (events, recorder) = recording_bus();
+        let book = EstimateRunBook::new();
+        let ai = McpSubmittingAi {
+            registry: OnceLock::new(),
+            results: RwLock::new(Vec::new()),
+        };
+        if ai
+            .registry
+            .set(catalog(&clock, &repositories, &events, &book))
+            .is_err()
+        {
+            panic!("카탈로그는 한 번만");
+        }
+        let identity = super::estimate_identity().expect("식별");
+        let target =
+            TrackingTarget::for_holding(domain::InstrumentId::try_new("sample-a").expect("ID"));
+        tauri::async_runtime::block_on(async {
+            open(&shared, &directory, &clock).await;
+            let outcome = RunSingleEstimate {
+                materials: &Materials,
+                tasks: repositories.as_ref(),
+                ai: &ai,
+                runs: &book,
+                clock: clock.as_ref(),
+                identity: &identity,
+            }
+            .run(&target, &EstimateTrigger::Cycle)
+            .await
+            .expect("실행");
+            assert_eq!(outcome, SingleEstimateOutcome::Submitted);
+            let records = repositories
+                .submission_records(target.instrument())
+                .await
+                .expect("제출 기록");
+            assert_eq!(records.len(), 1);
+            let record = records.first().expect("기록");
+            assert_eq!(record.metadata().prompt.hash, identity.prompt.hash);
+            assert_eq!(
+                *recorder.0.read().expect("이벤트"),
+                vec![DomainEvent::EstimateSubmitted(target.instrument().clone())]
+            );
+            let results = ai.results.read().expect("결과").clone();
+            assert_eq!(
+                results.last().expect("제출 결과")["recorded"],
+                json!("estimate_only_no_order")
+            );
+            book.release(record.run());
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
+    }
+}
