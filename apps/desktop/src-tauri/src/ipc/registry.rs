@@ -1,5 +1,5 @@
 use tauri::Runtime;
-use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
+use tauri_specta::{Builder, Commands, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
     ai_settings, app_version, briefing, chat, instruments, news_settings, open_external,
@@ -7,17 +7,12 @@ use super::{
     signals, system_data, thesis, toss, transactions, updates,
 };
 
-#[must_use]
 #[expect(
-    clippy::too_many_lines,
-    reason = "IPC 명령 목록은 collect_commands! 한 번에 모두 적어야 한다 (ADR 0016)"
+    trivial_casts,
+    reason = "#[specta::specta] 확장이 명령 함수를 fn 포인터로 as 변환한다 (ADR 0016)"
 )]
-pub fn specta_builder<R: Runtime>() -> Builder<R> {
-    #[expect(
-        trivial_casts,
-        reason = "#[specta::specta] 확장이 명령 함수를 fn 포인터로 as 변환한다 (ADR 0016)"
-    )]
-    let commands = collect_commands![
+fn product_commands<R: Runtime>() -> Commands<R> {
+    collect_commands![
         app_version::app_version::<tauri::Wry>,
         settings::get_settings::<tauri::Wry>,
         settings::set_order_permission::<tauri::Wry>,
@@ -69,9 +64,13 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         ai_settings::set_task_model::<tauri::Wry>,
         ai_settings::set_budget_percent::<tauri::Wry>,
         ai_settings::set_claude_config_dir::<tauri::Wry>
-    ];
+    ]
+}
+
+#[must_use]
+pub fn specta_builder<R: Runtime>() -> Builder<R> {
     Builder::<R>::new()
-        .commands(commands)
+        .commands(product_commands())
         .events(collect_events![super::event::UiEvent])
         .error_handling(ErrorHandlingMode::Result)
 }
