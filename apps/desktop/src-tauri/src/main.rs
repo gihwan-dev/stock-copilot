@@ -1,6 +1,7 @@
 use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
+use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
     NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
@@ -12,7 +13,10 @@ use src_tauri::product_events::{
 };
 use src_tauri::{build_app, run_app};
 use src_tauri::{
-    database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
+    database::{DatabaseFactory, DatabaseKeyProvision},
+    ports::Ports,
+    product_ports::ProductPorts,
+    unavailable::Unavailable,
 };
 use std::sync::Arc;
 use store_sqlite::{SharedDatabase, SqliteRepositories};
@@ -79,8 +83,8 @@ fn product_ports(
     notifier: Arc<ProductNotifier>,
     shared_clock: &Arc<platform_macos::SystemClock>,
     events: application::EventBus,
-) -> Ports<ProductPorts<SqliteRepositories>> {
-    Ports::<ProductPorts<SqliteRepositories>> {
+) -> Ports<ProductPorts<SqliteRepositories, ProductSecrets>> {
+    Ports::<ProductPorts<SqliteRepositories, ProductSecrets>> {
         broker_read: Arc::new(Unavailable),
         market_info: Arc::new(Unavailable),
         macro_series: Arc::new(Unavailable),
@@ -101,7 +105,7 @@ fn product_ports(
         valuations: Arc::clone(repositories),
         settings: Arc::clone(repositories),
         audit: Arc::clone(repositories),
-        secrets: Arc::new(Unavailable),
+        secrets: Arc::new(product_secrets()),
         notifier,
         news_feeds: Vec::new(),
         clock: Arc::clone(shared_clock),
@@ -110,6 +114,24 @@ fn product_ports(
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(Arc::clone(shared_clock))),
     }
+}
+
+type ProductSecrets = secrets_keychain::KeychainSecretStore<secrets_keychain::SystemKeychain>;
+
+fn product_secrets() -> ProductSecrets {
+    let build = if tauri::is_dev() {
+        secrets_keychain::BuildKind::Development
+    } else {
+        secrets_keychain::BuildKind::Release
+    };
+    secrets_keychain::KeychainSecretStore::new(
+        secrets_keychain::KeychainProfile::for_build(build),
+        secrets_keychain::SystemKeychain,
+    )
+}
+
+fn database_key_provision() -> DatabaseKeyProvision {
+    DatabaseKeyProvision(Box::new(secrets_keychain::generate_database_key))
 }
 
 fn product_builder(
@@ -126,10 +148,57 @@ fn product_builder(
         .manage(scheduler_events)
         .manage(Arc::clone(repositories))
         .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
+        .manage(database_key_provision())
         .manage(ui_events);
+    let with_feeds = builder.manage(collector_feeds(clock));
     match spec_watch_inputs(clock) {
-        Some(inputs) => builder.manage(inputs),
-        None => builder,
+        Some(inputs) => with_feeds.manage(inputs),
+        None => with_feeds,
+    }
+}
+
+fn collector_feeds(clock: &Arc<platform_macos::SystemClock>) -> CollectorFeeds {
+    let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
+    let Ok(http) = sources::SourceHttpClient::new(
+        sources::SourceEndpoint::live(),
+        shared,
+        Arc::new(sources::TokioSourceWait),
+        None,
+    ) else {
+        return CollectorFeeds::default();
+    };
+    let client = Arc::new(http);
+    let mut feeds: Vec<CollectorFeed> = sources::PressMacroSource::ALL
+        .into_iter()
+        .map(|source| CollectorFeed {
+            target: press_target(source),
+            startup: None,
+            regular: SharedFeed::new(sources::RssNewsFeed::new(Arc::clone(&client), source)),
+        })
+        .collect();
+    let kind = |window| {
+        SharedFeed::new(sources::KindDisclosureFeed::new(
+            sources::KindDisclosureClient::new(Arc::clone(&client)),
+            window,
+        ))
+    };
+    feeds.push(CollectorFeed {
+        target: application::CollectionTarget::KindDisclosure,
+        startup: Some(kind(sources::KindFetchWindow::StartupCatchUp)),
+        regular: kind(sources::KindFetchWindow::Regular),
+    });
+    CollectorFeeds(feeds)
+}
+
+const fn press_target(source: sources::PressMacroSource) -> application::CollectionTarget {
+    match source {
+        sources::PressMacroSource::Hankyung => application::CollectionTarget::HankyungRss,
+        sources::PressMacroSource::Maekyung
+        | sources::PressMacroSource::Yonhap
+        | sources::PressMacroSource::Edaily => application::CollectionTarget::PressRss,
+        sources::PressMacroSource::BankOfKorea | sources::PressMacroSource::FederalReserve => {
+            application::CollectionTarget::CentralBankRss
+        }
     }
 }
 
@@ -393,6 +462,36 @@ mod tests {
     }
 
     #[test]
+    fn composition_root_registers_keyless_press_and_kind_feeds_for_the_collector() {
+        use application::{CollectionTarget, FeedSource, NewsFeed};
+        let clock = std::sync::Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let feeds = super::collector_feeds(&clock);
+        let sources: Vec<(CollectionTarget, FeedSource)> = feeds
+            .0
+            .iter()
+            .map(|feed| (feed.target, feed.regular.source()))
+            .collect();
+        assert_eq!(sources.len(), 7);
+        assert!(sources.contains(&(
+            CollectionTarget::HankyungRss,
+            FeedSource::News(domain::NewsSource::Hankyung)
+        )));
+        assert!(sources.contains(&(
+            CollectionTarget::CentralBankRss,
+            FeedSource::News(domain::NewsSource::FederalReserve)
+        )));
+        let kind = feeds
+            .0
+            .iter()
+            .find(|feed| feed.target == CollectionTarget::KindDisclosure)
+            .expect("KIND");
+        assert_eq!(
+            kind.startup.as_ref().map(NewsFeed::source),
+            Some(FeedSource::Disclosure(domain::DisclosureSource::Kind))
+        );
+    }
+
+    #[test]
     fn composition_root_constructs_sources_client_without_broker_credentials_or_hosts() {
         let clock = std::sync::Arc::new(testkit_ports::SteppedClock::new(
             broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
@@ -546,6 +645,245 @@ mod briefing_store_tests {
             assert_eq!(latest.body, "오늘 브리핑");
             assert_eq!(latest.status, UiBriefingStatus::Completed);
             assert_eq!(latest.finished_at, "2026-11-25T08:20:00+09:00");
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
+    }
+}
+
+#[cfg(test)]
+mod key_provision_tests {
+    use application::SecretValue;
+    use src_tauri::database::{DatabaseKeyProvision, DatabaseStatus, open_provisioned_database};
+    use src_tauri::lifecycle::{DatabaseClosure, Lifecycle};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use testkit_ports::memory::MemoryReply;
+    use testkit_ports::system_fakes::MemorySecretStore;
+
+    const FAKE_KEY: [u8; 32] = *b"fake-db-key-9c41e7-never-on-disk";
+
+    fn clock() -> Arc<testkit_ports::SteppedClock> {
+        Arc::new(testkit_ports::SteppedClock::new(
+            broker_toss::TossTimestamp::try_from("2026-11-25T00:00:00Z")
+                .expect("clock")
+                .into_domain(),
+        ))
+    }
+
+    fn provision(count: Arc<AtomicUsize>) -> DatabaseKeyProvision {
+        DatabaseKeyProvision(Box::new(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            Ok(SecretValue::new(FAKE_KEY.to_vec()))
+        }))
+    }
+
+    async fn launch(
+        secrets: &MemorySecretStore,
+        count: &Arc<AtomicUsize>,
+        path: &std::path::Path,
+    ) -> DatabaseStatus {
+        let state = open_provisioned_database(
+            secrets,
+            &provision(Arc::clone(count)),
+            Arc::new(super::database_factory(clock())),
+            store_sqlite::DatabasePath::new(path.to_path_buf()),
+        )
+        .await;
+        let status = state.status();
+        let lifecycle = Lifecycle::new(tauri::async_runtime::spawn(std::future::pending()), state);
+        lifecycle.shutdown().await;
+        let guard = lifecycle.outcome().lock().await;
+        match &guard.as_ref().expect("종료 결과").database {
+            Ok(DatabaseClosure::Closed(_receipt)) => {}
+            Ok(DatabaseClosure::NotOpened) => panic!("열린 DB의 명시적 종료 필요"),
+            Err(error) => panic!("종료 실패: {error:?}"),
+        }
+        status
+    }
+
+    fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        (0..=haystack.len().saturating_sub(needle.len()))
+            .any(|start| haystack.get(start..start.saturating_add(needle.len())) == Some(needle))
+    }
+
+    #[test]
+    fn first_launch_creates_the_key_and_the_next_launch_reopens_without_key_bytes_on_disk() {
+        let directory = std::path::PathBuf::from("../../../target/fin-c")
+            .join(format!("product-key-{}", std::process::id()));
+        let path = directory.join("data").join("stock-copilot.db");
+        let secrets = MemorySecretStore::default();
+        for _ in 0..4_usize {
+            secrets.script_load().push(MemoryReply::Memory);
+        }
+        secrets.script_store().push(MemoryReply::Memory);
+        let count = Arc::new(AtomicUsize::new(0));
+        tauri::async_runtime::block_on(async {
+            assert_eq!(launch(&secrets, &count, &path).await, DatabaseStatus::Ready);
+            assert_eq!(launch(&secrets, &count, &path).await, DatabaseStatus::Ready);
+        });
+        assert_eq!(count.load(Ordering::SeqCst), 1, "키는 첫 실행에만 만든다");
+        let hex: Vec<u8> = FAKE_KEY
+            .iter()
+            .flat_map(|byte| format!("{byte:02x}").into_bytes())
+            .collect();
+        let mut scanned = 0_usize;
+        for entry in std::fs::read_dir(path.parent().expect("폴더")).expect("목록") {
+            let bytes = std::fs::read(entry.expect("항목").path()).expect("파일");
+            assert!(!contains(&bytes, &FAKE_KEY), "원시 키가 파일에 있음");
+            assert!(!contains(&bytes, &hex), "16진 키가 파일에 있음");
+            scanned = scanned.saturating_add(1);
+        }
+        assert!(scanned >= 1, "DB 파일을 검사함");
+        std::fs::remove_dir_all(directory).expect("정리");
+    }
+
+    #[test]
+    fn product_secrets_use_the_development_keychain_profile_outside_tauri_build() {
+        assert_eq!(
+            super::product_secrets().profile(),
+            &secrets_keychain::KeychainProfile::development()
+        );
+    }
+}
+
+#[cfg(test)]
+mod collector_store_tests {
+    use application::{
+        AiReadPolicy, CollectedEntry, CollectedObservation, ConditionalGet, DataAvailability,
+        FeedCursor, FeedPosition, FeedSource, InformationError, NewsFeed, NewsMetadata,
+        PublicationTime, Retention, RetryDelay, SecretValue, SourceState, SourceStatusRepository,
+        SystemFailure, SystemPort, SystemPortError, UserAgentRequirement,
+    };
+    use domain::{DataSource, NewsItem, NewsSource, NormalizedUrl, UntrustedText};
+    use src_tauri::platform::collector::{AppFeedRunner, FeedRunner};
+    use src_tauri::platform::notifier::{
+        FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
+    };
+    use src_tauri::product_ports::ProductPorts;
+    use std::sync::{Arc, RwLock};
+    use store_sqlite::{SharedDatabase, SqliteRepositories};
+
+    type Items = DataAvailability<(Vec<CollectedObservation>, FeedCursor)>;
+
+    struct CountingFeed {
+        calls: Arc<RwLock<Vec<FeedCursor>>>,
+        reply: RwLock<Option<Items>>,
+    }
+
+    impl NewsFeed for CountingFeed {
+        fn source(&self) -> FeedSource {
+            FeedSource::News(NewsSource::Yonhap)
+        }
+        fn metadata(&self) -> NewsMetadata {
+            NewsMetadata::new(
+                Retention::NotStored,
+                AiReadPolicy::TitleOnly,
+                ConditionalGet::Unsupported,
+                UserAgentRequirement::Standard,
+            )
+        }
+        fn new_items(
+            &self,
+            since: FeedCursor,
+        ) -> impl Future<Output = Result<Items, InformationError>> + Send {
+            self.calls.write().expect("잠금").push(since);
+            let reply = self.reply.write().expect("잠금").take();
+            std::future::ready(Ok(reply.unwrap_or(DataAvailability::NoData)))
+        }
+    }
+
+    fn position(value: &str) -> FeedCursor {
+        FeedCursor::Continue(FeedPosition::new(
+            UntrustedText::try_new(value).expect("텍스트"),
+        ))
+    }
+
+    fn one_article_feed(calls: &Arc<RwLock<Vec<FeedCursor>>>) -> CountingFeed {
+        let collected_at = broker_toss::TossTimestamp::try_from("2026-11-25T00:00:00Z")
+            .expect("clock")
+            .into_domain();
+        let item = NewsItem::new(
+            NewsSource::Yonhap,
+            NormalizedUrl::try_new("https://example.com/fin-e").expect("주소"),
+            UntrustedText::try_new("수집 기사").expect("제목"),
+            None,
+        );
+        CountingFeed {
+            calls: Arc::clone(calls),
+            reply: RwLock::new(Some(DataAvailability::Available((
+                vec![CollectedObservation::new(
+                    CollectedEntry::News(item),
+                    PublicationTime::NotProvided,
+                    collected_at,
+                )],
+                position("next"),
+            )))),
+        }
+    }
+
+    type Ports = src_tauri::ports::Ports<ProductPorts<SqliteRepositories, super::ProductSecrets>>;
+
+    fn mock_app(repositories: &Arc<SqliteRepositories>) -> tauri::App<tauri::test::MockRuntime> {
+        let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let notifier = Arc::new(FilteredNotifier::new(
+            UnavailableNotificationDelivery,
+            NotificationPreferences::default(),
+        ));
+        let ports: Ports = super::product_ports(
+            repositories,
+            notifier,
+            &clock,
+            application::EventBusBuilder::default().build(),
+        );
+        tauri::test::mock_builder()
+            .manage(ports)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("앱")
+    }
+
+    #[test]
+    fn app_runner_stores_collected_news_and_source_status_only_once_the_database_is_open() {
+        let shared = SharedDatabase::new();
+        let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
+        let app = mock_app(&repositories);
+        let calls = Arc::new(RwLock::new(Vec::new()));
+        let runner = AppFeedRunner::<
+            tauri::test::MockRuntime,
+            ProductPorts<SqliteRepositories, super::ProductSecrets>,
+            CountingFeed,
+        >::new(
+            app.handle().clone(),
+            repositories.as_ref().clone(),
+            one_article_feed(&calls),
+        );
+        let directory = std::path::PathBuf::from("../../../target/fin-e")
+            .join(format!("collector-{}", std::process::id()));
+        tauri::async_runtime::block_on(async {
+            assert_eq!(
+                runner.collect(FeedCursor::Start).await,
+                Err(SystemPortError::new(
+                    SystemPort::Repository,
+                    SystemFailure::Unavailable(RetryDelay::Unknown)
+                ))
+            );
+            assert_eq!(*calls.read().expect("잠금"), Vec::<FeedCursor>::new());
+            let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+            src_tauri::database::prepare_directory(&path).expect("폴더");
+            let clock = platform_macos::SystemClock::new().expect("시계");
+            let database =
+                store_sqlite::Database::open(&path, &SecretValue::new(vec![83; 32]), &clock)
+                    .expect("열기");
+            assert!(shared.install(database).await.is_none());
+            let collected = runner.collect(FeedCursor::Start).await.expect("수집");
+            assert_eq!(collected.cursor, position("next"));
+            assert_eq!(*collected.news.as_u32(), 1);
+            let status = repositories
+                .find(DataSource::Yonhap)
+                .await
+                .expect("상태")
+                .expect("기록");
+            assert_eq!(status.state(), SourceState::Healthy);
             let _closed = shared.close().await;
         });
         std::fs::remove_dir_all(directory).expect("정리");

@@ -36,25 +36,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             security::create_windows(app)?;
             let _policy = platform::residency::apply_accessory_policy(app);
             app.manage(platform::residency::ResidencyState::new());
-            let opened = tauri::async_runtime::block_on(database::open_database(
-                ports.secrets.as_ref(),
-                Arc::clone(&ports.database),
-                || {
-                    app.path()
-                        .app_data_dir()
-                        .map(|directory| {
-                            store_sqlite::DatabasePath::new(directory.join("stock-copilot.db"))
-                        })
-                        .map_err(|_error| {
-                            application::SystemPortError::new(
-                                application::SystemPort::Repository,
-                                application::SystemFailure::Unavailable(
-                                    application::RetryDelay::Unknown,
-                                ),
-                            )
-                        })
-                },
-            ));
+            let opened = open_product_database(app, &ports);
             let status = opened.status();
             let (shared_database, database) = share_database(app, opened);
             let refresh = tauri::async_runtime::block_on(startup::start(&ports, |data| {
@@ -76,6 +58,43 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             Ok(())
         })
         .build(context)
+}
+
+fn database_path<R: Runtime>(
+    app: &App<R>,
+) -> Result<store_sqlite::DatabasePath, application::SystemPortError> {
+    app.path()
+        .app_data_dir()
+        .map(|directory| store_sqlite::DatabasePath::new(directory.join("stock-copilot.db")))
+        .map_err(|_error| {
+            application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::Unavailable(application::RetryDelay::Unknown),
+            )
+        })
+}
+
+fn open_product_database<R: Runtime, P: PortTypes>(
+    app: &App<R>,
+    ports: &Ports<P>,
+) -> database::DatabaseState {
+    let factory = Arc::clone(&ports.database);
+    match (
+        app.try_state::<database::DatabaseKeyProvision>(),
+        database_path(app),
+    ) {
+        (Some(provision), Ok(resolved)) => {
+            tauri::async_runtime::block_on(database::open_provisioned_database(
+                ports.secrets.as_ref(),
+                provision.inner(),
+                factory,
+                resolved,
+            ))
+        }
+        (None, resolved) | (Some(_), resolved @ Err(_)) => tauri::async_runtime::block_on(
+            database::open_database(ports.secrets.as_ref(), factory, move || resolved),
+        ),
+    }
 }
 
 fn share_database<R: Runtime>(

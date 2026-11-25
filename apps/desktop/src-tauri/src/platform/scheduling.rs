@@ -1,14 +1,16 @@
-use crate::platform::background::{BackgroundRuntime, IdleCollectorWorker};
+use crate::platform::background::{BackgroundRuntime, CollectorWorker, IdleCollectorWorker};
+use crate::platform::collector::{CollectorFeeds, app_collector};
 use crate::platform::scheduled_ports::{AppSpecWatch, AppStoredJobs};
 use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
 use domain::Timestamp;
 use scheduler::{
-    DEFAULT_TICK_INTERVAL_SECONDS, DisabledAiJobQueue, JobError, JobRegistry, NoMarketCalendar,
-    PortfolioSyncJob, PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
+    BriefingJob, DailyBackupJob, IntradayCompactionJob, RegistryError, TossSpecWatchJob,
+    TransactionsSyncJob,
 };
 use scheduler::{
-    DailyBackupJob, IntradayCompactionJob, RegistryError, TossSpecWatchJob, TransactionsSyncJob,
+    DEFAULT_TICK_INTERVAL_SECONDS, DisabledAiJobQueue, JobError, JobRegistry, NoMarketCalendar,
+    PortfolioSyncJob, PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -109,6 +111,7 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     {
         return SchedulingStart::InvalidSchedule;
     }
+    let clock: Arc<dyn application::Clock> = Arc::<P::Clock>::clone(&ports.clock);
     let Ok(scheduler) = Scheduler::new(
         Arc::clone(&ports.clock),
         Arc::new(DisabledAiJobQueue),
@@ -117,13 +120,32 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
         return SchedulingStart::InvalidSchedule;
     };
     bridge.bind(scheduler.event_subscriber().with_order_sync(demand));
+    let collector = collector_worker::<R, P>(app, Arc::clone(&clock));
     let runtime = BackgroundRuntime::spawn(
         Arc::new(scheduler),
         Duration::from_secs(DEFAULT_TICK_INTERVAL_SECONDS),
-        Arc::new(IdleCollectorWorker),
+        collector,
     );
     app.manage(Arc::new(runtime));
     SchedulingStart::Started
+}
+
+fn collector_worker<R: Runtime, P: PortTypes>(
+    app: &App<R>,
+    clock: Arc<dyn application::Clock>,
+) -> Arc<dyn CollectorWorker> {
+    match (
+        app.try_state::<Arc<SqliteRepositories>>(),
+        app.try_state::<CollectorFeeds>(),
+    ) {
+        (Some(stored), Some(listed)) if !listed.0.is_empty() => Arc::new(app_collector::<R, P>(
+            app.handle(),
+            stored.as_ref(),
+            listed.inner(),
+            clock,
+        )),
+        (Some(_) | None, Some(_) | None) => Arc::new(IdleCollectorWorker),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +168,9 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     };
     registry.register(IntradayCompactionJob::new(stored()))?;
     registry.register(DailyBackupJob::new(stored()))?;
+    registry.register(BriefingJob::morning(stored()))?;
+    registry.register(BriefingJob::closing_review(stored()))?;
+    registry.register(BriefingJob::pre_us_market(stored()))?;
     registry.register(TransactionsSyncJob::new(
         stored(),
         Arc::new(NoMarketCalendar),

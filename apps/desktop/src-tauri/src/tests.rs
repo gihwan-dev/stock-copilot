@@ -2,10 +2,12 @@ use tauri::test::{mock_builder, mock_context, noop_assets};
 
 use crate::build_app;
 mod autostart;
+mod collector;
 mod database;
 mod e2e_smoke;
 mod exit;
 mod ipc_contract;
+mod key_provision;
 mod lifecycle;
 mod notifier;
 mod order_path;
