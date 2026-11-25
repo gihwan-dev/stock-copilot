@@ -25,6 +25,7 @@ import {
   shapeProblem,
 } from "../../.claude/hooks/lib/paths.mjs";
 import { LOCK, git } from "../../.claude/hooks/lib/project.mjs";
+import { blockedExit } from "./staged-sync.mjs";
 import { ROLE } from "../../.claude/hooks/lib/roles.mjs";
 import { parseScript } from "../../.claude/hooks/lib/shell.mjs";
 import { DECISION, decide } from "../../.claude/hooks/lib/verdict.mjs";
@@ -2819,11 +2820,16 @@ export const antigravityStop = (input, session, facts = {}) => {
             "git status 실행에 실패해 작업 사본 상태를 확인할 수 없다 (닫힌 실패).",
         };
       }
+      const blocked =
+        facts.blockedExit !== undefined ? facts.blockedExit : blockedExit(root);
+      if (rawDirty.trim() !== "" && blocked === true) {
+        return { decision: "allow" };
+      }
       if (rawDirty.trim() !== "") {
         return {
           decision: "continue",
           reason:
-            "커밋되지 않은 변경이 작업 사본에 남아 있다. 변경을 커밋(정상 Git 커밋 훅 포함)하거나 정리한 뒤 종료하라.",
+            '커밋되지 않은 변경이 작업 사본에 남아 있다. 변경을 커밋(정상 Git 커밋 훅 포함)하거나 정리한 뒤 종료하라. 고칠 수 없어 멈춘다면 `node harness/antigravity-hooks/staged-sync.mjs blocked <한 줄 이유>`로 막힘을 기록한 뒤 "막힘:"으로 보고하라.',
         };
       }
     }
