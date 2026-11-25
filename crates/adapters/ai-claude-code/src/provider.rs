@@ -62,6 +62,7 @@ pub struct ClaudeCodeConfig {
     model_defaults: ModelDefaults,
     cli_projects_dir: Option<PathBuf>,
     sandbox: Option<crate::sandbox::SandboxLayer>,
+    preflight_reap_grace_ms: u64,
 }
 
 impl fmt::Debug for ClaudeCodeConfig {
@@ -113,7 +114,14 @@ impl ClaudeCodeConfig {
             model_defaults: ModelDefaults::new(highest, fast),
             cli_projects_dir: None,
             sandbox: None,
+            preflight_reap_grace_ms: PREFLIGHT_REAP_GRACE_MS,
         })
+    }
+
+    #[must_use]
+    pub const fn with_preflight_reap_grace_ms(mut self, grace_ms: u64) -> Self {
+        self.preflight_reap_grace_ms = grace_ms;
+        self
     }
 
     #[must_use]
@@ -432,6 +440,7 @@ impl ClaudeCodeProvider {
             tx,
             record_cleanup: RecordCleanup::new(self.config.cli_projects_dir(), &workspace),
             workspace,
+            preflight_reap_grace_ms: self.config.preflight_reap_grace_ms,
         };
         let spawned_thread = std::thread::Builder::new()
             .name(String::from("claude-stream-reader"))
@@ -654,6 +663,7 @@ struct ReaderContext {
     tx: mpsc::Sender<ChannelMessage>,
     record_cleanup: RecordCleanup,
     workspace: RunWorkspace,
+    preflight_reap_grace_ms: u64,
 }
 
 struct RecordCleanup {
@@ -784,7 +794,7 @@ fn run_reader_loop(mut ctx: ReaderContext) {
     {
         let _closed_reader = reader;
     }
-    let exit_status = reap_for_stop(&ctx.shared, stop);
+    let exit_status = reap_for_stop(&ctx.shared, stop, ctx.preflight_reap_grace_ms);
     let interrupted = if ctx.shared.was_interrupted() {
         InterruptState::Interrupted
     } else {
@@ -805,11 +815,15 @@ fn run_reader_loop(mut ctx: ReaderContext) {
     );
 }
 
-fn reap_for_stop(shared: &SharedChild, stop: StopReason) -> Option<std::process::ExitStatus> {
+fn reap_for_stop(
+    shared: &SharedChild,
+    stop: StopReason,
+    preflight_grace_ms: u64,
+) -> Option<std::process::ExitStatus> {
     match stop {
         StopReason::NaturalEof => shared.reap_with_grace_blocking(NATURAL_EOF_REAP_GRACE_MS),
         StopReason::PreflightCompleted | StopReason::Rejected => {
-            shared.reap_with_grace_blocking(PREFLIGHT_REAP_GRACE_MS)
+            shared.reap_with_grace_blocking(preflight_grace_ms)
         }
         StopReason::DecodeError(_) | StopReason::ReceiverClosed => {
             shared.force_kill_and_reap_blocking()

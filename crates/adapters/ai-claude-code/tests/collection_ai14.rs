@@ -146,7 +146,8 @@ mod tests {
             String::from("/tmp"),
         ))
         .with_collection_json_schema(String::from(WEB_COLLECTION_JSON_SCHEMA))
-        .with_cli_projects_dir(root.join("projects"));
+        .with_cli_projects_dir(root.join("projects"))
+        .with_preflight_reap_grace_ms(10_000_u64);
         ClaudeWebCollectionRunner::new(
             Arc::new(ClaudeCodeProvider::new(config)),
             Arc::new(SteppedClock::new(at(1_700_000_000))),

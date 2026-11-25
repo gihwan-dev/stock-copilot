@@ -406,6 +406,44 @@ mod tests {
         Body,
     }
 
+    fn recorded_estimates(rt: &tokio::runtime::Runtime, catalog: &Catalog) -> usize {
+        rt.block_on(
+            catalog
+                .estimates
+                .submissions
+                .submission_records(&InstrumentId::try_new("sample-a").expect("종목")),
+        )
+        .expect("제출 기록")
+        .len()
+    }
+
+    fn submit_known_valid_estimate(rt: &tokio::runtime::Runtime, catalog: &Catalog) {
+        let before = recorded_estimates(rt, catalog);
+        let name = ToolName::try_new("submit_estimate").expect("도구 이름");
+        let (_spec, tool) = catalog.registry.get(&name).expect("등록된 도구");
+        let run_id = AiRunId::try_new("run-m05").expect("실행 ID");
+        let arguments = serde_json::json!({
+            "task_id": "est-1",
+            "p": 60_u64,
+            "rationale": "실적 개선",
+            "counterargument": "환율 부담",
+            "sources": []
+        });
+        let outcome = rt.block_on(tool.invoke(ToolInvocation {
+            run_id: &run_id,
+            arguments: arguments.as_object().expect("객체"),
+        }));
+        match (before, outcome) {
+            (0_usize, Ok(_accepted)) => {}
+            (1_usize, Err(error)) => assert_eq!(
+                error.code(),
+                ToolErrorCode::InvalidInput,
+                "이미 기록된 과제의 재제출은 거부된다"
+            ),
+            (count, other) => panic!("무작위 단계 뒤 기록 {count}건에서 예상 밖 결과: {other:?}"),
+        }
+    }
+
     #[test]
     fn every_registered_tool_survives_random_arguments_and_reaches_its_body() {
         let catalog = catalog();
@@ -444,6 +482,7 @@ mod tests {
             .saturating_add(catalog.market.calls().len())
             .saturating_add(catalog.news.calls().len());
         assert!(port_calls > 0_usize, "읽기 포트까지 호출이 닿아야 한다");
+        submit_known_valid_estimate(&rt, &catalog);
         let recorded = rt
             .block_on(
                 catalog
