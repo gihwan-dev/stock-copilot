@@ -74,7 +74,7 @@ const Actions = (props: {
   );
 
 export const StepScreen = (props: Props): ReactElement => (
-  <div className="flex flex-col w-full h-screen max-w-full scroll-flex bg-bg">
+  <div className="flex flex-col flex-1 w-full max-w-full scroll-flex">
     <ScrollArea direction="vertical">
       <div className="flex flex-col items-center w-full px-space-6 pt-space-10 pb-space-6">
         <div className="flex flex-col gap-space-8 w-full max-w-dialog-width">

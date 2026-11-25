@@ -210,7 +210,7 @@ export const AppShell = (props: Props): ReactElement => {
         if (chatState === "open") updateChat("closed");
         if (listState === "open") updateList("closed");
       }}
-      className="relative flex flex-col w-full h-screen bg-bg text-ink scroll-flex"
+      className="relative flex flex-col flex-1 w-full scroll-flex"
     >
       {statusSlot === null ? null : (
         <div className="flex-none w-full">{statusSlot}</div>
@@ -222,7 +222,7 @@ export const AppShell = (props: Props): ReactElement => {
           state={listState}
           onChange={updateList}
         />
-        <main className="relative flex-1 flex flex-col bg-bg scroll-flex">
+        <main className="relative flex-1 flex flex-col scroll-flex">
           <ShellChatBar
             chat={chatSlot}
             state={chatState}
