@@ -1,12 +1,14 @@
 use crate::ports::{PortTypes, Ports};
 use application::{
-    CheckTossSpec, FullInspectionRun, RunFullInspection, SecretKey, SecretStore, SpecDriftStatus,
-    TossSpecBaseline, TossSpecSource, TransactionSchedule,
+    BriefingOutcome, CheckTossSpec, FullInspectionRun, HoldingsBriefingContext, RunBriefing,
+    RunFullInspection, SecretKey, SecretStore, SpecDriftStatus, TossSpecBaseline, TossSpecSource,
+    TransactionSchedule,
 };
-use domain::{InspectionRangeDays, Timestamp};
+use domain::{BriefingKind, InspectionRangeDays, Timestamp};
 use scheduler::{
-    BackupResult, BackupRetention, CompactionResult, DatabaseBackupPort, IntradayCompactionPort,
-    JobError, SpecWatchPort, SpecWatchResult, TransactionSyncPort, TransactionSyncTally,
+    BackupResult, BackupRetention, BriefingPort, BriefingRunResult, CompactionResult,
+    DatabaseBackupPort, IntradayCompactionPort, JobError, SpecWatchPort, SpecWatchResult,
+    TransactionSyncPort, TransactionSyncTally,
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -185,6 +187,35 @@ impl<R: Runtime, P: PortTypes, S: TossSpecSource> SpecWatchPort for AppSpecWatch
             SpecDriftStatus::CheckFailed(error) => {
                 Err(JobError::ExecutionFailed(format!("{error:?}")))
             }
+        }
+    }
+}
+
+impl<R: Runtime, P: PortTypes> BriefingPort for AppStoredJobs<R, P> {
+    async fn run(
+        &self,
+        kind: BriefingKind,
+        _now: Timestamp,
+    ) -> Result<BriefingRunResult, JobError> {
+        let ports = self.ports()?;
+        let context = HoldingsBriefingContext {
+            portfolios: ports.portfolios.as_ref(),
+            news: ports.news.as_ref(),
+            accounts: &ports.saved_accounts,
+        };
+        let report = RunBriefing {
+            ai: ports.ai_provider.as_ref(),
+            repository: &self.repositories,
+            context: &context,
+            clock: ports.clock.as_ref(),
+            events: &ports.events,
+        }
+        .execute(kind)
+        .await
+        .map_err(storage)?;
+        match report.record.outcome {
+            BriefingOutcome::Completed { .. } => Ok(BriefingRunResult::Completed),
+            BriefingOutcome::Failed(_) => Ok(BriefingRunResult::Failed),
         }
     }
 }

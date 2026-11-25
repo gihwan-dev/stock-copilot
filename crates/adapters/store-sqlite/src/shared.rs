@@ -1,25 +1,25 @@
 use crate::{
     AuditStore, BackupDirectory, BackupOutcome, BriefingStore, ChatStore, Database, EstimateStore,
-    HoldingsStore, InformationStore, MarketStore, SettingsStore, SignalStore, SpecStatusStore,
-    ThesisStore, TransactionStore, ValuationStore,
+    HoldingsStore, InformationStore, MarketStore, SettingsStore, SignalStore, SourceStatusStore,
+    SpecStatusStore, ThesisStore, TransactionStore, ValuationStore,
 };
 use application::{
     AiRunId, AuditEntry, AuditIntegrity, AuditLog, BriefingRecord, BriefingRepository,
     ChatNumberEvidence, ChatNumberEvidenceSet, ChatRepository, ChatRunLedger, ChatRunLedgerEntry,
     ChatSessionId, ChatSessionRecord, ChatSessionSummary, Clock, ConditionalDraftOutcome,
-    EstimateRepository, FullInspectionRepository, FxRateQuery, MarketDataRepository,
-    NewsRepository, ProposalRepository, RecordOutcome, RetryDelay, SecretValue, SettingsRepository,
-    SignalCommitOutcome, SignalMutation, SignalRepository, SignalSnapshot, SignalSourceFacts,
-    SpecStatusRecord, StoredChatEntry, StoredUserMessage, SystemFailure, SystemPort,
-    SystemPortError, ThesisRepository, TossSpecStatusRepository, TransactionRepository,
-    TransactionSyncRecord, TransactionSyncRepository, UserMessageId, ValuationRepository,
-    WriteCompleted,
+    DisclosureRepository, EstimateRepository, FullInspectionRepository, FxRateQuery,
+    MarketDataRepository, NewsRepository, ProposalRepository, RecordOutcome, RetryDelay,
+    SecretValue, SettingsRepository, SignalCommitOutcome, SignalMutation, SignalRepository,
+    SignalSnapshot, SignalSourceFacts, SourceStatus, SourceStatusRepository, SpecStatusRecord,
+    StoredChatEntry, StoredUserMessage, SystemFailure, SystemPort, SystemPortError,
+    ThesisRepository, TossSpecStatusRepository, TransactionRepository, TransactionSyncRecord,
+    TransactionSyncRepository, UserMessageId, ValuationRepository, WriteCompleted,
 };
 use domain::{
-    AccountId, BriefingId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft,
-    DraftRestoreEvidence, EstimateOutcome, FxPair, FxRate, FxRateKind, HistoricalSignal,
-    HistoricalSignalOccurrence, InstrumentId, InvestorProfile, IssuedEstimateTaskId,
-    MasterInstrument, NewsItem, PriceAdjustment, Proposal, ProposalId, Quote,
+    AccountId, BriefingId, Calibration, CalibrationKey, Candle, CandlePeriod, DataSource,
+    Disclosure, DisclosureKey, Draft, DraftRestoreEvidence, EstimateOutcome, FxPair, FxRate,
+    FxRateKind, HistoricalSignal, HistoricalSignalOccurrence, InstrumentId, InvestorProfile,
+    IssuedEstimateTaskId, MasterInstrument, NewsItem, PriceAdjustment, Proposal, ProposalId, Quote,
     ResolvedOrderInstrument, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey,
     SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
@@ -596,6 +596,47 @@ impl BriefingRepository for SqliteRepositories {
         let guard = self.shared.read().await;
         let database = opened(guard.as_ref(), REPOSITORY)?;
         BriefingRepository::recent(&BriefingStore::new(database)).await
+    }
+}
+
+impl DisclosureRepository for SqliteRepositories {
+    async fn store_disclosure(&self, item: &Disclosure) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        InformationStore::new(database).store_disclosure(item).await
+    }
+    async fn disclosure(&self, key: &DisclosureKey) -> Result<Option<Disclosure>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        InformationStore::new(database).disclosure(key).await
+    }
+    async fn disclosures_for_instrument(
+        &self,
+        instrument: &InstrumentId,
+    ) -> Result<Vec<Disclosure>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        InformationStore::new(database)
+            .disclosures_for_instrument(instrument)
+            .await
+    }
+}
+
+impl SourceStatusRepository for SqliteRepositories {
+    async fn find(&self, source: DataSource) -> Result<Option<SourceStatus>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        SourceStatusStore::new(database).find(source).await
+    }
+    async fn list_all(&self) -> Result<Vec<SourceStatus>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        SourceStatusStore::new(database).list_all().await
+    }
+    async fn save(&self, status: &SourceStatus) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        SourceStatusRepository::save(&SourceStatusStore::new(database), status).await
     }
 }
 

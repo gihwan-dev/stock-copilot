@@ -1,7 +1,11 @@
 mod lexer;
 mod money;
 mod rules;
+mod statement;
+mod structure;
 
+#[cfg(test)]
+mod structure_tests;
 #[cfg(test)]
 mod tests;
 
@@ -16,6 +20,7 @@ use proc_macro2::{Literal, TokenStream, TokenTree};
 use crate::check_support::{Finding, read_text, report, string_value, workspace_root};
 use money::{MoneyNames, money_rules};
 use rules::{ASSEMBLY_MACROS, Recognition, Rule, recognize};
+use structure::Context;
 
 pub(crate) const STORE_DIRECTORY: &str = "crates/adapters/store-sqlite/";
 
@@ -204,10 +209,22 @@ fn collect_files(directory: &Path, files: &mut Vec<std::path::PathBuf>) -> Resul
     Ok(())
 }
 
+fn structure_findings(path: &str, text: &str, context: &Context) -> Vec<Finding<Rule>> {
+    structure::check_file(path, text, context)
+        .into_iter()
+        .map(|finding| Finding {
+            path: finding.path,
+            location: finding.location,
+            rule: Rule::Structure(finding.rule),
+        })
+        .collect()
+}
+
 pub(crate) fn check_repository(
     root: &Path,
     names: &MoneyNames,
 ) -> Result<BTreeSet<Finding<Rule>>, String> {
+    let context = Context::load(root)?;
     let metadata = MetadataCommand::new()
         .manifest_path(root.join("Cargo.toml"))
         .no_deps()
@@ -228,7 +245,9 @@ pub(crate) fn check_repository(
             .and_then(Path::to_str)
             .map(String::from)
             .ok_or_else(|| format!("{}: 저장소 밖의 경로", file.display()))?;
-        findings.extend(check_file(&relative, &read_text(&file)?, names));
+        let text = read_text(&file)?;
+        findings.extend(check_file(&relative, &text, names));
+        findings.extend(structure_findings(&relative, &text, &context));
     }
     Ok(findings)
 }
@@ -236,6 +255,7 @@ pub(crate) fn check_repository(
 pub(crate) fn text_findings(root: &Path, path: &str, text: &str) -> Result<Vec<String>, String> {
     let names = MoneyNames::load(root)?;
     let mut findings = check_file(path, text, &names);
+    findings.extend(structure_findings(path, text, &Context::load(root)?));
     findings.sort();
     findings.dedup();
     Ok(findings.iter().map(ToString::to_string).collect())

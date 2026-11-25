@@ -690,3 +690,14 @@ pub use warm_chat::{
 };
 mod database_restore;
 pub use database_restore::{RestoreOutcome, announce_restore};
+
+mod collect_feed;
+pub use collect_feed::{
+    CollectFeed, CollectedCount, CollectionDue, FeedRound, FeedRoundOutcome, collection_due,
+    feed_data_source,
+};
+
+mod briefing_context;
+pub use briefing_context::{
+    BRIEFING_INSTRUMENT_LIMIT, BRIEFING_NEWS_PER_INSTRUMENT, HoldingsBriefingContext,
+};

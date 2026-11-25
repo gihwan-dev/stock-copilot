@@ -189,7 +189,7 @@ crates = ["serde"]
 forbidden-in = ["domain"]
 
 [[external-location]]
-crates = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml"]
+crates = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml", "sqlparser"]
 allowed-in = ["xtask"]
 
 [[external-location]]
@@ -282,7 +282,7 @@ allowed = ["rust_decimal", "time"]
 
 [[external-allowlist]]
 crate = "xtask"
-allowed = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml", "typify", "schemars", "serde_json", "quote", "sha2"]
+allowed = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml", "typify", "schemars", "serde_json", "quote", "sha2", "sqlparser"]
 
 [[feature-location]]
 external = "tokio"

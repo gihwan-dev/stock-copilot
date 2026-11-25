@@ -66,17 +66,31 @@ pub(crate) fn plan(
     }
 }
 
-fn execute(root: &Path, executable: &str, args: &[String]) -> Result<(), String> {
-    let status = Command::new(executable)
-        .current_dir(root)
-        .args(args)
-        .status()
-        .map_err(|error| error.to_string())?;
+pub(crate) const PROPERTY_CASES: &str = "STOCK_COPILOT_PROPTEST_CASES";
+
+fn command_for(root: &Path, executable: &str, args: &[String]) -> Command {
+    let mut command = Command::new(executable);
+    command.current_dir(root).args(args);
+    command
+}
+
+fn local_test_command(root: &Path, args: &[String]) -> Command {
+    let mut command = command_for(root, "cargo", args);
+    command.env_remove(PROPERTY_CASES);
+    command
+}
+
+fn finish(executable: &str, mut command: Command) -> Result<(), String> {
+    let status = command.status().map_err(|error| error.to_string())?;
     if status.success() {
         Ok(())
     } else {
         Err(format!("{executable}: {status}"))
     }
+}
+
+fn execute(root: &Path, executable: &str, args: &[String]) -> Result<(), String> {
+    finish(executable, command_for(root, executable, args))
 }
 
 type Members = BTreeMap<String, String>;
@@ -140,7 +154,7 @@ fn check_rust(root: &Path, crates: &BTreeSet<String>) -> Result<(), String> {
             String::from("--locked"),
         ];
         tests.extend(packages);
-        execute(root, "cargo", &tests)?;
+        finish("cargo", local_test_command(root, &tests))?;
     }
     Ok(())
 }
@@ -535,5 +549,21 @@ mod review_tests {
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn local_tests_drop_the_full_property_count() {
+        let command = crate::fast_check::local_test_command(
+            std::path::Path::new("."),
+            &[String::from("nextest")],
+        );
+        assert_eq!(
+            command
+                .get_envs()
+                .filter(|(key, value)| *key == crate::fast_check::PROPERTY_CASES && value.is_none())
+                .count(),
+            1
+        );
+        assert_eq!(command.get_program(), "cargo");
     }
 }
