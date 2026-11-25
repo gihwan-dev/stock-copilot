@@ -1,0 +1,41 @@
+{
+  "symbol": "005930",
+  "name": "삼성전자",
+  "price": {
+    "amount": "71400",
+    "currency": "KRW"
+  },
+  "today": {
+    "rate": "2.00",
+    "direction": "up"
+  },
+  "quoted_at": "2026-11-25T10:00:00+09:00",
+  "candles": [
+    {
+      "date": "2026-11-24",
+      "open": "70000",
+      "high": "70000",
+      "low": "70000",
+      "close": "70000"
+    },
+    {
+      "date": "2026-11-25",
+      "open": "71400",
+      "high": "71400",
+      "low": "71400",
+      "close": "71400"
+    }
+  ],
+  "holding": {
+    "quantity": "10",
+    "value": {
+      "amount": "714000",
+      "currency": "KRW"
+    },
+    "profit": {
+      "amount": "64000",
+      "currency": "KRW"
+    },
+    "profit_rate": "9.85"
+  }
+}

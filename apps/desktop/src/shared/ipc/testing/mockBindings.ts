@@ -120,6 +120,22 @@ export const commands = {
     typedError<UiTransactionsView_Serialize, IpcError>(
       __TAURI_INVOKE("get_transactions", { request }),
     ),
+  getInstruments: (request: GetInstrumentsRequest) =>
+    typedError<UiInstrumentsView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_instruments", { request }),
+    ),
+  getInstrumentDetail: (request: InstrumentRequest) =>
+    typedError<UiInstrumentDetail_Serialize, IpcError>(
+      __TAURI_INVOKE("get_instrument_detail", { request }),
+    ),
+  addWatchlist: (request: InstrumentRequest) =>
+    typedError<UiWatchlistChange_Serialize, IpcError>(
+      __TAURI_INVOKE("add_watchlist", { request }),
+    ),
+  removeWatchlist: (request: InstrumentRequest) =>
+    typedError<UiWatchlistChange_Serialize, IpcError>(
+      __TAURI_INVOKE("remove_watchlist", { request }),
+    ),
 };
 
 /** Events */
@@ -572,6 +588,10 @@ export type GetChatHistoryResponse_Serialize = {
   active_turn: ActiveChatTurnDto | null;
 };
 
+export type GetInstrumentsRequest = {
+  scope: InstrumentsScope;
+};
+
 export type GetJobSchedulesRequest = {
   scope: JobSchedulesScope;
 };
@@ -607,6 +627,12 @@ export type GetStatusRequest = {
 export type GetTransactionsRequest = {
   scope: TransactionsScope;
 };
+
+export type InstrumentRequest = {
+  symbol: string;
+};
+
+export type InstrumentsScope = "tracked";
 
 export type IpcError = {
   kind: IpcErrorKind;
@@ -907,6 +933,11 @@ export type UiCurrencyValue_Serialize = {
   currency: UiCurrency;
   holdings: UiMoney;
   buying_power: UiMoney | null;
+};
+
+export type UiDailyChange = {
+  rate: string;
+  direction: UiDirection;
 };
 
 export type UiDataSource =
@@ -1677,7 +1708,75 @@ export type UiInformationSource =
   | ({ News: UiNewsSource } & { Disclosure?: never })
   | ({ Disclosure: UiDisclosureSource } & { News?: never });
 
+export type UiInstrumentCandle = {
+  date: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+};
+
 export type UiInstrumentCap = "10" | "15" | "20" | "25" | "30";
+
+export type UiInstrumentDetail =
+  UiInstrumentDetail_Serialize | UiInstrumentDetail_Deserialize;
+
+export type UiInstrumentDetail_Deserialize = {
+  symbol: string;
+  name: string;
+  price: UiMoney;
+  today?: UiDailyChange | null;
+  quoted_at: string;
+  candles: UiInstrumentCandle[];
+  holding?: UiInstrumentHolding | null;
+};
+
+export type UiInstrumentDetail_Serialize = {
+  symbol: string;
+  name: string;
+  price: UiMoney;
+  today: UiDailyChange | null;
+  quoted_at: string;
+  candles: UiInstrumentCandle[];
+  holding: UiInstrumentHolding | null;
+};
+
+export type UiInstrumentHolding = {
+  quantity: string;
+  value: UiMoney;
+  profit: UiMoney;
+  profit_rate: string;
+};
+
+export type UiInstrumentOrigin = "holding" | "watchlist";
+
+export type UiInstrumentRow =
+  UiInstrumentRow_Serialize | UiInstrumentRow_Deserialize;
+
+export type UiInstrumentRow_Deserialize = {
+  symbol: string;
+  name: string;
+  origin: UiInstrumentOrigin;
+  today?: UiDailyChange | null;
+};
+
+export type UiInstrumentRow_Serialize = {
+  symbol: string;
+  name: string;
+  origin: UiInstrumentOrigin;
+  today: UiDailyChange | null;
+};
+
+export type UiInstrumentsView =
+  UiInstrumentsView_Serialize | UiInstrumentsView_Deserialize;
+
+export type UiInstrumentsView_Deserialize = {
+  rows: UiInstrumentRow_Deserialize[];
+};
+
+export type UiInstrumentsView_Serialize = {
+  rows: UiInstrumentRow_Serialize[];
+};
 
 export type UiJobRun = {
   at: string;
@@ -2056,6 +2155,27 @@ export type UiUpdateState =
       };
     } & { downloading?: never; ready?: never });
 
+export type UiWatchlistChange =
+  UiWatchlistChange_Serialize | UiWatchlistChange_Deserialize;
+
+export type UiWatchlistChange_Deserialize = {
+  outcome: UiWatchlistOutcome;
+  reason?: UiWatchlistRejection | null;
+};
+
+export type UiWatchlistChange_Serialize = {
+  outcome: UiWatchlistOutcome;
+  reason: UiWatchlistRejection | null;
+};
+
+export type UiWatchlistOutcome = "applied" | "rejected";
+
+export type UiWatchlistRejection =
+  | "unknown-instrument"
+  | "inactive-instrument"
+  | "capacity-exceeded"
+  | "not-in-watchlist";
+
 export type UiWeightLevel = "normal" | "warning" | "over-cap";
 
 export type UpdateStatusQuery = "current" | "check-now";
@@ -2235,6 +2355,18 @@ export type MockCommandHandlers = {
   getTransactions: (args: {
     request: GetTransactionsRequest;
   }) => UiTransactionsView_Serialize | Promise<UiTransactionsView_Serialize>;
+  getInstruments: (args: {
+    request: GetInstrumentsRequest;
+  }) => UiInstrumentsView_Serialize | Promise<UiInstrumentsView_Serialize>;
+  getInstrumentDetail: (args: {
+    request: InstrumentRequest;
+  }) => UiInstrumentDetail_Serialize | Promise<UiInstrumentDetail_Serialize>;
+  addWatchlist: (args: {
+    request: InstrumentRequest;
+  }) => UiWatchlistChange_Serialize | Promise<UiWatchlistChange_Serialize>;
+  removeWatchlist: (args: {
+    request: InstrumentRequest;
+  }) => UiWatchlistChange_Serialize | Promise<UiWatchlistChange_Serialize>;
 };
 
 /**
@@ -2416,6 +2548,30 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.getTransactions,
             "get_transactions",
+            args,
+          );
+        case "get_instruments":
+          return mockCommandHandler(
+            mockHandlers.getInstruments,
+            "get_instruments",
+            args,
+          );
+        case "get_instrument_detail":
+          return mockCommandHandler(
+            mockHandlers.getInstrumentDetail,
+            "get_instrument_detail",
+            args,
+          );
+        case "add_watchlist":
+          return mockCommandHandler(
+            mockHandlers.addWatchlist,
+            "add_watchlist",
+            args,
+          );
+        case "remove_watchlist":
+          return mockCommandHandler(
+            mockHandlers.removeWatchlist,
+            "remove_watchlist",
             args,
           );
         default:

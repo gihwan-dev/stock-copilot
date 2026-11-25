@@ -11,6 +11,7 @@ use src_tauri::holdings_link::{
     SavedMaster,
 };
 use src_tauri::ipc::briefing::BriefingIpcState;
+use src_tauri::ipc::instruments::InstrumentsIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
 use src_tauri::ipc::scorecard::ScorecardIpcState;
@@ -120,15 +121,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(ResolutionDataSlot(Arc::new(ResolutionData::new(
                 TossResolutionSource(Arc::<ProductBroker>::clone(&toss.broker)),
             ))))
-            .manage(ScorecardIpcState::from_repository(
-                Arc::clone(&repositories),
-                Arc::<platform_macos::SystemClock>::clone(&shared_clock),
-            ))
+            .manage_screens(&toss, &repositories, &shared_clock, &ports.events)
             .manage(public_ip_runtime(&shared_clock)),
         ports,
         context,
     )?;
     run_primary(app)
+}
+
+trait ManageScreens {
+    fn manage_screens(
+        self,
+        toss: &ProductToss,
+        repositories: &Arc<SqliteRepositories>,
+        clock: &Arc<platform_macos::SystemClock>,
+        events: &Arc<application::EventBus>,
+    ) -> Self;
+}
+
+impl ManageScreens for tauri::Builder<tauri::Wry> {
+    fn manage_screens(
+        self,
+        toss: &ProductToss,
+        repositories: &Arc<SqliteRepositories>,
+        clock: &Arc<platform_macos::SystemClock>,
+        events: &Arc<application::EventBus>,
+    ) -> Self {
+        self.manage(ScorecardIpcState::from_repository(
+            Arc::clone(repositories),
+            Arc::<platform_macos::SystemClock>::clone(clock),
+        ))
+        .manage(InstrumentsIpcState::new(
+            Arc::<ProductBroker>::clone(&toss.broker),
+            Arc::clone(repositories),
+            Arc::<platform_macos::SystemClock>::clone(clock),
+            Arc::clone(events),
+        ))
+    }
 }
 
 struct ProductAiStatus {

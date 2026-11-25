@@ -1,4 +1,5 @@
 export const responses = {
+  addWatchlist: { outcome: "applied", reason: null },
   appVersion: { version: "0.1.0" },
   cancelChatTurn: { outcome: "NotRunning", turn_id: "turn-1" },
   checkTossConnection: { state: "connected" },
@@ -72,6 +73,51 @@ export const responses = {
       },
     ],
     session_id: "session-ipc-1",
+  },
+  getInstrumentDetail: {
+    candles: [
+      {
+        close: "70000",
+        date: "2026-11-24",
+        high: "70000",
+        low: "70000",
+        open: "70000",
+      },
+      {
+        close: "71400",
+        date: "2026-11-25",
+        high: "71400",
+        low: "71400",
+        open: "71400",
+      },
+    ],
+    holding: {
+      profit: { amount: "64000", currency: "KRW" },
+      profit_rate: "9.85",
+      quantity: "10",
+      value: { amount: "714000", currency: "KRW" },
+    },
+    name: "삼성전자",
+    price: { amount: "71400", currency: "KRW" },
+    quoted_at: "2026-11-25T10:00:00+09:00",
+    symbol: "005930",
+    today: { direction: "up", rate: "2.00" },
+  },
+  getInstruments: {
+    rows: [
+      {
+        name: "삼성전자",
+        origin: "holding",
+        symbol: "005930",
+        today: { direction: "up", rate: "2.00" },
+      },
+      {
+        name: "SK하이닉스",
+        origin: "watchlist",
+        symbol: "000660",
+        today: null,
+      },
+    ],
   },
   getJobSchedules: {
     jobs: [
@@ -233,6 +279,7 @@ export const responses = {
     { kind: "no-data" },
   ],
   openExternal: { status: "opened" },
+  removeWatchlist: { outcome: "applied", reason: null },
   requestOrderApproval: { reason: "presence-denied", status: "rejected" },
   restartToUpdate: { current_version: "0.1.0", state: "off" },
   resubscribeChatTurn: {

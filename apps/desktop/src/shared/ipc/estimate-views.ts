@@ -85,7 +85,7 @@ export type InstrumentListRow = {
   readonly name: FreeText;
   readonly ticker: Ticker;
   readonly origin: "holding" | "watchlist";
-  readonly todayRate: PercentDisplay;
+  readonly todayRate: PercentDisplay | undefined;
   readonly direction: "up" | "down" | "flat";
 };
 
@@ -107,7 +107,7 @@ export type InstrumentDetailView = {
   readonly name: FreeText;
   readonly ticker: Ticker;
   readonly price: Money;
-  readonly todayRate: PercentDisplay;
+  readonly todayRate: PercentDisplay | undefined;
   readonly direction: "up" | "down" | "flat";
   readonly quotedAt: Timestamp;
   readonly candles: readonly InstrumentCandle[];

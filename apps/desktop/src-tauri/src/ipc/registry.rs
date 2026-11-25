@@ -2,8 +2,8 @@ use tauri::Runtime;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
-    app_version, briefing, chat, open_external, order_approval, portfolio, public_ip, risk_editor,
-    schedule, scorecard, self_check, settings, toss, transactions, updates,
+    app_version, briefing, chat, instruments, open_external, order_approval, portfolio, public_ip,
+    risk_editor, schedule, scorecard, self_check, settings, toss, transactions, updates,
 };
 
 #[must_use]
@@ -39,7 +39,11 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         self_check::get_self_check::<tauri::Wry>,
         self_check::get_status::<tauri::Wry>,
         scorecard::get_scorecard::<tauri::Wry>,
-        transactions::get_transactions::<tauri::Wry>
+        transactions::get_transactions::<tauri::Wry>,
+        instruments::get_instruments::<tauri::Wry>,
+        instruments::get_instrument_detail::<tauri::Wry>,
+        instruments::add_watchlist::<tauri::Wry>,
+        instruments::remove_watchlist::<tauri::Wry>
     ];
     Builder::<R>::new()
         .commands(commands)

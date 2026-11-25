@@ -6,6 +6,7 @@ pub mod chat_hub;
 pub mod error;
 pub mod event;
 pub mod event_bridge;
+pub mod instruments;
 pub mod open_external;
 pub mod order_approval;
 pub mod portfolio;

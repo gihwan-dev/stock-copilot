@@ -196,3 +196,9 @@ export {
 export { getSelfCheck, getStatus } from "./status-call";
 export { getScorecard } from "./scorecard-call";
 export { getTransactions } from "./transactions-call";
+export {
+  addWatchlist,
+  getInstrumentDetail,
+  getInstruments,
+  removeWatchlist,
+} from "./instruments-call";

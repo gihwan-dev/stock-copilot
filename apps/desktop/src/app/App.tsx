@@ -4,7 +4,11 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { FirstRunGate, OnboardingClientProvider } from "../features/onboarding";
 import { AppFrame, AppShell, EmptyState, Page } from "../shared/ds";
 import {
+  addWatchlist,
   coreSetupClient,
+  getInstrumentDetail,
+  getInstruments,
+  removeWatchlist,
   getAllocation,
   getBriefings,
   getPortfolio,
@@ -47,6 +51,10 @@ const coreScreenSources: ScreenSources = {
   status: getStatus,
   scorecard: getScorecard,
   transactions: getTransactions,
+  instruments: getInstruments,
+  instrumentDetail: getInstrumentDetail,
+  addWatchlist,
+  removeWatchlist,
 };
 
 const CoreEventBridge = (): null => {

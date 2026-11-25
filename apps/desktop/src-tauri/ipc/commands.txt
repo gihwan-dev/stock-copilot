@@ -1,3 +1,4 @@
+add_watchlist
 app_version
 cancel_chat_turn
 check_toss_connection
@@ -5,6 +6,8 @@ copy_text
 get_allocation
 get_briefings
 get_chat_history
+get_instrument_detail
+get_instruments
 get_job_schedules
 get_portfolio
 get_public_ip
@@ -16,6 +19,7 @@ get_status
 get_transactions
 get_update_status
 open_external
+remove_watchlist
 request_order_approval
 restart_to_update
 resubscribe_chat_turn

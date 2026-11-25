@@ -20,6 +20,7 @@ const catalog = {
   quoteTitle: { ko: "시세" as UiText },
   price: { ko: "현재가" as UiText },
   today: { ko: "오늘 등락" as UiText },
+  todayUnknown: { ko: "등락 정보 없음" as UiText },
   quotedAt: { ko: "시세 시각" as UiText },
   chartTitle: { ko: "일봉 차트" as UiText },
   chartLabel: { ko: "일봉 차트" as UiText },

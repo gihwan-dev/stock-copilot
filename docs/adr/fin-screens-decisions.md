@@ -8,4 +8,8 @@
 |---|---|---|
 | 위임 | 하네스가 `Agent` 위임을 막아 모든 행을 메인 세션이 차례로 구현한다 | 하위 구현자 병렬 |
 | SC-3 | 거래내역은 명령 `get_transactions`가 기존 예약 작업(`TransactionsSyncJob`)이 저장한 첫 계좌의 최신 동기화 기록(`TransactionRepository::latest`)을 읽는다. 정산된 이력 행만 보이고(미정산 행은 정산 뒤 나타남) 취소 행은 뺀다. 사라진 행은 `vanished`로 남긴다. 최신순 500행까지. 금액은 순금액 → 거래금액 → 수수료 순으로 있는 값을 쓴다. 시각은 체결 시각, 없으면 정산일 0시(KST). 종목 이름은 마스터 디렉터리, 없으면 심볼. 현금 행 이름은 통화로 `messages.ts`(원화·달러) | 미정산 행도 표시, 금액 없는 행 제외 |
+| SC-1 | 종목 목록은 명령 `get_instruments`: 첫 계좌의 저장된 보유(`GetPortfolioView`)를 먼저, 관심 종목(`ManageWatchlist::list`)을 뒤에 둔다(겹치면 보유). 이름·시장은 종목 마스터 디렉터리에서 찾고, 마스터에 없는 관심 종목은 보이지 않는다. 디렉터리 항목에 `MasterInstrument`를 함께 두어 심볼↔종목 ID를 잇는다 | 관심 종목 표에 심볼·이름 열 추가(마이그레이션) |
+| SC-1 | 당일 등락은 domain `previous_session_close`(시세 시각의 날짜를 일봉의 시장 시간대로 구해 그보다 앞선 마지막 무수정 일봉 종가)와 `daily_change`(정확 나눗셈)로 계산한다. 토스 시세(`quotes`)는 목록 전체를 한 번에, 전일 종가는 종목마다 일봉 14일을 받아 같은 날짜 동안 메모리에 캐시한다. 시세·일봉이 없으면 등락을 비우고(화면 "등락 정보 없음") 0으로 지어내지 않는다. 그래서 화면 타입 `todayRate`를 선택값으로 바꿨다 | 등락 없는 행을 목록에서 뺌, 0% 표시 |
+| SC-1 | 종목 상세는 `get_instrument_detail(symbol)`: 현재가·시세 시각(없으면 재시도 오류), 등락, 일봉 120일 중 최근 60개(무수정), 저장된 보유의 수량·평가·손익. 관심 종목 추가·삭제는 `add_watchlist`/`remove_watchlist(symbol)`이 `ManageWatchlist`를 거쳐(이벤트 `WatchlistChanged`) 거부를 코드(`unknown-instrument`·`inactive-instrument`·`capacity-exceeded`·`not-in-watchlist`)로 보내고 문장은 `messages.ts`. 이미 있으면 적용으로 본다 | 이미 있음을 거부로 표시 |
+| SC-1 | 조립 루트 `main`이 60줄 상한을 넘어 성적표·종목 상태 등록을 `ManageScreens::manage_screens` 한 줄로 묶었다. master의 `platform/scheduling.rs` 변수 이름 유사(`similar_names`)도 이름만 바꿔 고쳤다 | - |
 | SC-3 | master에 있던 `ipc/portfolio/tests.rs`의 변수 가림(`clippy::shadow_unrelated`)을 이름만 바꿔 고쳤다(검사 결과 동일) | 그대로 둠(`check-lite` 실패) |

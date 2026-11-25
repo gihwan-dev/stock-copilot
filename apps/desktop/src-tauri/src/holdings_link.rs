@@ -40,6 +40,7 @@ pub struct DirectoryEntry {
     pub market: KnownMarket,
     pub name: DisplayInstrumentName,
     pub trading: domain::MasterTradingState,
+    pub master: MasterInstrument,
 }
 
 impl InstrumentDirectory {
@@ -54,6 +55,7 @@ impl InstrumentDirectory {
                         market: *quote.market(),
                         name: instrument.row().name.clone(),
                         trading: instrument.trading_state(),
+                        master: instrument.clone(),
                     },
                 ))
             })
@@ -61,6 +63,20 @@ impl InstrumentDirectory {
         match self.0.write() {
             Ok(mut guard) => *guard = entries,
             Err(poisoned) => *poisoned.into_inner() = entries,
+        }
+    }
+
+    #[must_use]
+    pub fn by_instrument(&self, instrument: &domain::InstrumentId) -> Option<DirectoryEntry> {
+        let find = |entries: &BTreeMap<Symbol, DirectoryEntry>| {
+            entries
+                .values()
+                .find(|entry| entry.master.row().instrument_id == *instrument)
+                .cloned()
+        };
+        match self.0.read() {
+            Ok(guard) => find(&guard),
+            Err(poisoned) => find(&poisoned.into_inner()),
         }
     }
 
