@@ -4,6 +4,7 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { FirstRunGate, OnboardingClientProvider } from "../features/onboarding";
 import { EmptyState, Page } from "../shared/ds";
 import {
+  coreSetupClient,
   getBriefings,
   pendingScreenSources,
   type ScreenSources,
@@ -20,6 +21,7 @@ type AppProps = {
   readonly queryClient?: QueryClient | undefined;
   readonly sources?: ScreenSources | undefined;
   readonly settingsClient?: SettingsClient | undefined;
+  readonly setupClient?: SettingsClient | undefined;
 };
 
 const coreScreenSources: ScreenSources = {
@@ -48,6 +50,18 @@ const AppErrorFallback = (props: Readonly<FallbackProps>): ReactElement => (
   </Page>
 );
 
+const SetupGate = (props: {
+  readonly client: SettingsClient | undefined;
+  readonly children: ReactElement;
+}): ReactElement =>
+  props.client === undefined ? (
+    props.children
+  ) : (
+    <OnboardingClientProvider client={props.client}>
+      <FirstRunGate>{props.children}</FirstRunGate>
+    </OnboardingClientProvider>
+  );
+
 export const App = (props: AppProps): ReactElement => {
   const [defaultClient] = useState(createAppQueryClient);
   const client = props.queryClient ?? defaultClient;
@@ -57,11 +71,13 @@ export const App = (props: AppProps): ReactElement => {
       <QueryClientProvider client={client}>
         <CoreEventBridge />
         {props.settingsClient === undefined ? (
-          <AppRouter
-            initialPath={props.initialPath}
-            sources={sources}
-            system="hidden"
-          />
+          <SetupGate client={props.setupClient}>
+            <AppRouter
+              initialPath={props.initialPath}
+              sources={sources}
+              system="hidden"
+            />
+          </SetupGate>
         ) : (
           <OnboardingClientProvider client={props.settingsClient}>
             <SettingsClients client={props.settingsClient}>
@@ -79,3 +95,7 @@ export const App = (props: AppProps): ReactElement => {
     </ErrorBoundary>
   );
 };
+
+export const CoreApp = (): ReactElement => (
+  <App setupClient={coreSetupClient} />
+);

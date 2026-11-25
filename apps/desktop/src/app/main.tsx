@@ -1,9 +1,9 @@
 import { StrictMode } from "react";
 import { mountApp } from "../shared/platform";
-import { App } from "./App";
+import { CoreApp } from "./App";
 
 mountApp(
   <StrictMode>
-    <App />
+    <CoreApp />
   </StrictMode>,
 );

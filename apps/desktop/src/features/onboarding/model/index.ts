@@ -1,4 +1,4 @@
-export type { CopyState, KeyProblem } from "./connection";
+export type { CopyState, IpView, KeyProblem } from "./connection";
 export {
   useConnectionGate,
   useIpCopy,

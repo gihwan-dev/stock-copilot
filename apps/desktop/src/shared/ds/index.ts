@@ -20,6 +20,8 @@ export { Inline } from "./Inline";
 export { Split } from "./Split";
 export { Toolbar } from "./Toolbar";
 export { Divider } from "./Divider";
+export { StepScreen } from "./StepScreen";
+export { ListRow } from "./ListRow";
 export { Table } from "./Table";
 export { Dialog } from "./Dialog";
 export { EmptyState } from "./EmptyState";

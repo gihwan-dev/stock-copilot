@@ -11,6 +11,7 @@ import { Table } from "./Table";
 import { Text } from "./Text";
 import { Heading } from "./Heading";
 import { EmptyState } from "./EmptyState";
+import { ListRow } from "./ListRow";
 import { Money } from "./Numbers";
 import { LineChart } from "./LineChart";
 import { AreaChart } from "./AreaChart";
@@ -45,6 +46,11 @@ const parts = [
   ...point("example-b", text("catalog.companyTwo", "ko"), "18600000000"),
   ...point("example-c", text("catalog.companyThree", "ko"), "32700000000"),
 ];
+const idle = (): void => {
+  return;
+};
+const rowTitle = text("catalog.company", "ko");
+const rowValue = text("ds.day", "ko");
 const charts = { LineChart, AreaChart, DonutChart, Treemap } as const;
 type Story = {
   readonly component:
@@ -53,6 +59,7 @@ type Story = {
     | "Card"
     | "Table"
     | "EmptyState"
+    | "ListRow"
     | "LineChart"
     | "AreaChart"
     | "DonutChart"
@@ -126,6 +133,49 @@ export const catalogAdditionalStories: readonly Story[] = [
     themes: ["light", "dark"],
     render: (): ReactElement => (
       <EmptyState title={text("ds.tableEmpty", "ko")}>{description}</EmptyState>
+    ),
+  },
+  {
+    component: "ListRow",
+    state: "long",
+    themes: ["light", "dark"],
+    render: (): ReactElement => (
+      <ListRow
+        title={rowTitle}
+        value={rowValue}
+        trailing={{ kind: "link", label: rowTitle, onPress: idle }}
+      />
+    ),
+  },
+  {
+    component: "ListRow",
+    state: "long",
+    themes: ["light", "dark"],
+    render: (): ReactElement => (
+      <ListRow
+        title={rowTitle}
+        value={rowValue}
+        trailing={{
+          kind: "fold",
+          label: rowTitle,
+          state: "open",
+          onPress: idle,
+        }}
+      >
+        <Text>{description}</Text>
+      </ListRow>
+    ),
+  },
+  {
+    component: "ListRow",
+    state: "long",
+    themes: ["light", "dark"],
+    render: (): ReactElement => (
+      <ListRow
+        title={rowTitle}
+        value={description}
+        trailing={{ kind: "switch", checked: "on", onChange: idle }}
+      />
     ),
   },
   ...(["LineChart", "AreaChart", "DonutChart", "Treemap"] as const).map(

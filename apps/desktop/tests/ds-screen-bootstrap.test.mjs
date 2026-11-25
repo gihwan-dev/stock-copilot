@@ -90,7 +90,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       );
     writeFileSync(
       join(folder, "src/app/App.tsx"),
-      "export const App = (): null => null;\n",
+      "export const App = (): null => null;\nexport const CoreApp = (): null => null;\n",
     );
     compile();
     const input = join(folder, "src/shared/platform/input.ts");

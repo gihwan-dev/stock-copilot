@@ -1,5 +1,5 @@
-import type { ReactElement } from "react";
-import { Card, Page, Skeleton } from "../../../shared/ds";
+import { useState, type ReactElement } from "react";
+import { Skeleton, StepScreen } from "../../../shared/ds";
 import { onboardingText } from "../messages";
 import { useConnectionGate } from "../model";
 import { useOnboardingClient } from "./client";
@@ -10,19 +10,27 @@ export const FirstRunGate = (props: {
   readonly children: ReactElement;
 }): ReactElement => {
   const view = useConnectionGate(useOnboardingClient());
+  const [choice, setChoice] = useState<"follow" | "later">("follow");
+  const later = (): void => {
+    setChoice("later");
+  };
+  if (choice === "later" && view.screen !== "loading") return props.children;
   switch (view.screen) {
     case "loading":
       return (
-        <Page title={onboardingText("onboarding.keyTitle", "ko")}>
-          <Card title={onboardingText("onboarding.loading", "ko")}>
-            <Skeleton variant="text" />
-          </Card>
-        </Page>
+        <StepScreen
+          progress={["now", "next"]}
+          progressLabel={onboardingText("onboarding.progress", "ko")}
+          title={onboardingText("onboarding.loading", "ko")}
+          description={onboardingText("onboarding.loadingBody", "ko")}
+        >
+          <Skeleton variant="text" />
+        </StepScreen>
       );
     case "keys":
-      return <KeyScreen problem={view.problem} />;
+      return <KeyScreen problem={view.problem} onLater={later} />;
     case "ip":
-      return <IpScreen />;
+      return <IpScreen onLater={later} />;
     case "ready":
       return props.children;
   }

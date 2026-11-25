@@ -6,10 +6,12 @@ import { Divider } from "../Divider";
 import { Grid } from "../Grid";
 import { GridItem } from "../GridItem";
 import { Inline } from "../Inline";
+import { ListRow } from "../ListRow";
 import { Page } from "../Page";
 import { Section } from "../Section";
 import { Split } from "../Split";
 import { Stack } from "../Stack";
+import { StepScreen } from "../StepScreen";
 import { Text } from "../Text";
 import { Toolbar } from "../Toolbar";
 import { stressFixtures } from "./stress";
@@ -24,7 +26,9 @@ type Component =
   | "Inline"
   | "Split"
   | "Toolbar"
-  | "Divider";
+  | "Divider"
+  | "StepScreen"
+  | "ListRow";
 
 type Story = {
   readonly component: Component;
@@ -151,6 +155,33 @@ export const layoutStressStories: readonly Story[] = [
         <Divider />
         <Text>{label}</Text>
       </>
+    ),
+  },
+  {
+    component: "StepScreen",
+    render: (): ReactElement => (
+      <StepScreen
+        progress={["passed", "now", "next"]}
+        progressLabel={label}
+        title={label}
+        description={stressFixtures.english}
+        primary={action}
+        secondary={{ label: stressFixtures.english, onPress: action.onPress }}
+      >
+        <Text>{stressFixtures.english}</Text>
+      </StepScreen>
+    ),
+  },
+  {
+    component: "ListRow",
+    render: (): ReactElement => (
+      <ListRow
+        title={label}
+        value={stressFixtures.english}
+        trailing={{ kind: "link", label, onPress: action.onPress }}
+      >
+        <Text>{stressFixtures.english}</Text>
+      </ListRow>
     ),
   },
 ];

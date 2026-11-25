@@ -322,6 +322,7 @@ test("DS19 component dimension exceptions equal the approved exact file token pa
       "src/shared/ds/Divider.tsx",
       ["h-border-hairline", "w-border-hairline", "min-h-control-height-sm"],
     ],
+    ["src/shared/ds/StepScreen.tsx", ["max-w-dialog-width"]],
   ]);
   for (const [file, values] of LENGTH_EXCEPTIONS) {
     for (const value of [...values, ...values.map((v) => `hover:${v}`)]) {

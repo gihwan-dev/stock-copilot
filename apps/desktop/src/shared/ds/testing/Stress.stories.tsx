@@ -66,7 +66,9 @@ type Component =
   | "DataText"
   | "TimestampText"
   | "Markdown"
-  | "ChatInput";
+  | "ChatInput"
+  | "StepScreen"
+  | "ListRow";
 type Story = {
   readonly component: Component;
   readonly state: "stress";

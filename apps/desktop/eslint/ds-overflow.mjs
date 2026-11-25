@@ -82,6 +82,7 @@ export const LENGTH_EXCEPTIONS = [
     "src/shared/ds/Divider.tsx",
     ["h-border-hairline", "w-border-hairline", "min-h-control-height-sm"],
   ],
+  ["src/shared/ds/StepScreen.tsx", ["max-w-dialog-width"]],
 ];
 const lengthException = (file) =>
   LENGTH_EXCEPTIONS.find(([path]) => path === file)?.[1] ?? [];

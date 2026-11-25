@@ -1,4 +1,6 @@
-import { err, type Result } from "../lib";
+import { err, ok, type Result } from "../lib";
+import { getSettings } from "./call";
+import type { SettingsView } from "./settings-schema";
 import type {
   AiSettings,
   AiTaskSetting,
@@ -111,4 +113,21 @@ export const unavailableSettingsClient: SettingsClient = {
   setAliases: unavailable,
   principles: unavailable,
   setPrinciples: unavailable,
+};
+
+const connectionOf = (
+  reply: Result<SettingsView, IpcFailure>,
+): Result<TossConnection, IpcFailure> =>
+  reply.kind === "ok"
+    ? ok({
+        state:
+          reply.value.tossConnection === "connected"
+            ? "connected"
+            : "needs-keys",
+      })
+    : reply;
+
+export const coreSetupClient: SettingsClient = {
+  ...unavailableSettingsClient,
+  checkTossConnection: () => getSettings().then(connectionOf),
 };

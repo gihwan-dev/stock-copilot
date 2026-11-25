@@ -2,21 +2,21 @@ import { useState, type ReactElement } from "react";
 import { Switch as Base } from "@base-ui/react/switch";
 import type { UiText } from "../lib";
 import type { Availability } from "./control-types";
-type State = "off" | "on";
-type Props = {
+export type SwitchState = "off" | "on";
+export type SwitchProps = {
   readonly label: UiText;
   readonly description?: UiText;
-  readonly checked?: State;
-  readonly defaultChecked?: State;
+  readonly checked?: SwitchState;
+  readonly defaultChecked?: SwitchState;
   readonly disabled?: Availability;
-  readonly onChange?: (state: State) => void;
+  readonly onChange?: (state: SwitchState) => void;
 };
 type Control = {
-  readonly props: Props;
-  readonly state: State;
-  readonly change: (state: State) => void;
+  readonly props: SwitchProps;
+  readonly state: SwitchState;
+  readonly change: (state: SwitchState) => void;
 };
-const control = (data: Control): ReactElement => {
+export const SwitchControl = (data: Control): ReactElement => {
   if (data.state === "on")
     return (
       <Base.Root
@@ -47,10 +47,12 @@ const control = (data: Control): ReactElement => {
     </Base.Root>
   );
 };
-export const Switch = (props: Props): ReactElement => {
-  const [inner, setInner] = useState<State>(props.defaultChecked ?? "off");
+export const Switch = (props: SwitchProps): ReactElement => {
+  const [inner, setInner] = useState<SwitchState>(
+    props.defaultChecked ?? "off",
+  );
   const state = props.checked ?? inner;
-  const change = (next: State): void => {
+  const change = (next: SwitchState): void => {
     if (props.disabled !== "disabled") {
       setInner(next);
       if (props.onChange !== undefined) props.onChange(next);
@@ -58,7 +60,7 @@ export const Switch = (props: Props): ReactElement => {
   };
   return (
     <label className="flex items-start gap-space-3 cursor-pointer text-ink">
-      <span>{control({ props, state, change })}</span>
+      <span>{SwitchControl({ props, state, change })}</span>
       <span className="status-sentence flex flex-col gap-space-1">
         <span className="text-label">{props.label}</span>
         <span className="text-caption text-ink-subtle">

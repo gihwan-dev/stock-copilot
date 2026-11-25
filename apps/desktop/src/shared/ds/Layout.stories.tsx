@@ -13,6 +13,7 @@ import { Page } from "./Page";
 import { Section } from "./Section";
 import { Split } from "./Split";
 import { Stack } from "./Stack";
+import { StepScreen } from "./StepScreen";
 import { Text } from "./Text";
 import { Toolbar } from "./Toolbar";
 
@@ -26,7 +27,8 @@ type Component =
   | "Inline"
   | "Split"
   | "Toolbar"
-  | "Divider";
+  | "Divider"
+  | "StepScreen";
 
 type Story = {
   readonly component: Component;
@@ -227,5 +229,17 @@ export const layoutComponentStories: readonly Story[] = [
   entry("Divider", "normal", (): ReactElement => <Divider />),
   entry("Divider", "normal", (): ReactElement => (
     <Divider direction="vertical" />
+  )),
+  entry("StepScreen", "normal", (): ReactElement => (
+    <StepScreen
+      progress={["now", "next"]}
+      progressLabel={sectionTitle}
+      title={company}
+      description={description}
+      primary={action}
+      secondary={action}
+    >
+      <Text>{day}</Text>
+    </StepScreen>
   )),
 ];

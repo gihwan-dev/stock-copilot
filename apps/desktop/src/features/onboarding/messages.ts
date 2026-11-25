@@ -2,13 +2,16 @@ import type { Locale, UiText } from "../../shared/lib";
 
 const catalog = {
   "onboarding.loading": { ko: "토스 연결을 확인하는 중이에요" as UiText },
-  "onboarding.keyTitle": { ko: "토스 연결" as UiText },
+  "onboarding.loadingBody": { ko: "잠시만 기다려 주세요." as UiText },
+  "onboarding.progress": { ko: "시작하기 진행 단계" as UiText },
+  "onboarding.keyTitle": { ko: "토스증권 키를 붙여 넣어 주세요" as UiText },
   "onboarding.keyBody": {
-    ko: "토스증권 WTS의 설정 > Open API에서 발급한 client_id와 secret을 붙여 넣으세요." as UiText,
+    ko: "WTS의 설정 > Open API에서 받은 client_id와 secret을 붙여 넣으세요." as UiText,
   },
   "onboarding.clientIdLabel": { ko: "client_id" as UiText },
   "onboarding.secretLabel": { ko: "secret" as UiText },
   "onboarding.connect": { ko: "연결하기" as UiText },
+  "onboarding.later": { ko: "나중에 할게요" as UiText },
   "onboarding.invalidField": {
     ko: "키 형식이 맞지 않아요. 다시 복사해 붙여 넣으세요." as UiText,
   },
@@ -25,9 +28,9 @@ const catalog = {
   "onboarding.failed": {
     ko: "토스에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요." as UiText,
   },
-  "onboarding.ipTitle": { ko: "허용 IP 등록" as UiText },
+  "onboarding.ipTitle": { ko: "허용 IP 등록만 하면 끝나요" as UiText },
   "onboarding.ipBody": {
-    ko: "이 컴퓨터의 IP가 토스에 등록되어 있지 않습니다. WTS의 허용 IP 관리에 추가하세요." as UiText,
+    ko: "이 Mac의 IP를 토스에 한 번만 등록해 주세요." as UiText,
   },
   "onboarding.ipLocation": {
     ko: "WTS > 설정 > Open API > 허용 IP 관리에 아래 IP를 추가하세요." as UiText,

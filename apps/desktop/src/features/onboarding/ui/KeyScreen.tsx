@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from "react";
-import { Button, Card, Page, Stack, Text, TextField } from "../../../shared/ds";
+import { StepScreen, Text, TextField } from "../../../shared/ds";
 import { parseSecretText, type TossKeys } from "../../../shared/ipc";
 import {
   emptyInputValue,
@@ -89,6 +89,7 @@ const useKeyForm = (submit: (keys: TossKeys) => void): KeyForm => {
 
 export const KeyScreen = (props: {
   readonly problem: KeyProblem;
+  readonly onLater: () => void;
 }): ReactElement => {
   const submission = useKeySubmission(useOnboardingClient());
   const form = useKeyForm(submission.submit);
@@ -97,38 +98,44 @@ export const KeyScreen = (props: {
       ? onboardingText("onboarding.failed", "ko")
       : problemText(props.problem);
   return (
-    <Page title={onboardingText("onboarding.keyTitle", "ko")}>
-      <Card>
-        <Stack gap="space-4">
-          <Text>{onboardingText("onboarding.keyBody", "ko")}</Text>
-          {sentence === undefined
-            ? []
-            : [
-                <Text key="problem" tone="alert">
-                  {sentence}
-                </Text>,
-              ]}
-          <SecretField
-            label={onboardingText("onboarding.clientIdLabel", "ko")}
-            value={form.clientId}
-            onChange={form.setClientId}
-            error={form.fieldError}
-          />
-          <SecretField
-            label={onboardingText("onboarding.secretLabel", "ko")}
-            value={form.secret}
-            onChange={form.setSecret}
-            error={form.fieldError}
-          />
-          <Button
-            variant="primary"
-            disabled={submission.state === "pending" ? "disabled" : "enabled"}
-            onClick={form.connect}
-          >
-            {onboardingText("onboarding.connect", "ko")}
-          </Button>
-        </Stack>
-      </Card>
-    </Page>
+    <StepScreen
+      progress={["now", "next"]}
+      progressLabel={onboardingText("onboarding.progress", "ko")}
+      title={onboardingText("onboarding.keyTitle", "ko")}
+      description={onboardingText("onboarding.keyBody", "ko")}
+      primary={{
+        label: onboardingText("onboarding.connect", "ko"),
+        onPress: form.connect,
+        disabled: submission.state === "pending" ? "disabled" : "enabled",
+      }}
+      secondary={{
+        label: onboardingText("onboarding.later", "ko"),
+        onPress: props.onLater,
+      }}
+    >
+      {[
+        ...(sentence === undefined
+          ? []
+          : [
+              <Text key="problem" tone="alert">
+                {sentence}
+              </Text>,
+            ]),
+        <SecretField
+          key="client-id"
+          label={onboardingText("onboarding.clientIdLabel", "ko")}
+          value={form.clientId}
+          onChange={form.setClientId}
+          error={form.fieldError}
+        />,
+        <SecretField
+          key="secret"
+          label={onboardingText("onboarding.secretLabel", "ko")}
+          value={form.secret}
+          onChange={form.setSecret}
+          error={form.fieldError}
+        />,
+      ]}
+    </StepScreen>
   );
 };

@@ -15,6 +15,7 @@ export const groups = {
     "Card",
     "Toolbar",
     "Divider",
+    "StepScreen",
   ],
   기본: [
     "Text",
@@ -28,6 +29,7 @@ export const groups = {
     "SegmentedControl",
     "Disclosure",
     "Icon",
+    "ListRow",
   ],
   피드백: ["Table", "Badge", "StatusBar", "Dialog", "EmptyState", "Skeleton"],
   숫자: [

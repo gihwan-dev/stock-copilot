@@ -1,13 +1,5 @@
 import type { ReactElement } from "react";
-import {
-  Button,
-  Card,
-  Page,
-  Skeleton,
-  Stack,
-  Text,
-  TextField,
-} from "../../../shared/ds";
+import { Skeleton, StepScreen, Text, TextField } from "../../../shared/ds";
 import type { PublicIp } from "../../../shared/ipc";
 import {
   parseInputValue,
@@ -15,7 +7,7 @@ import {
   type UiText,
 } from "../../../shared/lib";
 import { onboardingText } from "../messages";
-import { useIpCopy, usePublicIp, type CopyState } from "../model";
+import { useIpCopy, usePublicIp, type CopyState, type IpView } from "../model";
 import { useOnboardingClient } from "./client";
 
 const copyHint = (state: CopyState): UiText | undefined => {
@@ -48,29 +40,21 @@ const IpText = (props: {
     />
   );
 
-const IpField = (props: { readonly ip: PublicIp }): ReactElement => {
-  const copier = useIpCopy(useOnboardingClient());
+const IpField = (props: {
+  readonly ip: PublicIp;
+  readonly hint: UiText | undefined;
+}): ReactElement => {
   const shown = parseInputValue(props.ip.address);
   if (shown.kind === "err")
     return <Text>{onboardingText("onboarding.ipUnavailable", "ko")}</Text>;
-  return (
-    <Stack gap="space-2">
-      <IpText value={shown.value} hint={copyHint(copier.state)} />
-      <Button
-        variant="secondary"
-        onClick={(): void => {
-          copier.copy(props.ip);
-        }}
-      >
-        {onboardingText("onboarding.copy", "ko")}
-      </Button>
-    </Stack>
-  );
+  return <IpText value={shown.value} hint={props.hint} />;
 };
 
-const IpBody = (): ReactElement => {
-  const view = usePublicIp(useOnboardingClient());
-  switch (view.status) {
+const IpBody = (props: {
+  readonly view: IpView;
+  readonly hint: UiText | undefined;
+}): ReactElement => {
+  switch (props.view.status) {
     case "loading":
       return <Skeleton variant="text" />;
     case "unavailable":
@@ -80,21 +64,39 @@ const IpBody = (): ReactElement => {
         </Text>
       );
     case "ready":
-      return <IpField ip={view.ip} />;
+      return <IpField ip={props.view.ip} hint={props.hint} />;
   }
 };
 
-export const IpScreen = (): ReactElement => (
-  <Page title={onboardingText("onboarding.ipTitle", "ko")}>
-    <Card>
-      <Stack gap="space-4">
-        <Text>{onboardingText("onboarding.ipBody", "ko")}</Text>
-        <Text>{onboardingText("onboarding.ipLocation", "ko")}</Text>
-        <IpBody />
-        <Text tone="ink-muted" variant="body-sm">
-          {onboardingText("onboarding.autoRetry", "ko")}
-        </Text>
-      </Stack>
-    </Card>
-  </Page>
-);
+export const IpScreen = (props: {
+  readonly onLater: () => void;
+}): ReactElement => {
+  const client = useOnboardingClient();
+  const view = usePublicIp(client);
+  const copier = useIpCopy(client);
+  return (
+    <StepScreen
+      progress={["passed", "now"]}
+      progressLabel={onboardingText("onboarding.progress", "ko")}
+      title={onboardingText("onboarding.ipTitle", "ko")}
+      description={onboardingText("onboarding.ipBody", "ko")}
+      primary={{
+        label: onboardingText("onboarding.copy", "ko"),
+        onPress: (): void => {
+          if (view.status === "ready") copier.copy(view.ip);
+        },
+        disabled: view.status === "ready" ? "enabled" : "disabled",
+      }}
+      secondary={{
+        label: onboardingText("onboarding.later", "ko"),
+        onPress: props.onLater,
+      }}
+    >
+      <Text>{onboardingText("onboarding.ipLocation", "ko")}</Text>
+      <IpBody view={view} hint={copyHint(copier.state)} />
+      <Text tone="ink-muted" variant="body-sm">
+        {onboardingText("onboarding.autoRetry", "ko")}
+      </Text>
+    </StepScreen>
+  );
+};

@@ -19,6 +19,7 @@ export default {
             "Card",
             "Toolbar",
             "Divider",
+            "StepScreen",
           ],
           "기본",
           [
@@ -33,6 +34,7 @@ export default {
             "SegmentedControl",
             "Disclosure",
             "Icon",
+            "ListRow",
           ],
           "피드백",
           ["Table", "Badge", "StatusBar", "Dialog", "EmptyState", "Skeleton"],

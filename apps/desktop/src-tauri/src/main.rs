@@ -158,13 +158,12 @@ fn product_secrets() -> ProductSecrets {
         secrets_keychain::BuildKind::Release
     };
     let profile = match build {
-        secrets_keychain::BuildKind::Development => secrets_keychain::KeychainProfile::development(),
+        secrets_keychain::BuildKind::Development => {
+            secrets_keychain::KeychainProfile::development()
+        }
         secrets_keychain::BuildKind::Release => secrets_keychain::KeychainProfile::product_login(),
     };
-    secrets_keychain::KeychainSecretStore::new(
-        profile,
-        secrets_keychain::SystemKeychain,
-    )
+    secrets_keychain::KeychainSecretStore::new(profile, secrets_keychain::SystemKeychain)
 }
 
 fn database_key_provision() -> DatabaseKeyProvision {

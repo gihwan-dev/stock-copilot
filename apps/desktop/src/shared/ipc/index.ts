@@ -178,4 +178,4 @@ export {
   newsPerHourCounts,
 } from "./news-schema";
 export type { SettingsClient, TossKeys } from "./settings-client";
-export { unavailableSettingsClient } from "./settings-client";
+export { coreSetupClient, unavailableSettingsClient } from "./settings-client";
