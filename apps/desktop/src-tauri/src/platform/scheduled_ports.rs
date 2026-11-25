@@ -46,6 +46,12 @@ impl<R: Runtime, P: PortTypes> AppStoredJobs<R, P> {
         }
     }
 
+    fn estimate_flow(&self) -> Option<crate::estimate_flow::EstimateFlowSlot> {
+        self.app
+            .try_state::<crate::estimate_flow::EstimateFlowSlot>()
+            .map(|state| state.inner().clone())
+    }
+
     fn ports(&self) -> Result<tauri::State<'_, Ports<P>>, JobError> {
         self.app
             .try_state::<Ports<P>>()
@@ -286,6 +292,14 @@ impl<R: Runtime, P: PortTypes> IntradayReviewPort for AppStoredJobs<R, P> {
             WatchCause::PriceMove(instrument) => IntradayReviewSubject::PriceMove(instrument),
             WatchCause::NewsSurge(instrument) => IntradayReviewSubject::NewsSurge(instrument),
         };
+        if let Some(flow) = self.estimate_flow() {
+            match flow.0.intraday(&subject).await? {
+                application::SingleEstimateOutcome::Submitted
+                | application::SingleEstimateOutcome::NotSubmitted => return Ok(()),
+                application::SingleEstimateOutcome::NoTask
+                | application::SingleEstimateOutcome::Failed => {}
+            }
+        }
         let outcome = RunIntradayReview {
             ai: ports.ai_provider.as_ref(),
             clock: ports.clock.as_ref(),
@@ -342,5 +356,14 @@ impl<R: Runtime, P: PortTypes> EstimateResolutionPort for AppStoredJobs<R, P> {
             }
         }
         Ok(tally)
+    }
+}
+
+impl<R: Runtime, P: PortTypes> scheduler::EstimateCyclePort for AppStoredJobs<R, P> {
+    async fn run_cycle(&self, _now: Timestamp) -> Result<scheduler::EstimateCycleTally, JobError> {
+        let flow = self
+            .estimate_flow()
+            .ok_or_else(|| JobError::PortUnavailable(String::from("estimate-flow")))?;
+        flow.0.cycle().await
     }
 }

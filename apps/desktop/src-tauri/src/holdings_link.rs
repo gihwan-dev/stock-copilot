@@ -3,8 +3,8 @@ use std::sync::{Arc, RwLock};
 
 use application::{Clock, PortError, SyncPortfolio};
 use domain::{
-    DisplayInstrumentName, InstrumentMaster, InstrumentMasterEntry, KnownMarket, MasterInstrument,
-    MasterInstrumentFacts, Nanosecond, SpanSeconds, Symbol, TimeSpan, Timestamp,
+    DisplayInstrumentName, InstrumentId, InstrumentMaster, InstrumentMasterEntry, KnownMarket,
+    MasterInstrument, MasterInstrumentFacts, Nanosecond, SpanSeconds, Symbol, TimeSpan, Timestamp,
 };
 use tokio::sync::Mutex;
 
@@ -33,7 +33,16 @@ pub trait InstrumentMasterFeed: Send + Sync {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct InstrumentDirectory(Arc<RwLock<BTreeMap<Symbol, DirectoryEntry>>>);
+pub struct InstrumentDirectory {
+    entries: Arc<RwLock<BTreeMap<Symbol, DirectoryEntry>>>,
+    masters: Arc<RwLock<DirectoryMasters>>,
+}
+
+#[derive(Debug, Default)]
+struct DirectoryMasters {
+    by_id: BTreeMap<InstrumentId, MasterInstrument>,
+    by_symbol: BTreeMap<(KnownMarket, Symbol), InstrumentId>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectoryEntry {
@@ -42,12 +51,26 @@ pub struct DirectoryEntry {
     pub trading: domain::MasterTradingState,
 }
 
+fn write_lock<T>(lock: &RwLock<T>, value: T) {
+    match lock.write() {
+        Ok(mut guard) => *guard = value,
+        Err(poisoned) => *poisoned.into_inner() = value,
+    }
+}
+
 impl InstrumentDirectory {
     pub fn replace(&self, instruments: &[MasterInstrument]) {
+        let mut masters = DirectoryMasters::default();
         let entries = instruments
             .iter()
             .filter_map(|instrument| {
                 let quote = instrument.quote_instrument().ok()?;
+                let id = instrument.row().instrument_id.clone();
+                let _symbol = masters.by_symbol.insert(
+                    (*quote.market(), instrument.row().symbol.clone()),
+                    id.clone(),
+                );
+                let _master = masters.by_id.insert(id, instrument.clone());
                 Some((
                     instrument.row().symbol.clone(),
                     DirectoryEntry {
@@ -58,15 +81,13 @@ impl InstrumentDirectory {
                 ))
             })
             .collect();
-        match self.0.write() {
-            Ok(mut guard) => *guard = entries,
-            Err(poisoned) => *poisoned.into_inner() = entries,
-        }
+        write_lock(&self.entries, entries);
+        write_lock(&self.masters, masters);
     }
 
     #[must_use]
     pub fn entry(&self, symbol: &Symbol) -> Option<DirectoryEntry> {
-        match self.0.read() {
+        match self.entries.read() {
             Ok(guard) => guard.get(symbol).cloned(),
             Err(poisoned) => poisoned.into_inner().get(symbol).cloned(),
         }
@@ -75,6 +96,23 @@ impl InstrumentDirectory {
     #[must_use]
     pub fn name(&self, symbol: &Symbol) -> Option<DisplayInstrumentName> {
         self.entry(symbol).map(|entry| entry.name)
+    }
+
+    #[must_use]
+    pub fn master(&self, instrument: &InstrumentId) -> Option<MasterInstrument> {
+        match self.masters.read() {
+            Ok(guard) => guard.by_id.get(instrument).cloned(),
+            Err(poisoned) => poisoned.into_inner().by_id.get(instrument).cloned(),
+        }
+    }
+
+    #[must_use]
+    pub fn instrument_of(&self, market: KnownMarket, symbol: &Symbol) -> Option<InstrumentId> {
+        let key = (market, symbol.clone());
+        match self.masters.read() {
+            Ok(guard) => guard.by_symbol.get(&key).cloned(),
+            Err(poisoned) => poisoned.into_inner().by_symbol.get(&key).cloned(),
+        }
     }
 }
 

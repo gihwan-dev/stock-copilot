@@ -237,7 +237,7 @@ where
             return Ok(Preparation::Finished(SingleEstimateOutcome::Failed));
         };
         let Some(materials) = self.materials.materials(target, now).await? else {
-            return Ok(Preparation::Finished(SingleEstimateOutcome::NotSubmitted));
+            return Ok(Preparation::Finished(SingleEstimateOutcome::NoTask));
         };
         let horizon = materials.profile.horizon();
         let Ok(draft) = EstimateTask::create(
@@ -247,11 +247,11 @@ where
             materials.profile.hours_permission(),
             materials.profile.risk_appetite(),
         ) else {
-            return Ok(Preparation::Finished(SingleEstimateOutcome::NotSubmitted));
+            return Ok(Preparation::Finished(SingleEstimateOutcome::NoTask));
         };
         let calendars = self.materials.calendars(&draft).await?;
         let Ok(maturity) = estimate_maturity(&draft, &calendars) else {
-            return Ok(Preparation::Finished(SingleEstimateOutcome::NotSubmitted));
+            return Ok(Preparation::Finished(SingleEstimateOutcome::NoTask));
         };
         let created = CreateEstimateTask::new(self.tasks)
             .execute(CreateEstimateTaskInput {
@@ -275,7 +275,7 @@ where
             Ok(
                 CreateEstimateTaskOutcome::SkippedTask(_)
                 | CreateEstimateTaskOutcome::SkippedExcessiveCost,
-            ) => Preparation::Finished(SingleEstimateOutcome::NotSubmitted),
+            ) => Preparation::Finished(SingleEstimateOutcome::NoTask),
             Err(_error) => Preparation::Finished(SingleEstimateOutcome::Failed),
         })
     }

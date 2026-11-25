@@ -6,6 +6,10 @@ use src_tauri::ai_runtime::{
 use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::broker_link::{AccountSelector, BrokerMarketTools};
 use src_tauri::collected_links::{CollectedLinker, TitleLinker};
+use src_tauri::estimate_flow::{
+    BackgroundQuota, EstimateFlowParts, EstimateFlowSlot, EstimateRunBook, ProductEstimateFlow,
+    ProductMaterials, UnavailableEstimateFlow,
+};
 use src_tauri::holdings_link::{
     HoldingsListener, InstrumentDirectory, InstrumentMasterFeed, MasterRefresh, PortsHoldingsSync,
     SavedMaster,
@@ -91,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let toss = product_toss(&shared_clock, &events, &repositories)?;
     let turns = ChatTurnBook::new();
     let directory = InstrumentDirectory::default();
+    let estimate_runs = EstimateRunBook::new();
     let ai = assemble_ai(
         discover_ai_setup(
             &context.config().identifier,
@@ -100,7 +105,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_market(BrokerMarketTools::connected(Arc::<ProductBroker>::clone(
             &toss.broker,
         )))
-        .with_portfolio(catalog_portfolio(&toss, &repositories, &directory)),
+        .with_portfolio(catalog_portfolio(&toss, &repositories, &directory))
+        .with_estimate_runs(estimate_runs.clone()),
         &shared_clock,
         &events,
         &repositories,
@@ -109,6 +115,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let self_check = product_self_check(&ai, &repositories);
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
     let holdings = holdings_listener(&ports, &toss, &repositories, &directory, &shared_clock);
+    let calendars = product_calendars(&toss);
+    let flow = product_estimate_flow(&ports, &toss, (&directory, estimate_runs), &calendars);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
             .manage(directory)
@@ -117,18 +125,99 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(toss_link_state(&toss, holdings.clone(), &shared_clock))
             .manage(holdings)
             .manage(self_check)
-            .manage(ResolutionDataSlot(Arc::new(ResolutionData::new(
-                TossResolutionSource(Arc::<ProductBroker>::clone(&toss.broker)),
-            ))))
-            .manage(ScorecardIpcState::from_repository(
-                Arc::clone(&repositories),
-                Arc::<platform_macos::SystemClock>::clone(&shared_clock),
-            ))
-            .manage(public_ip_runtime(&shared_clock)),
+            .manage(ResolutionDataSlot(calendars))
+            .manage(flow),
         ports,
         context,
     )?;
     run_primary(app)
+}
+
+struct QueueQuota(Arc<ProductQueue>);
+
+impl BackgroundQuota for QueueQuota {
+    fn admission(&self) -> BoxFuture<'_, application::CycleAdmission> {
+        Box::pin(async move {
+            if self.0.snapshot().await.active_chat.is_some() {
+                return application::CycleAdmission::Paused { resumes_at: None };
+            }
+            match self.0.evaluate_scheduled_quota().await {
+                ai_claude_code::QuotaDecision::Allowed => application::CycleAdmission::Admitted,
+                ai_claude_code::QuotaDecision::WaitScheduledBudget { .. } => {
+                    application::CycleAdmission::Paused { resumes_at: None }
+                }
+                ai_claude_code::QuotaDecision::WaitRateLimit { resumes_at, .. } => {
+                    application::CycleAdmission::Paused {
+                        resumes_at: Some(resumes_at),
+                    }
+                }
+            }
+        })
+    }
+}
+
+const ESTIMATE_MODEL_PROVIDER: &str = "claude-code";
+const ESTIMATE_MODEL_NAME: &str = "default";
+const ESTIMATE_CLI_VERSION: &str = "cli";
+const ESTIMATE_PROMPT_ID: &str = "estimate";
+const ESTIMATE_PROMPT_VERSION: &str = "v1";
+
+fn estimate_identity() -> Option<application::EstimateRunIdentity> {
+    use application::PromptHasher as _;
+    let part = |value: &str| domain::ModelIdentityPart::try_new(value).ok();
+    let digest = store_sqlite::Sha256PromptHasher
+        .digest(&application::estimate_prompt_source())
+        .ok()?;
+    Some(application::EstimateRunIdentity {
+        model: domain::CalibrationModel::new(
+            part(ESTIMATE_MODEL_PROVIDER)?,
+            part(ESTIMATE_MODEL_NAME)?,
+            part(ESTIMATE_CLI_VERSION)?,
+        ),
+        cli_version: part(ESTIMATE_CLI_VERSION)?,
+        prompt: domain::EstimatePrompt {
+            id: domain::ScorecardPromptId::try_new(ESTIMATE_PROMPT_ID).ok()?,
+            version: part(ESTIMATE_PROMPT_VERSION)?,
+            hash: domain::PromptHash::try_new(digest.as_str()).ok()?,
+        },
+    })
+}
+
+type ProductCalendars = ResolutionData<TossResolutionSource>;
+
+fn product_calendars(toss: &ProductToss) -> Arc<ProductCalendars> {
+    Arc::new(ResolutionData::new(TossResolutionSource(Arc::clone(
+        &toss.broker,
+    ))))
+}
+
+fn product_estimate_flow(
+    ports: &Ports<AppPortTypes>,
+    toss: &ProductToss,
+    (directory, runs): (&InstrumentDirectory, EstimateRunBook),
+    calendars: &Arc<ProductCalendars>,
+) -> EstimateFlowSlot {
+    let Some(identity) = estimate_identity() else {
+        return EstimateFlowSlot(Arc::new(UnavailableEstimateFlow));
+    };
+    let materials = ProductMaterials {
+        broker: Arc::clone(&toss.broker),
+        settings: Arc::clone(&ports.settings),
+        directory: directory.clone(),
+        accounts: toss.accounts.clone(),
+        days: Arc::<ProductCalendars>::clone(calendars),
+    };
+    let flow = ProductEstimateFlow::new(EstimateFlowParts {
+        materials,
+        store: Arc::clone(&ports.settings),
+        portfolios: Arc::clone(&ports.portfolios),
+        ai: Arc::clone(&ports.ai_provider),
+        quota: Arc::new(QueueQuota(Arc::clone(&ports.chat_queue))),
+        clock: Arc::clone(&ports.clock),
+        runs,
+        identity,
+    });
+    EstimateFlowSlot(Arc::new(flow))
 }
 
 struct ProductAiStatus {
@@ -693,7 +782,12 @@ fn product_builder(
         .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
         .manage(database_key_provision())
         .manage(ui_events)
-        .manage(CollectedLinker(Arc::new(AliasTitleLinker)));
+        .manage(CollectedLinker(Arc::new(AliasTitleLinker)))
+        .manage(ScorecardIpcState::from_repository(
+            Arc::clone(repositories),
+            Arc::<platform_macos::SystemClock>::clone(clock),
+        ))
+        .manage(public_ip_runtime(clock));
     let with_feeds = builder.manage(collector_feeds(clock));
     match spec_watch_inputs(clock) {
         Some(inputs) => with_feeds.manage(inputs),
@@ -963,11 +1057,19 @@ struct AiSetup {
     turns: ChatTurnBook,
     market: BrokerMarketTools,
     portfolio: CatalogPortfolio,
+    estimate_runs: EstimateRunBook,
 }
 
 impl AiSetup {
     fn with_market(self, market: BrokerMarketTools) -> Self {
         Self { market, ..self }
+    }
+
+    fn with_estimate_runs(self, estimate_runs: EstimateRunBook) -> Self {
+        Self {
+            estimate_runs,
+            ..self
+        }
     }
 
     fn with_portfolio(self, portfolio: CatalogPortfolio) -> Self {
@@ -1123,6 +1225,7 @@ fn product_catalog(
             events: Arc::clone(events),
             market: setup.market.clone(),
             portfolio: setup.portfolio.clone(),
+            estimate_runs: setup.estimate_runs.clone(),
         },
     )
     .ok()
@@ -1277,6 +1380,7 @@ fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBo
         turns,
         market: BrokerMarketTools::unconnected(),
         portfolio: CatalogPortfolio::default(),
+        estimate_runs: EstimateRunBook::new(),
     }
 }
 
@@ -1859,6 +1963,7 @@ mod ai_composition_tests {
             turns: ChatTurnBook::new(),
             market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
             portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
+            estimate_runs: src_tauri::estimate_flow::EstimateRunBook::new(),
         };
         assemble_ai(setup, clock, events, repositories).expect("AI 조립")
     }
@@ -1968,6 +2073,7 @@ mod ai_composition_tests {
             turns: ChatTurnBook::new(),
             market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
             portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
+            estimate_runs: src_tauri::estimate_flow::EstimateRunBook::new(),
         }
     }
 

@@ -315,12 +315,12 @@ mod tests {
         missing.materials.materials = None;
         assert_eq!(
             missing.estimate(&EstimateTrigger::Cycle),
-            SingleEstimateOutcome::NotSubmitted
+            SingleEstimateOutcome::NoTask
         );
         let short = fixture(Submits::Yes, sample_kr_calendars(60, 62).expect("달력"));
         assert_eq!(
             short.estimate(&EstimateTrigger::Cycle),
-            SingleEstimateOutcome::NotSubmitted
+            SingleEstimateOutcome::NoTask
         );
         for case in [&missing, &short] {
             assert!(case.ai.specs.read().expect("읽기").is_empty());
@@ -345,7 +345,7 @@ mod tests {
         costly.materials.materials = Some(materials);
         assert_eq!(
             costly.estimate(&EstimateTrigger::Cycle),
-            SingleEstimateOutcome::NotSubmitted
+            SingleEstimateOutcome::NoTask
         );
         assert!(costly.ai.specs.read().expect("읽기").is_empty());
     }

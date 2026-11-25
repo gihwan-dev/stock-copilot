@@ -2,10 +2,10 @@ use crate::ai_runtime::RunMetadataBook;
 use crate::mcp_research::AppWebResearch;
 use crate::mcp_sources::{ArticleBodies, StoredArticles, StoredNews, StoredThesis};
 use application::{
-    AiRunId, Clock, EstimateAssignmentRepository, EstimateRunContextSource,
-    EstimateSubmissionRepository, EventBus, MarketToolReads, PortfolioToolReads, ProfileSource,
-    RetryDelay, ScorecardObservationRepository, SettingsRepository, SystemFailure, SystemPort,
-    SystemPortError, ThesisRepository, ToolCallHistory,
+    Clock, EstimateAssignmentRepository, EstimateSubmissionRepository, EventBus, MarketToolReads,
+    PortfolioToolReads, ProfileSource, RetryDelay, ScorecardObservationRepository,
+    SettingsRepository, SystemFailure, SystemPort, SystemPortError, ThesisRepository,
+    ToolCallHistory,
 };
 use application::{CollectedItemReads, NewsDataSettingsRepository, WatchlistRepository};
 use domain::{KnownMarket, Symbol};
@@ -124,15 +124,6 @@ impl MarketToolReads for UnconnectedToolData {
     }
 }
 
-impl EstimateRunContextSource for UnconnectedToolData {
-    fn estimate_context(
-        &self,
-        _run: &AiRunId,
-    ) -> impl Future<Output = Result<application::EstimateRunContext, SystemPortError>> + Send {
-        fail()
-    }
-}
-
 #[derive(Debug)]
 pub struct StoredProfile<S>(pub Arc<S>);
 
@@ -154,6 +145,7 @@ pub struct CatalogStores<R, E, B, W> {
     pub events: Arc<EventBus>,
     pub market: crate::broker_link::BrokerMarketTools,
     pub portfolio: crate::mcp_portfolio::CatalogPortfolio,
+    pub estimate_runs: crate::estimate_flow::EstimateRunBook,
 }
 
 impl<R, E, B, W> std::fmt::Debug for CatalogStores<R, E, B, W> {
@@ -184,7 +176,6 @@ where
     B: ArticleBodies + 'static,
     W: application::AiProvider + 'static,
 {
-    let data = Arc::new(UnconnectedToolData);
     let cursors = make_cursor_store(Arc::clone(clock));
     let ports = AnalysisCatalogPorts {
         portfolio: Arc::new(stores.portfolio.clone()),
@@ -217,7 +208,7 @@ where
             assignments: Arc::clone(&stores.estimates),
             submissions: Arc::clone(&stores.estimates),
             history: Arc::clone(&stores.estimates),
-            context: Arc::clone(&data),
+            context: Arc::new(stores.estimate_runs),
             settings: Arc::new(StoredProfile(Arc::clone(&stores.estimates))),
             observations: stores.estimates,
             clock: Arc::clone(clock),

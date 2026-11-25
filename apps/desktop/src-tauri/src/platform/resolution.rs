@@ -303,5 +303,15 @@ impl<S: ResolutionSource> ResolutionReads for ResolutionData<S> {
     }
 }
 
+impl<S: ResolutionSource> crate::estimate_flow::CalendarDays for ResolutionData<S> {
+    fn calendar_on(
+        &self,
+        market: KnownMarket,
+        date: CalendarDate,
+    ) -> BoxFuture<'_, Result<MarketCalendar, PortError>> {
+        Box::pin(self.calendar(market, date))
+    }
+}
+
 #[cfg(test)]
 mod tests;
