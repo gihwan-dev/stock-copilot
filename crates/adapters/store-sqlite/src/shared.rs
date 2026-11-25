@@ -757,3 +757,49 @@ impl application::ToolCallHistory for SqliteRepositories {
         application::ToolCallHistory::calls_in_run(&ChatStore::new(database), run).await
     }
 }
+
+impl application::CollectedTimes for SqliteRepositories {
+    async fn record_times(
+        &self,
+        entry: &application::CollectedEntry,
+        published_at: application::PublicationTime,
+        collected_at: Timestamp,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedTimes::record_times(
+            &InformationStore::new(database),
+            entry,
+            published_at,
+            collected_at,
+        )
+        .await
+    }
+}
+
+impl application::CollectedItemReads for SqliteRepositories {
+    async fn collected_since(
+        &self,
+        kind: application::CollectedKind,
+        since: Timestamp,
+    ) -> Result<Vec<application::ObservedCollectedItem>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedItemReads::collected_since(
+            &InformationStore::new(database),
+            kind,
+            since,
+        )
+        .await
+    }
+
+    async fn collected_item(
+        &self,
+        handle: &application::CollectedItemHandle,
+    ) -> Result<Option<application::ObservedCollectedItem>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedItemReads::collected_item(&InformationStore::new(database), handle)
+            .await
+    }
+}

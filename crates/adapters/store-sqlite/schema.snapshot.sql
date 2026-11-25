@@ -159,6 +159,11 @@ CREATE TABLE information_links (
     instrument TEXT NOT NULL,
     PRIMARY KEY (category, source, external_id, instrument)
 ) STRICT;
+CREATE TABLE information_times (
+    item_id INTEGER PRIMARY KEY REFERENCES information_items(id),
+    published_payload TEXT,
+    collected_payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE instrument_id_issuer (
     slot INTEGER PRIMARY KEY CHECK (slot = 1),
     last_issued TEXT NOT NULL CHECK (instr(last_issued, char(0)) = 0 AND length(last_issued) = 16 AND last_issued NOT GLOB '*[^0-9a-f]*' AND last_issued != '0000000000000000')

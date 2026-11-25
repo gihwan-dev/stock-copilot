@@ -1,3 +1,4 @@
+use crate::collected_item_reads::{CollectedTimes, NoCollectedTimes};
 use crate::{
     Clock, CollectedEntry, CollectedObservation, CollectionCadence, DataAvailability,
     DisclosureRepository, EventBus, FeedCursor, FeedSource, NewsFeed, NewsRepository,
@@ -97,14 +98,17 @@ fn information_source(source: FeedSource) -> InformationSource {
     }
 }
 
-pub struct CollectFeed<'a, Store, Statuses> {
+const NO_TIMES: NoCollectedTimes = NoCollectedTimes;
+
+pub struct CollectFeed<'a, Store, Statuses, Times = NoCollectedTimes> {
     store: &'a Store,
     statuses: &'a Statuses,
     clock: &'a dyn Clock,
     events: &'a EventBus,
+    times: &'a Times,
 }
 
-impl<Store, Statuses> Debug for CollectFeed<'_, Store, Statuses> {
+impl<Store, Statuses, Times> Debug for CollectFeed<'_, Store, Statuses, Times> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("CollectFeed").finish_non_exhaustive()
     }
@@ -127,9 +131,31 @@ where
             statuses,
             clock,
             events,
+            times: &NO_TIMES,
         }
     }
 
+    #[must_use]
+    pub const fn with_times<Times: CollectedTimes>(
+        self,
+        times: &'a Times,
+    ) -> CollectFeed<'a, Store, Statuses, Times> {
+        CollectFeed {
+            store: self.store,
+            statuses: self.statuses,
+            clock: self.clock,
+            events: self.events,
+            times,
+        }
+    }
+}
+
+impl<Store, Statuses, Times> CollectFeed<'_, Store, Statuses, Times>
+where
+    Store: NewsRepository + DisclosureRepository,
+    Statuses: SourceStatusRepository,
+    Times: CollectedTimes,
+{
     pub async fn collect<Feed: NewsFeed>(
         &self,
         feed: &Feed,
@@ -201,6 +227,14 @@ where
                     arrived.push(item.key().clone());
                 }
             }
+            let crate::WriteCompleted = self
+                .times
+                .record_times(
+                    observation.entry(),
+                    observation.published_at(),
+                    observation.collected_at(),
+                )
+                .await?;
         }
         for key in arrived {
             let _delivery = self.events.publish(DomainEvent::DisclosureArrived(key));

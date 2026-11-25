@@ -1684,6 +1684,46 @@ mod collector_store_tests {
     }
 
     #[test]
+    fn app_runner_records_collection_time_so_news_tools_can_read_the_item() {
+        use application::{CollectedItemReads, CollectedKind};
+        let shared = SharedDatabase::new();
+        let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
+        let app = mock_app(&repositories);
+        let calls = Arc::new(RwLock::new(Vec::new()));
+        let runner =
+            AppFeedRunner::<tauri::test::MockRuntime, super::AppPortTypes, CountingFeed>::new(
+                app.handle().clone(),
+                repositories.as_ref().clone(),
+                one_article_feed(&calls),
+            );
+        let directory = std::path::PathBuf::from("../../../target/fin-d")
+            .join(format!("collector-times-{}", std::process::id()));
+        tauri::async_runtime::block_on(async {
+            let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+            src_tauri::database::prepare_directory(&path).expect("폴더");
+            let clock = platform_macos::SystemClock::new().expect("시계");
+            let database =
+                store_sqlite::Database::open(&path, &SecretValue::new(vec![83; 32]), &clock)
+                    .expect("열기");
+            assert!(shared.install(database).await.is_none());
+            let _collected = runner.collect(FeedCursor::Start).await.expect("수집");
+            let collected_at = broker_toss::TossTimestamp::try_from("2026-11-25T00:00:00Z")
+                .expect("clock")
+                .into_domain();
+            let items = repositories
+                .collected_since(CollectedKind::News, collected_at)
+                .await
+                .expect("조회");
+            assert_eq!(items.len(), 1_usize);
+            let item = items.first().expect("항목");
+            assert_eq!(item.collected_at, collected_at);
+            assert_eq!(item.published_at, PublicationTime::NotProvided);
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
+    }
+
+    #[test]
     fn daily_valuation_without_market_calendar_fails_without_recording_and_skips_backfill() {
         use scheduler::{DailyValuationPort, JobError};
         use src_tauri::platform::scheduled_ports::AppStoredJobs;

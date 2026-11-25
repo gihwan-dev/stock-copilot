@@ -1,8 +1,11 @@
+use crate::estimates::codec::{Decoder, Encoder, put_timestamp, take_timestamp};
 use crate::{Database, sql::information as sql};
 use application::{
-    CollectedEntry, DisclosureRepository, InformationKey, InformationLinks, InformationSearch,
-    NewsRepository, SearchLimit, SystemPortError, WriteCompleted,
+    CollectedEntry, CollectedItemHandle, CollectedItemReads, CollectedKind, CollectedTimes,
+    DisclosureRepository, InformationKey, InformationLinks, InformationSearch, NewsRepository,
+    ObservedCollectedItem, PublicationTime, SearchLimit, SystemPortError, WriteCompleted,
 };
+use domain::Timestamp;
 use domain::{
     DartReceiptNo, Disclosure, DisclosureKey, DisclosureSource, InformationSource, InstrumentId,
     KindReceiptNo, NewsItem, NewsSource, NormalizedUrl, ReceiptNo, SecEdgarReceiptNo,
@@ -373,6 +376,182 @@ impl InformationSearch for InformationStore<'_> {
                     insert_index(tx, item.id, &item.entry)?;
                 }
                 Ok(WriteCompleted)
+            })
+            .await
+    }
+}
+
+fn encode_moment(at: Timestamp) -> String {
+    let mut out = Encoder::new();
+    put_timestamp(&mut out, at);
+    out.finish()
+}
+
+fn decode_moment(raw: &str) -> rusqlite::Result<Timestamp> {
+    let mut input = Decoder::new(raw);
+    let at = take_timestamp(&mut input)?;
+    input.finish()?;
+    Ok(at)
+}
+
+const fn category_tag(kind: CollectedKind) -> &'static str {
+    match kind {
+        CollectedKind::News => "news",
+        CollectedKind::Disclosure => "disclosure",
+    }
+}
+
+const fn handle_prefix(kind: CollectedKind) -> &'static str {
+    match kind {
+        CollectedKind::News => "n-",
+        CollectedKind::Disclosure => "d-",
+    }
+}
+
+fn handle_of(kind: CollectedKind, id: i64) -> rusqlite::Result<CollectedItemHandle> {
+    let mut text = String::from(handle_prefix(kind));
+    text.push_str(&id.to_string());
+    CollectedItemHandle::try_new(&text).map_err(invalid)
+}
+
+fn parse_handle(handle: &CollectedItemHandle) -> Option<(CollectedKind, i64)> {
+    let raw = handle.as_str();
+    let (kind, digits) = if let Some(rest) = raw.strip_prefix(handle_prefix(CollectedKind::News)) {
+        (CollectedKind::News, rest)
+    } else {
+        (
+            CollectedKind::Disclosure,
+            raw.strip_prefix(handle_prefix(CollectedKind::Disclosure))?,
+        )
+    };
+    if digits.is_empty()
+        || digits.starts_with('0')
+        || !digits.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    digits.parse::<i64>().ok().map(|id| (kind, id))
+}
+
+struct ObservedRow {
+    stored: Stored,
+    published: Option<String>,
+    collected: String,
+}
+
+fn decode_observed(row: &Row<'_>) -> rusqlite::Result<ObservedRow> {
+    Ok(ObservedRow {
+        stored: decode(row)?,
+        published: row.get(7)?,
+        collected: row.get(8)?,
+    })
+}
+
+fn observed(
+    connection: &Connection,
+    kind: CollectedKind,
+    row: ObservedRow,
+) -> rusqlite::Result<ObservedCollectedItem> {
+    let key = key_from_entry(&row.stored.entry)?;
+    let (category, source, external_id) = key_parts(&key);
+    let instruments = connection
+        .prepare(sql::LINKED_INSTRUMENTS)?
+        .query_map(params![category, source, external_id], |link| {
+            link.get::<_, String>(0)
+        })?
+        .map(|raw| {
+            let value = raw?;
+            InstrumentId::try_new(&value).map_err(invalid)
+        })
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(ObservedCollectedItem {
+        handle: handle_of(kind, row.stored.id)?,
+        entry: row.stored.entry,
+        published_at: match row.published {
+            Some(raw) => PublicationTime::Known(decode_moment(&raw)?),
+            None => PublicationTime::NotProvided,
+        },
+        collected_at: decode_moment(&row.collected)?,
+        instruments,
+    })
+}
+
+impl CollectedTimes for InformationStore<'_> {
+    async fn record_times(
+        &self,
+        entry: &CollectedEntry,
+        published_at: PublicationTime,
+        collected_at: Timestamp,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let owned = entry.clone();
+        self.database
+            .write(move |tx| {
+                let key = key_from_entry(&owned)?;
+                let (category, source, external_id) = key_parts(&key);
+                let published = match published_at {
+                    PublicationTime::Known(at) => Some(encode_moment(at)),
+                    PublicationTime::NotProvided => None,
+                };
+                match tx.execute(
+                    sql::RECORD_TIMES,
+                    params![
+                        published,
+                        encode_moment(collected_at),
+                        category,
+                        source,
+                        external_id
+                    ],
+                )? {
+                    1 => Ok(WriteCompleted),
+                    _ => Err(invalid(())),
+                }
+            })
+            .await
+    }
+}
+
+impl CollectedItemReads for InformationStore<'_> {
+    async fn collected_since(
+        &self,
+        kind: CollectedKind,
+        since: Timestamp,
+    ) -> Result<Vec<ObservedCollectedItem>, SystemPortError> {
+        self.database
+            .read(move |connection| {
+                let rows = connection
+                    .prepare(sql::OBSERVED_BY_CATEGORY)?
+                    .query_map([category_tag(kind)], decode_observed)?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                let items = rows
+                    .into_iter()
+                    .map(|row| observed(connection, kind, row))
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok(items
+                    .into_iter()
+                    .filter(|item| item.collected_at >= since)
+                    .collect())
+            })
+            .await
+    }
+
+    async fn collected_item(
+        &self,
+        handle: &CollectedItemHandle,
+    ) -> Result<Option<ObservedCollectedItem>, SystemPortError> {
+        let Some((kind, id)) = parse_handle(handle) else {
+            return Ok(None);
+        };
+        self.database
+            .read(move |connection| {
+                let row = connection
+                    .query_row(
+                        sql::OBSERVED_BY_ID,
+                        params![id, category_tag(kind)],
+                        decode_observed,
+                    )
+                    .optional()?;
+                row.map(|found| observed(connection, kind, found))
+                    .transpose()
             })
             .await
     }

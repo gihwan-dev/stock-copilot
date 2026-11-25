@@ -143,3 +143,132 @@ fn mcp_tool_ledger_and_estimate_reads_follow_the_installed_database() {
         let _closed = shared.close().await;
     });
 }
+
+fn moment(seconds: i64) -> domain::Timestamp {
+    domain::Timestamp::from_parts(
+        domain::UnixSeconds::new(seconds),
+        domain::Nanosecond::new(0_u32),
+        domain::OffsetSeconds::new(32_400_i32),
+    )
+    .expect("시각")
+}
+
+fn news(path: &str) -> application::CollectedEntry {
+    let mut url = String::from("https://www.yna.co.kr/view/");
+    url.push_str(path);
+    application::CollectedEntry::News(domain::NewsItem::new(
+        domain::NewsSource::Yonhap,
+        domain::NormalizedUrl::try_new(&url).expect("주소"),
+        domain::UntrustedText::try_new("반도체 수출 증가").expect("제목"),
+        Some(domain::UntrustedText::try_new("요약").expect("본문")),
+    ))
+}
+
+fn disclosure() -> application::CollectedEntry {
+    application::CollectedEntry::Disclosure(domain::Disclosure::new(
+        domain::ReceiptNo::Dart(domain::DartReceiptNo::try_new("20261125000001").expect("접수")),
+        domain::NormalizedUrl::try_new(
+            "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20261125000001",
+        )
+        .expect("주소"),
+        domain::UntrustedText::try_new("주요사항보고서").expect("제목"),
+        None,
+    ))
+}
+
+async fn seed_collected(repositories: &SqliteRepositories) {
+    use application::{CollectedEntry, CollectedTimes, DisclosureRepository, NewsRepository};
+    for entry in [news("AKR1"), news("AKR2"), disclosure()] {
+        let _stored = match &entry {
+            CollectedEntry::News(item) => NewsRepository::store(repositories, item).await,
+            CollectedEntry::Disclosure(item) => repositories.store_disclosure(item).await,
+        }
+        .expect("저장");
+    }
+    let _times = repositories
+        .record_times(
+            &news("AKR1"),
+            application::PublicationTime::Known(moment(1_790_000_000_i64)),
+            moment(1_790_000_100_i64),
+        )
+        .await
+        .expect("시각");
+    let _filed = repositories
+        .record_times(
+            &disclosure(),
+            application::PublicationTime::NotProvided,
+            moment(1_790_000_200_i64),
+        )
+        .await
+        .expect("시각");
+}
+
+#[test]
+fn collected_times_give_each_item_a_handle_and_bound_reads_by_collection_time() {
+    use application::{
+        CollectedItemHandle as Handle, CollectedItemReads, CollectedKind, CollectedTimes,
+        PublicationTime,
+    };
+    let fixture = Fixture::new();
+    let shared = SharedDatabase::new();
+    let repositories = SqliteRepositories::new(shared.clone());
+    runtime().block_on(async {
+        let database =
+            Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+        assert!(shared.install(database).await.is_none());
+        seed_collected(&repositories).await;
+        let _missing = repositories
+            .record_times(&news("AKR9"), PublicationTime::NotProvided, moment(1_i64))
+            .await
+            .expect_err("저장되지 않은 항목");
+        let recent = repositories
+            .collected_since(CollectedKind::News, moment(1_790_000_000_i64))
+            .await
+            .expect("조회");
+        assert_eq!(recent.len(), 1_usize, "시각 없는 항목은 내보내지 않는다");
+        let item = recent.first().expect("항목");
+        assert_eq!(item.handle, Handle::try_new("n-1").expect("핸들"));
+        assert_eq!(item.entry, news("AKR1"));
+        assert_eq!(
+            item.published_at,
+            PublicationTime::Known(moment(1_790_000_000_i64))
+        );
+        assert_eq!(item.collected_at, moment(1_790_000_100_i64));
+        let later = repositories
+            .collected_since(CollectedKind::News, moment(1_790_000_101_i64))
+            .await
+            .expect("조회");
+        assert_eq!(later.len(), 0_usize);
+        let filings = repositories
+            .collected_since(CollectedKind::Disclosure, moment(0_i64))
+            .await
+            .expect("조회");
+        let filing = filings.first().expect("공시");
+        assert_eq!(filing.handle, Handle::try_new("d-3").expect("핸들"));
+        assert_eq!(filing.published_at, PublicationTime::NotProvided);
+        assert_eq!(
+            repositories
+                .collected_item(&item.handle)
+                .await
+                .expect("조회")
+                .as_ref(),
+            Some(item)
+        );
+        for other in ["d-1", "n-3", "n-01", "n-2", "x-1", "n-"] {
+            let found = repositories
+                .collected_item(&Handle::try_new(other).expect("핸들"))
+                .await
+                .expect("조회");
+            assert_eq!(found, None, "{other}");
+        }
+        let _closed = shared.close().await;
+    });
+}
+
+#[test]
+fn information_times_migration_file_matches_the_runtime_statement() {
+    assert_eq!(
+        std::fs::read_to_string("migrations/0021_information_times.sql").expect("파일"),
+        crate::sql::information::MIGRATE_0021
+    );
+}
