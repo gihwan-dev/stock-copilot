@@ -1925,14 +1925,14 @@ mod tests {
         SignalDecision::assess(&input, &context)
     }
 
-    fn reference(values: (i64, i64, usize), axes: (u8, u8, u8), base: Decimal) -> u8 {
-        let (percent, margin, count) = values;
+    fn reference(values: (Decimal, i64, usize), axes: (u8, u8, u8), base: Decimal) -> u8 {
+        let (effective, margin, count) = values;
         let (held, excluded, source) = axes;
         let buy_margin = if count < 30 { margin.max(15) } else { margin };
         let sell_margin = if count < 30 { 15 } else { margin };
         if source != 1 {
             0
-        } else if Decimal::new(percent, 2)
+        } else if effective
             <= base
                 .checked_sub(Decimal::new(sell_margin, 2))
                 .expect("매도")
@@ -1942,8 +1942,7 @@ mod tests {
         } else {
             u8::from(
                 excluded == 0
-                    && Decimal::new(percent, 2)
-                        >= base.checked_add(Decimal::new(buy_margin, 2)).expect("매수"),
+                    && effective >= base.checked_add(Decimal::new(buy_margin, 2)).expect("매수"),
             )
         }
     }
@@ -1962,11 +1961,21 @@ mod tests {
         assert_eq!(estimate.operation(), operation);
         assert_eq!(estimate.task(), eligible.task());
         assert_eq!(estimate.submission().probability(), ai(percent));
-        assert_eq!(
-            estimate.display_probability().expect("표시").as_str(),
-            format!("≈{percent}.0%")
-        );
         let calibration = estimate.calibration();
+        let evidence = match calibration {
+            crate::CalibratedProbability::InsufficientSamples(value) => value.evidence(),
+            crate::CalibratedProbability::EligibleBeforeE91(value) => value.evidence(),
+        };
+        assert_eq!(
+            evidence.original_probability(),
+            ai(percent).into_probability()
+        );
+        if count < 30 {
+            assert_eq!(
+                estimate.display_probability().expect("표시").as_str(),
+                format!("≈{percent}.0%")
+            );
+        }
         assert!(
             !(estimate
                 .thresholds()
@@ -1979,6 +1988,17 @@ mod tests {
                     .expect("비교")
                     == crate::SignalCondition::Met)
         );
+    }
+    fn effective(estimate: &SignalEstimate) -> Decimal {
+        match estimate.calibration() {
+            crate::CalibratedProbability::InsufficientSamples(value) => {
+                value.evidence().probability()
+            }
+            crate::CalibratedProbability::EligibleBeforeE91(value) => {
+                value.evidence().probability()
+            }
+        }
+        .as_decimal()
     }
     #[test]
     fn independent_reference_covers_new_sell_priority_and_submission_readiness() {
@@ -2019,7 +2039,11 @@ mod tests {
                     let decision = SignalDecision::assess(&estimate, &context);
                     proptest::prop_assert_eq!(
                         classify(&decision),
-                        reference((percent, margin, count), (held, excluded, source), base)
+                        reference(
+                            (effective(&estimate), margin, count),
+                            (held, excluded, source),
+                            base
+                        )
                     );
                     assert_estimate_contract(&estimate, &eligible, (percent, count));
                     if source != 1 {

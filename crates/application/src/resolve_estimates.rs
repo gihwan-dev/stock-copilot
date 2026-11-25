@@ -3,9 +3,10 @@ use crate::{
     SystemPortError,
 };
 use domain::{
-    Calibration, CalibrationError, CalibrationEstimateId, CalibrationKey, CalibrationLedgerHead,
-    CalibrationSnapshot, Candle, DomainEvent, EstimateOutcome, EstimateSubmissionRecord,
-    MarketCalendar, OutcomeAdjustment, OutcomeState, OutcomeUnavailable, Timestamp,
+    BrierComparison, Calibration, CalibrationError, CalibrationEstimateId, CalibrationKey,
+    CalibrationLedgerHead, CalibrationSnapshot, Candle, DomainEvent, EstimateOutcome,
+    EstimateSubmissionRecord, MarketCalendar, OutcomeAdjustment, OutcomeState, OutcomeUnavailable,
+    Timestamp, brier_comparison,
 };
 use std::future::Future;
 
@@ -78,6 +79,7 @@ pub enum ResolutionStatus {
     Resolved {
         outcome: EstimateOutcome,
         delivery: DeliveryReport,
+        brier: Option<BrierComparison>,
     },
     Ongoing,
     Unavailable(ResolutionDataIssue),
@@ -92,6 +94,23 @@ pub enum ResolutionStatus {
 pub struct ResolutionReport {
     pub id: CalibrationEstimateId,
     pub status: ResolutionStatus,
+}
+
+fn prequential_brier(
+    snapshot: &CalibrationSnapshot,
+    record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+    outcome: domain::CalibrationOutcome,
+) -> Option<BrierComparison> {
+    let submission = record.submission();
+    let calibrated = snapshot
+        .calibration()
+        .calibrate(
+            submission.calibration_key(),
+            submission.probability(),
+            submission.task_key().task().base_probability(),
+        )
+        .ok()?;
+    brier_comparison(&calibrated, outcome)
 }
 
 #[derive(Debug)]
@@ -157,18 +176,12 @@ impl<'a, Repository: EstimateResolutionRepository, Data: ResolutionMarketData>
         ) else {
             return ResolutionStatus::MissingFact;
         };
-        let key = submission.calibration_key();
-        let previous = match self.repository.calibration(key).await {
-            Ok(Some(value)) => value,
-            Ok(None) => return ResolutionStatus::Calibration(CalibrationError::MissingCalibration),
-            Err(error) => return ResolutionStatus::Storage(error),
+        let outcome_kind = fact.outcome();
+        let previous = match self.current_calibration(submission.calibration_key()).await {
+            Ok(value) => value,
+            Err(status) => return *status,
         };
-        if previous.head.key() != key {
-            return ResolutionStatus::Calibration(CalibrationError::MismatchedCombination);
-        }
-        if previous.snapshot.through() != &previous.head {
-            return ResolutionStatus::Calibration(CalibrationError::StaleCalibration);
-        }
+        let brier = prequential_brier(&previous.snapshot, record, outcome_kind);
         let next = match previous.snapshot.calibration().with_fact(fact) {
             Ok(value) => value,
             Err(error) => {
@@ -182,11 +195,37 @@ impl<'a, Repository: EstimateResolutionRepository, Data: ResolutionMarketData>
             .commit_resolution(record, &outcome, &previous, &next)
             .await
         {
-            Ok(ResolutionCommitOutcome::Committed) => self.resolved(record, outcome),
+            Ok(ResolutionCommitOutcome::Committed) => self.resolved(record, outcome, brier),
             Ok(ResolutionCommitOutcome::AlreadyResolved) => ResolutionStatus::AlreadyResolved,
             Ok(ResolutionCommitOutcome::Conflict) => ResolutionStatus::Conflict,
             Err(error) => ResolutionStatus::Storage(error),
         }
+    }
+
+    async fn current_calibration(
+        &self,
+        key: &CalibrationKey,
+    ) -> Result<ResolutionCalibration, Box<ResolutionStatus>> {
+        let previous = match self.repository.calibration(key).await {
+            Ok(Some(value)) => value,
+            Ok(None) => {
+                return Err(Box::new(ResolutionStatus::Calibration(
+                    CalibrationError::MissingCalibration,
+                )));
+            }
+            Err(error) => return Err(Box::new(ResolutionStatus::Storage(error))),
+        };
+        if previous.head.key() != key {
+            return Err(Box::new(ResolutionStatus::Calibration(
+                CalibrationError::MismatchedCombination,
+            )));
+        }
+        if previous.snapshot.through() != &previous.head {
+            return Err(Box::new(ResolutionStatus::Calibration(
+                CalibrationError::StaleCalibration,
+            )));
+        }
+        Ok(previous)
     }
 
     async fn calibration_error(
@@ -247,6 +286,7 @@ impl<'a, Repository: EstimateResolutionRepository, Data: ResolutionMarketData>
         &self,
         record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
         outcome: EstimateOutcome,
+        brier: Option<BrierComparison>,
     ) -> ResolutionStatus {
         let delivery = self.events.publish(DomainEvent::EstimateResolved(
             record
@@ -257,7 +297,11 @@ impl<'a, Repository: EstimateResolutionRepository, Data: ResolutionMarketData>
                 .instrument()
                 .clone(),
         ));
-        ResolutionStatus::Resolved { outcome, delivery }
+        ResolutionStatus::Resolved {
+            outcome,
+            delivery,
+            brier,
+        }
     }
 
     async fn unavailable(

@@ -290,7 +290,9 @@ pub(crate) mod tests {
         let base =
             AiProbability::parse(&AiProbabilityInput::try_new(&percent.to_string()).expect("입력"))
                 .expect("확률");
-        let facts = (0..count)
+        let rows = if count < 30 { count } else { 100 };
+        let hits = usize::try_from(percent).expect("적중 수");
+        let facts = (0..rows)
             .map(|index| {
                 CalibrationFact::new(
                     CalibrationEstimate::new(
@@ -304,13 +306,21 @@ pub(crate) mod tests {
                         .expect("기간"),
                         base,
                     ),
-                    CalibrationOutcome::Hit,
+                    if count < 30 || index < hits {
+                        CalibrationOutcome::Hit
+                    } else {
+                        CalibrationOutcome::Miss
+                    },
                 )
             })
             .collect::<Vec<_>>();
         Calibration::try_new(key.clone(), &facts)
             .expect("자료")
-            .calibrate(&key, base)
+            .calibrate(
+                &key,
+                base,
+                crate::base_probability::tests::base_value(base.into_probability().as_decimal()),
+            )
             .expect("같은 조합")
     }
 
@@ -664,7 +674,11 @@ pub(crate) mod tests {
             AiProbability::parse(&AiProbabilityInput::try_new("50").expect("입력")).expect("확률");
         let other = Calibration::try_new(other_key.clone(), &[])
             .expect("자료")
-            .calibrate(&other_key, probability)
+            .calibrate(
+                &other_key,
+                probability,
+                crate::base_probability::tests::base_value(Decimal::new(40, 2)),
+            )
             .expect("같은 조합");
         assert_eq!(
             Thresholds::create(
