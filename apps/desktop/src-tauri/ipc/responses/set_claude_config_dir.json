@@ -1,0 +1,37 @@
+{
+  "tasks": [
+    {
+      "task": "chat",
+      "model": "opus",
+      "effort": "medium"
+    },
+    {
+      "task": "estimate",
+      "model": "opus",
+      "effort": "high"
+    },
+    {
+      "task": "deep-research",
+      "model": "opus",
+      "effort": "high"
+    },
+    {
+      "task": "briefing",
+      "model": "sonnet",
+      "effort": "medium"
+    },
+    {
+      "task": "news-summary",
+      "model": "haiku",
+      "effort": "low"
+    },
+    {
+      "task": "collection",
+      "model": "haiku",
+      "effort": "low"
+    }
+  ],
+  "budget_percent": "70",
+  "usage_percent": null,
+  "claude_config_dir": null
+}

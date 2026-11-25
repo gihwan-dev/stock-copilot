@@ -5,3 +5,6 @@ pub(crate) const HISTORY: &str =
     "SELECT sequence, payload FROM thesis_history WHERE instrument = ?1 ORDER BY sequence";
 pub(crate) const INSERT_HISTORY: &str =
     "INSERT INTO thesis_history(instrument, sequence, payload) VALUES (?1, ?2, ?3)";
+pub(crate) const MIGRATE_0024: &str = "CREATE TABLE thesis_history_times (\n    instrument TEXT NOT NULL,\n    sequence INTEGER NOT NULL CHECK (sequence > 0),\n    seconds INTEGER NOT NULL,\n    nanos INTEGER NOT NULL CHECK (nanos >= 0 AND nanos < 1000000000),\n    offset INTEGER NOT NULL,\n    PRIMARY KEY (instrument, sequence),\n    FOREIGN KEY (instrument, sequence) REFERENCES thesis_history(instrument, sequence)\n) STRICT;\n";
+pub(crate) const RECORD_TIME: &str = "INSERT OR IGNORE INTO thesis_history_times(instrument, sequence, seconds, nanos, offset) SELECT instrument, sequence, ?3, ?4, ?5 FROM thesis_history WHERE instrument = ?1 AND sequence = ?2";
+pub(crate) const TIMES: &str = "SELECT sequence, seconds, nanos, offset FROM thesis_history_times WHERE instrument = ?1 ORDER BY sequence";

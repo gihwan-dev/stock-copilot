@@ -49,6 +49,7 @@ pub struct DirectoryEntry {
     pub market: KnownMarket,
     pub name: DisplayInstrumentName,
     pub trading: domain::MasterTradingState,
+    pub master: MasterInstrument,
 }
 
 fn write_lock<T>(lock: &RwLock<T>, value: T) {
@@ -77,12 +78,27 @@ impl InstrumentDirectory {
                         market: *quote.market(),
                         name: instrument.row().name.clone(),
                         trading: instrument.trading_state(),
+                        master: instrument.clone(),
                     },
                 ))
             })
             .collect();
         write_lock(&self.entries, entries);
         write_lock(&self.masters, masters);
+    }
+
+    #[must_use]
+    pub fn by_instrument(&self, instrument: &InstrumentId) -> Option<DirectoryEntry> {
+        let find = |entries: &BTreeMap<Symbol, DirectoryEntry>| {
+            entries
+                .values()
+                .find(|entry| entry.master.row().instrument_id == *instrument)
+                .cloned()
+        };
+        match self.entries.read() {
+            Ok(guard) => find(&guard),
+            Err(poisoned) => find(&poisoned.into_inner()),
+        }
     }
 
     #[must_use]

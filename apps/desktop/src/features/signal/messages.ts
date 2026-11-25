@@ -14,6 +14,10 @@ const catalog = {
   factsTitle: { ko: "앱이 계산한 값" as UiText },
   reasonsTitle: { ko: "AI가 낸 근거" as UiText },
   price: { ko: "현재가" as UiText },
+  priceUnknown: { ko: "시세를 받지 못했어요" as UiText },
+  sizingPending: {
+    ko: "수량과 금액은 주문할 때 최신 호가로 계산해요." as UiText,
+  },
   quantity: { ko: "수량" as UiText },
   amount: { ko: "금액" as UiText },
   costs: { ko: "예상 수수료·세금" as UiText },

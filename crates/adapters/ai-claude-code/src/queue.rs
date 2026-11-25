@@ -447,6 +447,12 @@ impl<P: AiProvider> AiRunnerQueue<P> {
         decision
     }
 
+    pub async fn current_usage(&self) -> AiUsage {
+        let now = self.clock.now();
+        let mut guard = self.state.lock().await;
+        guard.quota.current_usage(now)
+    }
+
     pub async fn snapshot(&self) -> QueueSnapshot {
         let now = self.clock.now();
         let (transition, snap) = {

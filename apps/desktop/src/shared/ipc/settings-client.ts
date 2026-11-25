@@ -1,5 +1,29 @@
 import { err, type Result } from "../lib";
 import {
+  aiSettings,
+  setBudgetPercent,
+  setClaudeConfigDir,
+  setTaskModel,
+} from "./ai-call";
+import {
+  newsSettings,
+  setAliases,
+  setNewsSource,
+  setOptionalKey,
+  setSecContact,
+  setWakeCriteria,
+} from "./news-call";
+import { scheduledJobs, setScheduledJob } from "./schedule-call";
+import {
+  accountSelection,
+  backupNow,
+  deleteAllData,
+  exportData,
+  principles,
+  selectAccount,
+  setPrinciples,
+} from "./system-call";
+import {
   checkTossConnection,
   copyText,
   publicIp,
@@ -123,4 +147,27 @@ export const coreSetupClient: SettingsClient = {
   submitTossKeys,
   publicIp,
   copyText,
+};
+
+export const coreSettingsClient: SettingsClient = {
+  ...coreSetupClient,
+  accountSelection,
+  selectAccount,
+  backupNow,
+  exportData,
+  deleteAllData,
+  principles,
+  setPrinciples,
+  newsSettings,
+  setNewsSource,
+  setOptionalKey,
+  setSecContact,
+  setWakeCriteria,
+  setAliases,
+  scheduledJobs,
+  setScheduledJob,
+  aiSettings,
+  setTaskModel,
+  setBudgetPercent,
+  setClaudeConfigDir,
 };

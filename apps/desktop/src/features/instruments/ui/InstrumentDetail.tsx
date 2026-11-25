@@ -125,10 +125,16 @@ const Ready = (props: {
             <Money value={props.view.price} />
           </Line>
           <Line label={instrumentsText("today", "ko")}>
-            <Percent
-              value={props.view.todayRate}
-              direction={props.view.direction}
-            />
+            {props.view.todayRate === undefined ? (
+              <Text variant="caption" tone="ink-muted">
+                {instrumentsText("todayUnknown", "ko")}
+              </Text>
+            ) : (
+              <Percent
+                value={props.view.todayRate}
+                direction={props.view.direction}
+              />
+            )}
           </Line>
           <Line label={instrumentsText("quotedAt", "ko")}>
             <TimestampText value={props.view.quotedAt} variant="caption" />

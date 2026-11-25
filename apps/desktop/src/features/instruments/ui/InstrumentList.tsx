@@ -45,7 +45,13 @@ const Row = (props: {
           )}
         </Badge>
       </Inline>
-      <Percent value={props.row.todayRate} direction={props.row.direction} />
+      {props.row.todayRate === undefined ? (
+        <Text variant="caption" tone="ink-muted">
+          {instrumentsText("todayUnknown", "ko")}
+        </Text>
+      ) : (
+        <Percent value={props.row.todayRate} direction={props.row.direction} />
+      )}
     </Stack>
     <IconButton
       icon="chevron-right"

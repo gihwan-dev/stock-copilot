@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-news-source"
+description = "Enables the set_news_source command without any pre-configured scope."
+commands.allow = ["set_news_source"]
+
+[[permission]]
+identifier = "deny-set-news-source"
+description = "Denies the set_news_source command without any pre-configured scope."
+commands.deny = ["set_news_source"]

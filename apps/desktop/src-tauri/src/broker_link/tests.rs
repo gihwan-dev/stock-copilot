@@ -79,6 +79,44 @@ fn first_brokerage_account_is_selected_automatically_and_only_once() {
 }
 
 #[test]
+fn a_chosen_brokerage_account_survives_reconnects_and_other_kinds_are_refused() {
+    let broker = Arc::new(ScriptedBrokerRead::default());
+    let listed = rows(vec![
+        row(27, "PENSION_SAVINGS", "00000000419"),
+        row(413, "BROKERAGE", "00000000731"),
+        row(500, "BROKERAGE", "00000000999"),
+    ]);
+    for _ in 0_u8..5_u8 {
+        broker.script_accounts().push(Ok(listed.clone()));
+    }
+    let (selector, slot) = selector(&broker);
+    tauri::async_runtime::block_on(async {
+        let brokerage = selector.brokerage_accounts().await.expect("계좌 목록");
+        assert_eq!(
+            brokerage
+                .iter()
+                .map(|(account, _)| account.clone())
+                .collect::<Vec<_>>(),
+            vec![AccountId::new(413), AccountId::new(500)]
+        );
+        assert_eq!(
+            selector.choose(&AccountId::new(500)).await.expect("선택"),
+            super::AccountChoice::Chosen(SelectionChange::Changed)
+        );
+        assert_eq!(selector.select().await, SelectionChange::Unchanged);
+        assert_eq!(slot.current(), vec![AccountId::new(500)]);
+        assert_eq!(
+            selector
+                .choose(&AccountId::new(27))
+                .await
+                .expect("연금 계좌"),
+            super::AccountChoice::NotAvailable
+        );
+        assert_eq!(slot.current(), vec![AccountId::new(500)]);
+    });
+}
+
+#[test]
 fn no_brokerage_account_leaves_no_selection_and_a_failed_read_keeps_the_last_one() {
     let broker = Arc::new(ScriptedBrokerRead::default());
     broker

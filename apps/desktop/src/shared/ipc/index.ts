@@ -186,7 +186,11 @@ export {
   newsPerHourCounts,
 } from "./news-schema";
 export type { SettingsClient, TossKeys } from "./settings-client";
-export { coreSetupClient, unavailableSettingsClient } from "./settings-client";
+export {
+  coreSettingsClient,
+  coreSetupClient,
+  unavailableSettingsClient,
+} from "./settings-client";
 export {
   investorProfile,
   orderSettings,
@@ -196,3 +200,11 @@ export {
 export { getSelfCheck, getStatus } from "./status-call";
 export { getScorecard } from "./scorecard-call";
 export { getTransactions } from "./transactions-call";
+export { getThesis } from "./thesis-call";
+export { getSignals, skipSignal } from "./signals-call";
+export {
+  addWatchlist,
+  getInstrumentDetail,
+  getInstruments,
+  removeWatchlist,
+} from "./instruments-call";

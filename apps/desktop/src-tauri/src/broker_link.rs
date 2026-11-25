@@ -31,6 +31,12 @@ pub enum SelectionChange {
     Unchanged,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccountChoice {
+    Chosen(SelectionChange),
+    NotAvailable,
+}
+
 impl AccountSlot {
     #[must_use]
     pub fn with(accounts: Vec<AccountId>) -> Self {
@@ -100,10 +106,46 @@ impl<B: BrokerRead + 'static> AccountSelector<B> {
         }
     }
 
+    pub async fn brokerage_accounts(
+        &self,
+    ) -> Result<Vec<(AccountId, MaskedAccountNumber)>, PortError> {
+        let rows = self.broker.accounts().await?;
+        Ok(rows
+            .rows()
+            .iter()
+            .filter(|row| *row.kind() == domain::BrokerAccountKind::Brokerage)
+            .map(|row| (row.account().clone(), row.masked_number().clone()))
+            .collect())
+    }
+
+    pub async fn choose(&self, account: &AccountId) -> Result<AccountChoice, PortError> {
+        let rows = self.broker.accounts().await?;
+        match domain::select_brokerage_account_by_id(&rows, account) {
+            domain::BrokerAccountKeySelection::Selected(row) => {
+                self.slot.label(row.account(), row.masked_number());
+                let change = self.slot.replace(vec![row.account().clone()]);
+                if change == SelectionChange::Changed {
+                    let _delivery = self.events.publish(DomainEvent::AccountSelectionChanged);
+                }
+                Ok(AccountChoice::Chosen(change))
+            }
+            domain::BrokerAccountKeySelection::NotBrokerage
+            | domain::BrokerAccountKeySelection::NotFound
+            | domain::BrokerAccountKeySelection::Empty => Ok(AccountChoice::NotAvailable),
+        }
+    }
+
     pub async fn select(&self) -> SelectionChange {
         let Ok(rows) = self.broker.accounts().await else {
             return SelectionChange::Unchanged;
         };
+        if let Some(current) = self.slot.current().first()
+            && let domain::BrokerAccountKeySelection::Selected(row) =
+                domain::select_brokerage_account_by_id(&rows, current)
+        {
+            self.slot.label(row.account(), row.masked_number());
+            return SelectionChange::Unchanged;
+        }
         let chosen = match select_brokerage_account(&rows) {
             BrokerAccountSelection::Selected(row) => {
                 self.slot.label(row.account(), row.masked_number());

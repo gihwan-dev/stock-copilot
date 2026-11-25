@@ -33,6 +33,10 @@ CREATE TABLE ai_job_records (
     finished_nanos INTEGER NOT NULL CHECK (finished_nanos BETWEEN 0 AND 999999999),
     payload TEXT NOT NULL
 ) STRICT;
+CREATE TABLE ai_preferences (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE audit_log (
     seq INTEGER PRIMARY KEY CHECK (seq >= 1),
     at_payload TEXT NOT NULL,
@@ -442,6 +446,15 @@ CREATE TABLE thesis_history (
     sequence INTEGER NOT NULL CHECK (sequence > 0),
     payload TEXT NOT NULL,
     PRIMARY KEY (instrument, sequence)
+) STRICT;
+CREATE TABLE thesis_history_times (
+    instrument TEXT NOT NULL,
+    sequence INTEGER NOT NULL CHECK (sequence > 0),
+    seconds INTEGER NOT NULL,
+    nanos INTEGER NOT NULL CHECK (nanos >= 0 AND nanos < 1000000000),
+    offset INTEGER NOT NULL,
+    PRIMARY KEY (instrument, sequence),
+    FOREIGN KEY (instrument, sequence) REFERENCES thesis_history(instrument, sequence)
 ) STRICT;
 CREATE TABLE thesis_notes (
     instrument TEXT PRIMARY KEY

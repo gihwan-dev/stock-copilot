@@ -7,11 +7,14 @@ import type { AiChange } from "../model";
 import { budgetChoices, inputOf, pickBudget } from "./choices";
 
 const Usage = (props: { readonly settings: AiSettings }): ReactElement => {
-  const usage = parsePercentDisplay(props.settings.usage_percent);
+  const usage =
+    props.settings.usage_percent === null
+      ? undefined
+      : parsePercentDisplay(props.settings.usage_percent);
   return (
     <Inline gap="space-2" align="center">
       <Text tone="ink-muted">{aiText("ai.usageLabel", "ko")}</Text>
-      {usage.kind === "ok"
+      {usage?.kind === "ok"
         ? [<Percent key="usage" value={usage.value} />]
         : [<Text key="unknown">{aiText("ai.usageUnknown", "ko")}</Text>]}
     </Inline>

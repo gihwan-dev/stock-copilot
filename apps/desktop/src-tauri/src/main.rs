@@ -14,13 +14,19 @@ use src_tauri::holdings_link::{
     HoldingsListener, InstrumentDirectory, InstrumentMasterFeed, MasterRefresh, PortsHoldingsSync,
     SavedMaster,
 };
+use src_tauri::ipc::ai_settings::{AiControls, AiSettingsIpcState, BudgetApplied};
 use src_tauri::ipc::briefing::BriefingIpcState;
+use src_tauri::ipc::instruments::InstrumentsIpcState;
+use src_tauri::ipc::news_settings::NewsSettingsIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::ipc::order_approval::OrderApprovalRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
 use src_tauri::ipc::scorecard::ScorecardIpcState;
 use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
+use src_tauri::ipc::signals::{MarketCalendars, SignalsIpcState};
 use src_tauri::ipc::state::BoxFuture;
+use src_tauri::ipc::system_data::{DataCare, SystemDataIpcState};
+use src_tauri::ipc::thesis::ThesisIpcState;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
 };
@@ -133,7 +139,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(turns)
         .manage(toss_link_state(&toss, holdings.clone(), &shared_clock))
         .manage(holdings)
-        .manage(self_check),
+        .manage(self_check)
+        .manage_screens(&toss, &repositories, &shared_clock, &ports),
         ports,
         context,
     )?;
@@ -145,6 +152,165 @@ fn product_notifier(handle: &Arc<NotificationHandleSlot<tauri::Wry>>) -> Arc<Pro
         SystemNotificationDelivery::new(Arc::clone(handle)),
         NotificationPreferences::default(),
     ))
+}
+
+trait ManageScreens {
+    fn manage_screens(
+        self,
+        toss: &ProductToss,
+        repositories: &Arc<SqliteRepositories>,
+        clock: &Arc<platform_macos::SystemClock>,
+        ports: &Ports<AppPortTypes>,
+    ) -> Self;
+}
+
+impl ManageScreens for tauri::Builder<tauri::Wry> {
+    fn manage_screens(
+        self,
+        toss: &ProductToss,
+        repositories: &Arc<SqliteRepositories>,
+        clock: &Arc<platform_macos::SystemClock>,
+        ports: &Ports<AppPortTypes>,
+    ) -> Self {
+        let events = &ports.events;
+        self.manage(AiSettingsIpcState::new(
+            Arc::clone(repositories),
+            Arc::clone(events),
+            Arc::new(QueueControls(Arc::clone(&ports.chat_queue))),
+        ))
+        .manage(InstrumentsIpcState::new(
+            Arc::<ProductBroker>::clone(&toss.broker),
+            Arc::clone(repositories),
+            Arc::<platform_macos::SystemClock>::clone(clock),
+            Arc::clone(events),
+        ))
+        .manage(ThesisIpcState::from_repository(Arc::clone(repositories)))
+        .manage(SignalsIpcState::new(
+            Arc::clone(repositories),
+            Arc::new(TossResolutionSource(Arc::<ProductBroker>::clone(
+                &toss.broker,
+            ))),
+            Arc::<platform_macos::SystemClock>::clone(clock),
+        ))
+        .manage(NewsSettingsIpcState::new(
+            Arc::clone(repositories),
+            Arc::clone(&toss.secrets),
+            Arc::clone(events),
+        ))
+        .manage(SystemDataIpcState::new(
+            AccountSelector::new(
+                Arc::<ProductBroker>::clone(&toss.broker),
+                toss.accounts.clone(),
+                Arc::clone(events),
+            ),
+            toss.accounts.clone(),
+            Arc::new(ProductDataCare {
+                repositories: Arc::clone(repositories),
+                secrets: Arc::clone(&toss.secrets),
+                clock: Arc::<platform_macos::SystemClock>::clone(clock),
+                events: Arc::clone(events),
+            }),
+            Arc::clone(repositories),
+        ))
+    }
+}
+
+const DATABASE_FILES: [&str; 3] = [
+    "stock-copilot.db",
+    "stock-copilot.db-wal",
+    "stock-copilot.db-shm",
+];
+
+const WIPED_SECRETS: [application::SecretKey; 7] = [
+    application::SecretKey::TossClientId,
+    application::SecretKey::TossClientSecret,
+    application::SecretKey::TossAccessToken,
+    application::SecretKey::DatabaseEncryptionKey,
+    application::SecretKey::AuditHmacKey,
+    application::SecretKey::DartApiKey,
+    application::SecretKey::FredApiKey,
+];
+
+struct ProductDataCare {
+    repositories: Arc<SqliteRepositories>,
+    secrets: Arc<ProductSecrets>,
+    clock: Arc<platform_macos::SystemClock>,
+    events: Arc<application::EventBus>,
+}
+
+fn storage_failure() -> application::SystemPortError {
+    application::SystemPortError::new(
+        application::SystemPort::Repository,
+        application::SystemFailure::Unavailable(application::RetryDelay::Unknown),
+    )
+}
+
+fn remove_stored_files(data_directory: &Path) -> Result<(), application::SystemPortError> {
+    let files = DATABASE_FILES.map(|name| data_directory.join(name));
+    for file in files.iter().filter(|file| file.exists()) {
+        std::fs::remove_file(file).map_err(|_locked| storage_failure())?;
+    }
+    let backups = data_directory.join("backups");
+    if backups.exists() {
+        std::fs::remove_dir_all(&backups).map_err(|_locked| storage_failure())?;
+    }
+    Ok(())
+}
+
+impl DataCare for ProductDataCare {
+    fn back_up(
+        &self,
+        directory: PathBuf,
+    ) -> BoxFuture<'_, Result<(), application::SystemPortError>> {
+        Box::pin(async move {
+            use application::SecretStore as _;
+            let key = self
+                .secrets
+                .load(application::SecretKey::DatabaseEncryptionKey)
+                .await?
+                .ok_or_else(storage_failure)?;
+            self.repositories
+                .back_up(directory, &key, self.clock.as_ref())
+                .await
+                .map(|_outcome| ())
+        })
+    }
+
+    fn wipe(
+        &self,
+        data_directory: PathBuf,
+    ) -> BoxFuture<'_, Result<(), application::SystemPortError>> {
+        Box::pin(async move {
+            use application::SecretStore as _;
+            let _closed = self.repositories.shared().close().await?;
+            remove_stored_files(&data_directory)?;
+            for key in WIPED_SECRETS {
+                let _removed = self.secrets.remove(key).await?;
+            }
+            let _delivery = self.events.publish(domain::DomainEvent::StoredDataChanged);
+            Ok(())
+        })
+    }
+}
+
+struct QueueControls(Arc<ProductQueue>);
+
+impl AiControls for QueueControls {
+    fn apply_budget(
+        &self,
+        percent: application::ScheduledBudgetPercent,
+    ) -> BoxFuture<'_, BudgetApplied> {
+        Box::pin(async move {
+            match self.0.set_scheduled_cap_percent(percent.as_percent()).await {
+                Ok(_transition) => BudgetApplied::Applied,
+                Err(_invalid) => BudgetApplied::Refused,
+            }
+        })
+    }
+
+    fn usage(&self) -> BoxFuture<'_, application::AiUsage> {
+        Box::pin(self.0.current_usage())
+    }
 }
 
 struct QueueQuota(Arc<ProductQueue>);
@@ -444,6 +610,16 @@ impl ResolutionSource for TossResolutionSource {
         Box::pin(self.0.candles(instrument, window, period, adjustment))
     }
 
+    fn calendar_on(
+        &self,
+        market: domain::KnownMarket,
+        date: domain::CalendarDate,
+    ) -> BoxFuture<'_, Result<domain::MarketCalendar, application::PortError>> {
+        Box::pin(self.0.calendar_on(market, date))
+    }
+}
+
+impl MarketCalendars for TossResolutionSource {
     fn calendar_on(
         &self,
         market: domain::KnownMarket,
@@ -1391,7 +1567,11 @@ fn product_catalog(
     analysis_catalog(
         clock,
         CatalogStores {
-            theses: Arc::clone(repositories),
+            theses: Arc::new(application::TimedThesisRepository::new(
+                Arc::clone(repositories),
+                Arc::clone(repositories),
+                Arc::clone(clock),
+            )),
             estimates: Arc::clone(repositories),
             bodies: Arc::new(ProductArticleBodies::new(clock)),
             runs: runs.clone(),

@@ -500,3 +500,48 @@ fn noncanonical_history_fails_closed_without_affecting_original() {
         thesis.history()
     );
 }
+
+#[test]
+fn history_times_are_kept_once_per_stored_entry_and_ignore_unknown_sequences() {
+    use application::ThesisHistoryTimes;
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let path = DatabasePath::new(fixture.path());
+    let database = Database::open(&path, &key(), &clock()).expect("open");
+    let store = ThesisStore::new(&database);
+    let id = instrument("instrument-a");
+    let thesis = changed_thesis();
+    rt.block_on(store.store(&id, &thesis)).expect("store");
+    let first = crate::tests::timestamp();
+    let sequences = thesis
+        .history()
+        .iter()
+        .map(domain::HistoryEntry::sequence)
+        .collect::<Vec<_>>();
+    let unknown = domain::ThesisVersion::try_new(99).expect("version");
+    let mut with_unknown = sequences.clone();
+    with_unknown.push(unknown);
+    rt.block_on(store.record_times(&id, &with_unknown, first))
+        .expect("record");
+    let later = first
+        .checked_add(
+            domain::TimeSpan::try_new(domain::SpanSeconds::new(60), domain::Nanosecond::new(0))
+                .expect("span"),
+        )
+        .expect("later");
+    rt.block_on(store.record_times(&id, &sequences, later))
+        .expect("record again");
+    let times = rt.block_on(store.entry_times(&id)).expect("times");
+    assert_eq!(
+        times,
+        vec![application::ThesisEntryTime {
+            sequence: sequences[0],
+            recorded_at: first,
+        }]
+    );
+    assert_eq!(
+        rt.block_on(store.entry_times(&instrument("instrument-b")))
+            .expect("other"),
+        Vec::new()
+    );
+}

@@ -4,19 +4,26 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { FirstRunGate, OnboardingClientProvider } from "../features/onboarding";
 import { AppFrame, AppShell, EmptyState, Page } from "../shared/ds";
 import {
-  coreSetupClient,
+  addWatchlist,
+  coreSettingsClient,
+  getInstrumentDetail,
+  getInstruments,
+  removeWatchlist,
   getAllocation,
   getBriefings,
   getPortfolio,
   getScorecard,
   getSelfCheck,
+  getSignals,
   getStatus,
+  getThesis,
   getTransactions,
   investorProfile,
   orderSettings,
   pendingScreenSources,
   saveInvestorProfile,
   saveOrderSettings,
+  skipSignal,
   type ScreenSources,
   type SettingsClient,
 } from "../shared/ipc";
@@ -47,6 +54,13 @@ const coreScreenSources: ScreenSources = {
   status: getStatus,
   scorecard: getScorecard,
   transactions: getTransactions,
+  instruments: getInstruments,
+  instrumentDetail: getInstrumentDetail,
+  addWatchlist,
+  removeWatchlist,
+  thesis: getThesis,
+  signals: getSignals,
+  skipSignal,
 };
 
 const CoreEventBridge = (): null => {
@@ -121,5 +135,5 @@ export const App = (props: AppProps): ReactElement => {
 };
 
 export const CoreApp = (): ReactElement => (
-  <App setupClient={coreSetupClient} />
+  <App settingsClient={coreSettingsClient} />
 );

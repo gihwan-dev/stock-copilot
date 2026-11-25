@@ -235,6 +235,61 @@ impl ThesisRepository for SqliteRepositories {
     }
 }
 
+impl application::SignalSkipRepository for SqliteRepositories {
+    async fn record_skip(
+        &self,
+        skip: &application::SignalSkip,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::SignalSkipRepository::record_skip(&crate::SignalSkipStore::new(database), skip)
+            .await
+    }
+}
+
+impl application::SignalSkipHistory for SqliteRepositories {
+    async fn latest_skip(
+        &self,
+        instrument: &InstrumentId,
+    ) -> Result<Option<Timestamp>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        let skips = crate::SignalSkipStore::new(database).skips().await?;
+        Ok(skips
+            .into_iter()
+            .filter(|skip| skip.instrument == *instrument)
+            .map(|skip| skip.skipped_at)
+            .max())
+    }
+}
+
+impl application::ThesisHistoryTimes for SqliteRepositories {
+    async fn record_times(
+        &self,
+        instrument: &InstrumentId,
+        sequences: &[domain::ThesisVersion],
+        recorded_at: Timestamp,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ThesisHistoryTimes::record_times(
+            &ThesisStore::new(database),
+            instrument,
+            sequences,
+            recorded_at,
+        )
+        .await
+    }
+    async fn entry_times(
+        &self,
+        instrument: &InstrumentId,
+    ) -> Result<Vec<application::ThesisEntryTime>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ThesisHistoryTimes::entry_times(&ThesisStore::new(database), instrument).await
+    }
+}
+
 impl EstimateRepository for SqliteRepositories {
     async fn append_submission(
         &self,
@@ -833,6 +888,51 @@ impl application::CollectedItemReads for SqliteRepositories {
         let database = opened(guard.as_ref(), REPOSITORY)?;
         application::CollectedItemReads::collected_item(&InformationStore::new(database), handle)
             .await
+    }
+}
+
+impl application::AiPreferencesRepository for SqliteRepositories {
+    async fn load_ai_preferences(
+        &self,
+    ) -> Result<Option<application::AiPreferences>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::AiPreferencesRepository::load_ai_preferences(&crate::AiPreferencesStore::new(
+            database,
+        ))
+        .await
+    }
+    async fn store_ai_preferences(
+        &self,
+        preferences: &application::AiPreferences,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::AiPreferencesRepository::store_ai_preferences(
+            &crate::AiPreferencesStore::new(database),
+            preferences,
+        )
+        .await
+    }
+}
+
+impl application::PrinciplesRepository for SqliteRepositories {
+    async fn store_principles(
+        &self,
+        principles: &domain::InvestmentPrinciples,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::PrinciplesRepository::store_principles(
+            &crate::PrinciplesStore::new(database),
+            principles,
+        )
+        .await
+    }
+    async fn principles(&self) -> Result<Option<domain::InvestmentPrinciples>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::PrinciplesRepository::principles(&crate::PrinciplesStore::new(database)).await
     }
 }
 

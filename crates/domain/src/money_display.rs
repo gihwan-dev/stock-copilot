@@ -113,6 +113,24 @@ pub fn display_percent(ratio: &crate::Ratio, precision: DisplayPrecision) -> Dis
 }
 
 #[must_use]
+pub fn display_scorecard_percent(
+    rate: &crate::ScorecardDisplay,
+    precision: DisplayPrecision,
+) -> Option<DisplayDigits> {
+    let input = crate::NumericInput::try_new(rate.as_str()).ok()?;
+    let ratio = crate::Ratio::parse(&input).ok()?;
+    Some(display_percent(&ratio, precision))
+}
+
+#[must_use]
+pub fn display_probability_percent(
+    probability: crate::Probability,
+    precision: DisplayPrecision,
+) -> DisplayDigits {
+    display_digits(percent_of(Amount::new(probability.as_decimal())), precision)
+}
+
+#[must_use]
 pub fn display_quotient_percent(
     quotient: &crate::RatioQuotient,
     precision: DisplayPrecision,
@@ -186,6 +204,25 @@ mod tests {
     use proptest::strategy::Strategy;
     use proptest::test_runner::{Config, TestRunner};
     use rust_decimal::Decimal;
+
+    #[test]
+    fn probability_and_scorecard_rates_display_as_rounded_percent_digits() {
+        let precision = DisplayPrecision::try_new(1).expect("자릿수");
+        let probability = crate::Probability::try_new(Decimal::new(6_25, 3)).expect("확률");
+        assert_eq!(
+            super::display_probability_percent(probability, precision).as_str(),
+            "62.5"
+        );
+        let rate = crate::ScorecardDisplay::new(String::from("0.6250"));
+        assert_eq!(
+            super::display_scorecard_percent(&rate, precision)
+                .expect("적중률")
+                .as_str(),
+            "62.5"
+        );
+        let broken = crate::ScorecardDisplay::new(String::from("rate"));
+        assert_eq!(super::display_scorecard_percent(&broken, precision), None);
+    }
 
     #[test]
     fn display_rounds_without_mutating_money_and_direction_uses_original_change() {

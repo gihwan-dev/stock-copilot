@@ -205,7 +205,7 @@ pub(crate) fn signed(amount: Money, rate: Option<String>) -> Option<UiSignedAmou
     })
 }
 
-fn return_rate(holding: &ValuedHolding) -> Option<String> {
+pub(crate) fn return_rate(holding: &ValuedHolding) -> Option<String> {
     let observed = holding.valuation().selected_return().ok()?.value();
     match observed.rate() {
         HoldingReturn::Defined(quotient) => Some(

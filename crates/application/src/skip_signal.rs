@@ -49,6 +49,13 @@ pub trait SignalSkipRepository: Send + Sync {
     ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
 }
 
+pub trait SignalSkipHistory: Send + Sync {
+    fn latest_skip(
+        &self,
+        instrument: &InstrumentId,
+    ) -> impl Future<Output = Result<Option<Timestamp>, SystemPortError>> + Send;
+}
+
 #[derive(Debug)]
 pub struct SkipSignal<'a, Repository, TimeSource> {
     repository: &'a Repository,

@@ -40,7 +40,7 @@ export const aiSettingsSchema = z
   .object({
     tasks: z.array(taskSettingSchema).readonly(),
     budget_percent: z.enum(budgetPercents),
-    usage_percent: usagePercentSchema,
+    usage_percent: usagePercentSchema.nullable(),
     claude_config_dir: configPathSchema.nullable(),
   })
   .strict()

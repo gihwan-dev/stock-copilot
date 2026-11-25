@@ -140,6 +140,28 @@ const catalog = {
   "bin.70-plus": { ko: "70% 이상" as UiText },
   "cash.KRW": { ko: "원화" as UiText },
   "cash.USD": { ko: "달러" as UiText },
+  "watchlist.unknown-instrument": {
+    ko: "이 코드의 종목을 찾지 못했어요. 코드를 확인해 주세요." as UiText,
+  },
+  "watchlist.inactive-instrument": {
+    ko: "지금 거래할 수 없는 종목이라 추가하지 않았어요." as UiText,
+  },
+  "watchlist.capacity-exceeded": {
+    ko: "관심 종목은 200개까지 담을 수 있어요." as UiText,
+  },
+  "thesis.claim-added": { ko: "주장 추가" as UiText },
+  "thesis.claim-judged": { ko: "주장 판정" as UiText },
+  "thesis.criterion-added": { ko: "중단 조건 추가" as UiText },
+  "thesis.criterion-judged": { ko: "중단 조건 판정" as UiText },
+  "thesis.user-confirmed": { ko: "직접 확인함" as UiText },
+  "thesis.user-rejected": { ko: "직접 되돌림" as UiText },
+  "verdict.intact": { ko: "유지" as UiText },
+  "verdict.weakened": { ko: "약해짐" as UiText },
+  "verdict.broken": { ko: "깨짐" as UiText },
+  "verdict.unverifiable": { ko: "확인 불가" as UiText },
+  "watchlist.not-in-watchlist": {
+    ko: "관심 종목에 없는 종목이에요." as UiText,
+  },
   "risk.rejectInvalidProfile": {
     ko: "이 조합으로는 저장할 수 없어요. 비중 상한을 다시 골라 주세요." as UiText,
   },

@@ -29,7 +29,8 @@ export type SignalSizing =
       readonly costs: Money;
       readonly weightAfter: PercentDisplay;
     }
-  | { readonly kind: "zero"; readonly reason: FreeText };
+  | { readonly kind: "zero"; readonly reason: FreeText }
+  | { readonly kind: "pending" };
 
 export type SignalCardView = {
   readonly id: EntityId;
@@ -39,7 +40,7 @@ export type SignalCardView = {
   readonly market: "open" | "closed";
   readonly orderSwitch: "on" | "off";
   readonly proposal: EntityId | undefined;
-  readonly price: Money;
+  readonly price: Money | undefined;
   readonly sizing: SignalSizing;
   readonly aiProbability: PercentDisplay;
   readonly trackedProbability: PercentDisplay;
@@ -85,7 +86,7 @@ export type InstrumentListRow = {
   readonly name: FreeText;
   readonly ticker: Ticker;
   readonly origin: "holding" | "watchlist";
-  readonly todayRate: PercentDisplay;
+  readonly todayRate: PercentDisplay | undefined;
   readonly direction: "up" | "down" | "flat";
 };
 
@@ -107,7 +108,7 @@ export type InstrumentDetailView = {
   readonly name: FreeText;
   readonly ticker: Ticker;
   readonly price: Money;
-  readonly todayRate: PercentDisplay;
+  readonly todayRate: PercentDisplay | undefined;
   readonly direction: "up" | "down" | "flat";
   readonly quotedAt: Timestamp;
   readonly candles: readonly InstrumentCandle[];
@@ -163,7 +164,7 @@ export type ThesisClaim = {
 
 export type ThesisRevision = {
   readonly id: EntityId;
-  readonly at: Timestamp;
+  readonly at: Timestamp | undefined;
   readonly summary: FreeText;
 };
 

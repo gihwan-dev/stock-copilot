@@ -1,18 +1,18 @@
 use tauri::Runtime;
-use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
+use tauri_specta::{Builder, Commands, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
-    app_version, briefing, chat, open_external, order_approval, portfolio, public_ip, risk_editor,
-    schedule, scorecard, self_check, settings, toss, transactions, updates,
+    ai_settings, app_version, briefing, chat, instruments, news_settings, open_external,
+    order_approval, portfolio, public_ip, risk_editor, schedule, scorecard, self_check, settings,
+    signals, system_data, thesis, toss, transactions, updates,
 };
 
-#[must_use]
-pub fn specta_builder<R: Runtime>() -> Builder<R> {
-    #[expect(
-        trivial_casts,
-        reason = "#[specta::specta] 확장이 명령 함수를 fn 포인터로 as 변환한다 (ADR 0016)"
-    )]
-    let commands = collect_commands![
+#[expect(
+    trivial_casts,
+    reason = "#[specta::specta] 확장이 명령 함수를 fn 포인터로 as 변환한다 (ADR 0016)"
+)]
+fn product_commands<R: Runtime>() -> Commands<R> {
+    collect_commands![
         app_version::app_version::<tauri::Wry>,
         settings::get_settings::<tauri::Wry>,
         settings::set_order_permission::<tauri::Wry>,
@@ -39,10 +39,38 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         self_check::get_self_check::<tauri::Wry>,
         self_check::get_status::<tauri::Wry>,
         scorecard::get_scorecard::<tauri::Wry>,
-        transactions::get_transactions::<tauri::Wry>
-    ];
+        transactions::get_transactions::<tauri::Wry>,
+        instruments::get_instruments::<tauri::Wry>,
+        instruments::get_instrument_detail::<tauri::Wry>,
+        instruments::add_watchlist::<tauri::Wry>,
+        instruments::remove_watchlist::<tauri::Wry>,
+        thesis::get_thesis::<tauri::Wry>,
+        signals::get_signals::<tauri::Wry>,
+        signals::skip_signal::<tauri::Wry>,
+        system_data::get_account_selection::<tauri::Wry>,
+        system_data::select_account::<tauri::Wry>,
+        system_data::get_principles::<tauri::Wry>,
+        system_data::set_principles::<tauri::Wry>,
+        system_data::backup_now::<tauri::Wry>,
+        system_data::export_data::<tauri::Wry>,
+        system_data::delete_all_data::<tauri::Wry>,
+        news_settings::get_news_settings::<tauri::Wry>,
+        news_settings::set_news_source::<tauri::Wry>,
+        news_settings::set_optional_key::<tauri::Wry>,
+        news_settings::set_sec_contact::<tauri::Wry>,
+        news_settings::set_wake_criteria::<tauri::Wry>,
+        news_settings::set_aliases::<tauri::Wry>,
+        ai_settings::get_ai_settings::<tauri::Wry>,
+        ai_settings::set_task_model::<tauri::Wry>,
+        ai_settings::set_budget_percent::<tauri::Wry>,
+        ai_settings::set_claude_config_dir::<tauri::Wry>
+    ]
+}
+
+#[must_use]
+pub fn specta_builder<R: Runtime>() -> Builder<R> {
     Builder::<R>::new()
-        .commands(commands)
+        .commands(product_commands())
         .events(collect_events![super::event::UiEvent])
         .error_handling(ErrorHandlingMode::Result)
 }

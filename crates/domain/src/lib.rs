@@ -1,11 +1,13 @@
 mod money;
 mod volatility;
 pub use money::{Amount, AmountError, AmountInput, Currency, Money, MoneyError};
+mod daily_change;
+pub use daily_change::{DailyChange, DailyChangeError, daily_change, previous_session_close};
 mod money_display;
 pub use money_display::{
     DisplayDigits, DisplayDirection, DisplayMoney, DisplayMoneyChange, DisplayPrecision,
     DisplayPrecisionError, MoneyChange, display_change, display_money, display_percent,
-    display_quotient_percent,
+    display_probability_percent, display_quotient_percent, display_scorecard_percent,
 };
 
 mod account_id;

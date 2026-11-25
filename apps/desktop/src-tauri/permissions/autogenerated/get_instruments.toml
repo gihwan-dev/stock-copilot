@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-instruments"
+description = "Enables the get_instruments command without any pre-configured scope."
+commands.allow = ["get_instruments"]
+
+[[permission]]
+identifier = "deny-get-instruments"
+description = "Denies the get_instruments command without any pre-configured scope."
+commands.deny = ["get_instruments"]

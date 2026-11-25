@@ -119,6 +119,102 @@ export const commands = {
     typedError<UiTransactionsView_Serialize, IpcError>(
       __TAURI_INVOKE("get_transactions", { request }),
     ),
+  getInstruments: (request: GetInstrumentsRequest) =>
+    typedError<UiInstrumentsView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_instruments", { request }),
+    ),
+  getInstrumentDetail: (request: InstrumentRequest) =>
+    typedError<UiInstrumentDetail_Serialize, IpcError>(
+      __TAURI_INVOKE("get_instrument_detail", { request }),
+    ),
+  addWatchlist: (request: InstrumentRequest) =>
+    typedError<UiWatchlistChange_Serialize, IpcError>(
+      __TAURI_INVOKE("add_watchlist", { request }),
+    ),
+  removeWatchlist: (request: InstrumentRequest) =>
+    typedError<UiWatchlistChange_Serialize, IpcError>(
+      __TAURI_INVOKE("remove_watchlist", { request }),
+    ),
+  getThesis: (request: GetThesisRequest) =>
+    typedError<UiThesisView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_thesis", { request }),
+    ),
+  getSignals: (request: GetSignalsRequest) =>
+    typedError<UiSignalsView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_signals", { request }),
+    ),
+  skipSignal: (request: SkipSignalRequest) =>
+    typedError<UiSkipResult, IpcError>(
+      __TAURI_INVOKE("skip_signal", { request }),
+    ),
+  getAccountSelection: (request: SystemRequest) =>
+    typedError<UiAccountSelection, IpcError>(
+      __TAURI_INVOKE("get_account_selection", { request }),
+    ),
+  selectAccount: (request: SelectAccountRequest) =>
+    typedError<UiAccountSelection, IpcError>(
+      __TAURI_INVOKE("select_account", { request }),
+    ),
+  getPrinciples: (request: SystemRequest) =>
+    typedError<UiPrinciples, IpcError>(
+      __TAURI_INVOKE("get_principles", { request }),
+    ),
+  setPrinciples: (request: SetPrinciplesRequest) =>
+    typedError<UiPrinciples, IpcError>(
+      __TAURI_INVOKE("set_principles", { request }),
+    ),
+  backupNow: (request: SystemRequest) =>
+    typedError<UiBackupResult, IpcError>(
+      __TAURI_INVOKE("backup_now", { request }),
+    ),
+  exportData: (request: SystemRequest) =>
+    typedError<UiExportResult, IpcError>(
+      __TAURI_INVOKE("export_data", { request }),
+    ),
+  deleteAllData: (request: SystemRequest) =>
+    typedError<UiDeleteResult, IpcError>(
+      __TAURI_INVOKE("delete_all_data", { request }),
+    ),
+  getNewsSettings: (request: NewsRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("get_news_settings", { request }),
+    ),
+  setNewsSource: (request: SetNewsSourceRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_news_source", { request }),
+    ),
+  setOptionalKey: (request: SetOptionalKeyRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_optional_key", { request }),
+    ),
+  setSecContact: (request: SetSecContactRequest_Deserialize) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_sec_contact", { request }),
+    ),
+  setWakeCriteria: (request: SetWakeCriteriaRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_wake_criteria", { request }),
+    ),
+  setAliases: (request: SetAliasesRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_aliases", { request }),
+    ),
+  getAiSettings: (request: AiRequest) =>
+    typedError<UiAiSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("get_ai_settings", { request }),
+    ),
+  setTaskModel: (request: SetTaskModelRequest) =>
+    typedError<UiAiSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_task_model", { request }),
+    ),
+  setBudgetPercent: (request: SetBudgetPercentRequest) =>
+    typedError<UiAiSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_budget_percent", { request }),
+    ),
+  setClaudeConfigDir: (request: SetClaudeConfigDirRequest_Deserialize) =>
+    typedError<UiAiSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_claude_config_dir", { request }),
+    ),
 };
 
 /** Events */
@@ -134,6 +230,12 @@ export type ActiveChatTurnDto = {
 };
 
 export type ActiveTurnStateDto = "Running" | "Finished";
+
+export type AiRequest = {
+  scope: AiScope;
+};
+
+export type AiScope = "current";
 
 export type AppVersion = {
   version: string;
@@ -571,6 +673,10 @@ export type GetChatHistoryResponse_Serialize = {
   active_turn: ActiveChatTurnDto | null;
 };
 
+export type GetInstrumentsRequest = {
+  scope: InstrumentsScope;
+};
+
 export type GetJobSchedulesRequest = {
   scope: JobSchedulesScope;
 };
@@ -599,13 +705,27 @@ export type GetSettingsRequest = {
   scope: SettingsQueryScope;
 };
 
+export type GetSignalsRequest = {
+  scope: SignalsScope;
+};
+
 export type GetStatusRequest = {
   scope: SelfCheckScope;
+};
+
+export type GetThesisRequest = {
+  symbol: string;
 };
 
 export type GetTransactionsRequest = {
   scope: TransactionsScope;
 };
+
+export type InstrumentRequest = {
+  symbol: string;
+};
+
+export type InstrumentsScope = "tracked";
 
 export type IpcError = {
   kind: IpcErrorKind;
@@ -614,6 +734,12 @@ export type IpcError = {
 export type IpcErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
 
 export type JobSchedulesScope = "ai";
+
+export type NewsRequest = {
+  scope: NewsScope;
+};
+
+export type NewsScope = "current";
 
 export type OpenExternalRequest = {
   url: string;
@@ -688,6 +814,10 @@ export type SaveOrderSettingsRequest = {
 
 export type ScorecardScope = "all";
 
+export type SelectAccountRequest = {
+  account: string;
+};
+
 export type SelfCheckScope = "current";
 
 export type SendChatMessageRequest =
@@ -742,6 +872,25 @@ export type SendChatMessageResponse_Serialize = {
   failure_reason: ChatFailureReasonDto | null;
 };
 
+export type SetAliasesRequest = {
+  aliases: UiAliasInput[];
+};
+
+export type SetBudgetPercentRequest = {
+  percent: UiBudgetPercent;
+};
+
+export type SetClaudeConfigDirRequest =
+  SetClaudeConfigDirRequest_Serialize | SetClaudeConfigDirRequest_Deserialize;
+
+export type SetClaudeConfigDirRequest_Deserialize = {
+  path?: string | null;
+};
+
+export type SetClaudeConfigDirRequest_Serialize = {
+  path: string | null;
+};
+
 export type SetJobScheduleRequest =
   SetJobScheduleRequest_Serialize | SetJobScheduleRequest_Deserialize;
 
@@ -757,11 +906,50 @@ export type SetJobScheduleRequest_Serialize = {
   time: UiKstTime | null;
 };
 
+export type SetNewsSourceRequest = {
+  setting: UiSourceSettingInput;
+};
+
+export type SetOptionalKeyRequest = {
+  key: UiOptionalKey;
+  secret: string;
+};
+
 export type SetOrderPermissionRequest = {
   permission: UiOrderPermission;
 };
 
+export type SetPrinciplesRequest = {
+  principles: UiPrinciplesInput;
+};
+
+export type SetSecContactRequest =
+  SetSecContactRequest_Serialize | SetSecContactRequest_Deserialize;
+
+export type SetSecContactRequest_Deserialize = {
+  contact?: string | null;
+};
+
+export type SetSecContactRequest_Serialize = {
+  contact: string | null;
+};
+
+export type SetTaskModelRequest = {
+  setting: UiTaskSettingInput;
+};
+
+export type SetWakeCriteriaRequest = {
+  wake: UiWakeInput;
+};
+
 export type SettingsQueryScope = "all";
+
+export type SignalsScope = "current";
+
+export type SkipSignalRequest = {
+  symbol: string;
+  reason: string;
+};
 
 export type StoredChatEntryDto =
   StoredChatEntryDto_Serialize | StoredChatEntryDto_Deserialize;
@@ -795,11 +983,65 @@ export type SubmitTossKeysRequest = {
   secret: string;
 };
 
+export type SystemRequest = {
+  scope: SystemScope;
+};
+
+export type SystemScope = "current";
+
 export type TossConnectionQuery = "current";
 
 export type TransactionsScope = "recent";
 
+export type UiAccountRow = {
+  id: string;
+  number: string;
+};
+
+export type UiAccountSelection = {
+  selected: string;
+  accounts: UiAccountRow[];
+};
+
+export type UiAiEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+export type UiAiModel = "opus" | "sonnet" | "haiku";
+
 export type UiAiRuntime = "ready" | "missing";
+
+export type UiAiSettings = UiAiSettings_Serialize | UiAiSettings_Deserialize;
+
+export type UiAiSettings_Deserialize = {
+  tasks: UiTaskSetting[];
+  budget_percent: UiBudgetPercent;
+  usage_percent?: string | null;
+  claude_config_dir?: string | null;
+};
+
+export type UiAiSettings_Serialize = {
+  tasks: UiTaskSetting[];
+  budget_percent: UiBudgetPercent;
+  usage_percent: string | null;
+  claude_config_dir: string | null;
+};
+
+export type UiAiTask =
+  | "chat"
+  | "estimate"
+  | "deep-research"
+  | "briefing"
+  | "news-summary"
+  | "collection";
+
+export type UiAliasInput = {
+  alias: string;
+  ticker: string;
+};
+
+export type UiAliasRow = {
+  alias: string;
+  ticker: string;
+};
 
 export type UiAllocationLabel = "holding" | "cash-krw" | "cash-usd";
 
@@ -816,6 +1058,14 @@ export type UiAllocationView = {
   instruments: UiAllocationRow[];
   concentration: UiConcentration;
 };
+
+export type UiBackupResult = {
+  status: UiBackupStatus;
+};
+
+export type UiBackupStatus = "backed-up";
+
+export type UiBodyReading = "on" | "off" | "locked";
 
 export type UiBriefing = UiBriefing_Serialize | UiBriefing_Deserialize;
 
@@ -879,9 +1129,19 @@ export type UiBriefingsView_Serialize = {
   past: UiBriefing_Serialize[];
 };
 
+export type UiBudgetPercent = "50" | "60" | "70" | "80" | "90";
+
 export type UiCardExpiry = "5" | "10" | "15" | "30";
 
+export type UiCashMinPercent = "0" | "5" | "10" | "20" | "30";
+
+export type UiClaimStatus = "confirmed" | "needs-review";
+
+export type UiClaimVerdict = "intact" | "weakened" | "broken" | "unverifiable";
+
 export type UiConcentration = "balanced" | "concentrated";
+
+export type UiConcentrationCount = "3" | "4" | "5" | "6" | "8" | "10";
 
 export type UiConnectionState = "connected" | "needs-key";
 
@@ -908,6 +1168,13 @@ export type UiCurrencyValue_Serialize = {
   buying_power: UiMoney | null;
 };
 
+export type UiDailyChange = {
+  rate: string;
+  direction: UiDirection;
+};
+
+export type UiDailyMove = "3" | "5" | "7" | "10";
+
 export type UiDataSource =
   | "KindDisclosure"
   | "DartDisclosureApi"
@@ -926,6 +1193,12 @@ export type UiDataSource =
   | "FederalReserve"
   | "UsTreasury"
   | "Fred";
+
+export type UiDeleteResult = {
+  status: UiDeleteStatus;
+};
+
+export type UiDeleteStatus = "deleted";
 
 export type UiDirection = "up" | "down" | "flat";
 
@@ -1657,6 +1930,29 @@ export type UiEvent =
 
 export type UiExcludableType = "etf" | "etn" | "preferred" | "spac" | "reit";
 
+export type UiExportResult = {
+  status: UiExportStatus;
+};
+
+export type UiExportStatus = "exported";
+
+export type UiFeedSource =
+  | "KindDisclosure"
+  | "DartDisclosureApi"
+  | "DartDisclosureRss"
+  | "DartFundamentals"
+  | "Hankyung"
+  | "Maekyung"
+  | "Yonhap"
+  | "Edaily"
+  | "GoogleNews"
+  | "YahooFinance"
+  | "SecEdgar"
+  | "BankOfKorea"
+  | "FederalReserve"
+  | "UsTreasury"
+  | "Fred";
+
 export type UiFxPair = "UsdKrw" | "KrwUsd";
 
 export type UiHolding = {
@@ -1676,7 +1972,77 @@ export type UiInformationSource =
   | ({ News: UiNewsSource } & { Disclosure?: never })
   | ({ Disclosure: UiDisclosureSource } & { News?: never });
 
+export type UiInstrumentCandle = {
+  date: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+};
+
 export type UiInstrumentCap = "10" | "15" | "20" | "25" | "30";
+
+export type UiInstrumentDetail =
+  UiInstrumentDetail_Serialize | UiInstrumentDetail_Deserialize;
+
+export type UiInstrumentDetail_Deserialize = {
+  symbol: string;
+  name: string;
+  price: UiMoney;
+  today?: UiDailyChange | null;
+  quoted_at: string;
+  candles: UiInstrumentCandle[];
+  holding?: UiInstrumentHolding | null;
+};
+
+export type UiInstrumentDetail_Serialize = {
+  symbol: string;
+  name: string;
+  price: UiMoney;
+  today: UiDailyChange | null;
+  quoted_at: string;
+  candles: UiInstrumentCandle[];
+  holding: UiInstrumentHolding | null;
+};
+
+export type UiInstrumentHolding = {
+  quantity: string;
+  value: UiMoney;
+  profit: UiMoney;
+  profit_rate: string;
+};
+
+export type UiInstrumentOrigin = "holding" | "watchlist";
+
+export type UiInstrumentRow =
+  UiInstrumentRow_Serialize | UiInstrumentRow_Deserialize;
+
+export type UiInstrumentRow_Deserialize = {
+  symbol: string;
+  name: string;
+  origin: UiInstrumentOrigin;
+  today?: UiDailyChange | null;
+};
+
+export type UiInstrumentRow_Serialize = {
+  symbol: string;
+  name: string;
+  origin: UiInstrumentOrigin;
+  today: UiDailyChange | null;
+};
+
+export type UiInstrumentsView =
+  UiInstrumentsView_Serialize | UiInstrumentsView_Deserialize;
+
+export type UiInstrumentsView_Deserialize = {
+  rows: UiInstrumentRow_Deserialize[];
+};
+
+export type UiInstrumentsView_Serialize = {
+  rows: UiInstrumentRow_Serialize[];
+};
+
+export type UiInterval = "1" | "2" | "5" | "10" | "15" | "30" | "60";
 
 export type UiJobRun = {
   at: string;
@@ -1718,6 +2084,13 @@ export type UiJobSchedulesView_Serialize = {
 
 export type UiJobSwitch = "on" | "off";
 
+export type UiKeyPresence = "set" | "unset";
+
+export type UiKeys = {
+  dart: UiKeyPresence;
+  fred: UiKeyPresence;
+};
+
 export type UiKstTime = {
   hour: number;
   minute: number;
@@ -1725,9 +2098,32 @@ export type UiKstTime = {
 
 export type UiMarket = "Kr" | "Us";
 
+export type UiMarketState = "open" | "closed";
+
 export type UiMoney = {
   amount: string;
   currency: UiCurrency;
+};
+
+export type UiNewsPerHour = "3" | "5" | "10" | "20";
+
+export type UiNewsSettings =
+  UiNewsSettings_Serialize | UiNewsSettings_Deserialize;
+
+export type UiNewsSettings_Deserialize = {
+  sources: UiSourceSetting[];
+  keys: UiKeys;
+  sec_contact?: string | null;
+  wake: UiWake;
+  aliases: UiAliasRow[];
+};
+
+export type UiNewsSettings_Serialize = {
+  sources: UiSourceSetting[];
+  keys: UiKeys;
+  sec_contact: string | null;
+  wake: UiWake;
+  aliases: UiAliasRow[];
 };
 
 export type UiNewsSource =
@@ -1739,6 +2135,8 @@ export type UiNewsSource =
   | "FederalReserve"
   | "GoogleNews"
   | "YahooFinance";
+
+export type UiOptionalKey = "dart" | "fred";
 
 export type UiOptionalKeyState = "configured" | "unconfigured";
 
@@ -1752,6 +2150,8 @@ export type UiOrderSettingsDraft = {
   card_expiry: UiCardExpiry;
   order_count_limit: UiOrderCountLimit;
 };
+
+export type UiOrderSwitch = "on" | "off";
 
 export type UiOrderSwitchOutcome = {
   kind: UiOrderSwitchOutcomeKind;
@@ -1782,6 +2182,18 @@ export type UiPortfolioView_Serialize = {
   currencies: UiCurrencyValue_Serialize[];
   holdings: UiHolding[];
   today: UiSignedAmount | null;
+};
+
+export type UiPrinciples = {
+  text: string;
+  cash_min_percent: UiCashMinPercent;
+  concentration_min_count: UiConcentrationCount;
+};
+
+export type UiPrinciplesInput = {
+  text: string;
+  cash_min_percent: UiCashMinPercent;
+  concentration_min_count: UiConcentrationCount;
 };
 
 export type UiProfileDraft = {
@@ -1930,10 +2342,85 @@ export type UiSettingsView = {
   account_count: number;
 };
 
+export type UiSignalCard = UiSignalCard_Serialize | UiSignalCard_Deserialize;
+
+export type UiSignalCard_Deserialize = {
+  symbol: string;
+  name: string;
+  direction: UiSignalDirection;
+  market: UiMarketState;
+  order_switch: UiOrderSwitch;
+  price?: UiMoney | null;
+  ai_probability: string;
+  tracked_probability: string;
+  threshold: string;
+  bin_hit_rate?: string | null;
+  bin_count: string;
+  rationale: string;
+  counterargument: string;
+  sources: UiSignalSource[];
+};
+
+export type UiSignalCard_Serialize = {
+  symbol: string;
+  name: string;
+  direction: UiSignalDirection;
+  market: UiMarketState;
+  order_switch: UiOrderSwitch;
+  price: UiMoney | null;
+  ai_probability: string;
+  tracked_probability: string;
+  threshold: string;
+  bin_hit_rate: string | null;
+  bin_count: string;
+  rationale: string;
+  counterargument: string;
+  sources: UiSignalSource[];
+};
+
+export type UiSignalDirection = "buy" | "sell";
+
+export type UiSignalSource = {
+  kind: UiSignalSourceKind;
+  label: string;
+};
+
+export type UiSignalSourceKind = "tool" | "web" | "news" | "disclosure";
+
+export type UiSignalsView = UiSignalsView_Serialize | UiSignalsView_Deserialize;
+
+export type UiSignalsView_Deserialize = {
+  cards: UiSignalCard_Deserialize[];
+};
+
+export type UiSignalsView_Serialize = {
+  cards: UiSignalCard_Serialize[];
+};
+
 export type UiSignedAmount = {
   amount: UiMoney;
   rate: string;
   direction: UiDirection;
+};
+
+export type UiSkipOutcome = "recorded";
+
+export type UiSkipResult = {
+  outcome: UiSkipOutcome;
+};
+
+export type UiSourceSetting = {
+  source: UiFeedSource;
+  state: UiToggle;
+  body_reading: UiBodyReading;
+  interval_minutes: UiInterval;
+};
+
+export type UiSourceSettingInput = {
+  source: UiFeedSource;
+  state: UiToggle;
+  body_reading: UiBodyReading;
+  interval_minutes: UiInterval;
 };
 
 export type UiSourceStatus =
@@ -1965,7 +2452,66 @@ export type UiStatusView_Serialize = {
 
 export type UiSwitch = "off" | "on";
 
+export type UiTaskSetting = {
+  task: UiAiTask;
+  model: UiAiModel;
+  effort: UiAiEffort;
+};
+
+export type UiTaskSettingInput = {
+  task: UiAiTask;
+  model: UiAiModel;
+  effort: UiAiEffort;
+};
+
+export type UiThesisChange =
+  | "claim-added"
+  | "claim-judged"
+  | "criterion-added"
+  | "criterion-judged"
+  | "user-confirmed"
+  | "user-rejected";
+
+export type UiThesisClaim = {
+  id: string;
+  text: string;
+  status: UiClaimStatus;
+};
+
+export type UiThesisRevision =
+  UiThesisRevision_Serialize | UiThesisRevision_Deserialize;
+
+export type UiThesisRevision_Deserialize = {
+  sequence: string;
+  at?: string | null;
+  change: UiThesisChange;
+  subject?: string | null;
+  verdict?: UiClaimVerdict | null;
+};
+
+export type UiThesisRevision_Serialize = {
+  sequence: string;
+  at: string | null;
+  change: UiThesisChange;
+  subject: string | null;
+  verdict: UiClaimVerdict | null;
+};
+
+export type UiThesisView = UiThesisView_Serialize | UiThesisView_Deserialize;
+
+export type UiThesisView_Deserialize = {
+  claims: UiThesisClaim[];
+  history: UiThesisRevision_Deserialize[];
+};
+
+export type UiThesisView_Serialize = {
+  claims: UiThesisClaim[];
+  history: UiThesisRevision_Serialize[];
+};
+
 export type UiTimeAdjustment = "adjustable" | "not-adjustable";
+
+export type UiToggle = "on" | "off";
 
 export type UiToggleState = "off" | "on";
 
@@ -2054,6 +2600,37 @@ export type UiUpdateState =
         failure: UiUpdateFailure;
       };
     } & { downloading?: never; ready?: never });
+
+export type UiWake = {
+  daily_move_percent: UiDailyMove;
+  news_per_hour: UiNewsPerHour;
+};
+
+export type UiWakeInput = {
+  daily_move_percent: UiDailyMove;
+  news_per_hour: UiNewsPerHour;
+};
+
+export type UiWatchlistChange =
+  UiWatchlistChange_Serialize | UiWatchlistChange_Deserialize;
+
+export type UiWatchlistChange_Deserialize = {
+  outcome: UiWatchlistOutcome;
+  reason?: UiWatchlistRejection | null;
+};
+
+export type UiWatchlistChange_Serialize = {
+  outcome: UiWatchlistOutcome;
+  reason: UiWatchlistRejection | null;
+};
+
+export type UiWatchlistOutcome = "applied" | "rejected";
+
+export type UiWatchlistRejection =
+  | "unknown-instrument"
+  | "inactive-instrument"
+  | "capacity-exceeded"
+  | "not-in-watchlist";
 
 export type UiWeightLevel = "normal" | "warning" | "over-cap";
 

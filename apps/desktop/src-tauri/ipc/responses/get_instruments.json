@@ -1,0 +1,19 @@
+{
+  "rows": [
+    {
+      "symbol": "005930",
+      "name": "삼성전자",
+      "origin": "holding",
+      "today": {
+        "rate": "2.00",
+        "direction": "up"
+      }
+    },
+    {
+      "symbol": "000660",
+      "name": "SK하이닉스",
+      "origin": "watchlist",
+      "today": null
+    }
+  ]
+}

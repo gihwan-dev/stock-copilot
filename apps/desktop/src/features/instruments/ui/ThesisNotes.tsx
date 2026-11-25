@@ -35,7 +35,13 @@ const ThesisReady = (props: { readonly view: ThesisView }): ReactElement => (
     <Stack gap="space-2">
       {props.view.history.map((revision): ReactElement => (
         <Inline key={revision.id} gap="space-2" align="center" wrap="wrap">
-          <TimestampText value={revision.at} variant="caption" />
+          {revision.at === undefined ? (
+            <Text variant="caption" tone="ink-muted">
+              {instrumentsText("thesisTimeUnknown", "ko")}
+            </Text>
+          ) : (
+            <TimestampText value={revision.at} variant="caption" />
+          )}
           <DataText value={revision.summary} variant="body-sm" />
         </Inline>
       ))}

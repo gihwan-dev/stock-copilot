@@ -20,6 +20,7 @@ const catalog = {
   quoteTitle: { ko: "시세" as UiText },
   price: { ko: "현재가" as UiText },
   today: { ko: "오늘 등락" as UiText },
+  todayUnknown: { ko: "등락 정보 없음" as UiText },
   quotedAt: { ko: "시세 시각" as UiText },
   chartTitle: { ko: "일봉 차트" as UiText },
   chartLabel: { ko: "일봉 차트" as UiText },
@@ -35,6 +36,7 @@ const catalog = {
   thesisError: { ko: "논거 노트를 불러오지 못했어요" as UiText },
   thesisCurrent: { ko: "현재 노트" as UiText },
   thesisHistory: { ko: "바뀐 기록" as UiText },
+  thesisTimeUnknown: { ko: "시각 기록 전" as UiText },
   confirmed: { ko: "확인됨" as UiText },
   needsReview: { ko: "확인 필요" as UiText },
 } as const;
