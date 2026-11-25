@@ -84,6 +84,7 @@ export const captureStory = async (
         throw new Error(`시스템 글꼴 사용: ${JSON.stringify(used)}`);
     }
     await session.detach();
+    await page.clock.runFor(settings.settle);
     const bytes = await page.screenshot({
       animations: settings.animations,
       caret: settings.caret,

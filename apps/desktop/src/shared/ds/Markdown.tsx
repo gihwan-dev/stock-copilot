@@ -110,7 +110,7 @@ const MarkdownLink = ({ href, children, node }: LinkContent): ReactElement => {
   );
 };
 const MarkdownPre = ({ children }: BlockContent): ReactElement => (
-  <pre className="chat-content my-space-3 rounded-md bg-surface-sunken p-space-3">
+  <pre className="chat-content font-sans my-space-3 rounded-md bg-surface-sunken p-space-3">
     {children}
   </pre>
 );
@@ -150,7 +150,7 @@ const MarkdownQuote = ({ children }: BlockContent): ReactElement => (
   <blockquote className="markdown-quote my-space-3">{children}</blockquote>
 );
 const MarkdownCode = ({ children }: BlockContent): ReactElement => (
-  <code className="font-mono bg-surface-sunken">{children}</code>
+  <code className="font-sans bg-surface-sunken">{children}</code>
 );
 const components = {
   a: MarkdownLink,

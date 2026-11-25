@@ -41,12 +41,15 @@ FONT_STACK='system-ui, "Apple SD Gothic Neo", sans-serif' <임시>/ds16-webview 
 
 | 글꼴 묶음 | 실제로 쓰인 글꼴 | 숫자 0~9 폭(14px) | 고정폭 |
 |---|---|---|---|
-| 앱 그대로: `"IBM Plex Sans KR", "Apple SD Gothic Neo", …` | Apple SD Gothic Neo (IBM Plex Sans KR은 설치돼 있지 않고 앱도 `@font-face`로 싣지 않음) | 5.14 ~ 8.86px로 제각각 | **아님**. `1,111,111원` 52.63px, `8,888,888원` 74.52px |
+| 측정 도구의 글꼴 이름만: `"IBM Plex Sans KR", "Apple SD Gothic Neo", …` (`@font-face` 없이) | Apple SD Gothic Neo (이 기기에 IBM Plex Sans KR이 설치돼 있지 않음) | 5.14 ~ 8.86px로 제각각 | **아님**. `1,111,111원` 52.63px, `8,888,888원` 74.52px |
+| 실제 앱 빌드(`tokens.css`의 `@font-face`로 `design/fonts`의 IBM Plex Sans KR을 번들) | IBM Plex Sans KR (WKWebView·Chromium 모두 적재 확인) | 모두 8.40px | 맞음 (fin-design FD-9 실측) |
 | `system-ui, "Apple SD Gothic Neo", …` | SF Pro | 모두 8.862px | 맞음. 같은 자릿수면 같은 폭 |
 
-`tabular-nums`는 글꼴에 `tnum` 기능이 있어야 동작한다. 앱의 실제 대체 글꼴인 Apple SD Gothic Neo에는 없어서, 표의 금액 열이 자릿수가 같아도 폭이 달라 세로로 줄이 맞지 않는다. 문서(ADR 0079, R-14)의 "고정폭 숫자"와 다르다.
+`tabular-nums`는 글꼴에 `tnum` 기능이 있어야 동작한다. Apple SD Gothic Neo에는 없어서, 이 측정 도구처럼 `@font-face` 없이 글꼴 이름만 쓰면 금액 열이 세로로 맞지 않는다.
 
-**DS-05 수정 작업이 필요하다** (tasks.md는 메인이 고친다). 고칠 방향 후보:
+**정정 (fin-design FD-9)**: 위 첫 행은 측정 도구가 `@font-face`를 싣지 않아 생긴 결과다. 실제 앱은 `tokens.css`의 `@font-face`로 IBM Plex Sans KR(OFL)을 번들하고, 빌드한 앱을 시스템 WKWebView와 Chromium에 띄워 재면 그 글꼴이 적재되고 숫자 0~9 폭이 모두 같다(Plex 숫자는 기본이 고정폭). 앱은 문서(ADR 0079, R-14)의 "고정폭 숫자"를 지킨다. 재발은 `apps/desktop/tests/screen-number-width.test.mjs`가 막는다(두 엔진에서 글꼴 적재와 숫자 폭 확인).
+
+고칠 방향 후보(정정 뒤에는 필요 없음, 1번이 이미 적용돼 있음):
 
 1. IBM Plex Sans KR을 앱에 글꼴 파일로 싣는다(`@font-face`, 라이선스 OFL). 디자인 산출물과 같아진다.
 2. 숫자 표시에만 `system-ui`(SF Pro)를 앞에 둔다. 한글 단위(원·주·만·억·조)는 다음 글꼴로 넘어간다.

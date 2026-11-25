@@ -69,14 +69,26 @@ test("DS15 locks all rendering inputs independently", () => {
   assert.equal(settings.timezone, "Asia/Seoul");
   assert.equal(settings.time, "2026-01-02T03:04:05.000Z");
   assert.equal(settings.random, 0.3141592653589793);
+  assert.equal(settings.settle, 500);
+  assert.deepEqual(settings.browserArgs, [
+    "--num-raster-threads=1",
+    "--disable-partial-raster",
+  ]);
   assert.equal(settings.animations, "disabled");
   assert.equal(settings.caret, "hide");
-  assert.deepEqual(settings.components, [
-    "Button",
-    "Card",
-    "Money",
-    "TextField",
-  ]);
+  assert.deepEqual(
+    settings.components,
+    JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../harness/ds-catalog/public-list.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ).components,
+  );
+  assert.equal(settings.components.length, 47);
   assert.deepEqual(settings.themes, ["light", "dark"]);
 });
 

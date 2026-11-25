@@ -1,15 +1,9 @@
 import { createHash } from "node:crypto";
+import { settings } from "../../../harness/visual/policy.mjs";
 export const baselineFixture = () => {
-  const entries = [
-    ["Button", "light"],
-    ["Button", "dark"],
-    ["Card", "light"],
-    ["Card", "dark"],
-    ["Money", "light"],
-    ["Money", "dark"],
-    ["TextField", "light"],
-    ["TextField", "dark"],
-  ];
+  const entries = settings.components.flatMap((component) =>
+    settings.themes.map((theme) => [component, theme]),
+  );
   const images = {};
   const measurements = entries.map(([component, theme], index) => {
     const bytes = Buffer.from(`${component}/${theme}/${"x".repeat(index + 1)}`);

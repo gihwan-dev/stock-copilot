@@ -66,6 +66,9 @@ const fixture = ({
       if (pageError === "present") handler(new Error("page failed"));
     },
     clock: {
+      runFor: async (ms) => {
+        calls.push(["runFor", ms]);
+      },
       install: async (value) => {
         calls.push(["install", value.time.toISOString()]);
         installedTime = value.time.getTime() + 1;
@@ -167,6 +170,9 @@ test("DS15 normal capture applies inputs and checks actual fonts before its scre
       ["pauseAt", "2026-01-02T03:04:05.000Z"],
     ],
   );
+  const settled = calls.findIndex(([name]) => name === "runFor");
+  assert.deepEqual(calls[settled], ["runFor", 500]);
+  assert.equal(calls[settled + 1]?.[0], "screenshot");
   assert.deepEqual(
     calls.find(([name]) => name === "goto"),
     [

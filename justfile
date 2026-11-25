@@ -78,6 +78,7 @@ check-full: advisory-db-fetch check
     "{{just_executable()}}" mutants-diff {{quote(base)}}
 
 ds-check: check-pnpm
+    cargo run --locked --quiet --package xtask -- ds-check
     node harness/ds-catalog/check.mjs
     node harness/ds-overflow/typecheck.mjs
     node --test apps/desktop/tests/ds22-overflow-verdict.test.mjs

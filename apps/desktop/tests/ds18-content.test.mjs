@@ -295,7 +295,7 @@ test("DS18 semantic nodes retain hierarchy and nondefault list start", async () 
     ["ol", "markdown-ordered"],
     ["ul", "markdown-bullets"],
     ["blockquote", "markdown-quote"],
-    ["code", "font-mono"],
+    ["code", "bg-surface-sunken"],
   ])
     assert.ok(w.document.querySelector(tag).classList.contains(token));
   assert.equal(w.document.querySelector("ol").getAttribute("start"), "3");
