@@ -241,6 +241,88 @@ impl<'database> HoldingsStore<'database> {
             })
             .await
     }
+    pub async fn record_cash(
+        &self,
+        account: AccountId,
+        observed_at: Timestamp,
+        cash: Vec<(Money, Timestamp)>,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        self.database
+            .write(move |transaction| {
+                let found = transaction
+                    .query_row(
+                        sql::FIND,
+                        params![
+                            account.as_i64(),
+                            observed_at.utc_seconds().as_i64(),
+                            observed_at.nanosecond().as_u32()
+                        ],
+                        header,
+                    )
+                    .optional()?;
+                let Some(snapshot) = found else {
+                    return Err(rusqlite::Error::InvalidQuery);
+                };
+                for (amount, at) in &cash {
+                    transaction.execute(
+                        crate::sql::master::INSERT_CASH,
+                        params![
+                            snapshot.id,
+                            currency(amount.currency()),
+                            amount.amount().as_decimal().to_string(),
+                            at.utc_seconds().as_i64(),
+                            at.nanosecond().as_u32(),
+                            at.offset_seconds().as_i32()
+                        ],
+                    )?;
+                }
+                Ok(WriteCompleted)
+            })
+            .await
+    }
+    pub async fn latest_holdings(
+        &self,
+        account: AccountId,
+    ) -> Result<Option<(HoldingsSnapshot, Vec<(Money, Timestamp)>)>, SystemPortError> {
+        self.database
+            .read(move |connection| {
+                let Some(found) = connection
+                    .query_row(
+                        crate::sql::master::LATEST_HEADER,
+                        [account.as_i64()],
+                        header,
+                    )
+                    .optional()?
+                else {
+                    return Ok(None);
+                };
+                let snapshot = load(connection, &found)?;
+                let cash = connection
+                    .prepare(crate::sql::master::CASH)?
+                    .query_map([found.id], |row| {
+                        let unit = match row.get::<_, String>(0)?.as_str() {
+                            "KRW" => Currency::Krw,
+                            "USD" => Currency::Usd,
+                            _ => return Err(rusqlite::Error::InvalidQuery),
+                        };
+                        Ok((money(&row.get::<_, String>(1)?, unit)?, timestamp(row, 2)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok(Some((snapshot, cash)))
+            })
+            .await
+    }
+    pub async fn latest_account(&self) -> Result<Option<AccountId>, SystemPortError> {
+        self.database
+            .read(|connection| {
+                connection
+                    .query_row(crate::sql::master::LATEST_ACCOUNT, [], |row| {
+                        Ok(AccountId::new(row.get(0)?))
+                    })
+                    .optional()
+            })
+            .await
+    }
     pub async fn compact_holdings(
         &self,
         clock: &dyn Clock,
