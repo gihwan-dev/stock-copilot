@@ -3305,6 +3305,11 @@ dependencies = [
 [[package]]
 name = "secrets-keychain"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "security-framework",
+ "testkit-ports",
+]
 
 [[package]]
 name = "security-framework"
