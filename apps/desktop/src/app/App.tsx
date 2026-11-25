@@ -6,6 +6,8 @@ import { AppFrame, AppShell, EmptyState, Page } from "../shared/ds";
 import {
   coreSetupClient,
   getBriefings,
+  getSelfCheck,
+  getStatus,
   investorProfile,
   orderSettings,
   pendingScreenSources,
@@ -35,6 +37,8 @@ const coreScreenSources: ScreenSources = {
   orderSettings,
   saveInvestorProfile,
   saveOrderSettings,
+  selfCheck: getSelfCheck,
+  status: getStatus,
 };
 
 const CoreEventBridge = (): null => {

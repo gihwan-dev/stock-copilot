@@ -95,6 +95,14 @@ export const commands = {
     typedError<UiRiskSaveOutcome, IpcError>(
       __TAURI_INVOKE("save_order_settings", { request }),
     ),
+  getSelfCheck: (request: GetSelfCheckRequest) =>
+    typedError<UiSelfCheckView, IpcError>(
+      __TAURI_INVOKE("get_self_check", { request }),
+    ),
+  getStatus: (request: GetStatusRequest) =>
+    typedError<UiStatusView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_status", { request }),
+    ),
 };
 
 /** Events */
@@ -559,8 +567,16 @@ export type GetRiskSettingsRequest = {
   scope: RiskSettingsScope;
 };
 
+export type GetSelfCheckRequest = {
+  scope: SelfCheckScope;
+};
+
 export type GetSettingsRequest = {
   scope: SettingsQueryScope;
+};
+
+export type GetStatusRequest = {
+  scope: SelfCheckScope;
 };
 
 export type IpcError = {
@@ -639,6 +655,8 @@ export type SaveInvestorProfileRequest = {
 export type SaveOrderSettingsRequest = {
   draft: UiOrderSettingsDraft;
 };
+
+export type SelfCheckScope = "current";
 
 export type SendChatMessageRequest =
   SendChatMessageRequest_Serialize | SendChatMessageRequest_Deserialize;
@@ -746,6 +764,8 @@ export type SubmitTossKeysRequest = {
 };
 
 export type TossConnectionQuery = "current";
+
+export type UiAiRuntime = "ready" | "missing";
 
 export type UiBriefing = UiBriefing_Serialize | UiBriefing_Deserialize;
 
@@ -1706,6 +1726,23 @@ export type UiScheduledJob =
 
 export type UiSectorCap = "30" | "40" | "50";
 
+export type UiSelfCheckProblem =
+  | "none"
+  | "toss-key-invalid"
+  | "toss-key-permission"
+  | "toss-account-missing"
+  | "ip-not-allowed"
+  | "toss-key-shared"
+  | "claude-missing"
+  | "claude-signed-out"
+  | "order-risk-notice"
+  | "order-exchange-setting"
+  | "order-dollar-shortage";
+
+export type UiSelfCheckView = {
+  problem: UiSelfCheckProblem;
+};
+
 export type UiSettingsView = {
   toss_connection: UiConnectionState;
   horizon: UiHorizon;
@@ -1725,6 +1762,33 @@ export type UiSettingsView = {
   concentration_warning_threshold: number;
   auto_start_at_login: UiToggleState;
   account_count: number;
+};
+
+export type UiSourceStatus =
+  UiSourceStatus_Serialize | UiSourceStatus_Deserialize;
+
+export type UiSourceStatus_Deserialize = {
+  source: string;
+  last_success?: string | null;
+};
+
+export type UiSourceStatus_Serialize = {
+  source: string;
+  last_success: string | null;
+};
+
+export type UiStatusView = UiStatusView_Serialize | UiStatusView_Deserialize;
+
+export type UiStatusView_Deserialize = {
+  ai_runtime: UiAiRuntime;
+  ai_resumes_at?: string | null;
+  sources: UiSourceStatus_Deserialize[];
+};
+
+export type UiStatusView_Serialize = {
+  ai_runtime: UiAiRuntime;
+  ai_resumes_at: string | null;
+  sources: UiSourceStatus_Serialize[];
 };
 
 export type UiSwitch = "off" | "on";

@@ -7,7 +7,9 @@ get_chat_history
 get_job_schedules
 get_public_ip
 get_risk_settings
+get_self_check
 get_settings
+get_status
 get_update_status
 open_external
 request_order_approval

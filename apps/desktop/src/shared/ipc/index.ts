@@ -192,3 +192,4 @@ export {
   saveInvestorProfile,
   saveOrderSettings,
 } from "./risk-call";
+export { getSelfCheck, getStatus } from "./status-call";

@@ -9,6 +9,7 @@ use src_tauri::collected_links::{CollectedLinker, TitleLinker};
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
+use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
 use src_tauri::ipc::state::BoxFuture;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
@@ -96,6 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &repositories,
     )
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let self_check = product_self_check(&ai, &repositories);
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
     let link = toss_link_state(&ports, &toss, &shared_clock);
     let app = build_app(
@@ -103,11 +105,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(intraday)
             .manage(turns)
             .manage(link)
+            .manage(self_check)
             .manage(public_ip_runtime(&shared_clock)),
         ports,
         context,
     )?;
     run_primary(app)
+}
+
+struct ProductAiStatus {
+    install: ClaudeInstall,
+    queue: Arc<ProductQueue>,
+}
+
+impl AiStatusProbe for ProductAiStatus {
+    fn install(&self) -> ClaudeInstall {
+        self.install
+    }
+
+    fn limit(&self) -> BoxFuture<'_, AiLimit> {
+        Box::pin(async move {
+            match self.queue.evaluate_chat_quota().await {
+                ai_claude_code::QuotaDecision::WaitRateLimit { resumes_at, .. } => {
+                    AiLimit::Waiting(resumes_at)
+                }
+                ai_claude_code::QuotaDecision::Allowed
+                | ai_claude_code::QuotaDecision::WaitScheduledBudget { .. } => AiLimit::Available,
+            }
+        })
+    }
+}
+
+fn product_self_check(
+    ai: &ProductAiParts,
+    repositories: &Arc<SqliteRepositories>,
+) -> SelfCheckIpcState {
+    let install = match ai.ai.as_ref() {
+        AiAvailability::Ready(_) => ClaudeInstall::Installed,
+        AiAvailability::Missing => ClaudeInstall::Missing,
+    };
+    SelfCheckIpcState::new(
+        Arc::new(ProductAiStatus {
+            install,
+            queue: Arc::clone(&ai.queue),
+        }),
+        Arc::clone(repositories),
+    )
 }
 
 const PUBLIC_IP_SERVICE: &str = "https://api.ipify.org";

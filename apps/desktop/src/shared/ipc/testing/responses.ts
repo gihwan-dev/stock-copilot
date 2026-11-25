@@ -88,6 +88,7 @@ export const responses = {
       sector_cap: "40",
     },
   },
+  getSelfCheck: { problem: "claude-missing" },
   getSettings: {
     account_count: 0,
     ai_budget_percent: "70",
@@ -107,6 +108,14 @@ export const responses = {
     risk_appetite: "neutral",
     sector_cap_percent: "40",
     toss_connection: "needs-key",
+  },
+  getStatus: {
+    ai_resumes_at: "2026-11-25T15:00:00+09:00",
+    ai_runtime: "ready",
+    sources: [
+      { last_success: null, source: "kind-disclosure" },
+      { last_success: "2026-11-25T09:30:00+09:00", source: "yonhap" },
+    ],
   },
   getUpdateStatus: { current_version: "0.1.0", state: "off" },
   ipcErrors: [
