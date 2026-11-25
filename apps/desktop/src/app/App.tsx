@@ -11,6 +11,7 @@ import {
   getScorecard,
   getSelfCheck,
   getStatus,
+  getTransactions,
   investorProfile,
   orderSettings,
   pendingScreenSources,
@@ -45,6 +46,7 @@ const coreScreenSources: ScreenSources = {
   selfCheck: getSelfCheck,
   status: getStatus,
   scorecard: getScorecard,
+  transactions: getTransactions,
 };
 
 const CoreEventBridge = (): null => {

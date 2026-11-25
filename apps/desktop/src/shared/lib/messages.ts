@@ -138,6 +138,8 @@ const catalog = {
   "bin.50-60": { ko: "50~60%" as UiText },
   "bin.60-70": { ko: "60~70%" as UiText },
   "bin.70-plus": { ko: "70% 이상" as UiText },
+  "cash.KRW": { ko: "원화" as UiText },
+  "cash.USD": { ko: "달러" as UiText },
   "risk.rejectInvalidProfile": {
     ko: "이 조합으로는 저장할 수 없어요. 비중 상한을 다시 골라 주세요." as UiText,
   },

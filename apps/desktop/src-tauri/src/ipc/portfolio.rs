@@ -155,7 +155,7 @@ const fn ui_currency(currency: Currency) -> UiCurrency {
     }
 }
 
-const fn ui_direction(direction: DisplayDirection) -> UiDirection {
+pub(crate) const fn ui_direction(direction: DisplayDirection) -> UiDirection {
     match direction {
         DisplayDirection::Up => UiDirection::Up,
         DisplayDirection::Down => UiDirection::Down,
@@ -170,11 +170,11 @@ const fn digits_for(currency: Currency) -> u8 {
     }
 }
 
-fn precision(digits: u8) -> Option<DisplayPrecision> {
+pub(crate) fn precision(digits: u8) -> Option<DisplayPrecision> {
     DisplayPrecision::try_new(digits).ok()
 }
 
-fn ui_money(money: &Money) -> Option<UiMoney> {
+pub(crate) fn ui_money(money: &Money) -> Option<UiMoney> {
     let shown = domain::display_money(money, precision(digits_for(money.currency()))?);
     Some(UiMoney {
         amount: shown.digits().as_str().to_owned(),
@@ -182,7 +182,7 @@ fn ui_money(money: &Money) -> Option<UiMoney> {
     })
 }
 
-fn percent(ratio: &domain::Ratio) -> Option<String> {
+pub(crate) fn percent(ratio: &domain::Ratio) -> Option<String> {
     Some(
         domain::display_percent(ratio, precision(2)?)
             .as_str()
@@ -190,7 +190,7 @@ fn percent(ratio: &domain::Ratio) -> Option<String> {
     )
 }
 
-fn signed(amount: Money, rate: Option<String>) -> Option<UiSignedAmount> {
+pub(crate) fn signed(amount: Money, rate: Option<String>) -> Option<UiSignedAmount> {
     let change = domain::display_change(
         &MoneyChange::new(amount),
         precision(digits_for(amount.currency()))?,
@@ -243,7 +243,7 @@ fn holding_row(holding: &ValuedHolding, directory: &InstrumentDirectory) -> Opti
     })
 }
 
-fn display_name(symbol: &Symbol, directory: &InstrumentDirectory) -> String {
+pub(crate) fn display_name(symbol: &Symbol, directory: &InstrumentDirectory) -> String {
     directory.name(symbol).map_or_else(
         || symbol.as_str().to_owned(),
         |name| name.as_str().to_owned(),
