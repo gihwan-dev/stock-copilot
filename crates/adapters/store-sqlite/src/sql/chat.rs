@@ -12,3 +12,4 @@ pub(crate) const FIND_RUN: &str = "SELECT id FROM chat_run_ledger WHERE entry_pa
 pub(crate) const INSERT_RUN: &str =
     "INSERT INTO chat_run_ledger(run_id, entry_payload) VALUES (?1, ?2)";
 pub(crate) const INSERT_TOOL_CALL: &str = "INSERT INTO tool_call_ledger(run_id, request_id, tool_name, arguments_json, result_json, outcome, started_payload, finished_payload, protocol_version) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
+pub(crate) const TOOL_CALLS_IN_RUN: &str = "SELECT run_id, request_id, tool_name, arguments_json, result_json, outcome, started_payload, finished_payload, protocol_version FROM tool_call_ledger WHERE run_id = ?1 ORDER BY id";

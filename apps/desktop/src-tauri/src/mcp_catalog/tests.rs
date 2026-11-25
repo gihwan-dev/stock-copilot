@@ -61,6 +61,123 @@ impl EstimateSubmissionRepository for ClosedEstimates {
     }
 }
 
+impl application::ToolCallHistory for ClosedEstimates {
+    fn calls_in_run(
+        &self,
+        _run: &AiRunId,
+    ) -> impl Future<Output = Result<Vec<application::ToolCallRecord>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+}
+
+impl application::SettingsRepository for ClosedEstimates {
+    fn store_profile(
+        &self,
+        _profile: &domain::InvestorProfile,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn profile(
+        &self,
+    ) -> impl Future<Output = Result<Option<domain::InvestorProfile>, SystemPortError>> + Send {
+        ready(Ok(None))
+    }
+
+    fn store_risk_settings(
+        &self,
+        _settings: &domain::RiskSettings,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn risk_settings(
+        &self,
+    ) -> impl Future<Output = Result<Option<domain::RiskSettings>, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+}
+
+impl application::CollectedItemReads for ClosedEstimates {
+    fn collected_since(
+        &self,
+        _kind: application::CollectedKind,
+        _since: domain::Timestamp,
+    ) -> impl Future<Output = Result<Vec<application::ObservedCollectedItem>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+
+    fn collected_item(
+        &self,
+        _handle: &application::CollectedItemHandle,
+    ) -> impl Future<Output = Result<Option<application::ObservedCollectedItem>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+}
+
+impl application::NewsDataSettingsRepository for ClosedEstimates {
+    fn load(
+        &self,
+    ) -> impl Future<Output = Result<Option<application::NewsDataSettings>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+
+    fn store(
+        &self,
+        _settings: &application::NewsDataSettings,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+}
+
+impl application::WatchlistRepository for ClosedEstimates {
+    fn load(&self) -> impl Future<Output = Result<application::Watchlist, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn store(
+        &self,
+        _previous: &application::Watchlist,
+        _next: &application::Watchlist,
+    ) -> impl Future<Output = Result<application::WatchlistStoreOutcome, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+}
+
+impl application::AuditLog for ClosedEstimates {
+    fn append(
+        &self,
+        _entry: &application::AuditEntry,
+    ) -> impl Future<Output = Result<application::RecordOutcome, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn verify(
+        &self,
+    ) -> impl Future<Output = Result<application::AuditIntegrity, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+}
+
+struct NoBodies;
+
+impl crate::mcp_sources::ArticleBodies for NoBodies {
+    fn fetch(
+        &self,
+        _source: &domain::NewsSource,
+        _url: &domain::NormalizedUrl,
+        _settings: &application::NewsDataSettings,
+    ) -> impl Future<Output = Result<domain::UntrustedText, application::ArticleFetchFailure>> + Send
+    {
+        ready(Err(application::ArticleFetchFailure::NotFound))
+    }
+}
+
 impl ScorecardObservationRepository for ClosedEstimates {
     fn scorecard_observations(
         &self,
@@ -83,6 +200,14 @@ fn catalog() -> ToolRegistry {
         CatalogStores {
             theses: Arc::new(LatestThesisRepository::default()),
             estimates: Arc::new(ClosedEstimates),
+            bodies: Arc::new(NoBodies),
+            collector:
+                Arc::new(
+                    crate::ai_runtime::AiAvailability::<
+                        testkit_ports::chat_fakes::ScriptedAiProvider,
+                    >::Missing,
+                ),
+            runs: crate::ai_runtime::RunMetadataBook::new(),
             events: Arc::new(EventBusBuilder::default().build()),
         },
     )
@@ -125,4 +250,11 @@ fn allowed_tools_are_the_catalog_under_the_app_server_name_only() {
     ] {
         assert!(allowed.contains(expected), "{expected}");
     }
+}
+
+#[test]
+fn profile_tool_reads_the_saved_investor_profile_from_settings() {
+    use application::ProfileSource;
+    let stored = super::StoredProfile(Arc::new(ClosedEstimates));
+    assert_eq!(tauri::async_runtime::block_on(stored.profile()), Ok(None));
 }

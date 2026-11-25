@@ -311,6 +311,7 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed + 'static> FeedRunner for AppFeedRunn
                 ports.clock.as_ref(),
                 &ports.events,
             )
+            .with_times(&self.repositories)
             .collect(&self.feed, cursor)
             .await
         })

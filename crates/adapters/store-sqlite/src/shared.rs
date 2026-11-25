@@ -746,3 +746,105 @@ impl application::ValuationCloseEvidenceRepository for SqliteRepositories {
         .await
     }
 }
+
+impl application::ToolCallHistory for SqliteRepositories {
+    async fn calls_in_run(
+        &self,
+        run: &AiRunId,
+    ) -> Result<Vec<application::ToolCallRecord>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ToolCallHistory::calls_in_run(&ChatStore::new(database), run).await
+    }
+}
+
+impl application::CollectedTimes for SqliteRepositories {
+    async fn record_times(
+        &self,
+        entry: &application::CollectedEntry,
+        published_at: application::PublicationTime,
+        collected_at: Timestamp,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedTimes::record_times(
+            &InformationStore::new(database),
+            entry,
+            published_at,
+            collected_at,
+        )
+        .await
+    }
+}
+
+impl application::CollectedItemReads for SqliteRepositories {
+    async fn collected_since(
+        &self,
+        kind: application::CollectedKind,
+        since: Timestamp,
+    ) -> Result<Vec<application::ObservedCollectedItem>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedItemReads::collected_since(
+            &InformationStore::new(database),
+            kind,
+            since,
+        )
+        .await
+    }
+
+    async fn collected_item(
+        &self,
+        handle: &application::CollectedItemHandle,
+    ) -> Result<Option<application::ObservedCollectedItem>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedItemReads::collected_item(&InformationStore::new(database), handle)
+            .await
+    }
+}
+
+impl application::NewsDataSettingsRepository for SqliteRepositories {
+    async fn load(&self) -> Result<Option<application::NewsDataSettings>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::NewsDataSettingsRepository::load(&crate::NewsDataSettingsStore::new(database))
+            .await
+    }
+
+    async fn store(
+        &self,
+        settings: &application::NewsDataSettings,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::NewsDataSettingsRepository::store(
+            &crate::NewsDataSettingsStore::new(database),
+            settings,
+        )
+        .await
+    }
+}
+
+impl application::WatchlistRepository for SqliteRepositories {
+    async fn load(&self) -> Result<application::Watchlist, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::WatchlistRepository::load(&crate::WatchlistStore::new(database)).await
+    }
+
+    async fn store(
+        &self,
+        previous: &application::Watchlist,
+        next: &application::Watchlist,
+    ) -> Result<application::WatchlistStoreOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::WatchlistRepository::store(
+            &crate::WatchlistStore::new(database),
+            previous,
+            next,
+        )
+        .await
+    }
+}

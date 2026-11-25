@@ -69,12 +69,17 @@ impl WebCollectionRunner for ClaudeWebCollectionRunner {
     }
 }
 
+async fn drain_until_closed(stream: &mut ClaudeEventStream) {
+    while let Ok(Some(_event)) = stream.next().await {}
+}
+
 async fn drain_collection_stream(
     stream: &mut ClaudeEventStream,
 ) -> Result<(), WebCollectionFailure> {
     match stream.next().await {
         Ok(Some(AiEvent::IsolationChecked(IsolationCheck::Passed))) => {}
         Ok(Some(AiEvent::IsolationChecked(IsolationCheck::Rejected(_)))) => {
+            drain_until_closed(stream).await;
             return Err(WebCollectionFailure::Rejected);
         }
         Ok(Some(_) | None) | Err(_) => return Err(WebCollectionFailure::Unavailable),

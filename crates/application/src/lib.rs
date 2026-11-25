@@ -1,5 +1,9 @@
+mod collected_item_reads;
 mod observations;
 mod port_error;
+pub use collected_item_reads::{
+    CollectedItemReads, CollectedKind, CollectedTimes, NoCollectedTimes, ObservedCollectedItem,
+};
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Candle, CandlePeriod, CommissionRateFact, CreditTrade, Currency, FlowInterval,

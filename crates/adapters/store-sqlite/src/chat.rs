@@ -317,3 +317,43 @@ impl ToolCallLedger for ChatStore<'_> {
             .await
     }
 }
+
+fn decode_outcome(raw: &str) -> rusqlite::Result<ToolCallOutcome> {
+    match raw {
+        "succeeded" => Ok(ToolCallOutcome::Succeeded),
+        "tool_error" => Ok(ToolCallOutcome::ToolError),
+        "rejected" => Ok(ToolCallOutcome::Rejected),
+        _ => Err(invalid(())),
+    }
+}
+
+fn tool_call_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<ToolCallRecord> {
+    let text = |index: usize| row.get::<_, String>(index);
+    Ok(ToolCallRecord::new(application::ToolCallRecordInput {
+        run_id: application::AiRunId::try_new(&text(0)?).map_err(invalid)?,
+        request_id: application::ToolRequestId::try_new(&text(1)?).map_err(invalid)?,
+        tool_name: application::ToolName::try_new(&text(2)?).map_err(invalid)?,
+        arguments_json: application::ToolPayloadJson::try_new(&text(3)?).map_err(invalid)?,
+        result_json: application::ToolPayloadJson::try_new(&text(4)?).map_err(invalid)?,
+        outcome: decode_outcome(&text(5)?)?,
+        started_at: decode_time(&text(6)?)?,
+        finished_at: decode_time(&text(7)?)?,
+        protocol_version: application::ToolProtocolVersion::try_new(&text(8)?).map_err(invalid)?,
+    }))
+}
+
+impl application::ToolCallHistory for ChatStore<'_> {
+    async fn calls_in_run(
+        &self,
+        run: &application::AiRunId,
+    ) -> Result<Vec<ToolCallRecord>, SystemPortError> {
+        let run_id = run.as_str().to_owned();
+        self.database
+            .read(move |connection| {
+                let mut statement = connection.prepare(sql::TOOL_CALLS_IN_RUN)?;
+                let rows = statement.query_map([run_id], tool_call_of)?;
+                rows.collect()
+            })
+            .await
+    }
+}
