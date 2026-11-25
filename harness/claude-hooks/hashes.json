@@ -80,6 +80,6 @@
   "harness/codex-hooks/tests/session-r1.test.mjs": "b6e8ba88975c4156bcebb45f4c71bd7ae7ff8df1387ecfc59e4edd76194e5c5b",
   "harness/codex-hooks/tests/t3-r1.test.mjs": "bd668b911941821acb1736b8859beb316624d33b93df5f5334a3d1ced61144ab",
   "harness/codex-regression/run.mjs": "275cb59066721e2a6b35367e63a8ddf5e235a6c90a34e062ea67838fc7ddbc54",
-  "harness/sandbox/lock-fragment.json": "51acbc81e7da78fb683254f312ebdd4e2f8717e4586d71da83af7e33699e83ad",
+  "harness/sandbox/lock-fragment.json": "dfdb19629f97f1dbaefc34bff8cbe19684621ae343f98cb916fcd6d125db80d5",
   "harness/toolchain/pnpm.mjs": "f5f5269bb302000c1bd2c13fa1026ab88a60f1e7c7b7618fb7f431caafd2fbfd"
 }
