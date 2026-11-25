@@ -1,6 +1,7 @@
 pub mod autostart;
 pub mod background;
 pub mod collector;
+pub mod intraday;
 pub mod notifier;
 pub mod peer_process;
 pub mod process_cleanup;

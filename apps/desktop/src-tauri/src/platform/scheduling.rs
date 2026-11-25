@@ -1,5 +1,6 @@
 use crate::platform::background::{BackgroundRuntime, CollectorWorker, IdleCollectorWorker};
 use crate::platform::collector::{CollectorFeeds, app_collector};
+use crate::platform::intraday::IntradayWatchSlot;
 use crate::platform::scheduled_ports::{AppSpecWatch, AppStoredJobs};
 use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
@@ -12,6 +13,7 @@ use scheduler::{
     DEFAULT_TICK_INTERVAL_SECONDS, JobError, JobRegistry, NoMarketCalendar, PortfolioSyncJob,
     PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
 };
+use scheduler::{IntradayWatchInbox, IntradayWatchJob, IntradayWatchSubscriber};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
@@ -88,6 +90,7 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
         return SchedulingStart::NotConfigured;
     };
     let demand = Arc::new(SyncDemand::new());
+    let intraday = Arc::new(IntradayWatchInbox::new());
     let mut registry = JobRegistry::new();
     if registry
         .register(PortfolioSyncJob::new(
@@ -106,6 +109,7 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
             repositories.as_ref(),
             app.try_state::<SpecWatchInputs>()
                 .map(|inputs| inputs.inner().clone()),
+            Arc::clone(&intraday),
         )
         .is_err()
     {
@@ -120,6 +124,9 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
         return SchedulingStart::InvalidSchedule;
     };
     bridge.bind(scheduler.event_subscriber().with_order_sync(demand));
+    if let Some(slot) = app.try_state::<Arc<IntradayWatchSlot>>() {
+        slot.bind(IntradayWatchSubscriber::new(intraday, scheduler.triggers()));
+    }
     let collector = collector_worker::<R, P>(app, Arc::clone(&clock));
     let runtime = BackgroundRuntime::spawn(
         Arc::new(scheduler),
@@ -159,6 +166,7 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     app: &AppHandle<R>,
     repositories: &SqliteRepositories,
     spec_watch: Option<SpecWatchInputs>,
+    intraday: Arc<IntradayWatchInbox>,
 ) -> Result<(), RegistryError> {
     let stored = || {
         Arc::new(AppStoredJobs::<R, P>::new(
@@ -172,6 +180,7 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     registry.register(BriefingJob::closing_review(stored()))?;
     registry.register(BriefingJob::pre_us_market(stored()))?;
     registry.register(DailyValuationJob::new(stored()))?;
+    registry.register(IntradayWatchJob::new(stored(), intraday))?;
     registry.register(TransactionsSyncJob::new(
         stored(),
         Arc::new(NoMarketCalendar),
