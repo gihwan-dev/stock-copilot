@@ -10,3 +10,6 @@
 | fin-d 2 | 서버를 못 띄우면 CLI를 띄우지 않고 `Unavailable`로 끝낸다. 스트림이 끝나거나(`None`·오류) 버려지면 세션을 놓아 토큰 폐기·소켓 삭제가 일어난다(`McpServerHandle`의 `Drop`) | 실행 종료 기록 시점에 정리 |
 | fin-d 2 | 서버는 부모 PID를 `Pending`으로 시작하고 첨부의 PID 알림으로 CLI PID를 묶는다. 묶기 전 연결, 다른 부모, 상대 확인 수단 없음은 모두 거부(mcp-server 기존 동작)를 앱 조립 경로에서 다시 확인한다 | 상대 확인 끄기 |
 | fin-d 2 | 소켓 기반 폴더는 앱 데이터 폴더 아래 짧은 `m`(0700)으로 하고, 실행마다 `RunSocketSpec::generate_under`로 무작위 하위 폴더를 만든다. 경로가 104바이트를 넘거나 조상에 심볼릭 링크가 있으면 분석 실행을 띄우지 않는다 | 시스템 임시 폴더 |
+| fin-d 3 | 제품 분석 카탈로그는 `mcp_server::build_analysis_catalog`로 문서 도구 20개(design 3.1, `fixtures/mcp/tools_list.json`)를 그대로 등록한다. 자료원 포트 중 제품 구현이 없는 것(포트폴리오·시장·뉴스·웹 조사·기사·논거 대상·호출 이력·추정 실행 문맥·투자 성향)은 `UnconnectedToolData`가 저장소 사용 불가 오류로 닫고, `read_article`의 본문 읽기는 꺼짐으로 본다. 논거 저장소·추정 과제·제출·성적표 관측은 `SqliteRepositories`에 위임을 더해 연결한다 | 자료원이 생길 때까지 해당 도구를 목록에서 빼기(문서 목록과 어긋남) |
+| fin-d 3 | 앱 MCP 서버 이름은 `stock`, CLI 허용 도구는 카탈로그 이름에서 `mcp__stock__<도구>`로 만든다(사전 점검의 기대 목록과 같은 원본) | 이름 목록을 따로 고정 |
+| fin-d 3 | MCP 호출 원장은 `SqliteRepositories`의 `ToolCallLedger` 위임(채팅 저장소의 추가 전용 표)으로 남긴다 | 원장 미설정(모든 호출이 `ledger_unavailable`) |
