@@ -23,6 +23,7 @@ pub(crate) struct Allowlists {
     clock_names: BTreeMap<String, BTreeSet<String>>,
     build_scripts: BTreeSet<String>,
     generated_attributes: BTreeSet<String>,
+    unsafe_lints: BTreeSet<String>,
 }
 
 fn listed_paths(
@@ -130,6 +131,10 @@ impl Allowlists {
                 Some(_) => listed_names(&table, "generated-attribute")?,
                 None => BTreeSet::new(),
             },
+            unsafe_lints: match table.get("unsafe-lints") {
+                Some(_) => listed_paths(root, &table, "unsafe-lints")?,
+                None => BTreeSet::new(),
+            },
         })
     }
 
@@ -170,6 +175,14 @@ impl Allowlists {
 
     pub(crate) fn build_script(&self, path: &str) -> Membership {
         if self.build_scripts.contains(path) {
+            Membership::Listed
+        } else {
+            Membership::Unlisted
+        }
+    }
+
+    pub(crate) fn unsafe_lints(&self, path: &str) -> Membership {
+        if self.unsafe_lints.contains(path) {
             Membership::Listed
         } else {
             Membership::Unlisted

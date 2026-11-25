@@ -49,7 +49,7 @@ reason = "명령 밖의 IPC 통로, 플러그인, 사용자 정의 프로토콜,
 [[api]]
 names = ["plugin"]
 allowed-files = ["src/main.rs"]
-reason = "fin-update: 제품 조립 지점이 공식 자동 업데이트 플러그인(tauri-plugin-updater) 하나만 등록한다. capability에 updater 권한을 주지 않아 WebView는 플러그인 명령을 부를 수 없고, 확인·설치는 코어 명령으로만 한다 (SEC-10)"
+reason = "fin-update·U-14: 제품 조립 지점이 공식 플러그인 두 개(자동 업데이트 tauri-plugin-updater, macOS 알림 tauri-plugin-notification)만 등록한다. capability에 두 플러그인 권한을 주지 않아 WebView는 플러그인 명령을 부를 수 없고, 업데이트 확인·설치와 알림 발송은 코어(Rust)에서만 한다 (SEC-10)"
 
 [[api]]
 names = ["on_navigation", "on_new_window"]
