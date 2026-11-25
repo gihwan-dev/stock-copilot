@@ -49,6 +49,15 @@ impl KeychainProfile {
     }
 
     #[must_use]
+    pub const fn product_login() -> Self {
+        Self {
+            service: ServiceName::PRODUCT,
+            kind: KeychainKind::Login,
+            access_group: AccessGroup::EntitlementDefault,
+        }
+    }
+
+    #[must_use]
     pub const fn development() -> Self {
         Self {
             service: ServiceName::DEVELOPMENT,

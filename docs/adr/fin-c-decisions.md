@@ -16,3 +16,8 @@
 | S-12 | 실제 키체인을 건드리는 테스트는 두지 않는다. source-check가 `#[ignore]`를 금지하고 에이전트는 사용자 키체인을 건드리지 않는다. 실제 왕복은 S-17(사용자) | `#[ignore]` 테스트 |
 | S-12 | DB 키 생성 `generate_database_key()`는 `SecRandom`으로 32바이트를 만든다(새 패키지 없음) | `getrandom` 등 새 의존 |
 | S-12 | `harness/arch-check/rules.toml`에 `secrets-keychain`의 `syn`·`proc-macro2` 경유 `security-framework` 예외 추가(작업 공간 기능 통합 경로, ADR 0173 6항의 추가형 변경) | - |
+| S-14 | 서명 구성은 `tauri.conf.json` 하나에 둔다(`bundle.active: true`, `app`, Hardened Runtime, `Entitlements.plist`, 프로비저닝 프로파일 `signing/embedded.provisionprofile`). 팀 ID는 `TEAMID_PLACEHOLDER`, 서명 신원은 `APPLE_SIGNING_IDENTITY` 환경 변수. 결정 전문은 ADR 0176 | 서명용 덮어쓰기 설정 파일(capability-check가 `tauri.*` 추가 파일 금지) |
+| S-14 | ad-hoc 개발 빌드 = 묶음 없는 `cargo build`·`tauri dev`(entitlements 없음, 개발 서비스 이름·로그인 키체인) | 묶음을 만든 ad-hoc 빌드 |
+| S-14 | 멤버십이 없으면 `KeychainProfile::product_login()`으로 낮추는 사용자 서명 커밋. 실행 중 자동 전환 없음 | 실행 중 자동 전환 |
+| S-14 | S-17 최소 시험 빌드는 따로 두지 않고 서명한 제품 앱을 쓴다 | 키체인·확인 창만 있는 별도 앱 |
+| S-14 | `gen-bindings` 묶음 제외는 미룬다: 보호 파일(`generated.mjs`, Antigravity 어댑터)과 기존 테스트(`workspace_layout_tests.rs`, 어댑터 테스트)를 추가형이 아니게 바꿔야 해서 사용자 서명 커밋으로 넘긴다. 첫 서명 빌드 전에 해야 한다 | 지금 예시 대상으로 옮기기 |
