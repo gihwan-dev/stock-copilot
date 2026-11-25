@@ -96,6 +96,12 @@ fn mcp_tool_ledger_and_estimate_reads_follow_the_installed_database() {
             .record_call(&mcp_tool_call())
             .await
             .expect_err("미설치");
+        let _history = application::ToolCallHistory::calls_in_run(
+            &repositories,
+            &application::AiRunId::try_new("chat-run-1").expect("run"),
+        )
+        .await
+        .expect_err("미설치");
         let _assignments = repositories.load_assignments().await.expect_err("미설치");
         let _observations = repositories
             .scorecard_observations()
@@ -107,6 +113,22 @@ fn mcp_tool_ledger_and_estimate_reads_follow_the_installed_database() {
         assert_eq!(
             repositories.record_call(&mcp_tool_call()).await,
             Ok(application::RecordOutcome::Recorded)
+        );
+        assert_eq!(
+            application::ToolCallHistory::calls_in_run(
+                &repositories,
+                &application::AiRunId::try_new("chat-run-1").expect("run"),
+            )
+            .await,
+            Ok(vec![mcp_tool_call()])
+        );
+        assert_eq!(
+            application::ToolCallHistory::calls_in_run(
+                &repositories,
+                &application::AiRunId::try_new("chat-run-2").expect("run"),
+            )
+            .await,
+            Ok(Vec::new())
         );
         assert_eq!(
             EstimateAssignmentRepository::load_assignments(&repositories).await,

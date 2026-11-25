@@ -2,8 +2,8 @@ use application::{
     AiRunId, ArticleFetchFailure, ArticleToolPort, BodyReadingSetting, Clock,
     EstimateAssignmentRepository, EstimateRunContextSource, EstimateSubmissionRepository, EventBus,
     MarketToolReads, NewsToolReads, PortfolioToolReads, ProfileSource, RetryDelay,
-    ScorecardObservationRepository, SystemFailure, SystemPort, SystemPortError, ThesisRepository,
-    ThesisToolPort, ToolCallHistory, WebResearchToolFailure, WebResearchToolPort,
+    ScorecardObservationRepository, SettingsRepository, SystemFailure, SystemPort, SystemPortError,
+    ThesisRepository, ThesisToolPort, ToolCallHistory, WebResearchToolFailure, WebResearchToolPort,
 };
 use domain::{InstrumentId, KnownMarket, Symbol};
 use mcp_server::{
@@ -206,16 +206,6 @@ impl ThesisToolPort for UnconnectedToolData {
     }
 }
 
-impl ToolCallHistory for UnconnectedToolData {
-    fn calls_in_run(
-        &self,
-        _run: &AiRunId,
-    ) -> impl Future<Output = Result<Vec<application::ToolCallRecord>, SystemPortError>> + Send
-    {
-        fail()
-    }
-}
-
 impl EstimateRunContextSource for UnconnectedToolData {
     fn estimate_context(
         &self,
@@ -225,11 +215,14 @@ impl EstimateRunContextSource for UnconnectedToolData {
     }
 }
 
-impl ProfileSource for UnconnectedToolData {
+#[derive(Debug)]
+pub struct StoredProfile<S>(pub Arc<S>);
+
+impl<S: SettingsRepository> ProfileSource for StoredProfile<S> {
     fn profile(
         &self,
     ) -> impl Future<Output = Result<Option<domain::InvestorProfile>, SystemPortError>> + Send {
-        fail()
+        self.0.profile()
     }
 }
 
@@ -255,6 +248,8 @@ where
     E: EstimateAssignmentRepository
         + EstimateSubmissionRepository
         + ScorecardObservationRepository
+        + ToolCallHistory
+        + SettingsRepository
         + 'static,
 {
     let data = Arc::new(UnconnectedToolData);
@@ -267,13 +262,13 @@ where
         article: Arc::clone(&data),
         thesis: Arc::clone(&data),
         thesis_repository: stores.theses,
-        tool_history: Arc::clone(&data),
+        tool_history: Arc::clone(&stores.estimates),
         estimates: Arc::new(EstimateToolPorts {
             assignments: Arc::clone(&stores.estimates),
             submissions: Arc::clone(&stores.estimates),
-            history: Arc::clone(&data),
+            history: Arc::clone(&stores.estimates),
             context: Arc::clone(&data),
-            settings: Arc::clone(&data),
+            settings: Arc::new(StoredProfile(Arc::clone(&stores.estimates))),
             observations: stores.estimates,
             clock: Arc::clone(clock),
             events: stores.events,

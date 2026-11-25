@@ -746,3 +746,14 @@ impl application::ValuationCloseEvidenceRepository for SqliteRepositories {
         .await
     }
 }
+
+impl application::ToolCallHistory for SqliteRepositories {
+    async fn calls_in_run(
+        &self,
+        run: &AiRunId,
+    ) -> Result<Vec<application::ToolCallRecord>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ToolCallHistory::calls_in_run(&ChatStore::new(database), run).await
+    }
+}

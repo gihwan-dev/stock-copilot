@@ -61,6 +61,44 @@ impl EstimateSubmissionRepository for ClosedEstimates {
     }
 }
 
+impl application::ToolCallHistory for ClosedEstimates {
+    fn calls_in_run(
+        &self,
+        _run: &AiRunId,
+    ) -> impl Future<Output = Result<Vec<application::ToolCallRecord>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+}
+
+impl application::SettingsRepository for ClosedEstimates {
+    fn store_profile(
+        &self,
+        _profile: &domain::InvestorProfile,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn profile(
+        &self,
+    ) -> impl Future<Output = Result<Option<domain::InvestorProfile>, SystemPortError>> + Send {
+        ready(Ok(None))
+    }
+
+    fn store_risk_settings(
+        &self,
+        _settings: &domain::RiskSettings,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn risk_settings(
+        &self,
+    ) -> impl Future<Output = Result<Option<domain::RiskSettings>, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+}
+
 impl ScorecardObservationRepository for ClosedEstimates {
     fn scorecard_observations(
         &self,
@@ -125,4 +163,11 @@ fn allowed_tools_are_the_catalog_under_the_app_server_name_only() {
     ] {
         assert!(allowed.contains(expected), "{expected}");
     }
+}
+
+#[test]
+fn profile_tool_reads_the_saved_investor_profile_from_settings() {
+    use application::ProfileSource;
+    let stored = super::StoredProfile(Arc::new(ClosedEstimates));
+    assert_eq!(tauri::async_runtime::block_on(stored.profile()), Ok(None));
 }
