@@ -45,6 +45,17 @@ where
     }
 }
 
+impl<Store, Time, Renewal> TradeAccessToken for broker_toss::TossAccountRead<Store, Time, Renewal>
+where
+    Store: application::SecretStore,
+    Time: application::Clock,
+    Renewal: TokenRenewal,
+{
+    fn access_token(&self) -> impl Future<Output = Result<SecretValue, TradeTokenFailure>> + Send {
+        self.tokens().access_token()
+    }
+}
+
 #[derive(Debug)]
 struct RefuseNames;
 
