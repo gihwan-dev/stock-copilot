@@ -13,6 +13,7 @@ get_scorecard
 get_self_check
 get_settings
 get_status
+get_transactions
 get_update_status
 open_external
 request_order_approval
