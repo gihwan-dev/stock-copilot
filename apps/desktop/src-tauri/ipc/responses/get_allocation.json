@@ -1,0 +1,27 @@
+{
+  "instruments": [
+    {
+      "id": "KR-005930",
+      "kind": "holding",
+      "name": "삼성전자",
+      "value": {
+        "amount": "7200000",
+        "currency": "KRW"
+      },
+      "weight": "59.02",
+      "level": "over-cap"
+    },
+    {
+      "id": "cash-Krw",
+      "kind": "cash-krw",
+      "name": "",
+      "value": {
+        "amount": "5000000",
+        "currency": "KRW"
+      },
+      "weight": "40.98",
+      "level": "normal"
+    }
+  ],
+  "concentration": "concentrated"
+}

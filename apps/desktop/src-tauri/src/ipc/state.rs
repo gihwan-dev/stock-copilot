@@ -174,6 +174,11 @@ impl std::fmt::Debug for ScreenState {
 
 impl ScreenState {
     #[must_use]
+    pub fn new(backend: Arc<dyn ScreenBackend>) -> Self {
+        Self { backend }
+    }
+
+    #[must_use]
     pub fn from_ports<P: PortTypes>(ports: &Ports<P>) -> Self {
         Self {
             backend: Arc::new(PortsBackend::<P> {

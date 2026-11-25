@@ -51,6 +51,14 @@ export const commands = {
     typedError<UiBriefingsView_Serialize, IpcError>(
       __TAURI_INVOKE("get_briefings", { request }),
     ),
+  getPortfolio: (request: GetPortfolioRequest) =>
+    typedError<UiPortfolioView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_portfolio", { request }),
+    ),
+  getAllocation: (request: GetPortfolioRequest) =>
+    typedError<UiAllocationView, IpcError>(
+      __TAURI_INVOKE("get_allocation", { request }),
+    ),
   getJobSchedules: (request: GetJobSchedulesRequest) =>
     typedError<UiJobSchedulesView_Serialize, IpcError>(
       __TAURI_INVOKE("get_job_schedules", { request }),
@@ -539,6 +547,10 @@ export type GetJobSchedulesRequest = {
   scope: JobSchedulesScope;
 };
 
+export type GetPortfolioRequest = {
+  scope: PortfolioScope;
+};
+
 export type GetPublicIpRequest = {
   query: PublicIpQuery;
 };
@@ -594,6 +606,8 @@ export type OrderApprovalStatus =
   | "broker-rejected"
   | "outcome-unknown"
   | "unavailable";
+
+export type PortfolioScope = "current";
 
 export type PublicIpQuery = "current";
 
@@ -721,6 +735,22 @@ export type SubmitTossKeysRequest = {
 
 export type TossConnectionQuery = "current";
 
+export type UiAllocationLabel = "holding" | "cash-krw" | "cash-usd";
+
+export type UiAllocationRow = {
+  id: string;
+  kind: UiAllocationLabel;
+  name: string;
+  value: UiMoney;
+  weight: string;
+  level: UiWeightLevel;
+};
+
+export type UiAllocationView = {
+  instruments: UiAllocationRow[];
+  concentration: UiConcentration;
+};
+
 export type UiBriefing = UiBriefing_Serialize | UiBriefing_Deserialize;
 
 export type UiBriefingFailure =
@@ -783,6 +813,8 @@ export type UiBriefingsView_Serialize = {
   past: UiBriefing_Serialize[];
 };
 
+export type UiConcentration = "balanced" | "concentrated";
+
 export type UiConnectionState = "connected" | "needs-key";
 
 export type UiCopyResult = {
@@ -790,6 +822,23 @@ export type UiCopyResult = {
 };
 
 export type UiCopyStatus = "copied";
+
+export type UiCurrency = "KRW" | "USD";
+
+export type UiCurrencyValue =
+  UiCurrencyValue_Serialize | UiCurrencyValue_Deserialize;
+
+export type UiCurrencyValue_Deserialize = {
+  currency: UiCurrency;
+  holdings: UiMoney;
+  buying_power?: UiMoney | null;
+};
+
+export type UiCurrencyValue_Serialize = {
+  currency: UiCurrency;
+  holdings: UiMoney;
+  buying_power: UiMoney | null;
+};
 
 export type UiDataSource =
   | "KindDisclosure"
@@ -809,6 +858,8 @@ export type UiDataSource =
   | "FederalReserve"
   | "UsTreasury"
   | "Fred";
+
+export type UiDirection = "up" | "down" | "flat";
 
 export type UiDisclosureKey = {
   source: UiDisclosureSource;
@@ -1538,6 +1589,14 @@ export type UiEvent =
 
 export type UiFxPair = "UsdKrw" | "KrwUsd";
 
+export type UiHolding = {
+  symbol: string;
+  name: string;
+  quantity: string;
+  value: UiMoney;
+  profit: UiSignedAmount;
+};
+
 export type UiHorizon =
   "hours" | "few-days" | "weeks-to-months" | "half-year-or-more";
 
@@ -1593,6 +1652,11 @@ export type UiKstTime = {
 
 export type UiMarket = "Kr" | "Us";
 
+export type UiMoney = {
+  amount: string;
+  currency: UiCurrency;
+};
+
 export type UiNewsSource =
   | "Hankyung"
   | "Maekyung"
@@ -1614,6 +1678,29 @@ export type UiOrderSwitchOutcome = {
 
 export type UiOrderSwitchOutcomeKind =
   "changed" | "unchanged" | "denied" | "unavailable";
+
+export type UiPortfolioView =
+  UiPortfolioView_Serialize | UiPortfolioView_Deserialize;
+
+export type UiPortfolioView_Deserialize = {
+  recorded_at: string;
+  total: UiMoney;
+  total_coverage: UiTotalCoverage;
+  exchange_rate_at?: string | null;
+  currencies: UiCurrencyValue_Deserialize[];
+  holdings: UiHolding[];
+  today?: UiSignedAmount | null;
+};
+
+export type UiPortfolioView_Serialize = {
+  recorded_at: string;
+  total: UiMoney;
+  total_coverage: UiTotalCoverage;
+  exchange_rate_at: string | null;
+  currencies: UiCurrencyValue_Serialize[];
+  holdings: UiHolding[];
+  today: UiSignedAmount | null;
+};
 
 export type UiPublicIp = {
   address: string;
@@ -1652,6 +1739,12 @@ export type UiSettingsView = {
   account_count: number;
 };
 
+export type UiSignedAmount = {
+  amount: UiMoney;
+  rate: string;
+  direction: UiDirection;
+};
+
 export type UiTimeAdjustment = "adjustable" | "not-adjustable";
 
 export type UiToggleState = "off" | "on";
@@ -1668,6 +1761,8 @@ export type UiTossConnectionState =
   | "forbidden"
   | "account-not-found"
   | "key-in-use";
+
+export type UiTotalCoverage = "complete" | "partial";
 
 export type UiUpdateFailure = "check" | "download" | "install";
 
@@ -1692,6 +1787,8 @@ export type UiUpdateState =
         failure: UiUpdateFailure;
       };
     } & { downloading?: never; ready?: never });
+
+export type UiWeightLevel = "normal" | "warning" | "over-cap";
 
 export type UpdateStatusQuery = "current" | "check-now";
 
