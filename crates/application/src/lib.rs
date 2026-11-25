@@ -345,6 +345,11 @@ pub use cli_version_gate::{
     AiGate, CliVersion, CliVersionGateOutcome, CliVersionGateReport, CliVersionSource,
     EnsureVerifiedCliVersion, LoginRecheck, VerifiedCliVersions,
 };
+mod ai_preferences;
+pub use ai_preferences::{
+    AiEffortChoice, AiModelChoice, AiPreferences, AiPreferencesRepository, AiTask,
+    AiTaskPreference, ClaudeConfigDir, ClaudeConfigDirError, ScheduledBudgetPercent,
+};
 mod ai_provider;
 pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,

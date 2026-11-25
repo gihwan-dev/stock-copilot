@@ -14,6 +14,19 @@ export const responses = {
     ],
     selected: "1",
   },
+  getAiSettings: {
+    budget_percent: "70",
+    claude_config_dir: null,
+    tasks: [
+      { effort: "medium", model: "opus", task: "chat" },
+      { effort: "high", model: "opus", task: "estimate" },
+      { effort: "high", model: "opus", task: "deep-research" },
+      { effort: "medium", model: "sonnet", task: "briefing" },
+      { effort: "low", model: "haiku", task: "news-summary" },
+      { effort: "low", model: "haiku", task: "collection" },
+    ],
+    usage_percent: null,
+  },
   getAllocation: {
     concentration: "concentrated",
     instruments: [
@@ -552,6 +565,32 @@ export const responses = {
     ],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
   },
+  setBudgetPercent: {
+    budget_percent: "70",
+    claude_config_dir: null,
+    tasks: [
+      { effort: "medium", model: "opus", task: "chat" },
+      { effort: "high", model: "opus", task: "estimate" },
+      { effort: "high", model: "opus", task: "deep-research" },
+      { effort: "medium", model: "sonnet", task: "briefing" },
+      { effort: "low", model: "haiku", task: "news-summary" },
+      { effort: "low", model: "haiku", task: "collection" },
+    ],
+    usage_percent: null,
+  },
+  setClaudeConfigDir: {
+    budget_percent: "70",
+    claude_config_dir: null,
+    tasks: [
+      { effort: "medium", model: "opus", task: "chat" },
+      { effort: "high", model: "opus", task: "estimate" },
+      { effort: "high", model: "opus", task: "deep-research" },
+      { effort: "medium", model: "sonnet", task: "briefing" },
+      { effort: "low", model: "haiku", task: "news-summary" },
+      { effort: "low", model: "haiku", task: "collection" },
+    ],
+    usage_percent: null,
+  },
   setJobSchedule: {
     enabled: "on",
     job: "morning-briefing",
@@ -859,6 +898,19 @@ export const responses = {
       },
     ],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
+  },
+  setTaskModel: {
+    budget_percent: "70",
+    claude_config_dir: null,
+    tasks: [
+      { effort: "medium", model: "opus", task: "chat" },
+      { effort: "high", model: "opus", task: "estimate" },
+      { effort: "high", model: "opus", task: "deep-research" },
+      { effort: "medium", model: "sonnet", task: "briefing" },
+      { effort: "low", model: "haiku", task: "news-summary" },
+      { effort: "low", model: "haiku", task: "collection" },
+    ],
+    usage_percent: null,
   },
   setWakeCriteria: {
     aliases: [],

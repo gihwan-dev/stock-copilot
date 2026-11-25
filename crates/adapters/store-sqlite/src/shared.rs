@@ -891,6 +891,31 @@ impl application::CollectedItemReads for SqliteRepositories {
     }
 }
 
+impl application::AiPreferencesRepository for SqliteRepositories {
+    async fn load_ai_preferences(
+        &self,
+    ) -> Result<Option<application::AiPreferences>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::AiPreferencesRepository::load_ai_preferences(&crate::AiPreferencesStore::new(
+            database,
+        ))
+        .await
+    }
+    async fn store_ai_preferences(
+        &self,
+        preferences: &application::AiPreferences,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::AiPreferencesRepository::store_ai_preferences(
+            &crate::AiPreferencesStore::new(database),
+            preferences,
+        )
+        .await
+    }
+}
+
 impl application::PrinciplesRepository for SqliteRepositories {
     async fn store_principles(
         &self,

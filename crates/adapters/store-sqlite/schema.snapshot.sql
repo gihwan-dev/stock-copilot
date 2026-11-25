@@ -33,6 +33,10 @@ CREATE TABLE ai_job_records (
     finished_nanos INTEGER NOT NULL CHECK (finished_nanos BETWEEN 0 AND 999999999),
     payload TEXT NOT NULL
 ) STRICT;
+CREATE TABLE ai_preferences (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE audit_log (
     seq INTEGER PRIMARY KEY CHECK (seq >= 1),
     at_payload TEXT NOT NULL,

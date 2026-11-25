@@ -2,12 +2,16 @@ use tauri::Runtime;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
-    app_version, briefing, chat, instruments, news_settings, open_external, order_approval,
-    portfolio, public_ip, risk_editor, schedule, scorecard, self_check, settings, signals,
-    system_data, thesis, toss, transactions, updates,
+    ai_settings, app_version, briefing, chat, instruments, news_settings, open_external,
+    order_approval, portfolio, public_ip, risk_editor, schedule, scorecard, self_check, settings,
+    signals, system_data, thesis, toss, transactions, updates,
 };
 
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "IPC 명령 목록은 collect_commands! 한 번에 모두 적어야 한다 (ADR 0016)"
+)]
 pub fn specta_builder<R: Runtime>() -> Builder<R> {
     #[expect(
         trivial_casts,
@@ -60,7 +64,11 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         news_settings::set_optional_key::<tauri::Wry>,
         news_settings::set_sec_contact::<tauri::Wry>,
         news_settings::set_wake_criteria::<tauri::Wry>,
-        news_settings::set_aliases::<tauri::Wry>
+        news_settings::set_aliases::<tauri::Wry>,
+        ai_settings::get_ai_settings::<tauri::Wry>,
+        ai_settings::set_task_model::<tauri::Wry>,
+        ai_settings::set_budget_percent::<tauri::Wry>,
+        ai_settings::set_claude_config_dir::<tauri::Wry>
     ];
     Builder::<R>::new()
         .commands(commands)

@@ -7,6 +7,7 @@ copy_text
 delete_all_data
 export_data
 get_account_selection
+get_ai_settings
 get_allocation
 get_briefings
 get_chat_history
@@ -36,12 +37,15 @@ save_order_settings
 select_account
 send_chat_message
 set_aliases
+set_budget_percent
+set_claude_config_dir
 set_job_schedule
 set_news_source
 set_optional_key
 set_order_permission
 set_principles
 set_sec_contact
+set_task_model
 set_wake_criteria
 skip_signal
 submit_toss_keys

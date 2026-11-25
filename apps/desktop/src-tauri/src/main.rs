@@ -14,6 +14,7 @@ use src_tauri::holdings_link::{
     HoldingsListener, InstrumentDirectory, InstrumentMasterFeed, MasterRefresh, PortsHoldingsSync,
     SavedMaster,
 };
+use src_tauri::ipc::ai_settings::{AiControls, AiSettingsIpcState, BudgetApplied};
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::instruments::InstrumentsIpcState;
 use src_tauri::ipc::news_settings::NewsSettingsIpcState;
@@ -135,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(self_check)
             .manage(ResolutionDataSlot(calendars))
             .manage(flow)
-            .manage_screens(&toss, &repositories, &shared_clock, &ports.events),
+            .manage_screens(&toss, &repositories, &shared_clock, &ports),
         ports,
         context,
     )?;
@@ -148,7 +149,7 @@ trait ManageScreens {
         toss: &ProductToss,
         repositories: &Arc<SqliteRepositories>,
         clock: &Arc<platform_macos::SystemClock>,
-        events: &Arc<application::EventBus>,
+        ports: &Ports<AppPortTypes>,
     ) -> Self;
 }
 
@@ -158,9 +159,15 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
         toss: &ProductToss,
         repositories: &Arc<SqliteRepositories>,
         clock: &Arc<platform_macos::SystemClock>,
-        events: &Arc<application::EventBus>,
+        ports: &Ports<AppPortTypes>,
     ) -> Self {
-        self.manage(InstrumentsIpcState::new(
+        let events = &ports.events;
+        self.manage(AiSettingsIpcState::new(
+            Arc::clone(repositories),
+            Arc::clone(events),
+            Arc::new(QueueControls(Arc::clone(&ports.chat_queue))),
+        ))
+        .manage(InstrumentsIpcState::new(
             Arc::<ProductBroker>::clone(&toss.broker),
             Arc::clone(repositories),
             Arc::<platform_macos::SystemClock>::clone(clock),
@@ -272,6 +279,26 @@ impl DataCare for ProductDataCare {
             let _delivery = self.events.publish(domain::DomainEvent::StoredDataChanged);
             Ok(())
         })
+    }
+}
+
+struct QueueControls(Arc<ProductQueue>);
+
+impl AiControls for QueueControls {
+    fn apply_budget(
+        &self,
+        percent: application::ScheduledBudgetPercent,
+    ) -> BoxFuture<'_, BudgetApplied> {
+        Box::pin(async move {
+            match self.0.set_scheduled_cap_percent(percent.as_percent()).await {
+                Ok(_transition) => BudgetApplied::Applied,
+                Err(_invalid) => BudgetApplied::Refused,
+            }
+        })
+    }
+
+    fn usage(&self) -> BoxFuture<'_, application::AiUsage> {
+        Box::pin(self.0.current_usage())
     }
 }
 

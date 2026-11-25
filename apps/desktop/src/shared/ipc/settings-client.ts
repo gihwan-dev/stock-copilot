@@ -1,5 +1,11 @@
 import { err, type Result } from "../lib";
 import {
+  aiSettings,
+  setBudgetPercent,
+  setClaudeConfigDir,
+  setTaskModel,
+} from "./ai-call";
+import {
   newsSettings,
   setAliases,
   setNewsSource,
@@ -7,6 +13,7 @@ import {
   setSecContact,
   setWakeCriteria,
 } from "./news-call";
+import { scheduledJobs, setScheduledJob } from "./schedule-call";
 import {
   accountSelection,
   backupNow,
@@ -157,4 +164,10 @@ export const coreSettingsClient: SettingsClient = {
   setSecContact,
   setWakeCriteria,
   setAliases,
+  scheduledJobs,
+  setScheduledJob,
+  aiSettings,
+  setTaskModel,
+  setBudgetPercent,
+  setClaudeConfigDir,
 };

@@ -15,6 +15,7 @@ pub(crate) mod review_tests;
 #[cfg(test)]
 pub(crate) mod third_tests;
 
+pub(crate) mod ai_preferences;
 pub(crate) mod holdings;
 #[cfg(test)]
 pub(crate) mod holdings_tests;

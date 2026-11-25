@@ -199,6 +199,22 @@ export const commands = {
     typedError<UiNewsSettings_Serialize, IpcError>(
       __TAURI_INVOKE("set_aliases", { request }),
     ),
+  getAiSettings: (request: AiRequest) =>
+    typedError<UiAiSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("get_ai_settings", { request }),
+    ),
+  setTaskModel: (request: SetTaskModelRequest) =>
+    typedError<UiAiSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_task_model", { request }),
+    ),
+  setBudgetPercent: (request: SetBudgetPercentRequest) =>
+    typedError<UiAiSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_budget_percent", { request }),
+    ),
+  setClaudeConfigDir: (request: SetClaudeConfigDirRequest_Deserialize) =>
+    typedError<UiAiSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_claude_config_dir", { request }),
+    ),
 };
 
 /** Events */
@@ -214,6 +230,12 @@ export type ActiveChatTurnDto = {
 };
 
 export type ActiveTurnStateDto = "Running" | "Finished";
+
+export type AiRequest = {
+  scope: AiScope;
+};
+
+export type AiScope = "current";
 
 export type AppVersion = {
   version: string;
@@ -854,6 +876,21 @@ export type SetAliasesRequest = {
   aliases: UiAliasInput[];
 };
 
+export type SetBudgetPercentRequest = {
+  percent: UiBudgetPercent;
+};
+
+export type SetClaudeConfigDirRequest =
+  SetClaudeConfigDirRequest_Serialize | SetClaudeConfigDirRequest_Deserialize;
+
+export type SetClaudeConfigDirRequest_Deserialize = {
+  path?: string | null;
+};
+
+export type SetClaudeConfigDirRequest_Serialize = {
+  path: string | null;
+};
+
 export type SetJobScheduleRequest =
   SetJobScheduleRequest_Serialize | SetJobScheduleRequest_Deserialize;
 
@@ -895,6 +932,10 @@ export type SetSecContactRequest_Deserialize = {
 
 export type SetSecContactRequest_Serialize = {
   contact: string | null;
+};
+
+export type SetTaskModelRequest = {
+  setting: UiTaskSettingInput;
 };
 
 export type SetWakeCriteriaRequest = {
@@ -962,7 +1003,35 @@ export type UiAccountSelection = {
   accounts: UiAccountRow[];
 };
 
+export type UiAiEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+export type UiAiModel = "opus" | "sonnet" | "haiku";
+
 export type UiAiRuntime = "ready" | "missing";
+
+export type UiAiSettings = UiAiSettings_Serialize | UiAiSettings_Deserialize;
+
+export type UiAiSettings_Deserialize = {
+  tasks: UiTaskSetting[];
+  budget_percent: UiBudgetPercent;
+  usage_percent?: string | null;
+  claude_config_dir?: string | null;
+};
+
+export type UiAiSettings_Serialize = {
+  tasks: UiTaskSetting[];
+  budget_percent: UiBudgetPercent;
+  usage_percent: string | null;
+  claude_config_dir: string | null;
+};
+
+export type UiAiTask =
+  | "chat"
+  | "estimate"
+  | "deep-research"
+  | "briefing"
+  | "news-summary"
+  | "collection";
 
 export type UiAliasInput = {
   alias: string;
@@ -1059,6 +1128,8 @@ export type UiBriefingsView_Serialize = {
   latest: UiBriefing_Serialize | null;
   past: UiBriefing_Serialize[];
 };
+
+export type UiBudgetPercent = "50" | "60" | "70" | "80" | "90";
 
 export type UiCardExpiry = "5" | "10" | "15" | "30";
 
@@ -2380,6 +2451,18 @@ export type UiStatusView_Serialize = {
 };
 
 export type UiSwitch = "off" | "on";
+
+export type UiTaskSetting = {
+  task: UiAiTask;
+  model: UiAiModel;
+  effort: UiAiEffort;
+};
+
+export type UiTaskSettingInput = {
+  task: UiAiTask;
+  model: UiAiModel;
+  effort: UiAiEffort;
+};
 
 export type UiThesisChange =
   | "claim-added"

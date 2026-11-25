@@ -1,3 +1,4 @@
+pub mod ai_settings;
 pub mod app_version;
 pub mod briefing;
 pub mod chat;
