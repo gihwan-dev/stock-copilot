@@ -9,6 +9,7 @@ get_job_schedules
 get_portfolio
 get_public_ip
 get_risk_settings
+get_scorecard
 get_self_check
 get_settings
 get_status

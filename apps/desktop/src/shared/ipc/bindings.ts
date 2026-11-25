@@ -111,6 +111,10 @@ export const commands = {
     typedError<UiStatusView_Serialize, IpcError>(
       __TAURI_INVOKE("get_status", { request }),
     ),
+  getScorecard: (request: GetScorecardRequest) =>
+    typedError<UiScorecardView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_scorecard", { request }),
+    ),
 };
 
 /** Events */
@@ -579,6 +583,10 @@ export type GetRiskSettingsRequest = {
   scope: RiskSettingsScope;
 };
 
+export type GetScorecardRequest = {
+  scope: ScorecardScope;
+};
+
 export type GetSelfCheckRequest = {
   scope: SelfCheckScope;
 };
@@ -669,6 +677,8 @@ export type SaveInvestorProfileRequest = {
 export type SaveOrderSettingsRequest = {
   draft: UiOrderSettingsDraft;
 };
+
+export type ScorecardScope = "all";
 
 export type SelfCheckScope = "current";
 
@@ -1810,6 +1820,64 @@ export type UiScheduledJob =
   | "weekly-review"
   | "intraday-watch"
   | "news-collection";
+
+export type UiScorecardBin = "below-50" | "50-60" | "60-70" | "70-plus";
+
+export type UiScorecardBinRow =
+  UiScorecardBinRow_Serialize | UiScorecardBinRow_Deserialize;
+
+export type UiScorecardBinRow_Deserialize = {
+  bin: UiScorecardBin;
+  count: string;
+  mean_prediction?: string | null;
+  hit_rate?: string | null;
+};
+
+export type UiScorecardBinRow_Serialize = {
+  bin: UiScorecardBin;
+  count: string;
+  mean_prediction: string | null;
+  hit_rate: string | null;
+};
+
+export type UiScorecardCombination =
+  UiScorecardCombination_Serialize | UiScorecardCombination_Deserialize;
+
+export type UiScorecardCombination_Deserialize = {
+  model: string;
+  horizon: UiScorecardHorizon;
+  judged: string;
+  verdict: UiScorecardVerdict;
+  brier?: string | null;
+  bins: UiScorecardBinRow_Deserialize[];
+  comparisons: string;
+};
+
+export type UiScorecardCombination_Serialize = {
+  model: string;
+  horizon: UiScorecardHorizon;
+  judged: string;
+  verdict: UiScorecardVerdict;
+  brier: string | null;
+  bins: UiScorecardBinRow_Serialize[];
+  comparisons: string;
+};
+
+export type UiScorecardHorizon =
+  "hours" | "few-days" | "weeks-to-months" | "half-year-or-more";
+
+export type UiScorecardVerdict = "pending" | "ready";
+
+export type UiScorecardView =
+  UiScorecardView_Serialize | UiScorecardView_Deserialize;
+
+export type UiScorecardView_Deserialize = {
+  combinations: UiScorecardCombination_Deserialize[];
+};
+
+export type UiScorecardView_Serialize = {
+  combinations: UiScorecardCombination_Serialize[];
+};
 
 export type UiSectorCap = "30" | "40" | "50";
 

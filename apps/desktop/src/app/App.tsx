@@ -8,6 +8,7 @@ import {
   getAllocation,
   getBriefings,
   getPortfolio,
+  getScorecard,
   getSelfCheck,
   getStatus,
   investorProfile,
@@ -43,6 +44,7 @@ const coreScreenSources: ScreenSources = {
   saveOrderSettings,
   selfCheck: getSelfCheck,
   status: getStatus,
+  scorecard: getScorecard,
 };
 
 const CoreEventBridge = (): null => {
