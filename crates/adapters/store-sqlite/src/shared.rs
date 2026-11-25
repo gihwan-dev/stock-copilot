@@ -639,3 +639,91 @@ impl SourceStatusRepository for SqliteRepositories {
         SourceStatusRepository::save(&SourceStatusStore::new(database), status).await
     }
 }
+
+impl application::ToolCallLedger for SqliteRepositories {
+    async fn record_call(
+        &self,
+        record: &application::ToolCallRecord,
+    ) -> Result<RecordOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ToolCallLedger::record_call(&ChatStore::new(database), record).await
+    }
+}
+
+impl application::EstimateAssignmentRepository for SqliteRepositories {
+    async fn load_assignments(
+        &self,
+    ) -> Result<domain::EstimateAssignments<AiRunId>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::EstimateAssignmentRepository::load_assignments(&EstimateStore::new(database))
+            .await
+    }
+    async fn commit_assignments(
+        &self,
+        previous: &domain::EstimateAssignments<AiRunId>,
+        next: &domain::EstimateAssignments<AiRunId>,
+    ) -> Result<application::EstimateCommitOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::EstimateAssignmentRepository::commit_assignments(
+            &EstimateStore::new(database),
+            previous,
+            next,
+        )
+        .await
+    }
+}
+
+impl application::EstimateSubmissionRepository for SqliteRepositories {
+    async fn submission_records(
+        &self,
+        instrument: &InstrumentId,
+    ) -> Result<
+        Vec<domain::EstimateSubmissionRecord<AiRunId, application::ReasoningEffort>>,
+        SystemPortError,
+    > {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::EstimateSubmissionRepository::submission_records(
+            &EstimateStore::new(database),
+            instrument,
+        )
+        .await
+    }
+    async fn assignments(&self) -> Result<domain::EstimateAssignments<AiRunId>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::EstimateSubmissionRepository::assignments(&EstimateStore::new(database)).await
+    }
+    async fn commit_submission(
+        &self,
+        previous: &domain::EstimateAssignments<AiRunId>,
+        next: &domain::EstimateAssignments<AiRunId>,
+        records: &[domain::EstimateSubmissionRecord<AiRunId, application::ReasoningEffort>],
+    ) -> Result<application::EstimateCommitOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::EstimateSubmissionRepository::commit_submission(
+            &EstimateStore::new(database),
+            previous,
+            next,
+            records,
+        )
+        .await
+    }
+}
+
+impl application::ScorecardObservationRepository for SqliteRepositories {
+    async fn scorecard_observations(
+        &self,
+    ) -> Result<Vec<domain::ScorecardObservation>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::ScorecardObservationRepository::scorecard_observations(&EstimateStore::new(
+            database,
+        ))
+        .await
+    }
+}

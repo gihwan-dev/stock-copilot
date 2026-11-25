@@ -273,6 +273,7 @@ allow = [
   { crate = "quick-xml", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "quote", reason = "cargo_metadata, tauri, tauri-build 전이 의존성" },
   { crate = "ra-ap-rustc_lexer", reason = "xtask 주석 검사 (harness.md 2장)" },
+  { crate = "sqlparser", reason = "xtask SQL 검사의 SQL 파서 (S-20), 기본 기능 끔" },
   { crate = "raw-window-handle", reason = "tauri 전이 의존성" },
   { crate = "regex", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "regex-automata", reason = "tauri, tauri-build 전이 의존성" },

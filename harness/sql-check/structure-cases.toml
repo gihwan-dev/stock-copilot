@@ -1,0 +1,262 @@
+reason = "S-20 구조 검사의 예제. 금액 열은 amount, price로 둔다. expect는 sql-structure: 뒤의 규칙 이름이다"
+known_migration = "CREATE TABLE t (amount TEXT CHECK (amount NOT GLOB '*[^0-9.-]*'));\n"
+
+[[query]]
+sql = "SELECT amount, price FROM t WHERE amount = ?1 AND id = ?2"
+expect = []
+
+[[query]]
+sql = "SELECT t.amount FROM t WHERE ?1 = t.price"
+expect = []
+
+[[query]]
+sql = "INSERT INTO t(id, amount) VALUES (?1, ?2)"
+expect = []
+
+[[query]]
+sql = "INSERT OR IGNORE INTO t(amount) VALUES (?1)"
+expect = []
+
+[[query]]
+sql = "UPDATE t SET amount = ?1 WHERE price = ?2"
+expect = []
+
+[[query]]
+sql = "DELETE FROM t WHERE amount = ?1"
+expect = []
+
+[[query]]
+sql = "INSERT INTO t(id, amount) VALUES (?1, ?2) ON CONFLICT(id) DO UPDATE SET amount = excluded.amount"
+expect = []
+
+[[query]]
+sql = "SELECT id FROM t WHERE (amount = ?1 OR price = ?2)"
+expect = []
+
+[[query]]
+sql = "PRAGMA journal_mode = WAL"
+expect = []
+
+[[query]]
+sql = "PRAGMA foreign_keys = ON"
+expect = []
+
+[[query]]
+sql = "SELECT amount AS a FROM t"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "WITH x AS (SELECT amount FROM t) SELECT amount FROM x"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "WITH x(a) AS (SELECT amount FROM t) SELECT a FROM x"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT a FROM (SELECT amount AS a FROM t)"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT sum(amount) FROM t"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT max(t.amount) FROM t"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT amount + 1 FROM t"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT id FROM t WHERE amount > ?1"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT id FROM t WHERE amount BETWEEN ?1 AND ?2"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT id FROM t ORDER BY amount"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT id FROM t GROUP BY amount"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "UPDATE t SET amount = amount + ?1"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "UPDATE t SET id = ?1 WHERE amount < price"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT \"amount\" * 2 FROM t"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT id FROM t WHERE id IN (SELECT id FROM u WHERE amount = ?1)"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT id FROM t UNION SELECT amount FROM u"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "INSERT INTO t(amount) SELECT sum(amount) FROM u"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT CAST(amount AS REAL) FROM t"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT id FROM t WHERE amount IS NULL"
+expect = ["money-placement:amount"]
+
+[[query]]
+sql = "SELECT 1; SELECT 2"
+expect = ["statements:2"]
+
+[[query]]
+sql = "SELEC id FROM t"
+expect = ["unparsable"]
+
+[[query]]
+sql = "CREATE TABLE t (id INTEGER)"
+expect = ["ddl-outside-migration"]
+
+[[query]]
+sql = "DROP TABLE t"
+expect = ["ddl-outside-migration"]
+
+[[migration]]
+sql = "CREATE TABLE t (id INTEGER, amount TEXT NOT NULL CHECK (amount NOT GLOB '*[^0-9.-]*' AND amount GLOB '*[0-9]*'), CHECK (amount IS NOT NULL OR price IS NULL)) STRICT;\nCREATE TABLE u (price TEXT);"
+expect = []
+
+[[migration]]
+sql = "CREATE INDEX i ON t(amount);"
+expect = ["money-placement:amount"]
+
+[[migration]]
+sql = "CREATE VIEW v AS SELECT amount FROM t;"
+expect = ["money-placement:amount"]
+
+[[migration]]
+sql = "CREATE TRIGGER g AFTER INSERT ON t BEGIN UPDATE u SET price = NEW.amount * 2; END;"
+expect = ["money-placement:price"]
+
+[[migration]]
+sql = "CREATE VIRTUAL TABLE f USING fts5(title, tokenize='unicode61');"
+expect = []
+
+[[migration]]
+sql = "CREATE VIRTUAL TABLE f USING fts5(amount, tokenize='unicode61');"
+expect = ["money-placement:amount"]
+
+[[money]]
+sql = "CREATE TABLE t (cost TEXT CHECK (cost NOT GLOB '*[^0-9.-]*'), label TEXT CHECK (label NOT GLOB '*[^a-z]*'), fee TEXT, CHECK (fee NOT GLOB '*[^0-9.-]*'));"
+expect = ["cost", "fee"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/sql/t.rs"
+text = "pub(crate) const A: &str = \"SELECT amount FROM t WHERE id = ?1\";\npub(crate) const M: &str = \"CREATE TABLE t (amount TEXT CHECK (amount NOT GLOB '*[^0-9.-]*'));\\n\";"
+expect = []
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/sql/t.rs"
+text = "pub(crate) const A: &str = concat!(\"SELECT \", \"1\");"
+expect = ["module-item"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/sql/t.rs"
+text = "fn f() -> &'static str { \"SELECT 1\" }"
+expect = ["module-item"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/sql/t.rs"
+text = "include!(\"other.rs\");"
+expect = ["module-macro"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/sql/t.rs"
+text = "pub(crate) const N: u8 = 1;"
+expect = ["module-item"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/sql/t.rs"
+text = "pub(crate) const A: &str = \"SELECT sum(amount) FROM t\";"
+expect = ["money-placement:amount"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/sql/t.rs"
+text = "pub(crate) const A: &str = \"CREATE INDEX i ON t(id)\";"
+expect = ["ddl-outside-migration"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "const A: &str = \"SELECT id FROM t\";"
+expect = ["outside-module"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f() { let note = \"plain text\"; }"
+expect = []
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t_tests.rs"
+text = "const A: &str = \"SELECT id FROM t\";"
+expect = []
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f(c: &Connection) { c.execute(sql::t::INSERT, []); c.prepare(&crate::sql::SELECT_ALL); c.query_row(SELECT, [], |r| r.get(0)); c.pragma_update(None, \"user_version\", 1); s.execute([]); }"
+expect = []
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f(c: &Connection, q: &str) { c.execute(q, []); }"
+expect = ["call-argument:execute"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f(c: &Connection) { c.prepare(&format!(\"x{}\", 1)); }"
+expect = ["call-argument:prepare"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f(c: &Connection) { c.execute_batch(sql::A.trim()); }"
+expect = ["call-argument:execute_batch"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f(c: &Connection) { c.query_row(Sql::new(), [], |r| r.get(0)); }"
+expect = ["call-argument:query_row"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f(c: &Connection, n: &str) { c.pragma_update(None, n, 1); }"
+expect = ["call-argument:pragma_update"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f(c: &Connection) { c.pragma_query(None, \"user version\", |r| Ok(())); }"
+expect = ["call-argument:pragma_query"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/t.rs"
+text = "fn f(c: &Connection) { c.prepare_cached(sql::a); }"
+expect = ["call-argument:prepare_cached"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/runner.rs"
+text = "fn run(c: &Connection, q: &str) { c.execute_batch(q); }\nfn other(c: &Connection, q: &str) { c.execute_batch(q); }"
+expect = ["call-argument:execute_batch"]
+
+[[source]]
+path = "crates/adapters/store-sqlite/src/runner.rs"
+text = "fn run(c: &Connection) { c.execute_batch(&format!(\"x\")); }"
+expect = ["call-argument:execute_batch"]
