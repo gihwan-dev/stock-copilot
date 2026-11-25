@@ -3,6 +3,7 @@ import type { UiText } from "../lib";
 import { Button } from "./Button";
 import type { Action } from "./control-types";
 import { Heading } from "./Heading";
+import { ScrollArea } from "./ScrollArea";
 
 type StepMark = "passed" | "now" | "next";
 type Steps =
@@ -73,17 +74,25 @@ const Actions = (props: {
   );
 
 export const StepScreen = (props: Props): ReactElement => (
-  <div className="flex flex-col items-center w-full h-full max-w-full scroll-flex bg-bg">
-    <div className="flex flex-col flex-1 gap-space-8 w-full max-w-dialog-width px-space-6 py-space-10 scroll-flex">
-      <Progress progress={props.progress} label={props.progressLabel} />
-      <div className="flex flex-col gap-space-2">
-        <Heading level={1}>{props.title}</Heading>
-        <p className="status-sentence text-body text-ink-muted">
-          {props.description}
-        </p>
+  <div className="flex flex-col w-full h-screen max-w-full scroll-flex bg-bg">
+    <ScrollArea direction="vertical">
+      <div className="flex flex-col items-center w-full px-space-6 pt-space-10 pb-space-6">
+        <div className="flex flex-col gap-space-8 w-full max-w-dialog-width">
+          <Progress progress={props.progress} label={props.progressLabel} />
+          <div className="flex flex-col gap-space-2">
+            <Heading level={1}>{props.title}</Heading>
+            <p className="status-sentence text-body text-ink-muted">
+              {props.description}
+            </p>
+          </div>
+          <div className="flex flex-col gap-space-4">{props.children}</div>
+        </div>
       </div>
-      <div className="flex flex-col flex-1 gap-space-4">{props.children}</div>
-      <Actions primary={props.primary} secondary={props.secondary} />
+    </ScrollArea>
+    <div className="flex justify-center w-full px-space-6 pt-space-4 pb-space-8">
+      <div className="flex flex-col w-full max-w-dialog-width">
+        <Actions primary={props.primary} secondary={props.secondary} />
+      </div>
     </div>
   </div>
 );
