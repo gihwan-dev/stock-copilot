@@ -3235,3 +3235,330 @@ mod toss_assembly_tests {
         assert_eq!(server.finish().expect("요청"), Vec::<u8>::new());
     }
 }
+
+#[cfg(test)]
+mod holdings_job_assembly_tests {
+    use application::{
+        AiEvent, BriefingOutcome, BriefingRepository, IsolationCheck, PortfolioRepository,
+        SecretValue, ValuationRepository,
+    };
+    use domain::{
+        AccountId, AcquisitionPrice, BuyingPower, CommonShare, Currency, DisplayInstrumentName,
+        Holding, HoldingObservation, InstrumentId, KoreanMasterDetail, LiquidationTrading,
+        ListingStatus, Market, MarketCalendar, MarketSession, MasterCode, MasterInstrument,
+        MasterInstrumentRow, MasterSecurityType, Money, Nanosecond, NumericInput, NxtTrading,
+        OffsetSeconds, Portfolio, Price, Quantity, SessionData, SessionInformation, Symbol,
+        SyncOutcome, SyncRecord, TimeInterval, Timestamp, TradingSuspension, UnixSeconds,
+        UntrustedText,
+    };
+    use scheduler::{AiJobQueue, AiQueueAdmission, AiQueueError, BriefingPort, DailyValuationPort};
+    use src_tauri::database::DatabaseFactory;
+    use src_tauri::platform::scheduled_ports::AppStoredJobs;
+    use src_tauri::ports::{PortTypes, Ports};
+    use src_tauri::unavailable::{Unavailable, UnavailableFeed};
+    use std::sync::Arc;
+    use store_sqlite::{SharedDatabase, SqlitePortfolioStore, SqliteRepositories};
+    use testkit_ports::chat_fakes::{AiProviderCall, ScriptedAiEventStream, ScriptedAiProvider};
+
+    #[derive(Debug, Default)]
+    struct AdmittingQueue;
+
+    impl AiJobQueue for AdmittingQueue {
+        fn request_background_slot(
+            &self,
+            _job: scheduler::ScheduledJobId,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<AiQueueAdmission, AiQueueError>> + Send {
+            std::future::ready(Ok(AiQueueAdmission::Admitted))
+        }
+        fn release_background_slot(
+            &self,
+            _job: scheduler::ScheduledJobId,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<(), AiQueueError>> + Send {
+            std::future::ready(Ok(()))
+        }
+    }
+
+    #[derive(Debug)]
+    struct HoldingJobPorts;
+    impl PortTypes for HoldingJobPorts {
+        type BrokerRead = testkit_ports::scripted::ScriptedBrokerRead;
+        type MarketInfo = testkit_ports::scripted::ScriptedMarketInfo;
+        type MacroSeries = Unavailable;
+        type NewsFeed = UnavailableFeed;
+        type Fundamentals = Unavailable;
+        type AiProvider = ScriptedAiProvider;
+        type ChatRepository = testkit_ports::chat_fakes::MemoryChatRepository;
+        type ChatRunLedger = testkit_ports::chat_fakes::MemoryChatRunLedger;
+        type ChatQueuePort = testkit_ports::chat_fakes::ScriptedChatQueue;
+        type WarmChatRuntime = testkit_ports::chat_fakes::ScriptedWarmChatRuntime;
+        type AiJobQueue = AdmittingQueue;
+        type PortfolioRepository = SqlitePortfolioStore;
+        type TransactionRepository = Unavailable;
+        type MarketDataRepository = SqliteRepositories;
+        type NewsRepository = SqliteRepositories;
+        type ThesisRepository = Unavailable;
+        type EstimateRepository = Unavailable;
+        type SignalRepository = Unavailable;
+        type ProposalRepository = Unavailable;
+        type ValuationRepository = SqliteRepositories;
+        type SettingsRepository = testkit_ports::memory::MemorySettingsRepository;
+        type AuditLog = Unavailable;
+        type SecretStore = testkit_ports::system_fakes::MemorySecretStore;
+        type Clock = testkit_ports::SteppedClock;
+        type Notifier = Unavailable;
+        type UserPresence = testkit_ports::ScriptedPresence;
+    }
+
+    const BASE_DAY: i64 = 1_794_960_000;
+
+    fn at(day: i64, hour: i64) -> Timestamp {
+        let days = day.checked_mul(86_400).expect("일");
+        let hours = hour.checked_mul(3_600).expect("시");
+        let seconds = days
+            .checked_add(hours)
+            .and_then(|offset| BASE_DAY.checked_add(offset))
+            .and_then(|local| local.checked_sub(32_400))
+            .expect("시각");
+        Timestamp::from_parts(
+            UnixSeconds::new(seconds),
+            Nanosecond::new(0),
+            OffsetSeconds::new(32_400),
+        )
+        .expect("시각")
+    }
+
+    fn segment(day: i64, start: i64, end: i64) -> SessionData {
+        SessionData::try_new(
+            TimeInterval::try_new(at(day, start), at(day, end)).expect("구간"),
+            None,
+        )
+        .expect("세션")
+    }
+
+    fn session(day: i64, market: &Market) -> MarketSession {
+        let information = match market {
+            Market::Kr => SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(segment(day, 9, 15)),
+                after_market: None,
+            },
+            Market::Us | Market::Unknown(_) => SessionInformation::Us {
+                day_market: None,
+                pre_market: None,
+                regular_market: Some(segment(day, 9, 15)),
+                after_market: None,
+            },
+        };
+        MarketSession::try_new(at(day, 0).offset_calendar_date(), information).expect("장")
+    }
+
+    fn calendar(market: &Market) -> MarketCalendar {
+        MarketCalendar::try_new(session(0, market), session(1, market), session(2, market))
+            .expect("달력")
+    }
+
+    fn money(text: &str, currency: Currency) -> Money {
+        Money::parse(&NumericInput::try_new(text).expect("숫자"), currency).expect("금액")
+    }
+
+    fn portfolio(now: Timestamp) -> Portfolio {
+        let master = MasterInstrument::try_new(MasterInstrumentRow {
+            listing_market: MasterCode::try_new("KOSPI").expect("시장"),
+            symbol: Symbol::try_new("005930").expect("심볼"),
+            instrument_id: InstrumentId::try_new("inst-1").expect("ID"),
+            name: DisplayInstrumentName::try_new("삼성전자").expect("이름"),
+            security_type: MasterSecurityType::from_code(
+                MasterCode::try_new("STOCK").expect("유형"),
+            ),
+            currency: Currency::Krw,
+            listing_status: ListingStatus::Active,
+            common_share: CommonShare::Common,
+            korean_detail: Some(KoreanMasterDetail {
+                liquidation: LiquidationTrading::Regular,
+                krx: TradingSuspension::Clear,
+                nxt: NxtTrading::Unsupported,
+            }),
+            observed_at: now,
+        })
+        .expect("마스터");
+        let holding = Holding::new(
+            master.order_instrument().expect("종목"),
+            Quantity::parse(&NumericInput::try_new("3").expect("숫자")).expect("수량"),
+            AcquisitionPrice::try_new(money("70000", Currency::Krw)).expect("평단"),
+            HoldingObservation::new(
+                Some(Price::try_new(money("72000", Currency::Krw)).expect("가격")),
+                None,
+                now,
+            ),
+        )
+        .expect("보유");
+        Portfolio::new(
+            vec![holding],
+            BuyingPower::new(money("1000", Currency::Krw), now),
+            BuyingPower::new(money("0", Currency::Usd), now),
+        )
+        .expect("포트폴리오")
+    }
+
+    struct Assembly {
+        app: tauri::App<tauri::test::MockRuntime>,
+        provider: Arc<ScriptedAiProvider>,
+        repositories: SqliteRepositories,
+        shared: SharedDatabase,
+        directory: std::path::PathBuf,
+    }
+
+    fn assemble(now: Timestamp) -> Assembly {
+        let shared = SharedDatabase::new();
+        let repositories = SqliteRepositories::new(shared.clone());
+        let directory = std::path::PathBuf::from("../../../target/fin-hold")
+            .join(format!("jobs-{}", std::process::id()));
+        let clock = Arc::new(testkit_ports::SteppedClock::new(now));
+        tauri::async_runtime::block_on(async {
+            let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+            src_tauri::database::prepare_directory(&path).expect("폴더");
+            let database = store_sqlite::Database::open(
+                &path,
+                &SecretValue::new(vec![55; 32]),
+                clock.as_ref(),
+            )
+            .expect("열기");
+            assert!(shared.install(database).await.is_none());
+        });
+        let portfolios = Arc::new(SqlitePortfolioStore::new(repositories.clone()));
+        let account = AccountId::new(413);
+        tauri::async_runtime::block_on(portfolios.record(
+            &account,
+            &SyncRecord::new(now, SyncOutcome::Complete(portfolio(now))),
+        ))
+        .expect("동기화 기록");
+        let provider = Arc::new(ScriptedAiProvider::default());
+        let ports = job_ports(portfolios, &repositories, &provider, clock, account);
+        let app = tauri::test::mock_builder()
+            .manage(ports)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("앱");
+        Assembly {
+            app,
+            provider,
+            repositories,
+            shared,
+            directory,
+        }
+    }
+
+    fn job_ports(
+        portfolios: Arc<SqlitePortfolioStore>,
+        repositories: &SqliteRepositories,
+        provider: &Arc<ScriptedAiProvider>,
+        clock: Arc<testkit_ports::SteppedClock>,
+        account: AccountId,
+    ) -> Ports<HoldingJobPorts> {
+        let market_info = Arc::new(testkit_ports::scripted::ScriptedMarketInfo::default());
+        market_info
+            .script_calendar()
+            .push(Ok(calendar(&Market::Kr)));
+        market_info
+            .script_calendar()
+            .push(Ok(calendar(&Market::Us)));
+        let shared_repositories = Arc::new(repositories.clone());
+        Ports {
+            broker_read: Arc::new(testkit_ports::scripted::ScriptedBrokerRead::default()),
+            market_info,
+            macro_series: Arc::new(Unavailable),
+            news_feeds: Vec::new(),
+            fundamentals: Arc::new(Unavailable),
+            ai_provider: Arc::clone(provider),
+            chat_repository: Arc::new(testkit_ports::chat_fakes::MemoryChatRepository::default()),
+            chat_ledger: Arc::new(testkit_ports::chat_fakes::MemoryChatRunLedger::default()),
+            chat_queue: Arc::new(testkit_ports::chat_fakes::ScriptedChatQueue::default()),
+            warm_chat: Arc::new(testkit_ports::chat_fakes::ScriptedWarmChatRuntime::default()),
+            ai_jobs: Arc::new(AdmittingQueue),
+            portfolios,
+            transactions: Arc::new(Unavailable),
+            market_data: Arc::clone(&shared_repositories),
+            news: Arc::clone(&shared_repositories),
+            theses: Arc::new(Unavailable),
+            estimates: Arc::new(Unavailable),
+            signals: Arc::new(Unavailable),
+            proposals: Arc::new(Unavailable),
+            valuations: shared_repositories,
+            settings: Arc::new(testkit_ports::memory::MemorySettingsRepository::default()),
+            audit: Arc::new(Unavailable),
+            secrets: Arc::new(testkit_ports::system_fakes::MemorySecretStore::default()),
+            clock,
+            notifier: Arc::new(Unavailable),
+            presence: Arc::new(testkit_ports::ScriptedPresence::new([], [])),
+            events: Arc::new(application::EventBusBuilder::default().build()),
+            saved_accounts: src_tauri::broker_link::AccountSlot::with(vec![account]),
+            database: Arc::new(DatabaseFactory(Box::new(|_path, _key| {
+                Err(application::SystemPortError::new(
+                    application::SystemPort::Repository,
+                    application::SystemFailure::InvalidData,
+                ))
+            }))),
+        }
+    }
+
+    impl Drop for Assembly {
+        fn drop(&mut self) {
+            let _closed = tauri::async_runtime::block_on(self.shared.close());
+            let _cleaned = std::fs::remove_dir_all(&self.directory);
+        }
+    }
+
+    #[test]
+    fn briefing_and_daily_valuation_read_the_holdings_the_portfolio_sync_stored() {
+        let now = at(1, 16);
+        let assembly = assemble(now);
+        for _ in 0_u8..2_u8 {
+            assembly
+                .provider
+                .script_run()
+                .push(Ok(ScriptedAiEventStream::from_events(vec![
+                    AiEvent::IsolationChecked(IsolationCheck::Passed),
+                    AiEvent::TextDelta(UntrustedText::try_new("보유 종목 요약").expect("요약")),
+                ])));
+        }
+        let jobs = AppStoredJobs::<tauri::test::MockRuntime, HoldingJobPorts>::new(
+            assembly.app.handle().clone(),
+            assembly.repositories.clone(),
+        );
+        tauri::async_runtime::block_on(async {
+            let _briefing = BriefingPort::run(&jobs, domain::BriefingKind::Morning, now)
+                .await
+                .expect("브리핑");
+            let inputs: Vec<String> = assembly
+                .provider
+                .calls()
+                .iter()
+                .filter_map(|call| match call {
+                    AiProviderCall::Run(spec) => Some(format!("{:?}", spec.input())),
+                    AiProviderCall::Resume { .. }
+                    | AiProviderCall::Usage
+                    | AiProviderCall::Interrupt(_)
+                    | AiProviderCall::VerifyIsolation(_) => None,
+                })
+                .collect();
+            assert!(
+                inputs.iter().any(|input| input.contains("005930")),
+                "브리핑 맥락에 실제 보유 종목: {inputs:?}"
+            );
+            let saved = assembly.repositories.recent().await.expect("브리핑 기록");
+            match saved.first().map(|record| &record.outcome) {
+                Some(BriefingOutcome::Completed { .. }) => {}
+                other => panic!("완료된 브리핑이어야 함: {other:?}"),
+            }
+            jobs.record_today(now).await.expect("일별 평가");
+            let window = TimeInterval::try_new(at(0, 0), at(2, 0)).expect("구간");
+            let history = assembly
+                .repositories
+                .history(&AccountId::new(413), window)
+                .await
+                .expect("평가 이력");
+            assert_eq!(history.len(), 1, "보유 저장소의 계좌가 평가됨");
+        });
+    }
+}
