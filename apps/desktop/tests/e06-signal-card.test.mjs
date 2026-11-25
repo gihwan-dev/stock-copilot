@@ -95,7 +95,10 @@ test("E-06 signal cards show loading, empty, error and ready states with code fa
     w.cleanup();
 
     const ready = w.mount([w.card({})]);
-    const text = await w.waitText(ready, "매수 신호");
+    const collapsed = await w.waitText(ready, "매수 신호");
+    assert.equal(collapsed.includes("판정 건수"), false);
+    w.click(ready.getByRole("button", { name: "앱이 계산한 값" }));
+    const text = await w.waitText(ready, "판정 건수");
     for (const label of [
       "앱이 계산한 값",
       "현재가",

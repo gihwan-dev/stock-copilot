@@ -21,23 +21,30 @@ type Summary =
   | { readonly kind: "ready"; readonly settings: SettingsView }
   | { readonly kind: "missing" };
 
+export type SummaryScope = "all" | "status-only";
+
 type AdvancedProps = {
   readonly overview: Summary;
+  readonly scope: SummaryScope;
   readonly onOpenStatus: () => void;
   readonly editors: readonly ReactElement[];
 };
 
 const summaryCards = (
   summary: Summary,
+  scope: SummaryScope,
   onOpenStatus: () => void,
 ): readonly ReactElement[] =>
   summary.kind === "missing"
     ? []
     : [
-        <AiCard key="ai" settings={summary.settings} />,
-        <NewsDataCard key="news" settings={summary.settings} />,
-        <OrderRulesCard key="orders" settings={summary.settings} />,
-        <PrinciplesCard key="principles" settings={summary.settings} />,
+        ...(scope === "all"
+          ? [
+              <AiCard key="ai" settings={summary.settings} />,
+              <NewsDataCard key="news" settings={summary.settings} />,
+              <PrinciplesCard key="principles" settings={summary.settings} />,
+            ]
+          : []),
         <SystemCard
           key="system"
           settings={summary.settings}
@@ -114,27 +121,6 @@ const NewsDataCard = (props: {
   </Card>
 );
 
-const OrderRulesCard = (props: {
-  readonly settings: SettingsView;
-}): ReactElement => (
-  <Card title={settingsText("advancedOrderTitle", "ko")}>
-    <Stack gap="space-3">
-      <ToggleSummaryRow
-        labelKey="marketOrderLabel"
-        state={props.settings.allowMarketOrders}
-      />
-      <ToggleSummaryRow
-        labelKey="hoursHorizonLabel"
-        state={props.settings.allowHoursHorizon}
-      />
-      <Inline gap="space-2" align="center" wrap="wrap">
-        <Text variant="label">{settingsText("cardExpiryLabel", "ko")}</Text>
-        <DataText value={props.settings.cardExpiryMinutes} variant="body-sm" />
-      </Inline>
-    </Stack>
-  </Card>
-);
-
 const PrinciplesCard = (props: {
   readonly settings: SettingsView;
 }): ReactElement => (
@@ -183,7 +169,10 @@ const SystemCard = (props: Props): ReactElement => (
 export const AdvancedSettings = (props: AdvancedProps): ReactElement => (
   <Disclosure title={settingsText("advancedTitle", "ko")} defaultOpen="closed">
     <Stack gap="space-4">
-      {[...summaryCards(props.overview, props.onOpenStatus), ...props.editors]}
+      {[
+        ...summaryCards(props.overview, props.scope, props.onOpenStatus),
+        ...props.editors,
+      ]}
     </Stack>
   </Disclosure>
 );

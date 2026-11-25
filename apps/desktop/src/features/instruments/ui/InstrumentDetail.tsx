@@ -46,7 +46,7 @@ const Chart = (props: {
   const points: readonly CandlePoint[] = props.view.candles.map(
     (candle): CandlePoint => ({
       id: candle.id,
-      label: instrumentsText("chartLabel", "ko"),
+      label: candle.label,
       open: candle.open,
       high: candle.high,
       low: candle.low,
@@ -103,11 +103,18 @@ const Holding = (props: {
 const Ready = (props: {
   readonly view: InstrumentDetailView;
   readonly sources: DetailSources;
+  readonly onClose: () => void;
 }): ReactElement => {
   const actions = useWatchlistActions(props.sources);
   return (
     <Stack gap="space-4">
-      <Card title={instrumentsText("quoteTitle", "ko")}>
+      <Card
+        title={instrumentsText("quoteTitle", "ko")}
+        actions={{
+          label: instrumentsText("close", "ko"),
+          onPress: props.onClose,
+        }}
+      >
         <Stack gap="space-1">
           <Inline gap="space-2" align="center" wrap="wrap">
             <DataText value={props.view.name} />
@@ -181,12 +188,11 @@ export const InstrumentDetail = (props: {
       );
     case "ready":
       return (
-        <Stack gap="space-4">
-          <Button variant="ghost" onClick={props.onClose}>
-            {instrumentsText("close", "ko")}
-          </Button>
-          <Ready view={detail.view.data} sources={props.sources} />
-        </Stack>
+        <Ready
+          view={detail.view.data}
+          sources={props.sources}
+          onClose={props.onClose}
+        />
       );
   }
 };

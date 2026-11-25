@@ -145,7 +145,6 @@ test("U-23 settings screen shows only 3 basic items by default, hides advanced b
       "주문 켜기",
       "AI",
       "뉴스·데이터",
-      "주문",
       "투자 원칙",
       "시스템",
     ]);

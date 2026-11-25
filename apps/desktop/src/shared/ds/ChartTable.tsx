@@ -146,7 +146,7 @@ export const CandleTable = (props: {
             }}
           >
             <th scope="row" className="text-left status-sentence">
-              {point.label}
+              {chartLabelText(point.label)}
             </th>
             <td className="text-right status-sentence">
               <ChartNumber value={point.open} />
@@ -174,7 +174,7 @@ export const CandleStatusBody = (props: {
   <>
     {props.selected === undefined ? null : (
       <span className="status-sentence">
-        {props.selected.label}
+        {chartLabelText(props.selected.label)}
         {text("ds.chartSeparator", "ko")}
       </span>
     )}

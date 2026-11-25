@@ -21,7 +21,7 @@ export type ChartProps = {
 };
 export type CandlePoint = {
   readonly id: EntityId;
-  readonly label: UiText;
+  readonly label: UiText | FreeText;
   readonly open: ChartDecimal;
   readonly high: ChartDecimal;
   readonly low: ChartDecimal;

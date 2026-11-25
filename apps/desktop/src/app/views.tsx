@@ -186,6 +186,7 @@ export const SettingsRouteView = (): ReactElement => {
         onOpenStatus={(): void => {
           go("/settings/status");
         }}
+        summaryScope={system === "shown" ? "status-only" : "all"}
         advanced={[
           ...(system === "shown" ? [<SettingsSections key="sections" />] : []),
           <RiskEditors key="risk-editors" sources={sources} />,

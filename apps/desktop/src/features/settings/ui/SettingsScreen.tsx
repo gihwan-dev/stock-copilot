@@ -14,7 +14,7 @@ import {
   useSettingsQuery,
   type SettingsQueryState,
 } from "../model/settings";
-import { AdvancedSettings } from "./AdvancedSettings";
+import { AdvancedSettings, type SummaryScope } from "./AdvancedSettings";
 import {
   InvestorProfileRow,
   OrderSwitchRow,
@@ -29,6 +29,7 @@ type Props = {
   readonly onBack: () => void;
   readonly onOpenStatus: () => void;
   readonly advanced: readonly ReactElement[];
+  readonly summaryScope: SummaryScope;
   readonly system: ReactElement | null;
 };
 
@@ -104,6 +105,7 @@ export const SettingsScreen = (props: Props): ReactElement => {
                 ? { kind: "ready", settings: query.view.data }
                 : { kind: "missing" }
             }
+            scope={props.summaryScope}
             onOpenStatus={props.onOpenStatus}
             editors={props.advanced}
           />,

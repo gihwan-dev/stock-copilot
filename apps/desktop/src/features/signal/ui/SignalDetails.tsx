@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import {
   Badge,
   DataText,
+  Disclosure,
   Inline,
   Money,
   Percent,
@@ -40,55 +41,68 @@ const Fact = (props: {
   </Inline>
 );
 
-const SizingFacts = (props: { readonly card: SignalCardView }): ReactElement =>
-  props.card.sizing.kind === "zero" ? (
-    <DataText value={props.card.sizing.reason} variant="body-sm" />
-  ) : (
-    <Stack gap="space-1">
-      <Fact label={signalText("quantity", "ko")}>
-        <Quantity value={props.card.sizing.quantity} />
+export const KeyFacts = (props: {
+  readonly card: SignalCardView;
+}): ReactElement => (
+  <Stack gap="space-2">
+    {props.card.sizing.kind === "zero" ? (
+      <DataText value={props.card.sizing.reason} variant="body-sm" />
+    ) : (
+      <Inline gap="space-6" align="center" wrap="wrap">
+        <Fact label={signalText("quantity", "ko")}>
+          <Quantity value={props.card.sizing.quantity} />
+        </Fact>
+        <Fact label={signalText("amount", "ko")}>
+          <Money value={props.card.sizing.amount} />
+        </Fact>
+      </Inline>
+    )}
+    <Inline gap="space-6" align="center" wrap="wrap">
+      <Fact label={signalText("trackedProbability", "ko")}>
+        <Probability value={props.card.trackedProbability} />
       </Fact>
-      <Fact label={signalText("amount", "ko")}>
-        <Money value={props.card.sizing.amount} />
+      <Fact label={signalText("threshold", "ko")}>
+        <Probability value={props.card.threshold} />
       </Fact>
-      <Fact label={signalText("costs", "ko")}>
-        <Money value={props.card.sizing.costs} />
-      </Fact>
-      <Fact label={signalText("weightAfter", "ko")}>
-        <Percent value={props.card.sizing.weightAfter} />
-      </Fact>
-    </Stack>
-  );
+    </Inline>
+  </Stack>
+);
 
 export const Facts = (props: {
   readonly card: SignalCardView;
 }): ReactElement => (
-  <Stack gap="space-1">
-    <Text variant="label">{signalText("factsTitle", "ko")}</Text>
-    <Fact label={signalText("price", "ko")}>
-      <Money value={props.card.price} />
-    </Fact>
-    <SizingFacts card={props.card} />
-    <Fact label={signalText("aiProbability", "ko")}>
-      <Probability value={props.card.aiProbability} />
-    </Fact>
-    <Fact label={signalText("trackedProbability", "ko")}>
-      <Probability value={props.card.trackedProbability} />
-    </Fact>
-    <Fact label={signalText("threshold", "ko")}>
-      <Probability value={props.card.threshold} />
-    </Fact>
-    <Fact label={signalText("binHitRate", "ko")}>
-      {props.card.binHitRate === undefined ? (
-        <Text variant="body-sm">{signalText("binHitRateNone", "ko")}</Text>
+  <Disclosure title={signalText("factsTitle", "ko")} defaultOpen="closed">
+    <Stack gap="space-1">
+      <Fact label={signalText("price", "ko")}>
+        <Money value={props.card.price} />
+      </Fact>
+      {props.card.sizing.kind === "zero" ? (
+        <Stack gap="space-1">{[]}</Stack>
       ) : (
-        <Percent value={props.card.binHitRate} />
+        <Stack gap="space-1">
+          <Fact label={signalText("costs", "ko")}>
+            <Money value={props.card.sizing.costs} />
+          </Fact>
+          <Fact label={signalText("weightAfter", "ko")}>
+            <Percent value={props.card.sizing.weightAfter} />
+          </Fact>
+        </Stack>
       )}
-    </Fact>
-    <Fact label={signalText("binCount", "ko")}>
-      <DataText value={props.card.binCount} variant="body-sm" />
-    </Fact>
-  </Stack>
+      <Fact label={signalText("aiProbability", "ko")}>
+        <Probability value={props.card.aiProbability} />
+      </Fact>
+      <Fact label={signalText("binHitRate", "ko")}>
+        {props.card.binHitRate === undefined ? (
+          <Text variant="body-sm">{signalText("binHitRateNone", "ko")}</Text>
+        ) : (
+          <Percent value={props.card.binHitRate} />
+        )}
+      </Fact>
+      <Fact label={signalText("binCount", "ko")}>
+        <DataText value={props.card.binCount} variant="body-sm" />
+      </Fact>
+    </Stack>
+  </Disclosure>
 );
 
 const SourceRow = (props: { readonly source: SignalSource }): ReactElement => (
