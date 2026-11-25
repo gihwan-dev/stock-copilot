@@ -208,6 +208,9 @@ mod tests {
         let product = KeychainProfile::product();
         assert_eq!(product.kind(), KeychainKind::DataProtection);
         assert_eq!(product.access_group(), &AccessGroup::EntitlementDefault);
+        let login = KeychainProfile::product_login();
+        assert_eq!(login.kind(), KeychainKind::Login);
+        assert_eq!(login.service(), &ServiceName::PRODUCT);
         let named = KeychainProfile::product()
             .with_access_group(AccessGroup::Named("TEAMID.group".to_owned()));
         assert_eq!(

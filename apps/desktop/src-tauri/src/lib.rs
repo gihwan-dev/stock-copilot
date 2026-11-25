@@ -1,3 +1,4 @@
+pub mod ai_runtime;
 pub mod audit_queue;
 pub mod bindings;
 pub mod database;
