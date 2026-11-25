@@ -1,9 +1,11 @@
 app_version
 cancel_chat_turn
 check_toss_connection
+copy_text
 get_briefings
 get_chat_history
 get_job_schedules
+get_public_ip
 get_settings
 get_update_status
 open_external

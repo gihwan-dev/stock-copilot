@@ -8,6 +8,8 @@ use src_tauri::broker_link::{AccountSelector, BrokerMarketTools};
 use src_tauri::collected_links::{CollectedLinker, TitleLinker};
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
+use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
+use src_tauri::ipc::state::BoxFuture;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
 };
@@ -100,11 +102,81 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
             .manage(intraday)
             .manage(turns)
-            .manage(link),
+            .manage(link)
+            .manage(public_ip_runtime(&shared_clock)),
         ports,
         context,
     )?;
     run_primary(app)
+}
+
+const PUBLIC_IP_SERVICE: &str = "https://api.ipify.org";
+const CLIPBOARD_COMMAND: &str = "/usr/bin/pbcopy";
+
+struct ServicePublicIp(Option<sources::PublicIpClient>);
+
+impl PublicIpLookup for ServicePublicIp {
+    fn lookup(&self) -> BoxFuture<'_, Result<std::net::IpAddr, LookupFailed>> {
+        Box::pin(async move {
+            let client = self.0.as_ref().ok_or(LookupFailed)?;
+            client
+                .lookup()
+                .await
+                .map(|address| address.as_ip())
+                .map_err(|_error| LookupFailed)
+        })
+    }
+}
+
+struct MacClipboard;
+
+fn write_clipboard(text: &str) -> Result<(), LookupFailed> {
+    use std::io::Write;
+    let mut child = std::process::Command::new(CLIPBOARD_COMMAND)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|_error| LookupFailed)?;
+    let written = child
+        .stdin
+        .take()
+        .ok_or(LookupFailed)
+        .and_then(|mut stdin| {
+            stdin
+                .write_all(text.as_bytes())
+                .map_err(|_error| LookupFailed)
+        });
+    let status = child.wait().map_err(|_error| LookupFailed)?;
+    written?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(LookupFailed)
+    }
+}
+
+impl TextClipboard for MacClipboard {
+    fn copy(&self, text: String) -> BoxFuture<'_, Result<(), LookupFailed>> {
+        Box::pin(async move {
+            tauri::async_runtime::spawn_blocking(move || write_clipboard(&text))
+                .await
+                .map_err(|_error| LookupFailed)?
+        })
+    }
+}
+
+fn public_ip_runtime(clock: &Arc<platform_macos::SystemClock>) -> PublicIpRuntime {
+    let client = sources::PublicIpEndpoint::service(PUBLIC_IP_SERVICE)
+        .and_then(sources::PublicIpClient::new)
+        .ok();
+    let shared_clock: Arc<dyn application::Clock> =
+        Arc::<platform_macos::SystemClock>::clone(clock);
+    PublicIpRuntime::new(
+        Arc::new(ServicePublicIp(client)),
+        Arc::new(MacClipboard),
+        shared_clock,
+    )
 }
 
 fn start_toss_check(app: &tauri::AppHandle<tauri::Wry>) {
@@ -290,11 +362,11 @@ where
     S: application::SecretStore + 'static,
     C: application::Clock + 'static,
 {
-    fn check(&self) -> src_tauri::ipc::state::BoxFuture<'_, ProbeResult> {
+    fn check(&self) -> BoxFuture<'_, ProbeResult> {
         Box::pin(async move { self.0.connection_status().await.map_err(probe_failure) })
     }
 
-    fn reconnect(&self) -> src_tauri::ipc::state::BoxFuture<'_, ProbeResult> {
+    fn reconnect(&self) -> BoxFuture<'_, ProbeResult> {
         Box::pin(async move { self.0.reconnect().await.map_err(probe_failure) })
     }
 }

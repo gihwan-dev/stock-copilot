@@ -1,6 +1,8 @@
 import { err, type Result } from "../lib";
 import {
   checkTossConnection,
+  copyText,
+  publicIp,
   submitTossKeys,
   type TossKeys,
 } from "./toss-call";
@@ -119,4 +121,6 @@ export const coreSetupClient: SettingsClient = {
   ...unavailableSettingsClient,
   checkTossConnection,
   submitTossKeys,
+  publicIp,
+  copyText,
 };

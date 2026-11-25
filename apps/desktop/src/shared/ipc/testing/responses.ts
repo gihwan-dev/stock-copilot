@@ -2,6 +2,7 @@ export const responses = {
   appVersion: { version: "0.1.0" },
   cancelChatTurn: { outcome: "NotRunning", turn_id: "turn-1" },
   checkTossConnection: { state: "connected" },
+  copyText: { status: "copied" },
   getBriefings: {
     latest: {
       body: "밤사이 미국장은 올랐습니다 [1]",
@@ -71,6 +72,7 @@ export const responses = {
       },
     ],
   },
+  getPublicIp: { address: "203.0.113.10" },
   getSettings: {
     account_count: 0,
     ai_budget_percent: "70",

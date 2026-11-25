@@ -60,6 +60,14 @@ export const commands = {
     typedError<UiJobSchedule_Serialize, IpcError>(
       __TAURI_INVOKE("set_job_schedule", { request }),
     ),
+  getPublicIp: (request: GetPublicIpRequest) =>
+    typedError<UiPublicIp, IpcError>(
+      __TAURI_INVOKE("get_public_ip", { request }),
+    ),
+  copyText: (request: CopyTextRequest) =>
+    typedError<UiCopyResult, IpcError>(
+      __TAURI_INVOKE("copy_text", { request }),
+    ),
   checkTossConnection: (request: CheckTossConnectionRequest) =>
     typedError<UiTossConnection, IpcError>(
       __TAURI_INVOKE("check_toss_connection", { request }),
@@ -501,6 +509,10 @@ export type CheckTossConnectionRequest = {
   query: TossConnectionQuery;
 };
 
+export type CopyTextRequest = {
+  text: string;
+};
+
 export type GetBriefingsRequest = {
   scope: BriefingsScope;
 };
@@ -526,6 +538,10 @@ export type GetChatHistoryResponse_Serialize = {
 
 export type GetJobSchedulesRequest = {
   scope: JobSchedulesScope;
+};
+
+export type GetPublicIpRequest = {
+  query: PublicIpQuery;
 };
 
 export type GetSettingsRequest = {
@@ -579,6 +595,8 @@ export type OrderApprovalStatus =
   | "broker-rejected"
   | "outcome-unknown"
   | "unavailable";
+
+export type PublicIpQuery = "current";
 
 export type RestartConfirm = "restart";
 
@@ -767,6 +785,12 @@ export type UiBriefingsView_Serialize = {
 };
 
 export type UiConnectionState = "connected" | "needs-key";
+
+export type UiCopyResult = {
+  status: UiCopyStatus;
+};
+
+export type UiCopyStatus = "copied";
 
 export type UiDataSource =
   | "KindDisclosure"
@@ -1592,6 +1616,10 @@ export type UiOrderSwitchOutcome = {
 export type UiOrderSwitchOutcomeKind =
   "changed" | "unchanged" | "denied" | "unavailable";
 
+export type UiPublicIp = {
+  address: string;
+};
+
 export type UiRiskAppetite = "conservative" | "neutral" | "aggressive";
 
 export type UiScheduledJob =
@@ -1798,6 +1826,12 @@ export type MockCommandHandlers = {
   setJobSchedule: (args: {
     request: SetJobScheduleRequest_Deserialize;
   }) => UiJobSchedule_Serialize | Promise<UiJobSchedule_Serialize>;
+  getPublicIp: (args: {
+    request: GetPublicIpRequest;
+  }) => UiPublicIp | Promise<UiPublicIp>;
+  copyText: (args: {
+    request: CopyTextRequest;
+  }) => UiCopyResult | Promise<UiCopyResult>;
   checkTossConnection: (args: {
     request: CheckTossConnectionRequest;
   }) => UiTossConnection | Promise<UiTossConnection>;
@@ -1911,6 +1945,14 @@ export function mockCommands(
             "set_job_schedule",
             args,
           );
+        case "get_public_ip":
+          return mockCommandHandler(
+            mockHandlers.getPublicIp,
+            "get_public_ip",
+            args,
+          );
+        case "copy_text":
+          return mockCommandHandler(mockHandlers.copyText, "copy_text", args);
         case "check_toss_connection":
           return mockCommandHandler(
             mockHandlers.checkTossConnection,

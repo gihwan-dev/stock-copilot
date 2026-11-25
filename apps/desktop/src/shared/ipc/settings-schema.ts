@@ -9,7 +9,14 @@ import {
   type Result,
 } from "../lib";
 import { settleWithSchema, type IpcFailure } from "./schema";
-import { connectionSchema, type TossConnection } from "./setup-schema";
+import {
+  connectionSchema,
+  copiedSchema,
+  publicIpSchema,
+  type CopyResult,
+  type PublicIp,
+  type TossConnection,
+} from "./setup-schema";
 
 type ConnectionState = "connected" | "needs-key";
 type OptionalKeyState = "configured" | "unconfigured";
@@ -213,3 +220,11 @@ export const settleTossConnection = (
   outcome: CommandOutcome,
 ): Result<TossConnection, IpcFailure> =>
   settleWithSchema(outcome, connectionSchema);
+
+export const settlePublicIp = (
+  outcome: CommandOutcome,
+): Result<PublicIp, IpcFailure> => settleWithSchema(outcome, publicIpSchema);
+
+export const settleCopyResult = (
+  outcome: CommandOutcome,
+): Result<CopyResult, IpcFailure> => settleWithSchema(outcome, copiedSchema);

@@ -53,3 +53,15 @@ test("a retryable core error stays a command failure", async () => {
     error: { kind: "command", error: { kind: "retryable" } },
   });
 });
+
+test("the public IP and copy commands return the recorded replies", async () => {
+  const copy = vi.fn(() => responses.copyText);
+  mockCommands({ getPublicIp: () => responses.getPublicIp, copyText: copy });
+  const ip = await coreSetupClient.publicIp();
+  expect(ip).toStrictEqual(ok({ address: "203.0.113.10" }));
+  if (ip.kind !== "ok") return;
+  await expect(
+    coreSetupClient.copyText(ip.value.address),
+  ).resolves.toStrictEqual(ok({ status: "copied" }));
+  expect(copy).toHaveBeenCalledWith({ request: { text: "203.0.113.10" } });
+});

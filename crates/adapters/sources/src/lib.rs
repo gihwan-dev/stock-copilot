@@ -8,6 +8,7 @@ mod headers;
 mod http;
 mod kind_disclosures;
 mod news_rss;
+mod public_ip;
 mod rate_limiter;
 mod registry;
 mod rss;
@@ -53,6 +54,7 @@ pub use kind_disclosures::{
     normalize_corp_name, parse_kind_rss,
 };
 pub use news_rss::{PressMacroSource, RssNewsFeed};
+pub use public_ip::{PublicIpAddress, PublicIpClient, PublicIpEndpoint, PublicIpError};
 pub use rate_limiter::{SourceWait, TokioSourceWait};
 pub use registry::{
     AiReadSettingPolicy, CredentialRequirement, HostAllowance, HttpDataSource, RateLimitBucket,

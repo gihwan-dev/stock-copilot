@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-public-ip"
+description = "Enables the get_public_ip command without any pre-configured scope."
+commands.allow = ["get_public_ip"]
+
+[[permission]]
+identifier = "deny-get-public-ip"
+description = "Denies the get_public_ip command without any pre-configured scope."
+commands.deny = ["get_public_ip"]
