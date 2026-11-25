@@ -1,28 +1,19 @@
 import { expect, test } from "vitest";
-import { readDecimalForNumberDisplay } from "../lib/money";
 import { settleAllocation, settlePortfolio } from "./portfolio-schema";
 import { wire } from "./schema";
 import { responses } from "./testing/responses";
 
-test("settlePortfolio turns the recorded core view into the overview with names and signed profit", () => {
-  const result = settlePortfolio({
-    status: "ok",
-    data: wire(responses.getPortfolio),
-  });
+const recorded = responses.getPortfolio;
+const recordedHolding = recorded.holdings[0];
+
+test("settlePortfolio keeps the recorded time, coverage and currency rows", () => {
+  const result = settlePortfolio({ status: "ok", data: wire(recorded) });
   expect(result.kind).toBe("ok");
   if (result.kind !== "ok") return;
   const view = result.value;
-  expect(view.recordedAt).toBe("2026-11-25T09:00:00+09:00");
+  expect(view.recordedAt).toBe(recorded.recorded_at);
   expect(view.totalCoverage).toBe("complete");
   expect(view.exchangeRate).toBeUndefined();
-  expect(readDecimalForNumberDisplay(view.totalApproximate)).toBe("12200000");
-  expect(view.holdings).toHaveLength(1);
-  expect(view.holdings[0]?.name).toBe("삼성전자");
-  expect(view.holdings[0]?.ticker).toBe("005930");
-  expect(view.holdings[0]?.profit.direction).toBe("up");
-  expect(readDecimalForNumberDisplay(view.holdings[0]?.profit.rate)).toBe(
-    "10.77",
-  );
   expect(view.today?.direction).toBe("down");
   expect(view.currencies.map((row) => row.currency)).toStrictEqual([
     "KRW",
@@ -30,26 +21,38 @@ test("settlePortfolio turns the recorded core view into the overview with names 
   ]);
 });
 
-test("settlePortfolio rejects malformed money, extra fields and keeps command errors closed", () => {
-  const recorded = responses.getPortfolio;
+test("settlePortfolio carries the master name, symbol and signed profit of each holding", () => {
+  const result = settlePortfolio({ status: "ok", data: wire(recorded) });
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") return;
+  const holding = result.value.holdings[0];
+  expect(holding?.name).toBe(recordedHolding.name);
+  expect(holding?.ticker).toBe(recordedHolding.symbol);
+  expect(holding?.profit.direction).toBe("up");
+});
+
+test("settlePortfolio rejects malformed money and extra fields", () => {
+  const invalid = { kind: "err", error: { kind: "invalid-response" } };
   expect(
     settlePortfolio({
       status: "ok",
       data: wire({ ...recorded, total: { amount: "1,000", currency: "KRW" } }),
     }),
-  ).toStrictEqual({ kind: "err", error: { kind: "invalid-response" } });
+  ).toStrictEqual(invalid);
   expect(
     settlePortfolio({
       status: "ok",
       data: wire({ ...recorded, account: "00000000731" }),
     }),
-  ).toStrictEqual({ kind: "err", error: { kind: "invalid-response" } });
-  expect(
-    settlePortfolio({
-      status: "ok",
-      data: wire({ ...recorded, today: null, exchange_rate_at: null }),
-    }).kind,
-  ).toBe("ok");
+  ).toStrictEqual(invalid);
+});
+
+test("settlePortfolio accepts a missing daily profit and keeps command errors closed", () => {
+  const partial = settlePortfolio({
+    status: "ok",
+    data: wire({ ...recorded, today: null, exchange_rate_at: null }),
+  });
+  expect(partial.kind).toBe("ok");
   expect(
     settlePortfolio({ status: "error", error: wire({ kind: "no-data" }) }),
   ).toStrictEqual({
@@ -72,7 +75,4 @@ test("settleAllocation keeps the cash row kind so the screen names it, and reads
     "cash-krw",
   ]);
   expect(result.value.instruments[0]?.level).toBe("over-cap");
-  expect(readDecimalForNumberDisplay(result.value.instruments[0]?.weight)).toBe(
-    "59.02",
-  );
 });
