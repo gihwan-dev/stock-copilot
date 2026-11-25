@@ -803,3 +803,48 @@ impl application::CollectedItemReads for SqliteRepositories {
             .await
     }
 }
+
+impl application::NewsDataSettingsRepository for SqliteRepositories {
+    async fn load(&self) -> Result<Option<application::NewsDataSettings>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::NewsDataSettingsRepository::load(&crate::NewsDataSettingsStore::new(database))
+            .await
+    }
+
+    async fn store(
+        &self,
+        settings: &application::NewsDataSettings,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::NewsDataSettingsRepository::store(
+            &crate::NewsDataSettingsStore::new(database),
+            settings,
+        )
+        .await
+    }
+}
+
+impl application::WatchlistRepository for SqliteRepositories {
+    async fn load(&self) -> Result<application::Watchlist, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::WatchlistRepository::load(&crate::WatchlistStore::new(database)).await
+    }
+
+    async fn store(
+        &self,
+        previous: &application::Watchlist,
+        next: &application::Watchlist,
+    ) -> Result<application::WatchlistStoreOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::WatchlistRepository::store(
+            &crate::WatchlistStore::new(database),
+            previous,
+            next,
+        )
+        .await
+    }
+}

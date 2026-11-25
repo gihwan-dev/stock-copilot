@@ -6,6 +6,7 @@ pub mod exit;
 pub mod ipc;
 pub mod lifecycle;
 pub mod mcp_catalog;
+pub mod mcp_sources;
 pub mod platform;
 pub mod ports;
 pub mod product_events;

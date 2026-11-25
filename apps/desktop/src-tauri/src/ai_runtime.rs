@@ -1,17 +1,18 @@
 use application::{
     AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, ChatHistory, Clock, ExecutablePath,
-    InformationError, IsolationCheck, PeerProcessInspector, ProcessId, ResetTime, RunKind, RunSpec,
-    SecretValue, ToolCallLedger,
+    InformationError, IsolationCheck, ModelSelection, PeerProcessInspector, ProcessId, ResetTime,
+    RunKind, RunSpec, SecretValue, ThesisRunMetadata, ToolCallLedger,
 };
 use domain::UntrustedText;
 use mcp_server::{
     McpServerConfig, McpServerHandle, PeerInspectorMode, PeerProcessTarget, RunIdentity,
     RunServerDeps, RunServerRequest, RunSocketSpec, ToolLedgerMode, ToolRegistry,
 };
+use std::collections::BTreeMap;
 use std::fmt;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{Arc, OnceLock, RwLock, Weak};
 
 #[cfg(test)]
 mod tests;
@@ -111,9 +112,67 @@ impl<S: AiEventStream, M: Send> AiEventStream for AttachedStream<S, M> {
     }
 }
 
+type MetadataMap = BTreeMap<String, ThesisRunMetadata>;
+
+#[derive(Debug, Clone, Default)]
+pub struct RunMetadataBook(Arc<RwLock<MetadataMap>>);
+
+fn model_label(model: &ModelSelection) -> &str {
+    match model {
+        ModelSelection::Default => "default",
+        ModelSelection::Highest => "highest",
+        ModelSelection::Fast => "fast",
+        ModelSelection::Named(name) => name.as_str(),
+    }
+}
+
+impl RunMetadataBook {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn record(&self, spec: &RunSpec) -> RunEntry {
+        let metadata = UntrustedText::try_new(model_label(spec.model()))
+            .ok()
+            .zip(UntrustedText::try_new(&format!("{:?}", spec.purpose())).ok())
+            .map(|(model, prompt_version)| ThesisRunMetadata {
+                model,
+                prompt_version,
+            });
+        if let (Some(entry), Ok(mut map)) = (metadata, self.0.write()) {
+            let _previous = map.insert(spec.id().as_str().to_owned(), entry);
+        }
+        RunEntry {
+            book: self.clone(),
+            run: spec.id().as_str().to_owned(),
+        }
+    }
+
+    #[must_use]
+    pub fn thesis_metadata(&self, run: &AiRunId) -> Option<ThesisRunMetadata> {
+        self.0.read().ok()?.get(run.as_str()).cloned()
+    }
+}
+
+#[derive(Debug)]
+pub struct RunEntry {
+    book: RunMetadataBook,
+    run: String,
+}
+
+impl Drop for RunEntry {
+    fn drop(&mut self) {
+        if let Ok(mut map) = self.book.0.write() {
+            let _removed = map.remove(&self.run);
+        }
+    }
+}
+
 pub struct McpAttachedAi<A, H> {
     inner: Arc<A>,
     host: Arc<H>,
+    runs: RunMetadataBook,
 }
 
 impl<A, H> fmt::Debug for McpAttachedAi<A, H> {
@@ -124,13 +183,23 @@ impl<A, H> fmt::Debug for McpAttachedAi<A, H> {
 
 impl<A, H> McpAttachedAi<A, H> {
     #[must_use]
-    pub const fn new(inner: Arc<A>, host: Arc<H>) -> Self {
-        Self { inner, host }
+    pub fn new(inner: Arc<A>, host: Arc<H>) -> Self {
+        Self {
+            inner,
+            host,
+            runs: RunMetadataBook::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_runs(mut self, runs: RunMetadataBook) -> Self {
+        self.runs = runs;
+        self
     }
 }
 
 impl<A: AttachableAi, H: RunMcpHost> AiProvider for McpAttachedAi<A, H> {
-    type Stream = AttachedStream<A::Stream, H::Session>;
+    type Stream = AttachedStream<A::Stream, (H::Session, RunEntry)>;
 
     async fn run(&self, spec: RunSpec) -> Result<Self::Stream, InformationError> {
         match spec.kind() {
@@ -140,10 +209,11 @@ impl<A: AttachableAi, H: RunMcpHost> AiProvider for McpAttachedAi<A, H> {
             }),
             RunKind::Analysis => {
                 let session = self.host.open(spec.id())?;
+                let entry = self.runs.record(&spec);
                 let inner = self.inner.run_with_mcp(spec, session.link()?).await?;
                 Ok(AttachedStream {
                     inner,
-                    session: Some(session),
+                    session: Some((session, entry)),
                 })
             }
         }
@@ -162,13 +232,14 @@ impl<A: AttachableAi, H: RunMcpHost> AiProvider for McpAttachedAi<A, H> {
             }),
             RunKind::Analysis => {
                 let session = self.host.open(spec.id())?;
+                let entry = self.runs.record(&spec);
                 let inner = self
                     .inner
                     .resume_with_mcp(spec, history, message, session.link()?)
                     .await?;
                 Ok(AttachedStream {
                     inner,
-                    session: Some(session),
+                    session: Some((session, entry)),
                 })
             }
         }

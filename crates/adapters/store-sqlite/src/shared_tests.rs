@@ -272,3 +272,35 @@ fn information_times_migration_file_matches_the_runtime_statement() {
         crate::sql::information::MIGRATE_0021
     );
 }
+
+#[test]
+fn news_settings_and_watchlist_follow_the_installed_database() {
+    use application::{NewsDataSettingsRepository, WatchlistRepository};
+    let fixture = Fixture::new();
+    let shared = SharedDatabase::new();
+    let repositories = SqliteRepositories::new(shared.clone());
+    runtime().block_on(async {
+        let _settings = NewsDataSettingsRepository::load(&repositories)
+            .await
+            .expect_err("미설치");
+        let _watchlist = WatchlistRepository::load(&repositories)
+            .await
+            .expect_err("미설치");
+        let database =
+            Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+        assert!(shared.install(database).await.is_none());
+        let initial = application::NewsDataSettings::initial();
+        let _stored = NewsDataSettingsRepository::store(&repositories, &initial)
+            .await
+            .expect("저장");
+        assert_eq!(
+            NewsDataSettingsRepository::load(&repositories).await,
+            Ok(Some(initial))
+        );
+        assert_eq!(
+            WatchlistRepository::load(&repositories).await,
+            Ok(application::Watchlist::empty())
+        );
+        let _closed = shared.close().await;
+    });
+}

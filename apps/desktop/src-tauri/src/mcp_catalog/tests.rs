@@ -99,6 +99,70 @@ impl application::SettingsRepository for ClosedEstimates {
     }
 }
 
+impl application::CollectedItemReads for ClosedEstimates {
+    fn collected_since(
+        &self,
+        _kind: application::CollectedKind,
+        _since: domain::Timestamp,
+    ) -> impl Future<Output = Result<Vec<application::ObservedCollectedItem>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+
+    fn collected_item(
+        &self,
+        _handle: &application::CollectedItemHandle,
+    ) -> impl Future<Output = Result<Option<application::ObservedCollectedItem>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+}
+
+impl application::NewsDataSettingsRepository for ClosedEstimates {
+    fn load(
+        &self,
+    ) -> impl Future<Output = Result<Option<application::NewsDataSettings>, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+
+    fn store(
+        &self,
+        _settings: &application::NewsDataSettings,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+}
+
+impl application::WatchlistRepository for ClosedEstimates {
+    fn load(&self) -> impl Future<Output = Result<application::Watchlist, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn store(
+        &self,
+        _previous: &application::Watchlist,
+        _next: &application::Watchlist,
+    ) -> impl Future<Output = Result<application::WatchlistStoreOutcome, SystemPortError>> + Send
+    {
+        ready(Err(closed()))
+    }
+}
+
+struct NoBodies;
+
+impl crate::mcp_sources::ArticleBodies for NoBodies {
+    fn fetch(
+        &self,
+        _source: &domain::NewsSource,
+        _url: &domain::NormalizedUrl,
+        _settings: &application::NewsDataSettings,
+    ) -> impl Future<Output = Result<application::ArticleBody, application::ArticleFetchFailure>> + Send
+    {
+        ready(Err(application::ArticleFetchFailure::NotFound))
+    }
+}
+
 impl ScorecardObservationRepository for ClosedEstimates {
     fn scorecard_observations(
         &self,
@@ -121,6 +185,8 @@ fn catalog() -> ToolRegistry {
         CatalogStores {
             theses: Arc::new(LatestThesisRepository::default()),
             estimates: Arc::new(ClosedEstimates),
+            bodies: Arc::new(NoBodies),
+            runs: crate::ai_runtime::RunMetadataBook::new(),
             events: Arc::new(EventBusBuilder::default().build()),
         },
     )

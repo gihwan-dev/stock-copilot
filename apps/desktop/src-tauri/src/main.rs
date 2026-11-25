@@ -1,7 +1,7 @@
 use application::{AiProvider, AiRunId, ChatHistory, InformationError, RunSpec};
 use src_tauri::ai_runtime::{
     AiAvailability, AttachableAi, BridgeLocation, McpAttachedAi, McpRunLink, McpServerHost,
-    McpServerHostParts,
+    McpServerHostParts, RunMetadataBook,
 };
 use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::ipc::briefing::BriefingIpcState;
@@ -9,6 +9,7 @@ use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
 };
+use src_tauri::mcp_sources::ArticleBodies;
 use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
@@ -471,17 +472,87 @@ fn assemble_ai(
     Ok(ProductAiParts { ai, queue, jobs })
 }
 
+struct ProductArticleBodies {
+    reader: Option<sources::ArticleReader>,
+    clock: Arc<platform_macos::SystemClock>,
+}
+
+impl std::fmt::Debug for ProductArticleBodies {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProductArticleBodies")
+    }
+}
+
+const fn article_unavailable() -> application::ArticleFetchFailure {
+    application::ArticleFetchFailure::Unavailable(application::SystemPortError::new(
+        application::SystemPort::Repository,
+        application::SystemFailure::Unavailable(application::RetryDelay::Unknown),
+    ))
+}
+
+impl ProductArticleBodies {
+    fn new(clock: &Arc<platform_macos::SystemClock>) -> Self {
+        let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
+        let reader = sources::SourceHttpClient::new(
+            sources::SourceEndpoint::live(),
+            shared,
+            Arc::new(sources::TokioSourceWait),
+            None,
+        )
+        .ok()
+        .map(|client| sources::ArticleReader::new(Arc::new(client)));
+        Self {
+            reader,
+            clock: Arc::clone(clock),
+        }
+    }
+}
+
+impl ArticleBodies for ProductArticleBodies {
+    async fn fetch(
+        &self,
+        source: &domain::NewsSource,
+        url: &domain::NormalizedUrl,
+        settings: &application::NewsDataSettings,
+    ) -> Result<application::ArticleBody, application::ArticleFetchFailure> {
+        let reader = self.reader.as_ref().ok_or_else(article_unavailable)?;
+        let title =
+            domain::UntrustedText::try_new("article").map_err(|_error| article_unavailable())?;
+        let item = domain::NewsItem::new(source.clone(), url.clone(), title, None);
+        match reader
+            .read_transient(item.collected(), settings.body_read())
+            .await
+        {
+            Ok(text) => Ok(application::ArticleBody {
+                text,
+                fetched_at: application::Clock::now(self.clock.as_ref()),
+            }),
+            Err(sources::ArticleReadError::FetchFailed(_)) => Err(article_unavailable()),
+            Err(
+                sources::ArticleReadError::WebSourceDisallowed
+                | sources::ArticleReadError::DisclosureDisallowed
+                | sources::ArticleReadError::SourceLockedOff(_)
+                | sources::ArticleReadError::AiBodyReadDisabled(_)
+                | sources::ArticleReadError::DisallowedArticleHost,
+            ) => Err(application::ArticleFetchFailure::NotFound),
+        }
+    }
+}
+
 fn claude_ai(
     setup: AiSetup,
     clock: &Arc<platform_macos::SystemClock>,
     events: &Arc<application::EventBus>,
     repositories: &Arc<SqliteRepositories>,
 ) -> Option<McpAttachedAi<ProductClaude, ProductMcpHost>> {
+    let runs = RunMetadataBook::new();
     let registry = analysis_catalog(
         clock,
         CatalogStores {
             theses: Arc::clone(repositories),
             estimates: Arc::clone(repositories),
+            bodies: Arc::new(ProductArticleBodies::new(clock)),
+            runs: runs.clone(),
             events: Arc::clone(events),
         },
     )
@@ -519,13 +590,16 @@ fn claude_ai(
         base_dir: setup.mcp_base,
         bridge: setup.bridge.clone(),
     });
-    Some(McpAttachedAi::new(
-        Arc::new(ProductClaude {
-            provider: Arc::new(provider),
-            bridge: setup.bridge,
-        }),
-        Arc::new(host),
-    ))
+    Some(
+        McpAttachedAi::new(
+            Arc::new(ProductClaude {
+                provider: Arc::new(provider),
+                bridge: setup.bridge,
+            }),
+            Arc::new(host),
+        )
+        .with_runs(runs),
+    )
 }
 
 fn bundled_bridge() -> BridgeLocation {

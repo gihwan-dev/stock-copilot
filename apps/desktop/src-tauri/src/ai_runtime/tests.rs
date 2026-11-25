@@ -553,3 +553,31 @@ fn analysis_runs_stay_closed_until_the_bridge_location_is_known() {
         assert_eq!(call_rx.try_recv().ok(), Some(Call::RunWithMcp));
     });
 }
+
+#[test]
+fn analysis_run_registers_thesis_metadata_only_while_it_runs() {
+    tauri::async_runtime::block_on(async {
+        let base = TempBase::new();
+        let (calls, _call_rx) = mpsc::channel();
+        let (links, _link_rx) = mpsc::channel();
+        let book = super::RunMetadataBook::new();
+        let ai = McpAttachedAi::new(
+            Arc::new(RecordingAi { calls, links }),
+            Arc::new(host(&base.0, matching_inspector())),
+        )
+        .with_runs(book.clone());
+        let run = AiRunId::try_new("chat-meta").expect("id");
+        let mut stream = ai.run(analysis("chat-meta")).await.expect("실행");
+        let metadata = book.thesis_metadata(&run).expect("등록");
+        assert_eq!(metadata.model.as_untrusted_str(), "default");
+        assert_eq!(metadata.prompt_version.as_untrusted_str(), "Chat");
+        assert_eq!(drain(&mut stream).await, 2_usize);
+        assert_eq!(book.thesis_metadata(&run), None, "실행이 끝나면 지운다");
+        let _collect = ai.run(collection("collect-meta")).await.expect("수집");
+        assert_eq!(
+            book.thesis_metadata(&AiRunId::try_new("collect-meta").expect("id")),
+            None,
+            "수집 실행은 등록하지 않는다"
+        );
+    });
+}
