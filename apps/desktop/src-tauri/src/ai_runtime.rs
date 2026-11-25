@@ -481,3 +481,62 @@ impl<A: AiProvider> AiProvider for AiAvailability<A> {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct LateAi<A>(Arc<OnceLock<Arc<A>>>);
+
+impl<A> Clone for LateAi<A> {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
+
+impl<A> Default for LateAi<A> {
+    fn default() -> Self {
+        Self(Arc::new(OnceLock::new()))
+    }
+}
+
+impl<A> LateAi<A> {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn bind(&self, ai: Arc<A>) -> Result<(), Arc<A>> {
+        self.0.set(ai)
+    }
+
+    fn bound(&self) -> Result<&A, InformationError> {
+        self.0.get().map(AsRef::as_ref).ok_or_else(missing)
+    }
+}
+
+impl<A: AiProvider> AiProvider for LateAi<A> {
+    type Stream = A::Stream;
+
+    async fn run(&self, spec: RunSpec) -> Result<Self::Stream, InformationError> {
+        self.bound()?.run(spec).await
+    }
+
+    async fn resume(
+        &self,
+        spec: RunSpec,
+        history: ChatHistory,
+        message: UntrustedText,
+    ) -> Result<Self::Stream, InformationError> {
+        self.bound()?.resume(spec, history, message).await
+    }
+
+    async fn usage(&self) -> Result<AiUsage, InformationError> {
+        self.bound()?.usage().await
+    }
+
+    async fn interrupt(&self, run: &AiRunId) -> Result<(), InformationError> {
+        self.bound()?.interrupt(run).await
+    }
+
+    async fn verify_isolation(&self, kind: RunKind) -> Result<IsolationCheck, InformationError> {
+        self.bound()?.verify_isolation(kind).await
+    }
+}

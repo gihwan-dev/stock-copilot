@@ -149,6 +149,21 @@ impl application::WatchlistRepository for ClosedEstimates {
     }
 }
 
+impl application::AuditLog for ClosedEstimates {
+    fn append(
+        &self,
+        _entry: &application::AuditEntry,
+    ) -> impl Future<Output = Result<application::RecordOutcome, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+
+    fn verify(
+        &self,
+    ) -> impl Future<Output = Result<application::AuditIntegrity, SystemPortError>> + Send {
+        ready(Err(closed()))
+    }
+}
+
 struct NoBodies;
 
 impl crate::mcp_sources::ArticleBodies for NoBodies {
@@ -157,7 +172,7 @@ impl crate::mcp_sources::ArticleBodies for NoBodies {
         _source: &domain::NewsSource,
         _url: &domain::NormalizedUrl,
         _settings: &application::NewsDataSettings,
-    ) -> impl Future<Output = Result<application::ArticleBody, application::ArticleFetchFailure>> + Send
+    ) -> impl Future<Output = Result<domain::UntrustedText, application::ArticleFetchFailure>> + Send
     {
         ready(Err(application::ArticleFetchFailure::NotFound))
     }
@@ -186,6 +201,12 @@ fn catalog() -> ToolRegistry {
             theses: Arc::new(LatestThesisRepository::default()),
             estimates: Arc::new(ClosedEstimates),
             bodies: Arc::new(NoBodies),
+            collector:
+                Arc::new(
+                    crate::ai_runtime::AiAvailability::<
+                        testkit_ports::chat_fakes::ScriptedAiProvider,
+                    >::Missing,
+                ),
             runs: crate::ai_runtime::RunMetadataBook::new(),
             events: Arc::new(EventBusBuilder::default().build()),
         },

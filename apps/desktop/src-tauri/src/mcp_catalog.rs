@@ -1,11 +1,11 @@
 use crate::ai_runtime::RunMetadataBook;
+use crate::mcp_research::AppWebResearch;
 use crate::mcp_sources::{ArticleBodies, StoredArticles, StoredNews, StoredThesis};
 use application::{
     AiRunId, Clock, EstimateAssignmentRepository, EstimateRunContextSource,
     EstimateSubmissionRepository, EventBus, MarketToolReads, PortfolioToolReads, ProfileSource,
     RetryDelay, ScorecardObservationRepository, SettingsRepository, SystemFailure, SystemPort,
-    SystemPortError, ThesisRepository, ToolCallHistory, WebResearchToolFailure,
-    WebResearchToolPort,
+    SystemPortError, ThesisRepository, ToolCallHistory,
 };
 use application::{CollectedItemReads, NewsDataSettingsRepository, WatchlistRepository};
 use domain::{KnownMarket, Symbol};
@@ -124,24 +124,6 @@ impl MarketToolReads for UnconnectedToolData {
     }
 }
 
-impl WebResearchToolPort for UnconnectedToolData {
-    fn known_targets(
-        &self,
-        _run: &AiRunId,
-    ) -> impl Future<Output = Result<Vec<Symbol>, SystemPortError>> + Send {
-        fail()
-    }
-
-    fn request_research(
-        &self,
-        _run: &AiRunId,
-        _request: &application::WebResearchToolRequest,
-    ) -> impl Future<Output = Result<application::WebResearchToolOutcome, WebResearchToolFailure>> + Send
-    {
-        ready(Err(WebResearchToolFailure::Unavailable(unconnected())))
-    }
-}
-
 impl EstimateRunContextSource for UnconnectedToolData {
     fn estimate_context(
         &self,
@@ -162,23 +144,24 @@ impl<S: SettingsRepository> ProfileSource for StoredProfile<S> {
     }
 }
 
-pub struct CatalogStores<R, E, B> {
+pub struct CatalogStores<R, E, B, W> {
     pub theses: Arc<R>,
     pub estimates: Arc<E>,
     pub bodies: Arc<B>,
+    pub collector: Arc<W>,
     pub runs: RunMetadataBook,
     pub events: Arc<EventBus>,
 }
 
-impl<R, E, B> std::fmt::Debug for CatalogStores<R, E, B> {
+impl<R, E, B, W> std::fmt::Debug for CatalogStores<R, E, B, W> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("CatalogStores")
     }
 }
 
-pub fn analysis_catalog<C, R, E, B>(
+pub fn analysis_catalog<C, R, E, B, W>(
     clock: &Arc<C>,
-    stores: CatalogStores<R, E, B>,
+    stores: CatalogStores<R, E, B, W>,
 ) -> Result<ToolRegistry, ToolRegistryError>
 where
     C: Clock + 'static,
@@ -191,8 +174,10 @@ where
         + CollectedItemReads
         + NewsDataSettingsRepository
         + WatchlistRepository
+        + application::AuditLog
         + 'static,
     B: ArticleBodies + 'static,
+    W: application::AiProvider + 'static,
 {
     let data = Arc::new(UnconnectedToolData);
     let cursors = make_cursor_store(Arc::clone(clock));
@@ -203,10 +188,15 @@ where
             Arc::clone(&stores.estimates),
             Arc::clone(clock),
         )),
-        research: Arc::clone(&data),
+        research: Arc::new(AppWebResearch::new(
+            Arc::clone(&stores.estimates),
+            stores.collector,
+            Arc::clone(clock),
+        )),
         article: Arc::new(StoredArticles::new(
             Arc::clone(&stores.estimates),
             stores.bodies,
+            Arc::clone(clock),
         )),
         thesis: Arc::new(StoredThesis::new(
             Arc::clone(&stores.estimates),

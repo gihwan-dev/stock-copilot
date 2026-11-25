@@ -1,6 +1,6 @@
 use application::{AiProvider, AiRunId, ChatHistory, InformationError, RunSpec};
 use src_tauri::ai_runtime::{
-    AiAvailability, AttachableAi, BridgeLocation, McpAttachedAi, McpRunLink, McpServerHost,
+    AiAvailability, AttachableAi, BridgeLocation, LateAi, McpAttachedAi, McpRunLink, McpServerHost,
     McpServerHostParts, RunMetadataBook,
 };
 use src_tauri::audit_queue::AuditEventQueue;
@@ -474,7 +474,6 @@ fn assemble_ai(
 
 struct ProductArticleBodies {
     reader: Option<sources::ArticleReader>,
-    clock: Arc<platform_macos::SystemClock>,
 }
 
 impl std::fmt::Debug for ProductArticleBodies {
@@ -501,10 +500,7 @@ impl ProductArticleBodies {
         )
         .ok()
         .map(|client| sources::ArticleReader::new(Arc::new(client)));
-        Self {
-            reader,
-            clock: Arc::clone(clock),
-        }
+        Self { reader }
     }
 }
 
@@ -514,7 +510,7 @@ impl ArticleBodies for ProductArticleBodies {
         source: &domain::NewsSource,
         url: &domain::NormalizedUrl,
         settings: &application::NewsDataSettings,
-    ) -> Result<application::ArticleBody, application::ArticleFetchFailure> {
+    ) -> Result<domain::UntrustedText, application::ArticleFetchFailure> {
         let reader = self.reader.as_ref().ok_or_else(article_unavailable)?;
         let title =
             domain::UntrustedText::try_new("article").map_err(|_error| article_unavailable())?;
@@ -523,10 +519,7 @@ impl ArticleBodies for ProductArticleBodies {
             .read_transient(item.collected(), settings.body_read())
             .await
         {
-            Ok(text) => Ok(application::ArticleBody {
-                text,
-                fetched_at: application::Clock::now(self.clock.as_ref()),
-            }),
+            Ok(text) => Ok(text),
             Err(sources::ArticleReadError::FetchFailed(_)) => Err(article_unavailable()),
             Err(
                 sources::ArticleReadError::WebSourceDisallowed
@@ -546,6 +539,7 @@ fn claude_ai(
     repositories: &Arc<SqliteRepositories>,
 ) -> Option<McpAttachedAi<ProductClaude, ProductMcpHost>> {
     let runs = RunMetadataBook::new();
+    let collector = LateAi::<ai_claude_code::ClaudeCodeProvider>::new();
     let registry = analysis_catalog(
         clock,
         CatalogStores {
@@ -553,6 +547,7 @@ fn claude_ai(
             estimates: Arc::clone(repositories),
             bodies: Arc::new(ProductArticleBodies::new(clock)),
             runs: runs.clone(),
+            collector: Arc::new(collector.clone()),
             events: Arc::clone(events),
         },
     )
@@ -577,10 +572,13 @@ fn claude_ai(
     };
     let shared_clock: Arc<dyn application::Clock> =
         Arc::<platform_macos::SystemClock>::clone(clock);
-    let provider = ai_claude_code::ClaudeCodeProvider::new(config).with_clock_and_quota(
-        shared_clock,
-        ai_claude_code::QuotaPolicy::default_policy().ok()?,
+    let provider = Arc::new(
+        ai_claude_code::ClaudeCodeProvider::new(config).with_clock_and_quota(
+            shared_clock,
+            ai_claude_code::QuotaPolicy::default_policy().ok()?,
+        ),
     );
+    let _bound = collector.bind(Arc::clone(&provider));
     let host = McpServerHost::new(McpServerHostParts {
         clock: Arc::clone(clock),
         inspector: mcp_server::PeerInspectorMode::Configured(Arc::new(PsPeerInspector::default())),
@@ -593,7 +591,7 @@ fn claude_ai(
     Some(
         McpAttachedAi::new(
             Arc::new(ProductClaude {
-                provider: Arc::new(provider),
+                provider,
                 bridge: setup.bridge,
             }),
             Arc::new(host),

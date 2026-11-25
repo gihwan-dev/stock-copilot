@@ -9,7 +9,7 @@ use application::{
 };
 use domain::{
     AiBodyReadPolicy, EvidenceRef, EvidenceUrl, InformationSource, InstrumentId, Nanosecond,
-    NewsSource, NormalizedUrl, SpanSeconds, Symbol, TimeSpan, Timestamp,
+    NewsSource, NormalizedUrl, SpanSeconds, Symbol, TimeSpan, Timestamp, UntrustedText,
 };
 use std::future::Future;
 use std::sync::Arc;
@@ -159,23 +159,28 @@ pub trait ArticleBodies: Send + Sync {
         source: &NewsSource,
         url: &NormalizedUrl,
         settings: &NewsDataSettings,
-    ) -> impl Future<Output = Result<ArticleBody, ArticleFetchFailure>> + Send;
+    ) -> impl Future<Output = Result<UntrustedText, ArticleFetchFailure>> + Send;
 }
 
 #[derive(Debug)]
-pub struct StoredArticles<S, B> {
+pub struct StoredArticles<S, B, C> {
     store: Arc<S>,
     bodies: Arc<B>,
+    clock: Arc<C>,
 }
 
-impl<S, B> StoredArticles<S, B> {
+impl<S, B, C> StoredArticles<S, B, C> {
     #[must_use]
-    pub const fn new(store: Arc<S>, bodies: Arc<B>) -> Self {
-        Self { store, bodies }
+    pub const fn new(store: Arc<S>, bodies: Arc<B>, clock: Arc<C>) -> Self {
+        Self {
+            store,
+            bodies,
+            clock,
+        }
     }
 }
 
-impl<S: NewsDataSettingsRepository, B: Send + Sync> StoredArticles<S, B> {
+impl<S: NewsDataSettingsRepository, B: Send + Sync, C: Send + Sync> StoredArticles<S, B, C> {
     async fn settings(&self) -> Result<NewsDataSettings, SystemPortError> {
         Ok(self
             .store
@@ -185,10 +190,11 @@ impl<S: NewsDataSettingsRepository, B: Send + Sync> StoredArticles<S, B> {
     }
 }
 
-impl<S, B> ArticleToolPort for StoredArticles<S, B>
+impl<S, B, C> ArticleToolPort for StoredArticles<S, B, C>
 where
     S: CollectedItemReads + NewsDataSettingsRepository,
     B: ArticleBodies,
+    C: Clock,
 {
     async fn locate(
         &self,
@@ -249,7 +255,11 @@ where
                 CollectedEntry::News(_) | CollectedEntry::Disclosure(_) => None,
             })
             .ok_or(ArticleFetchFailure::NotFound)?;
-        self.bodies.fetch(&source, url, &settings).await
+        let text = self.bodies.fetch(&source, url, &settings).await?;
+        Ok(ArticleBody {
+            text,
+            fetched_at: self.clock.now(),
+        })
     }
 }
 
