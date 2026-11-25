@@ -12,6 +12,7 @@ const catalog = {
     ko: "토스증권 WTS의 Open API 설정에서 발급한 키를 붙여 넣어 연결할 수 있어요." as UiText,
   },
   profileTitle: { ko: "투자 성향" as UiText },
+  profileDetails: { ko: "투자 성향 자세히 보기" as UiText },
   horizonLabel: { ko: "기간" as UiText },
   horizonHours: { ko: "몇 시간" as UiText },
   horizonFewDays: { ko: "며칠" as UiText },

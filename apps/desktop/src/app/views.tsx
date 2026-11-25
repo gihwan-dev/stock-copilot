@@ -7,6 +7,7 @@ import { ChatPanel } from "../features/chat";
 import { InstrumentDetail, InstrumentList } from "../features/instruments";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
+import { useKeyEntry } from "../features/onboarding";
 import { SettingsScreen } from "../features/settings";
 import { RiskEditors } from "../features/settings-risk";
 import { ScorecardPanel } from "../features/scorecard";
@@ -169,8 +170,10 @@ export const SettingsRouteView = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
   const system = useSystemSettings();
+  const tossEntry = useKeyEntry();
   return (
     <SettingsScreen
+      tossEntry={tossEntry}
       onBack={(): void => {
         go("/");
       }}

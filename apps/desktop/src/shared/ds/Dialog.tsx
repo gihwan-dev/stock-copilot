@@ -14,7 +14,12 @@ type Props = {
   readonly children: ReactElement | readonly ReactElement[];
   readonly actions?: DialogActions;
   readonly wide?: "normal" | "wide";
+  readonly placement?: "center" | "sheet";
 };
+const viewports = {
+  center: "dialog-overlay z-modal flex items-center justify-center p-space-6",
+  sheet: "dialog-overlay z-modal flex items-end justify-center p-space-4",
+} as const;
 const widths = {
   normal:
     "w-full max-w-dialog-width max-h-full scroll-flex flex flex-col bg-surface-raised rounded-lg shadow-popover",
@@ -22,6 +27,7 @@ const widths = {
 } as const;
 export const Dialog = (props: Props): ReactElement => {
   const wide = props.wide ?? "normal";
+  const placement = props.placement ?? "center";
   const popupRef = useRef<HTMLDivElement>(null);
   return (
     <BaseDialog.Root<void>
@@ -39,7 +45,7 @@ export const Dialog = (props: Props): ReactElement => {
           data-dialog-backdrop=""
           className="dialog-overlay z-modal bg-overlay"
         />
-        <BaseDialog.Viewport className="dialog-overlay z-modal flex items-center justify-center p-space-6">
+        <BaseDialog.Viewport className={viewports[placement]}>
           <BaseDialog.Popup
             aria-modal="true"
             ref={popupRef}

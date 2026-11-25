@@ -90,8 +90,9 @@ const useKeyForm = (submit: (keys: TossKeys) => void): KeyForm => {
 export const KeyScreen = (props: {
   readonly problem: KeyProblem;
   readonly onLater: () => void;
+  readonly onConnected: () => void;
 }): ReactElement => {
-  const submission = useKeySubmission(useOnboardingClient());
+  const submission = useKeySubmission(useOnboardingClient(), props.onConnected);
   const form = useKeyForm(submission.submit);
   const sentence =
     submission.state === "failed"

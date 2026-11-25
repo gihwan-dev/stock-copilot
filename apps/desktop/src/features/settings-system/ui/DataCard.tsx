@@ -31,6 +31,7 @@ const DeleteDialog = (props: {
   <Dialog
     open={props.open}
     title={systemText("system.deleteTitle", "ko")}
+    placement="sheet"
     onClose={props.close}
     actions={{
       confirm: {

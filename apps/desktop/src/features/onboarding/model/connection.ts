@@ -84,7 +84,10 @@ export type KeySubmission = {
   readonly submit: (keys: TossKeys) => void;
 };
 
-export const useKeySubmission = (client: SettingsClient): KeySubmission => {
+export const useKeySubmission = (
+  client: SettingsClient,
+  onConnected: () => void,
+): KeySubmission => {
   const queryClient = useQueryClient();
   const [outcome, setOutcome] = useState<"idle" | "failed">("idle");
   const mutation = useMutation({
@@ -106,6 +109,7 @@ export const useKeySubmission = (client: SettingsClient): KeySubmission => {
         onSettled: (reply): void => {
           setOutcome(reply?.kind === "ok" ? "idle" : "failed");
           mutation.reset();
+          if (reply?.kind === "ok") onConnected();
         },
       });
     },

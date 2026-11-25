@@ -1,1 +1,1 @@
-export { SettingsScreen } from "./ui/SettingsScreen";
+export { SettingsScreen, type TossEntry } from "./ui/SettingsScreen";
