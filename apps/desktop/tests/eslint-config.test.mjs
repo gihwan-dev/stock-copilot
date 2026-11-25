@@ -116,6 +116,7 @@ const undisableable = [
   "@typescript-eslint/only-throw-error",
   "functional/no-try-statements",
   "functional/no-expression-statements",
+  "functional/immutable-data",
   "@eslint-community/eslint-comments/no-use",
   "@eslint-community/eslint-comments/require-description",
   "@eslint-community/eslint-comments/no-unlimited-disable",
