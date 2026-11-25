@@ -2513,7 +2513,9 @@ mod collector_store_tests {
         let directory = std::path::PathBuf::from("../../../target/fin-hold")
             .join(format!("restore-{}", std::process::id()));
         let system = platform_macos::SystemClock::new().expect("시계");
-        let observed = application::Clock::now(&system);
+        let observed = broker_toss::TossTimestamp::try_from("2026-11-25T07:00:00Z")
+            .expect("clock")
+            .into_domain();
         tauri::async_runtime::block_on(async {
             let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
             src_tauri::database::prepare_directory(&path).expect("폴더");
