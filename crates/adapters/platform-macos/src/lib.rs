@@ -8,7 +8,10 @@ pub use system_clock::SystemClock;
 mod unavailable_presence;
 pub use unavailable_presence::UnavailablePresence;
 mod native_dialog;
-pub use native_dialog::{DialogChoice, NativeOrderDialog, NativeRiskDialog, choice_from};
+pub use native_dialog::{
+    DialogChoice, EXPORT_DIALOG_TITLE, EXPORT_EXTENSION, EXPORT_FILTER_NAME, NativeOrderDialog,
+    NativeRiskDialog, choice_from, pick_save_path,
+};
 mod local_auth;
 pub use local_auth::{LocalDeviceOwnerAuth, response_from};
 mod order_presence;

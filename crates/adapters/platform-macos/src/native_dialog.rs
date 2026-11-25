@@ -66,6 +66,19 @@ impl OrderDialogBackend for NativeOrderDialog {
     }
 }
 
+pub const EXPORT_DIALOG_TITLE: &str = "백업 파일을 저장할 위치";
+pub const EXPORT_FILTER_NAME: &str = "Stock Copilot 백업";
+pub const EXPORT_EXTENSION: &str = "db";
+
+#[must_use]
+pub fn pick_save_path(file_name: &str) -> Option<std::path::PathBuf> {
+    rfd::FileDialog::new()
+        .set_title(EXPORT_DIALOG_TITLE)
+        .add_filter(EXPORT_FILTER_NAME, &[EXPORT_EXTENSION])
+        .set_file_name(file_name)
+        .save_file()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{DialogChoice, choice_from};

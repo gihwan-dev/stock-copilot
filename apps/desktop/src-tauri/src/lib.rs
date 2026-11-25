@@ -22,6 +22,7 @@ mod security;
 pub mod signal_flow;
 pub mod sqlite_ports;
 pub mod startup;
+pub mod task_models;
 pub mod toss_link;
 pub mod unavailable;
 pub mod updates;

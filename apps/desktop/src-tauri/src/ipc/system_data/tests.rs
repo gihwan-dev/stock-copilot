@@ -7,9 +7,10 @@ use domain::{AccountId, InvestmentPrinciples, MaskedAccountNumber};
 use tauri::test::{mock_builder, mock_context, noop_assets};
 
 use super::{
-    AccountBook, DataCare, PrinciplesBook, SystemDataIpcState, SystemRequest, SystemScope,
-    UiCashMinPercent, UiConcentrationCount, UiPrinciples, UiPrinciplesInput, backup_now,
-    get_account_selection, get_principles, load_accounts, save_principles, select_account_ref,
+    AccountBook, DataCare, ExportTarget, PrinciplesBook, SystemDataIpcState, SystemRequest,
+    SystemScope, UiCashMinPercent, UiConcentrationCount, UiExportStatus, UiPrinciples,
+    UiPrinciplesInput, backup_now, export_chosen, get_account_selection, get_principles,
+    load_accounts, save_principles, select_account_ref,
 };
 use crate::broker_link::{AccountChoice, SelectionChange};
 use crate::ipc::error::IpcErrorKind;
@@ -46,6 +47,7 @@ impl AccountBook for FakeAccounts {
 #[derive(Default)]
 struct FakeCare {
     backups: RwLock<Vec<PathBuf>>,
+    exports: RwLock<Vec<(PathBuf, PathBuf)>>,
     failure: RwLock<Option<SystemPortError>>,
 }
 
@@ -56,8 +58,25 @@ impl DataCare for FakeCare {
         Box::pin(std::future::ready(failure.map_or(Ok(()), Err)))
     }
 
+    fn export_to(
+        &self,
+        staging: PathBuf,
+        target: PathBuf,
+    ) -> BoxFuture<'_, Result<(), SystemPortError>> {
+        self.exports.write().expect("잠금").push((staging, target));
+        Box::pin(std::future::ready(Ok(())))
+    }
+
     fn wipe(&self, _data_directory: PathBuf) -> BoxFuture<'_, Result<(), SystemPortError>> {
         Box::pin(std::future::ready(Ok(())))
+    }
+}
+
+struct FixedTarget(Option<PathBuf>);
+
+impl ExportTarget for FixedTarget {
+    fn choose(&self) -> BoxFuture<'_, Option<PathBuf>> {
+        Box::pin(std::future::ready(self.0.clone()))
     }
 }
 
@@ -76,11 +95,16 @@ impl PrinciplesBook for FakePrinciples {
 }
 
 fn state(care: Arc<FakeCare>) -> SystemDataIpcState {
+    state_with(care, None)
+}
+
+fn state_with(care: Arc<FakeCare>, target: Option<PathBuf>) -> SystemDataIpcState {
     SystemDataIpcState {
         accounts: Arc::new(FakeAccounts {
             selected: RwLock::new(Some(AccountId::new(413))),
         }),
         care,
+        target: Arc::new(FixedTarget(target)),
         principles: Arc::new(FakePrinciples::default()),
     }
 }
@@ -191,4 +215,28 @@ fn unmanaged_state_and_unknown_fields_are_refused() {
     assert_eq!(missing.kind, IpcErrorKind::NoData);
     let _refused = serde_json::from_str::<SystemRequest>(r#"{"scope":"current","all":true}"#)
         .expect_err("모르는 필드");
+}
+
+#[test]
+fn export_writes_only_to_the_chosen_file_and_a_cancelled_choice_does_nothing() {
+    let care = Arc::new(FakeCare::default());
+    let cancelled = tauri::async_runtime::block_on(export_chosen(
+        &state_with(Arc::clone(&care), None),
+        PathBuf::from("/tmp/staging"),
+    ))
+    .expect("취소");
+    assert_eq!(cancelled.status, UiExportStatus::Cancelled);
+    assert!(care.exports.read().expect("잠금").is_empty());
+    let chosen = PathBuf::from("/Users/me/Desktop/backup.db");
+    let exported = tauri::async_runtime::block_on(export_chosen(
+        &state_with(Arc::clone(&care), Some(chosen.clone())),
+        PathBuf::from("/tmp/staging"),
+    ))
+    .expect("내보내기");
+    assert_eq!(exported.status, UiExportStatus::Exported);
+    assert_eq!(
+        *care.exports.read().expect("잠금"),
+        vec![(PathBuf::from("/tmp/staging"), chosen)]
+    );
+    assert!(care.backups.read().expect("잠금").is_empty());
 }

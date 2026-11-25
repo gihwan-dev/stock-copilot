@@ -1935,7 +1935,7 @@ export type UiExportResult = {
   status: UiExportStatus;
 };
 
-export type UiExportStatus = "exported";
+export type UiExportStatus = "exported" | "cancelled";
 
 export type UiFeedSource =
   | "KindDisclosure"

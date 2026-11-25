@@ -63,6 +63,7 @@ pub struct ClaudeCodeConfig {
     cli_projects_dir: Option<PathBuf>,
     sandbox: Option<crate::sandbox::SandboxLayer>,
     preflight_reap_grace_ms: u64,
+    config_dir: crate::config_dir::ConfigDirSlot,
 }
 
 impl fmt::Debug for ClaudeCodeConfig {
@@ -115,6 +116,7 @@ impl ClaudeCodeConfig {
             cli_projects_dir: None,
             sandbox: None,
             preflight_reap_grace_ms: PREFLIGHT_REAP_GRACE_MS,
+            config_dir: crate::config_dir::ConfigDirSlot::default(),
         })
     }
 
@@ -133,6 +135,12 @@ impl ClaudeCodeConfig {
     #[must_use]
     pub fn without_sandbox(mut self) -> Self {
         self.sandbox = None;
+        self
+    }
+
+    #[must_use]
+    pub fn with_config_dir_slot(mut self, slot: crate::config_dir::ConfigDirSlot) -> Self {
+        self.config_dir = slot;
         self
     }
 
@@ -252,7 +260,11 @@ impl ClaudeCodeConfig {
             host_env: self.host_env.as_ref(),
             mcp_token,
         };
-        let plan = build_command_plan(&input)?;
+        let built = build_command_plan(&input)?;
+        let plan = match self.config_dir.get() {
+            Some(dir) => built.with_config_dir(&dir),
+            None => built,
+        };
         Ok(match &self.sandbox {
             Some(layer) => plan.wrapped_in_sandbox(layer),
             None => plan,

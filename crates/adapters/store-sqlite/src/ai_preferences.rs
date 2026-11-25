@@ -109,7 +109,7 @@ pub(crate) fn encode(preferences: &AiPreferences) -> String {
     payload.push_str(budget_text(preferences.budget()));
     payload.push_str("\ndir:");
     payload.push_str(preferences.config_dir().map_or("", ClaudeConfigDir::as_str));
-    for preference in preferences.tasks() {
+    for preference in preferences.chosen_tasks() {
         for part in [
             "\ntask:",
             task_name(preference.task),

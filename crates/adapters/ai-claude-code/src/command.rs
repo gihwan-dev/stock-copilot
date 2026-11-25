@@ -533,6 +533,17 @@ impl fmt::Debug for CommandPlan {
 
 impl CommandPlan {
     #[must_use]
+    pub(crate) fn with_config_dir(mut self, dir: &Path) -> Self {
+        self.env
+            .retain(|(key, _)| key != crate::config_dir::CONFIG_DIR_ENV_KEY);
+        self.env.push((
+            String::from(crate::config_dir::CONFIG_DIR_ENV_KEY),
+            dir.to_string_lossy().into_owned(),
+        ));
+        self
+    }
+
+    #[must_use]
     pub fn executable(&self) -> &Path {
         &self.executable
     }
