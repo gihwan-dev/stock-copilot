@@ -15,3 +15,8 @@ pub(crate) const DELETE_ALL_INDEX: &str = "DELETE FROM information_fts";
 pub(crate) const INSERT_INDEX: &str =
     "INSERT INTO information_fts(rowid, title_grams, body_grams) VALUES (?1, ?2, ?3)";
 pub(crate) const SEARCH_INDEX: &str = "SELECT rowid FROM information_fts WHERE information_fts MATCH ?1 ORDER BY rank, rowid LIMIT ?2";
+pub(crate) const MIGRATE_0021: &str = "CREATE TABLE information_times (\n    item_id INTEGER PRIMARY KEY REFERENCES information_items(id),\n    published_payload TEXT,\n    collected_payload TEXT NOT NULL\n) STRICT;\n";
+pub(crate) const RECORD_TIMES: &str = "INSERT INTO information_times(item_id, published_payload, collected_payload) SELECT id, ?1, ?2 FROM information_items WHERE category = ?3 AND source = ?4 AND external_id = ?5 ON CONFLICT(item_id) DO UPDATE SET published_payload = excluded.published_payload, collected_payload = excluded.collected_payload";
+pub(crate) const OBSERVED_BY_CATEGORY: &str = "SELECT i.id, i.category, i.source, i.external_id, i.url, i.title, i.body, t.published_payload, t.collected_payload FROM information_items AS i INNER JOIN information_times AS t ON t.item_id = i.id WHERE i.category = ?1 ORDER BY i.id DESC LIMIT 1000";
+pub(crate) const OBSERVED_BY_ID: &str = "SELECT i.id, i.category, i.source, i.external_id, i.url, i.title, i.body, t.published_payload, t.collected_payload FROM information_items AS i INNER JOIN information_times AS t ON t.item_id = i.id WHERE i.id = ?1 AND i.category = ?2";
+pub(crate) const LINKED_INSTRUMENTS: &str = "SELECT instrument FROM information_links WHERE category = ?1 AND source = ?2 AND external_id = ?3 ORDER BY instrument";

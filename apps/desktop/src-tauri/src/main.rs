@@ -1,7 +1,7 @@
 use application::{AiProvider, AiRunId, ChatHistory, InformationError, RunSpec};
 use src_tauri::ai_runtime::{
     AiAvailability, AttachableAi, BridgeLocation, McpAttachedAi, McpRunLink, McpServerHost,
-    McpServerHostParts,
+    McpServerHostParts, RunMetadataBook,
 };
 use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::ipc::briefing::BriefingIpcState;
@@ -9,6 +9,7 @@ use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
 };
+use src_tauri::mcp_sources::ArticleBodies;
 use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
@@ -67,9 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui_events: Arc::clone(&ui_events),
     });
     let events = Arc::new(bus);
-    let bridge = BridgeLocation::new();
     let ai = assemble_ai(
-        discover_ai_setup(&context.config().identifier, bridge.clone()),
+        discover_ai_setup(&context.config().identifier, bundled_bridge()),
         &shared_clock,
         &events,
         &repositories,
@@ -81,11 +81,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ports,
         context,
     )?;
-    let _first = bridge.set(
-        tauri::Manager::path(&app)
-            .resource_dir()?
-            .join(BRIDGE_FILE_NAME),
-    );
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
             .app_data_dir()?
@@ -477,17 +472,87 @@ fn assemble_ai(
     Ok(ProductAiParts { ai, queue, jobs })
 }
 
+struct ProductArticleBodies {
+    reader: Option<sources::ArticleReader>,
+    clock: Arc<platform_macos::SystemClock>,
+}
+
+impl std::fmt::Debug for ProductArticleBodies {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProductArticleBodies")
+    }
+}
+
+const fn article_unavailable() -> application::ArticleFetchFailure {
+    application::ArticleFetchFailure::Unavailable(application::SystemPortError::new(
+        application::SystemPort::Repository,
+        application::SystemFailure::Unavailable(application::RetryDelay::Unknown),
+    ))
+}
+
+impl ProductArticleBodies {
+    fn new(clock: &Arc<platform_macos::SystemClock>) -> Self {
+        let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
+        let reader = sources::SourceHttpClient::new(
+            sources::SourceEndpoint::live(),
+            shared,
+            Arc::new(sources::TokioSourceWait),
+            None,
+        )
+        .ok()
+        .map(|client| sources::ArticleReader::new(Arc::new(client)));
+        Self {
+            reader,
+            clock: Arc::clone(clock),
+        }
+    }
+}
+
+impl ArticleBodies for ProductArticleBodies {
+    async fn fetch(
+        &self,
+        source: &domain::NewsSource,
+        url: &domain::NormalizedUrl,
+        settings: &application::NewsDataSettings,
+    ) -> Result<application::ArticleBody, application::ArticleFetchFailure> {
+        let reader = self.reader.as_ref().ok_or_else(article_unavailable)?;
+        let title =
+            domain::UntrustedText::try_new("article").map_err(|_error| article_unavailable())?;
+        let item = domain::NewsItem::new(source.clone(), url.clone(), title, None);
+        match reader
+            .read_transient(item.collected(), settings.body_read())
+            .await
+        {
+            Ok(text) => Ok(application::ArticleBody {
+                text,
+                fetched_at: application::Clock::now(self.clock.as_ref()),
+            }),
+            Err(sources::ArticleReadError::FetchFailed(_)) => Err(article_unavailable()),
+            Err(
+                sources::ArticleReadError::WebSourceDisallowed
+                | sources::ArticleReadError::DisclosureDisallowed
+                | sources::ArticleReadError::SourceLockedOff(_)
+                | sources::ArticleReadError::AiBodyReadDisabled(_)
+                | sources::ArticleReadError::DisallowedArticleHost,
+            ) => Err(application::ArticleFetchFailure::NotFound),
+        }
+    }
+}
+
 fn claude_ai(
     setup: AiSetup,
     clock: &Arc<platform_macos::SystemClock>,
     events: &Arc<application::EventBus>,
     repositories: &Arc<SqliteRepositories>,
 ) -> Option<McpAttachedAi<ProductClaude, ProductMcpHost>> {
+    let runs = RunMetadataBook::new();
     let registry = analysis_catalog(
         clock,
         CatalogStores {
             theses: Arc::clone(repositories),
             estimates: Arc::clone(repositories),
+            bodies: Arc::new(ProductArticleBodies::new(clock)),
+            runs: runs.clone(),
             events: Arc::clone(events),
         },
     )
@@ -525,13 +590,27 @@ fn claude_ai(
         base_dir: setup.mcp_base,
         bridge: setup.bridge.clone(),
     });
-    Some(McpAttachedAi::new(
-        Arc::new(ProductClaude {
-            provider: Arc::new(provider),
-            bridge: setup.bridge,
-        }),
-        Arc::new(host),
-    ))
+    Some(
+        McpAttachedAi::new(
+            Arc::new(ProductClaude {
+                provider: Arc::new(provider),
+                bridge: setup.bridge,
+            }),
+            Arc::new(host),
+        )
+        .with_runs(runs),
+    )
+}
+
+fn bundled_bridge() -> BridgeLocation {
+    let location = BridgeLocation::new();
+    if let Some(path) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(BRIDGE_FILE_NAME)))
+    {
+        let _first = location.set(path);
+    }
+    location
 }
 
 fn discover_ai_setup(identifier: &str, bridge: BridgeLocation) -> AiSetup {
@@ -1673,6 +1752,46 @@ mod collector_store_tests {
                 .expect("상태")
                 .expect("기록");
             assert_eq!(status.state(), SourceState::Healthy);
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
+    }
+
+    #[test]
+    fn app_runner_records_collection_time_so_news_tools_can_read_the_item() {
+        use application::{CollectedItemReads, CollectedKind};
+        let shared = SharedDatabase::new();
+        let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
+        let app = mock_app(&repositories);
+        let calls = Arc::new(RwLock::new(Vec::new()));
+        let runner =
+            AppFeedRunner::<tauri::test::MockRuntime, super::AppPortTypes, CountingFeed>::new(
+                app.handle().clone(),
+                repositories.as_ref().clone(),
+                one_article_feed(&calls),
+            );
+        let directory = std::path::PathBuf::from("../../../target/fin-d")
+            .join(format!("collector-times-{}", std::process::id()));
+        tauri::async_runtime::block_on(async {
+            let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+            src_tauri::database::prepare_directory(&path).expect("폴더");
+            let clock = platform_macos::SystemClock::new().expect("시계");
+            let database =
+                store_sqlite::Database::open(&path, &SecretValue::new(vec![83; 32]), &clock)
+                    .expect("열기");
+            assert!(shared.install(database).await.is_none());
+            let _collected = runner.collect(FeedCursor::Start).await.expect("수집");
+            let collected_at = broker_toss::TossTimestamp::try_from("2026-11-25T00:00:00Z")
+                .expect("clock")
+                .into_domain();
+            let items = repositories
+                .collected_since(CollectedKind::News, collected_at)
+                .await
+                .expect("조회");
+            assert_eq!(items.len(), 1_usize);
+            let item = items.first().expect("항목");
+            assert_eq!(item.collected_at, collected_at);
+            assert_eq!(item.published_at, PublicationTime::NotProvided);
             let _closed = shared.close().await;
         });
         std::fs::remove_dir_all(directory).expect("정리");

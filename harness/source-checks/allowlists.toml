@@ -4,8 +4,8 @@ reason = "typify가 토스 OpenAPI의 components.schemas에서 만든 생성 cra
 
 [[clock-environment]]
 path = "apps/desktop/src-tauri/src/main.rs"
-names = ["clock-env:var", "clock-env:var_os", "clock-env:vars", "clock-env:vars_os", "test-awareness:thread::current"]
-reason = "조립 지점의 환경 읽기. 벽시계 직접 읽기는 SystemClock 한 곳으로 제한 (U-01)"
+names = ["clock-env:var", "clock-env:var_os", "clock-env:vars", "clock-env:vars_os", "test-awareness:thread::current", "test-awareness:env::current_exe"]
+reason = "조립 지점의 환경 읽기. 벽시계 직접 읽기는 SystemClock 한 곳으로 제한 (U-01). 앱 실행 파일 옆 mcp-bridge 위치를 찾는다 (fin-d)"
 
 [[clock-environment]]
 path = "crates/xtask/src/main.rs"

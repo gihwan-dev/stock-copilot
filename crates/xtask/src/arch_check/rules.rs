@@ -534,8 +534,6 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     let reexport = sub_table(table, "reexport")?;
     only_keys(reexport, "source.reexport", &["crates"])?;
     let presence = presence_rules(table)?;
-    let identity_confirmation = identity_confirmation_rules(table)?;
-    let order_collector = order_collector_rules(table)?;
     let order = sub_table(table, "toss-order")?;
     only_keys(
         order,
@@ -574,8 +572,8 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
         host_needle: text(host, "needle")?,
         host_crates: names(host, "allowed-crates")?,
         host_files: texts(host, "allowed-files")?.into_iter().collect(),
-        identity_confirmation,
-        order_collector,
+        identity_confirmation: identity_confirmation_rules(table)?,
+        order_collector: order_collector_rules(table)?,
     })
 }
 

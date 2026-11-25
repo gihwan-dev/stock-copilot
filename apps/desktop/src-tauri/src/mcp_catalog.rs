@@ -1,11 +1,14 @@
+use crate::ai_runtime::RunMetadataBook;
+use crate::mcp_sources::{ArticleBodies, StoredArticles, StoredNews, StoredThesis};
 use application::{
-    AiRunId, ArticleFetchFailure, ArticleToolPort, BodyReadingSetting, Clock,
-    EstimateAssignmentRepository, EstimateRunContextSource, EstimateSubmissionRepository, EventBus,
-    MarketToolReads, NewsToolReads, PortfolioToolReads, ProfileSource, RetryDelay,
-    ScorecardObservationRepository, SystemFailure, SystemPort, SystemPortError, ThesisRepository,
-    ThesisToolPort, ToolCallHistory, WebResearchToolFailure, WebResearchToolPort,
+    AiRunId, Clock, EstimateAssignmentRepository, EstimateRunContextSource,
+    EstimateSubmissionRepository, EventBus, MarketToolReads, PortfolioToolReads, ProfileSource,
+    RetryDelay, ScorecardObservationRepository, SettingsRepository, SystemFailure, SystemPort,
+    SystemPortError, ThesisRepository, ToolCallHistory, WebResearchToolFailure,
+    WebResearchToolPort,
 };
-use domain::{InstrumentId, KnownMarket, Symbol};
+use application::{CollectedItemReads, NewsDataSettingsRepository, WatchlistRepository};
+use domain::{KnownMarket, Symbol};
 use mcp_server::{
     AnalysisCatalogPorts, EstimateToolPorts, ToolRegistry, ToolRegistryError,
     build_analysis_catalog, make_cursor_store,
@@ -121,23 +124,6 @@ impl MarketToolReads for UnconnectedToolData {
     }
 }
 
-impl NewsToolReads for UnconnectedToolData {
-    fn search_news(
-        &self,
-        _query: &application::CollectedItemQuery,
-    ) -> impl Future<Output = Result<Vec<application::NewsToolLine>, SystemPortError>> + Send {
-        fail()
-    }
-
-    fn disclosures(
-        &self,
-        _query: &application::CollectedItemQuery,
-    ) -> impl Future<Output = Result<Vec<application::DisclosureToolLine>, SystemPortError>> + Send
-    {
-        fail()
-    }
-}
-
 impl WebResearchToolPort for UnconnectedToolData {
     fn known_targets(
         &self,
@@ -156,66 +142,6 @@ impl WebResearchToolPort for UnconnectedToolData {
     }
 }
 
-impl ArticleToolPort for UnconnectedToolData {
-    fn locate(
-        &self,
-        _handle: &application::CollectedItemHandle,
-    ) -> impl Future<Output = Result<Option<application::ArticleLocation>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn body_reading(
-        &self,
-        _source: &domain::NewsSource,
-    ) -> impl Future<Output = Result<BodyReadingSetting, SystemPortError>> + Send {
-        ready(Ok(BodyReadingSetting::Disabled))
-    }
-
-    fn fetch_body(
-        &self,
-        _url: &domain::NormalizedUrl,
-    ) -> impl Future<Output = Result<application::ArticleBody, ArticleFetchFailure>> + Send {
-        ready(Err(ArticleFetchFailure::Unavailable(unconnected())))
-    }
-}
-
-impl ThesisToolPort for UnconnectedToolData {
-    fn resolve_target(
-        &self,
-        _run: &AiRunId,
-        _symbol: &Symbol,
-    ) -> impl Future<Output = Result<Option<InstrumentId>, SystemPortError>> + Send {
-        fail()
-    }
-
-    fn collected_evidence(
-        &self,
-        _run: &AiRunId,
-        _instrument: &InstrumentId,
-        _handle: &application::CollectedItemHandle,
-    ) -> impl Future<Output = Result<Option<domain::EvidenceRef>, SystemPortError>> + Send {
-        fail()
-    }
-
-    fn run_metadata(
-        &self,
-        _run: &AiRunId,
-    ) -> impl Future<Output = Result<application::ThesisRunMetadata, SystemPortError>> + Send {
-        fail()
-    }
-}
-
-impl ToolCallHistory for UnconnectedToolData {
-    fn calls_in_run(
-        &self,
-        _run: &AiRunId,
-    ) -> impl Future<Output = Result<Vec<application::ToolCallRecord>, SystemPortError>> + Send
-    {
-        fail()
-    }
-}
-
 impl EstimateRunContextSource for UnconnectedToolData {
     fn estimate_context(
         &self,
@@ -225,29 +151,34 @@ impl EstimateRunContextSource for UnconnectedToolData {
     }
 }
 
-impl ProfileSource for UnconnectedToolData {
+#[derive(Debug)]
+pub struct StoredProfile<S>(pub Arc<S>);
+
+impl<S: SettingsRepository> ProfileSource for StoredProfile<S> {
     fn profile(
         &self,
     ) -> impl Future<Output = Result<Option<domain::InvestorProfile>, SystemPortError>> + Send {
-        fail()
+        self.0.profile()
     }
 }
 
-pub struct CatalogStores<R, E> {
+pub struct CatalogStores<R, E, B> {
     pub theses: Arc<R>,
     pub estimates: Arc<E>,
+    pub bodies: Arc<B>,
+    pub runs: RunMetadataBook,
     pub events: Arc<EventBus>,
 }
 
-impl<R, E> std::fmt::Debug for CatalogStores<R, E> {
+impl<R, E, B> std::fmt::Debug for CatalogStores<R, E, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("CatalogStores")
     }
 }
 
-pub fn analysis_catalog<C, R, E>(
+pub fn analysis_catalog<C, R, E, B>(
     clock: &Arc<C>,
-    stores: CatalogStores<R, E>,
+    stores: CatalogStores<R, E, B>,
 ) -> Result<ToolRegistry, ToolRegistryError>
 where
     C: Clock + 'static,
@@ -255,25 +186,40 @@ where
     E: EstimateAssignmentRepository
         + EstimateSubmissionRepository
         + ScorecardObservationRepository
+        + ToolCallHistory
+        + SettingsRepository
+        + CollectedItemReads
+        + NewsDataSettingsRepository
+        + WatchlistRepository
         + 'static,
+    B: ArticleBodies + 'static,
 {
     let data = Arc::new(UnconnectedToolData);
     let cursors = make_cursor_store(Arc::clone(clock));
     let ports = AnalysisCatalogPorts {
         portfolio: Arc::clone(&data),
         market: Arc::clone(&data),
-        news: Arc::clone(&data),
+        news: Arc::new(StoredNews::new(
+            Arc::clone(&stores.estimates),
+            Arc::clone(clock),
+        )),
         research: Arc::clone(&data),
-        article: Arc::clone(&data),
-        thesis: Arc::clone(&data),
+        article: Arc::new(StoredArticles::new(
+            Arc::clone(&stores.estimates),
+            stores.bodies,
+        )),
+        thesis: Arc::new(StoredThesis::new(
+            Arc::clone(&stores.estimates),
+            stores.runs,
+        )),
         thesis_repository: stores.theses,
-        tool_history: Arc::clone(&data),
+        tool_history: Arc::clone(&stores.estimates),
         estimates: Arc::new(EstimateToolPorts {
             assignments: Arc::clone(&stores.estimates),
             submissions: Arc::clone(&stores.estimates),
-            history: Arc::clone(&data),
+            history: Arc::clone(&stores.estimates),
             context: Arc::clone(&data),
-            settings: Arc::clone(&data),
+            settings: Arc::new(StoredProfile(Arc::clone(&stores.estimates))),
             observations: stores.estimates,
             clock: Arc::clone(clock),
             events: stores.events,
