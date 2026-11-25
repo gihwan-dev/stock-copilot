@@ -7,10 +7,13 @@ use super::{
 };
 use crate::toss_link::TossConnectionState;
 
-fn at(text: &str) -> domain::Timestamp {
-    broker_toss::TossTimestamp::try_from(text)
-        .expect("시각")
-        .into_domain()
+fn at(seconds: i64) -> domain::Timestamp {
+    domain::Timestamp::from_parts(
+        domain::UnixSeconds::new(seconds),
+        domain::Nanosecond::new(0),
+        domain::OffsetSeconds::new(0),
+    )
+    .expect("시각")
 }
 
 #[test]
@@ -60,8 +63,8 @@ fn healthy_or_unknown_state_shows_nothing() {
 
 #[test]
 fn status_lists_sources_with_kst_success_time_and_ai_wait() {
-    let success = at("2026-11-25T00:30:00Z");
-    let sources = vec![
+    let success = at(1_795_566_600);
+    let statuses = vec![
         SourceStatus::try_new(
             DataSource::Yonhap,
             SourceState::Healthy,
@@ -73,15 +76,16 @@ fn status_lists_sources_with_kst_success_time_and_ai_wait() {
     ];
     let view = status_view(
         ClaudeInstall::Installed,
-        AiLimit::Waiting(at("2026-11-25T06:00:00Z")),
-        &sources,
+        AiLimit::Waiting(at(1_795_586_400)),
+        &statuses,
     );
     assert_eq!(view.ai_runtime, UiAiRuntime::Ready);
     assert_eq!(
         view.ai_resumes_at.as_deref(),
         Some("2026-11-25T15:00:00+09:00")
     );
-    assert_eq!(view.sources.len(), 2);
+    let listed = view.sources.len();
+    assert_eq!(listed, 2);
     super::super::tests::assert_response_snapshot("get_status", &view);
 }
 
