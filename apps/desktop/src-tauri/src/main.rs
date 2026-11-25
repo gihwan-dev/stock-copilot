@@ -678,6 +678,7 @@ type AppPortTypes = ProductPorts<
     ProductQueue,
     ProductAiJobs,
     ProductBroker,
+    store_sqlite::SqlitePortfolioStore,
 >;
 
 const ALLOWED_BUILTIN_PLUGINS: [&str; 4] = [
@@ -3314,8 +3315,16 @@ mod holdings_job_assembly_tests {
     }
 
     #[derive(Debug)]
-    struct HoldingJobPorts;
-    impl PortTypes for HoldingJobPorts {
+    struct GenericJobPorts<Holdings, Store>(std::marker::PhantomData<fn() -> (Holdings, Store)>);
+    type HoldingJobPorts = GenericJobPorts<SqlitePortfolioStore, SqliteRepositories>;
+    impl<Holdings, Store> PortTypes for GenericJobPorts<Holdings, Store>
+    where
+        Holdings: PortfolioRepository + 'static,
+        Store: application::MarketDataRepository
+            + application::NewsRepository
+            + ValuationRepository
+            + 'static,
+    {
         type BrokerRead = testkit_ports::scripted::ScriptedBrokerRead;
         type MarketInfo = testkit_ports::scripted::ScriptedMarketInfo;
         type MacroSeries = Unavailable;
@@ -3327,15 +3336,15 @@ mod holdings_job_assembly_tests {
         type ChatQueuePort = testkit_ports::chat_fakes::ScriptedChatQueue;
         type WarmChatRuntime = testkit_ports::chat_fakes::ScriptedWarmChatRuntime;
         type AiJobQueue = AdmittingQueue;
-        type PortfolioRepository = SqlitePortfolioStore;
+        type PortfolioRepository = Holdings;
         type TransactionRepository = Unavailable;
-        type MarketDataRepository = SqliteRepositories;
-        type NewsRepository = SqliteRepositories;
+        type MarketDataRepository = Store;
+        type NewsRepository = Store;
         type ThesisRepository = Unavailable;
         type EstimateRepository = Unavailable;
         type SignalRepository = Unavailable;
         type ProposalRepository = Unavailable;
-        type ValuationRepository = SqliteRepositories;
+        type ValuationRepository = Store;
         type SettingsRepository = testkit_ports::memory::MemorySettingsRepository;
         type AuditLog = Unavailable;
         type SecretStore = testkit_ports::system_fakes::MemorySecretStore;
