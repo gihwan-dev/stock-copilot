@@ -49,6 +49,7 @@ export default {
             "DirectionBadge",
             "DataText",
             "TimestampText",
+            "ChartNumber",
           ],
           "차트",
           ["LineChart", "AreaChart", "DonutChart", "Treemap", "CandleChart"],

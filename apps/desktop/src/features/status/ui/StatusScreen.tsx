@@ -5,7 +5,6 @@ import {
   EmptyState,
   Inline,
   Page,
-  Section,
   Skeleton,
   Stack,
   Text,
@@ -16,50 +15,54 @@ import { statusText } from "../messages";
 import { useStatus } from "../model/status";
 import { RecordsCard, SourcesCard, UsageCard } from "./StatusTables";
 
-const RuntimeCard = (props: { readonly view: StatusView }): ReactElement => (
-  <Card title={statusText("runtimeTitle", "ko")}>
-    {props.view.aiRuntime.kind === "ready" ? (
-      <Text variant="body-sm">{statusText("runtimeReady", "ko")}</Text>
-    ) : (
-      <Inline gap="space-2" align="center" wrap="wrap">
-        <Text variant="body-sm">{statusText("runtimeUnavailable", "ko")}</Text>
-        <DataText value={props.view.aiRuntime.reason} variant="body-sm" />
-      </Inline>
-    )}
-  </Card>
-);
+const RuntimeLine = (props: { readonly view: StatusView }): ReactElement =>
+  props.view.aiRuntime.kind === "ready" ? (
+    <Text variant="body-sm">{statusText("runtimeReady", "ko")}</Text>
+  ) : (
+    <Inline gap="space-2" align="center" wrap="wrap">
+      <Text variant="body-sm">{statusText("runtimeUnavailable", "ko")}</Text>
+      <DataText value={props.view.aiRuntime.reason} variant="body-sm" />
+    </Inline>
+  );
 
-const LimitCard = (props: { readonly view: StatusView }): ReactElement => (
-  <Card title={statusText("limitTitle", "ko")}>
-    {props.view.aiLimit.kind === "available" ? (
-      <Text variant="body-sm">{statusText("limitAvailable", "ko")}</Text>
-    ) : (
-      <Inline gap="space-2" align="center" wrap="wrap">
-        <Text variant="body-sm">{statusText("limitWaiting", "ko")}</Text>
-        <TimestampText value={props.view.aiLimit.resumesAt} variant="body-sm" />
-      </Inline>
-    )}
+const LimitLine = (props: { readonly view: StatusView }): ReactElement =>
+  props.view.aiLimit.kind === "available" ? (
+    <Text variant="body-sm">{statusText("limitAvailable", "ko")}</Text>
+  ) : (
+    <Inline gap="space-2" align="center" wrap="wrap">
+      <Text variant="body-sm">{statusText("limitWaiting", "ko")}</Text>
+      <TimestampText value={props.view.aiLimit.resumesAt} variant="body-sm" />
+    </Inline>
+  );
+
+const AiCard = (props: { readonly view: StatusView }): ReactElement => (
+  <Card title={statusText("aiSection", "ko")}>
+    <Stack gap="space-3">
+      <Stack gap="space-1">
+        <Text variant="caption" tone="ink-muted">
+          {statusText("runtimeTitle", "ko")}
+        </Text>
+        <RuntimeLine view={props.view} />
+      </Stack>
+      <Stack gap="space-1">
+        <Text variant="caption" tone="ink-muted">
+          {statusText("limitTitle", "ko")}
+        </Text>
+        <LimitLine view={props.view} />
+      </Stack>
+    </Stack>
   </Card>
 );
 
 const StatusReady = (props: { readonly view: StatusView }): ReactElement => (
-  <Stack gap="space-6">
+  <Stack gap="space-4">
     <Text variant="body-sm" tone="ink-muted">
       {statusText("intro", "ko")}
     </Text>
-    <Section title={statusText("aiSection", "ko")}>
-      <Stack gap="space-4">
-        <RuntimeCard view={props.view} />
-        <LimitCard view={props.view} />
-        <UsageCard usage={props.view.aiUsage} />
-      </Stack>
-    </Section>
-    <Section title={statusText("sourcesSection", "ko")}>
-      <SourcesCard sources={props.view.sources} />
-    </Section>
-    <Section title={statusText("recordsSection", "ko")}>
-      <RecordsCard records={props.view.records} />
-    </Section>
+    <AiCard view={props.view} />
+    <UsageCard usage={props.view.aiUsage} />
+    <SourcesCard sources={props.view.sources} />
+    <RecordsCard records={props.view.records} />
   </Stack>
 );
 
