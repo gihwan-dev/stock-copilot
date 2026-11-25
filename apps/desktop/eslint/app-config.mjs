@@ -88,6 +88,7 @@ const UNDISABLEABLE_RULES = [
   "@typescript-eslint/only-throw-error",
   "functional/no-try-statements",
   "functional/no-expression-statements",
+  "functional/immutable-data",
   "@eslint-community/eslint-comments/no-use",
   "@eslint-community/eslint-comments/require-description",
   "@eslint-community/eslint-comments/no-unlimited-disable",
@@ -458,6 +459,22 @@ export const appConfig = (
         "guard/no-sync-external-store",
         "functional/no-expression-statements",
       ]),
+    }),
+    ...whenListed(PLATFORM_FILE_ALLOWLIST, {
+      rules: {
+        "functional/immutable-data": [
+          "error",
+          {
+            ignoreClasses: false,
+            ignoreImmediateMutation: false,
+            ignoreAccessorPattern: [
+              "ctx.fillStyle",
+              "ctx.strokeStyle",
+              "ctx.lineWidth",
+            ],
+          },
+        ],
+      },
     }),
     ...whenListed(TYPE_PREDICATE_ALLOWLIST, {
       rules: off(["guard/no-type-predicate"]),

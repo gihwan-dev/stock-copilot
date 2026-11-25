@@ -149,12 +149,9 @@ const paintScene = (
   const width = canvas.width > 0 ? canvas.width : 300;
   const height = canvas.height > 0 ? canvas.height : 150;
   ctx.clearRect(0, 0, width, height);
-  // eslint-disable-next-line functional/immutable-data -- Canvas 2D 컨텍스트는 속성 대입으로 배경색을 지정한다
   ctx.fillStyle = palette.surface;
   ctx.fillRect(0, 0, width, height);
-  // eslint-disable-next-line functional/immutable-data -- Canvas 2D 컨텍스트는 속성 대입으로 격자선 색을 지정한다
   ctx.strokeStyle = palette.grid;
-  // eslint-disable-next-line functional/immutable-data -- Canvas 2D 컨텍스트는 속성 대입으로 격자선 굵기를 지정한다
   ctx.lineWidth = 1;
   [0.2, 0.5, 0.8].forEach((ratio): void => {
     const y = Math.round(height * ratio) + 0.5;
@@ -174,11 +171,8 @@ const paintScene = (
       1.5,
       ((bar.bodyBottom - bar.bodyTop) / 60) * height,
     );
-    // eslint-disable-next-line functional/immutable-data -- Canvas 2D 컨텍스트는 속성 대입으로 캔들 채우기 색을 지정한다
     ctx.fillStyle = tone;
-    // eslint-disable-next-line functional/immutable-data -- Canvas 2D 컨텍스트는 속성 대입으로 심지 선 색을 지정한다
     ctx.strokeStyle = tone;
-    // eslint-disable-next-line functional/immutable-data -- Canvas 2D 컨텍스트는 속성 대입으로 심지 선 굵기를 지정한다
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(cx, wickTop);
@@ -186,7 +180,6 @@ const paintScene = (
     ctx.stroke();
     ctx.fillRect(cx - barWidth / 2, bodyTop, barWidth, bodyHeight);
     if (scene.activeId === bar.id) {
-      // eslint-disable-next-line functional/immutable-data -- Canvas 2D 컨텍스트는 속성 대입으로 강조선 색을 지정한다
       ctx.strokeStyle = palette.focus;
       ctx.beginPath();
       ctx.moveTo(cx, 0);

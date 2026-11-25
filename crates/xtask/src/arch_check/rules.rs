@@ -113,6 +113,14 @@ pub(crate) struct SourceRules {
     pub(crate) host_crates: BTreeSet<CrateName>,
     pub(crate) host_files: BTreeSet<String>,
     pub(crate) identity_confirmation: IdentityConfirmationRules,
+    pub(crate) order_collector: OrderCollectorRules,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct OrderCollectorRules {
+    pub(crate) collector_types: BTreeSet<String>,
+    pub(crate) allowed_crates: BTreeSet<CrateName>,
+    pub(crate) allowed_files: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -487,6 +495,27 @@ fn identity_confirmation_rules(table: &Table) -> Result<IdentityConfirmationRule
     })
 }
 
+fn order_collector_rules(table: &Table) -> Result<OrderCollectorRules, CheckFailure> {
+    let section = sub_table(table, "order-collector")?;
+    only_keys(
+        section,
+        "source.order-collector",
+        &["collector-types", "allowed-crates", "allowed-files"],
+    )?;
+    let collector_types: BTreeSet<String> =
+        texts(section, "collector-types")?.into_iter().collect();
+    if collector_types.is_empty() {
+        return Err(problem(String::from(
+            "source.order-collector: collector-types가 비어 있다",
+        )));
+    }
+    Ok(OrderCollectorRules {
+        collector_types,
+        allowed_crates: names(section, "allowed-crates")?,
+        allowed_files: texts(section, "allowed-files")?.into_iter().collect(),
+    })
+}
+
 fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     only_keys(
         table,
@@ -496,6 +525,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
             "schema-surface",
             "user-presence",
             "identity-confirmation",
+            "order-collector",
             "toss-order",
             "http-write",
             "process",
@@ -507,6 +537,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     only_keys(reexport, "source.reexport", &["crates"])?;
     let presence = presence_rules(table)?;
     let identity_confirmation = identity_confirmation_rules(table)?;
+    let order_collector = order_collector_rules(table)?;
     let order = sub_table(table, "toss-order")?;
     only_keys(
         order,
@@ -546,6 +577,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
         host_crates: names(host, "allowed-crates")?,
         host_files: texts(host, "allowed-files")?.into_iter().collect(),
         identity_confirmation,
+        order_collector,
     })
 }
 

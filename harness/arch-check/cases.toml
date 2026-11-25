@@ -874,6 +874,33 @@ findings = [
 ]
 
 [[case]]
+name = "order-collector-outside-allowed-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "crates/application/src/synthesized.rs" },
+    { rule = "order-collector-start", subject = "crates/adapters/broker-toss-trade/src/lib.rs" },
+    { rule = "order-collector-start", subject = "crates/application/src/lib.rs" },
+    { rule = "order-collector-start", subject = "crates/application/src/synthesized.rs" },
+    { rule = "order-collector-start", subject = "crates/domain/src/sneak.rs" },
+    { rule = "order-collector-start", subject = "crates/testkit-ports/src/lib.rs" },
+    { rule = "order-collector-start", subject = "crates/testkit-ports/tests/new_fixture.rs" },
+]
+
+[[case]]
+name = "pastey-direct-dependency-fail"
+findings = [
+    { rule = "external-location", subject = "mcp-server => pastey" },
+    { rule = "external-location", subject = "store-sqlite => pastey" },
+]
+
+[[case]]
+name = "identity-confirmation-rmcp-paste-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "crates/mcp-server/src/aliased_rmcp.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/mcp-server/src/direct_rmcp.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/mcp-server/src/glob_rmcp.rs" },
+]
+
+[[case]]
 name = "identity-confirmation-reexported-paste-fail"
 findings = [
     { rule = "identity-confirmation-issuance", subject = "apps/desktop/e2e-app/src/lib.rs" },
