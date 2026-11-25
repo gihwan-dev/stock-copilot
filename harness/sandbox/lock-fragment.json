@@ -35,6 +35,7 @@
         "./apps/desktop/src/shared/ds/theme.css",
         "./apps/desktop/src/shared/ds/tokens.css",
         "./apps/desktop/src/shared/ds/tokens.ts",
+        "./apps/desktop/src-tauri/Entitlements.plist",
         "./apps/desktop/src-tauri/build.rs",
         "./apps/desktop/src-tauri/capabilities",
         "./apps/desktop/src-tauri/icons",

@@ -157,8 +157,12 @@ fn product_secrets() -> ProductSecrets {
     } else {
         secrets_keychain::BuildKind::Release
     };
+    let profile = match build {
+        secrets_keychain::BuildKind::Development => secrets_keychain::KeychainProfile::development(),
+        secrets_keychain::BuildKind::Release => secrets_keychain::KeychainProfile::product_login(),
+    };
     secrets_keychain::KeychainSecretStore::new(
-        secrets_keychain::KeychainProfile::for_build(build),
+        profile,
         secrets_keychain::SystemKeychain,
     )
 }

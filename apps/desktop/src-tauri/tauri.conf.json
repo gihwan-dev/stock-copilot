@@ -30,10 +30,7 @@
     "macOS": {
       "minimumSystemVersion": "13.0",
       "hardenedRuntime": true,
-      "entitlements": "Entitlements.plist",
-      "files": {
-        "embedded.provisionprofile": "signing/embedded.provisionprofile"
-      }
+      "entitlements": "Entitlements.plist"
     }
   }
 }
