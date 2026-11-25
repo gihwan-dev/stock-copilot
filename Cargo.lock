@@ -3774,6 +3774,7 @@ dependencies = [
 name = "src-tauri"
 version = "0.1.0"
 dependencies = [
+ "ai-claude-code",
  "application",
  "approval-command",
  "broker-toss",
@@ -3790,6 +3791,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-specta",
+ "testkit",
  "testkit-ports",
  "tokio",
  "trade-fakes",

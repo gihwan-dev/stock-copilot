@@ -179,8 +179,14 @@ fn host(
         registry: Arc::new(ToolRegistry::new()),
         ledger: ToolLedgerMode::Configured(Arc::new(MemoryToolCallLedger::recording())),
         base_dir: base.join("m"),
-        bridge: ExecutablePath::try_new(BRIDGE).expect("브리지"),
+        bridge: bridge_at(BRIDGE),
     })
+}
+
+fn bridge_at(path: &str) -> super::BridgeLocation {
+    let location = super::BridgeLocation::new();
+    assert_eq!(location.set(PathBuf::from(path)), Ok(()));
+    location
 }
 
 fn matching_inspector() -> PeerInspectorMode<ScriptedPeerProcessInspector> {
@@ -478,4 +484,72 @@ fn host_reports_the_registry_it_serves() {
         Some(InformationError::Unavailable(ResetTime::NotProvided)),
         "런타임 밖에서는 서버를 띄우지 않는다"
     );
+}
+
+#[test]
+fn missing_cli_makes_every_ai_call_unavailable_without_touching_the_runner() {
+    tauri::async_runtime::block_on(async {
+        let ai = super::AiAvailability::<RecordingAi>::Missing;
+        let unavailable = Some(InformationError::Unavailable(ResetTime::NotProvided));
+        assert_eq!(ai.run(analysis("chat-missing")).await.err(), unavailable);
+        assert_eq!(
+            ai.resume(
+                collection("collect-missing"),
+                ChatHistory::new(Vec::new()),
+                UntrustedText::try_new("x").expect("text"),
+            )
+            .await
+            .err(),
+            unavailable
+        );
+        assert_eq!(ai.usage().await.err(), unavailable);
+        assert_eq!(
+            ai.verify_isolation(RunKind::Analysis).await.err(),
+            unavailable
+        );
+        let (calls, call_rx) = mpsc::channel();
+        let (links, _link_rx) = mpsc::channel();
+        let ready = super::AiAvailability::Ready(RecordingAi { calls, links });
+        let _stream = ready.run(collection("collect-ready")).await.expect("수집");
+        assert_eq!(
+            call_rx.try_recv().ok(),
+            Some(Call::Run(RunKind::Collection))
+        );
+    });
+}
+
+#[test]
+fn analysis_runs_stay_closed_until_the_bridge_location_is_known() {
+    tauri::async_runtime::block_on(async {
+        let base = TempBase::new();
+        let (calls, call_rx) = mpsc::channel();
+        let (links, _link_rx) = mpsc::channel();
+        let location = super::BridgeLocation::new();
+        let ai = McpAttachedAi::new(
+            Arc::new(RecordingAi { calls, links }),
+            Arc::new(McpServerHost::new(McpServerHostParts {
+                clock: clock(),
+                inspector: matching_inspector(),
+                config: McpServerConfig::default_config().expect("설정"),
+                registry: Arc::new(ToolRegistry::new()),
+                ledger: ToolLedgerMode::Configured(Arc::new(MemoryToolCallLedger::recording())),
+                base_dir: base.0.join("m"),
+                bridge: location.clone(),
+            })),
+        );
+        assert_eq!(
+            ai.run(analysis("chat-no-bridge")).await.err(),
+            Some(InformationError::Unavailable(ResetTime::NotProvided))
+        );
+        assert!(call_rx.try_recv().is_err(), "CLI를 띄우지 않는다");
+        assert!(!base.0.join("m").exists());
+        assert_eq!(location.set(PathBuf::from(BRIDGE)), Ok(()));
+        assert_eq!(
+            location.set(PathBuf::from("/tmp/other")),
+            Err(PathBuf::from("/tmp/other")),
+            "한 번 정한 위치는 바꾸지 않는다"
+        );
+        let _stream = ai.run(analysis("chat-bridge")).await.expect("실행");
+        assert_eq!(call_rx.try_recv().ok(), Some(Call::RunWithMcp));
+    });
 }

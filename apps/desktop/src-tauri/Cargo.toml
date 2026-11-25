@@ -14,6 +14,7 @@ store-sqlite = { path = "../../../crates/adapters/store-sqlite" }
 broker-toss = { path = "../../../crates/adapters/broker-toss" }
 scheduler = { path = "../../../crates/scheduler" }
 mcp-server = { path = "../../../crates/mcp-server" }
+ai-claude-code = { path = "../../../crates/adapters/ai-claude-code" }
 sources = { path = "../../../crates/adapters/sources" }
 tauri = { workspace = true }
 tauri-specta = { workspace = true }
@@ -31,5 +32,6 @@ workspace = true
 
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
+testkit = { path = "../../../crates/testkit" }
 testkit-ports = { path = "../../../crates/testkit-ports" }
 trade-fakes = { path = "../../../crates/trade-fakes" }

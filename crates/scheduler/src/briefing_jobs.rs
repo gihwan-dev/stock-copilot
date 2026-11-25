@@ -125,7 +125,7 @@ pub struct RunBriefingRunner<A, R, X, C> {
     repository: Arc<R>,
     context: Arc<X>,
     clock: Arc<C>,
-    events: EventBus,
+    events: Arc<EventBus>,
 }
 
 impl<A, R, X, C> RunBriefingRunner<A, R, X, C>
@@ -136,12 +136,23 @@ where
     C: Clock,
 {
     #[must_use]
-    pub const fn new(
+    pub fn new(
         ai: Arc<A>,
         repository: Arc<R>,
         context: Arc<X>,
         clock: Arc<C>,
         events: EventBus,
+    ) -> Self {
+        Self::with_shared_events(ai, repository, context, clock, Arc::new(events))
+    }
+
+    #[must_use]
+    pub const fn with_shared_events(
+        ai: Arc<A>,
+        repository: Arc<R>,
+        context: Arc<X>,
+        clock: Arc<C>,
+        events: Arc<EventBus>,
     ) -> Self {
         Self {
             ai,

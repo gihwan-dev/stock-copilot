@@ -1,11 +1,13 @@
 use crate::platform::background::{BackgroundRuntime, IdleCollectorWorker};
+use crate::platform::briefing_context::HoldingsBriefingContext;
 use crate::platform::scheduled_ports::{AppSpecWatch, AppStoredJobs};
 use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
 use domain::Timestamp;
+use scheduler::{BriefingJob, RunBriefingRunner};
 use scheduler::{
-    DEFAULT_TICK_INTERVAL_SECONDS, DisabledAiJobQueue, JobError, JobRegistry, NoMarketCalendar,
-    PortfolioSyncJob, PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
+    DEFAULT_TICK_INTERVAL_SECONDS, JobError, JobRegistry, NoMarketCalendar, PortfolioSyncJob,
+    PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
 };
 use scheduler::{
     DailyBackupJob, IntradayCompactionJob, RegistryError, TossSpecWatchJob, TransactionsSyncJob,
@@ -98,6 +100,11 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
         return SchedulingStart::InvalidSchedule;
     }
     if let Some(repositories) = app.try_state::<Arc<SqliteRepositories>>()
+        && register_briefing_jobs(&mut registry, &ports, repositories.as_ref()).is_err()
+    {
+        return SchedulingStart::InvalidSchedule;
+    }
+    if let Some(repositories) = app.try_state::<Arc<SqliteRepositories>>()
         && register_stored_jobs::<R, P>(
             &mut registry,
             app.handle(),
@@ -111,7 +118,7 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     }
     let Ok(scheduler) = Scheduler::new(
         Arc::clone(&ports.clock),
-        Arc::new(DisabledAiJobQueue),
+        Arc::clone(&ports.ai_jobs),
         registry,
     ) else {
         return SchedulingStart::InvalidSchedule;
@@ -124,6 +131,27 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     );
     app.manage(Arc::new(runtime));
     SchedulingStart::Started
+}
+
+pub fn register_briefing_jobs<P: PortTypes>(
+    registry: &mut JobRegistry,
+    ports: &Ports<P>,
+    repositories: &SqliteRepositories,
+) -> Result<(), RegistryError> {
+    let runner = Arc::new(RunBriefingRunner::with_shared_events(
+        Arc::clone(&ports.ai_provider),
+        Arc::new(repositories.clone()),
+        Arc::new(HoldingsBriefingContext::new(
+            Arc::clone(&ports.portfolios),
+            ports.saved_accounts.clone(),
+        )),
+        Arc::clone(&ports.clock),
+        Arc::clone(&ports.events),
+    ));
+    registry.register(BriefingJob::morning(Arc::clone(&runner)))?;
+    registry.register(BriefingJob::closing_review(Arc::clone(&runner)))?;
+    registry.register(BriefingJob::pre_us_market(runner))?;
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
