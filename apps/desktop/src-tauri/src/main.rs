@@ -2114,4 +2114,122 @@ mod briefing_assembly_tests {
             | JobRunOutcome::Failed(_) => false,
         }
     }
+
+    fn settings_control(
+        app: &tauri::App<tauri::test::MockRuntime>,
+        clock: &Arc<testkit_ports::SteppedClock>,
+        store: &Arc<SqliteRepositories>,
+    ) -> src_tauri::platform::job_settings::SettingsControl<
+        testkit_ports::SteppedClock,
+        AdmittingQueue,
+        SqliteRepositories,
+    > {
+        use src_tauri::platform::job_settings::{AppJobSchedules, SettingsControl};
+        let scheduler = Arc::new(
+            Scheduler::new(
+                Arc::clone(clock),
+                Arc::new(AdmittingQueue),
+                registry(
+                    app,
+                    store.as_ref(),
+                    Arc::new(scheduler::IntradayWatchInbox::new()),
+                ),
+            )
+            .expect("일정"),
+        );
+        SettingsControl::new(
+            scheduler::ScheduleSettings::new(
+                scheduler,
+                Arc::new(AppJobSchedules::new(Arc::clone(store))),
+                application::EventBusBuilder::default().build(),
+            ),
+            Arc::clone(store),
+        )
+    }
+
+    async fn install_database(
+        shared: &SharedDatabase,
+        directory: &std::path::Path,
+        clock: &testkit_ports::SteppedClock,
+    ) {
+        let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+        src_tauri::database::prepare_directory(&path).expect("폴더");
+        let database = store_sqlite::Database::open(&path, &SecretValue::new(vec![83; 32]), clock)
+            .expect("열기");
+        assert!(shared.install(database).await.is_none());
+    }
+
+    async fn record_one_skip(store: &Arc<SqliteRepositories>) {
+        use scheduler::JobRecordSink;
+        use src_tauri::platform::job_settings::job_record_queue;
+        let writer = {
+            let (sink, writer) = job_record_queue(Arc::clone(store));
+            sink.record(&scheduler::JobExecutionRecord {
+                id: ScheduledJobId::MorningBriefing,
+                scheduled_for: utc("2026-11-24T22:45:00Z"),
+                evaluated_at: utc("2026-11-24T22:45:01Z"),
+                outcome: JobRunOutcome::SkippedMissedWindow,
+            });
+            writer
+        };
+        writer.await.expect("기록 완료");
+    }
+
+    #[test]
+    fn saved_schedule_change_is_restored_after_restart_and_job_runs_are_persisted() {
+        use scheduler::{JobEnablement, JobScheduleChange, KstTimeOfDay};
+        use src_tauri::platform::job_settings::ScheduleControl;
+        let provider = Arc::new(ScriptedAiProvider::default());
+        let clock = Arc::new(testkit_ports::SteppedClock::new(utc(
+            "2026-11-24T20:00:00Z",
+        )));
+        let shared = SharedDatabase::new();
+        let store = Arc::new(SqliteRepositories::new(shared.clone()));
+        let app = mock_app(
+            &provider,
+            &clock,
+            application::EventBusBuilder::default().build(),
+        );
+        let directory = std::path::PathBuf::from("../../../target/fin-e")
+            .join(format!("job-settings-{}", std::process::id()));
+        tauri::async_runtime::block_on(async {
+            install_database(&shared, &directory, clock.as_ref()).await;
+            let first = settings_control(&app, &clock, &store);
+            let changed = first
+                .change(JobScheduleChange {
+                    id: ScheduledJobId::MorningBriefing,
+                    enabled: JobEnablement::Disabled,
+                    time: Some(KstTimeOfDay::try_new(7, 45).expect("시각")),
+                })
+                .await
+                .expect("변경");
+            assert_eq!(changed.config.enabled, JobEnablement::Disabled);
+            let restarted = settings_control(&app, &clock, &store);
+            let report = restarted.restore().await.expect("복원");
+            assert_eq!(report.applied, vec![ScheduledJobId::MorningBriefing]);
+            let morning = restarted
+                .configurable_jobs()
+                .await
+                .into_iter()
+                .find(|job| job.id == ScheduledJobId::MorningBriefing)
+                .expect("아침 브리핑");
+            assert_eq!(morning.config.enabled, JobEnablement::Disabled);
+            assert_eq!(
+                morning.config.schedule,
+                scheduler::ScheduleRule::DailyKst(KstTimeOfDay::try_new(7, 45).expect("시각"))
+            );
+            record_one_skip(&store).await;
+            let runs = restarted
+                .recent_runs(ScheduledJobId::MorningBriefing)
+                .await
+                .expect("기록 조회");
+            assert_eq!(runs.len(), 1);
+            assert_eq!(
+                runs[0].result,
+                application::JobRunResult::SkippedMissedWindow
+            );
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
+    }
 }

@@ -848,3 +848,41 @@ impl application::WatchlistRepository for SqliteRepositories {
         .await
     }
 }
+
+impl application::JobScheduleStore for SqliteRepositories {
+    async fn save_schedule(
+        &self,
+        schedule: &application::SavedJobSchedule,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        crate::JobScheduleSqlStore::new(database)
+            .save_schedule(schedule)
+            .await
+    }
+    async fn schedules(&self) -> Result<Vec<application::SavedJobSchedule>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::JobScheduleStore::schedules(&crate::JobScheduleSqlStore::new(database)).await
+    }
+    async fn append_run(
+        &self,
+        entry: &application::JobRunEntry,
+    ) -> Result<WriteCompleted, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        crate::JobScheduleSqlStore::new(database)
+            .append_run(entry)
+            .await
+    }
+    async fn recent_runs(
+        &self,
+        job: &application::JobCode,
+    ) -> Result<Vec<application::JobRunEntry>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        crate::JobScheduleSqlStore::new(database)
+            .recent_runs(job)
+            .await
+    }
+}

@@ -40,7 +40,7 @@ pub struct ScheduleRestoreReport {
 pub struct ScheduleSettings<C: Clock, Q: AiJobQueue, R> {
     scheduler: Arc<Scheduler<C, Q>>,
     repository: Arc<R>,
-    events: EventBus,
+    events: Arc<EventBus>,
 }
 
 const fn adjusted_rule(
@@ -66,10 +66,15 @@ const fn adjusted_rule(
 
 impl<C: Clock, Q: AiJobQueue, R: JobScheduleSettingsRepository> ScheduleSettings<C, Q, R> {
     #[must_use]
-    pub const fn new(
+    pub fn new(scheduler: Arc<Scheduler<C, Q>>, repository: Arc<R>, events: EventBus) -> Self {
+        Self::with_shared_events(scheduler, repository, Arc::new(events))
+    }
+
+    #[must_use]
+    pub const fn with_shared_events(
         scheduler: Arc<Scheduler<C, Q>>,
         repository: Arc<R>,
-        events: EventBus,
+        events: Arc<EventBus>,
     ) -> Self {
         Self {
             scheduler,

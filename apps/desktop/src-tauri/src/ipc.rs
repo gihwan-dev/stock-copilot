@@ -9,6 +9,7 @@ pub mod event_bridge;
 pub mod open_external;
 pub mod order_approval;
 pub mod registry;
+pub mod schedule;
 pub mod settings;
 pub mod state;
 

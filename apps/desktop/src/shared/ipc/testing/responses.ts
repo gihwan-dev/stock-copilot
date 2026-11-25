@@ -50,6 +50,26 @@ export const responses = {
     ],
     session_id: "session-ipc-1",
   },
+  getJobSchedules: {
+    jobs: [
+      {
+        enabled: "on",
+        job: "morning-briefing",
+        last_run: { at: "2026-11-25T08:20:05+09:00", outcome: "succeeded" },
+        next_run: "2026-11-26T08:20:00+09:00",
+        time: { hour: 8, minute: 20 },
+        time_adjustment: "adjustable",
+      },
+      {
+        enabled: "off",
+        job: "pre-us-market-check",
+        last_run: null,
+        next_run: null,
+        time: null,
+        time_adjustment: "not-adjustable",
+      },
+    ],
+  },
   getSettings: {
     account_count: 0,
     ai_budget_percent: "70",
@@ -93,6 +113,14 @@ export const responses = {
     session_id: "session-ipc-1",
     status: "Completed",
     turn_id: "turn-1",
+  },
+  setJobSchedule: {
+    enabled: "on",
+    job: "morning-briefing",
+    last_run: null,
+    next_run: "2026-11-26T07:45:00+09:00",
+    time: { hour: 7, minute: 45 },
+    time_adjustment: "adjustable",
   },
   setOrderPermission: { kind: "denied", order_enabled: "off" },
 } as const;

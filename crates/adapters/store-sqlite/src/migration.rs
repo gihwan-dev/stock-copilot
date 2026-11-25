@@ -73,6 +73,7 @@ pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
         "0021_information_times.sql",
         crate::sql::information::MIGRATE_0021,
     ),
+    ("0022_scheduled_jobs.sql", crate::sql::jobs::CREATE),
 ];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {

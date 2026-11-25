@@ -1,7 +1,7 @@
 use tauri::Runtime;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
-use super::{app_version, briefing, chat, open_external, order_approval, settings};
+use super::{app_version, briefing, chat, open_external, order_approval, schedule, settings};
 
 #[must_use]
 pub fn specta_builder<R: Runtime>() -> Builder<R> {
@@ -19,7 +19,9 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         chat::cancel_chat_turn::<tauri::Wry>,
         open_external::open_external::<tauri::Wry>,
         order_approval::request_order_approval::<tauri::Wry>,
-        briefing::get_briefings::<tauri::Wry>
+        briefing::get_briefings::<tauri::Wry>,
+        schedule::get_job_schedules::<tauri::Wry>,
+        schedule::set_job_schedule::<tauri::Wry>
     ];
     Builder::<R>::new()
         .commands(commands)

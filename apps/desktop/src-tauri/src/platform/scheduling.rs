@@ -1,6 +1,9 @@
 use crate::platform::background::{BackgroundRuntime, CollectorWorker, IdleCollectorWorker};
 use crate::platform::collector::{CollectorFeeds, app_collector};
 use crate::platform::intraday::IntradayWatchSlot;
+use crate::platform::job_settings::{
+    AppJobSchedules, ScheduleIpcState, SettingsControl, job_record_queue,
+};
 use crate::platform::scheduled_ports::{AppSpecWatch, AppStoredJobs};
 use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
@@ -14,6 +17,7 @@ use scheduler::{
     PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
 };
 use scheduler::{IntradayWatchInbox, IntradayWatchJob, IntradayWatchSubscriber};
+use scheduler::{ScheduleSettings, SchedulerOptions};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
@@ -115,26 +119,86 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     {
         return SchedulingStart::InvalidSchedule;
     }
-    let clock: Arc<dyn application::Clock> = Arc::<P::Clock>::clone(&ports.clock);
-    let Ok(scheduler) = Scheduler::new(
-        Arc::clone(&ports.clock),
-        Arc::clone(&ports.ai_jobs),
-        registry,
-    ) else {
+    let stored = app
+        .try_state::<Arc<SqliteRepositories>>()
+        .map(|state| state.as_ref().clone());
+    let Ok(built) = build_scheduler(&ports, registry, stored.as_ref()) else {
         return SchedulingStart::InvalidSchedule;
     };
+    let scheduler = Arc::new(built);
     bridge.bind(scheduler.event_subscriber().with_order_sync(demand));
-    if let Some(slot) = app.try_state::<Arc<IntradayWatchSlot>>() {
-        slot.bind(IntradayWatchSubscriber::new(intraday, scheduler.triggers()));
-    }
-    let collector = collector_worker::<R, P>(app, Arc::clone(&clock));
+    bind_listeners(app, &scheduler, &ports, intraday, stored);
+    let clock: Arc<dyn application::Clock> = Arc::<P::Clock>::clone(&ports.clock);
+    let collector = collector_worker::<R, P>(app, clock);
     let runtime = BackgroundRuntime::spawn(
-        Arc::new(scheduler),
+        scheduler,
         Duration::from_secs(DEFAULT_TICK_INTERVAL_SECONDS),
         collector,
     );
     app.manage(Arc::new(runtime));
     SchedulingStart::Started
+}
+
+type PortScheduler<P> = Scheduler<<P as PortTypes>::Clock, <P as PortTypes>::AiJobQueue>;
+
+fn build_scheduler<P: PortTypes>(
+    ports: &Ports<P>,
+    registry: JobRegistry,
+    stored: Option<&SqliteRepositories>,
+) -> Result<PortScheduler<P>, scheduler::ScheduleTimeError> {
+    match stored {
+        Some(repositories) => {
+            let (records, _writer) = job_record_queue(Arc::new(repositories.clone()));
+            Scheduler::with_options(
+                Arc::clone(&ports.clock),
+                Arc::clone(&ports.ai_jobs),
+                registry,
+                SchedulerOptions {
+                    calendars: Arc::new(NoMarketCalendar),
+                    records: Arc::new(records),
+                },
+            )
+        }
+        None => Scheduler::new(
+            Arc::clone(&ports.clock),
+            Arc::clone(&ports.ai_jobs),
+            registry,
+        ),
+    }
+}
+
+fn bind_listeners<R: Runtime, P: PortTypes>(
+    app: &App<R>,
+    scheduler: &Arc<PortScheduler<P>>,
+    ports: &Ports<P>,
+    intraday: Arc<IntradayWatchInbox>,
+    stored: Option<SqliteRepositories>,
+) {
+    if let Some(slot) = app.try_state::<Arc<IntradayWatchSlot>>() {
+        slot.bind(IntradayWatchSubscriber::new(intraday, scheduler.triggers()));
+    }
+    if let Some(repositories) = stored {
+        manage_schedule_settings(app, scheduler, ports, repositories);
+    }
+}
+
+fn manage_schedule_settings<R: Runtime, P: PortTypes>(
+    app: &App<R>,
+    scheduler: &Arc<PortScheduler<P>>,
+    ports: &Ports<P>,
+    repositories: SqliteRepositories,
+) {
+    let store = Arc::new(repositories);
+    let control = SettingsControl::new(
+        ScheduleSettings::with_shared_events(
+            Arc::clone(scheduler),
+            Arc::new(AppJobSchedules::new(Arc::clone(&store))),
+            Arc::clone(&ports.events),
+        ),
+        store,
+    );
+    let _restored = tauri::async_runtime::block_on(control.restore());
+    app.manage(ScheduleIpcState(Arc::new(control)));
 }
 
 fn collector_worker<R: Runtime, P: PortTypes>(

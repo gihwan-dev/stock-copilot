@@ -52,6 +52,14 @@ export const commands = {
     typedError<UiBriefingsView_Serialize, IpcError>(
       __TAURI_INVOKE("get_briefings", { request }),
     ),
+  getJobSchedules: (request: GetJobSchedulesRequest) =>
+    typedError<UiJobSchedulesView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_job_schedules", { request }),
+    ),
+  setJobSchedule: (request: SetJobScheduleRequest_Deserialize) =>
+    typedError<UiJobSchedule_Serialize, IpcError>(
+      __TAURI_INVOKE("set_job_schedule", { request }),
+    ),
 };
 
 /** Events */
@@ -496,6 +504,10 @@ export type GetChatHistoryResponse_Serialize = {
   active_turn: ActiveChatTurnDto | null;
 };
 
+export type GetJobSchedulesRequest = {
+  scope: JobSchedulesScope;
+};
+
 export type GetSettingsRequest = {
   scope: SettingsQueryScope;
 };
@@ -505,6 +517,8 @@ export type IpcError = {
 };
 
 export type IpcErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
+
+export type JobSchedulesScope = "ai";
 
 export type OpenExternalRequest = {
   url: string;
@@ -607,6 +621,21 @@ export type SendChatMessageResponse_Serialize = {
   first_token_latency_ms: number | null;
   resets_at_unix_seconds: string | null;
   failure_reason: ChatFailureReasonDto | null;
+};
+
+export type SetJobScheduleRequest =
+  SetJobScheduleRequest_Serialize | SetJobScheduleRequest_Deserialize;
+
+export type SetJobScheduleRequest_Deserialize = {
+  job: UiScheduledJob;
+  enabled: UiJobSwitch;
+  time?: UiKstTime | null;
+};
+
+export type SetJobScheduleRequest_Serialize = {
+  job: UiScheduledJob;
+  enabled: UiJobSwitch;
+  time: UiKstTime | null;
 };
 
 export type SetOrderPermissionRequest = {
@@ -1461,6 +1490,51 @@ export type UiInformationSource =
   | ({ News: UiNewsSource } & { Disclosure?: never })
   | ({ Disclosure: UiDisclosureSource } & { News?: never });
 
+export type UiJobRun = {
+  at: string;
+  outcome: UiJobRunOutcome;
+};
+
+export type UiJobRunOutcome = "succeeded" | "skipped" | "waiting" | "failed";
+
+export type UiJobSchedule = UiJobSchedule_Serialize | UiJobSchedule_Deserialize;
+
+export type UiJobSchedule_Deserialize = {
+  job: UiScheduledJob;
+  enabled: UiJobSwitch;
+  time?: UiKstTime | null;
+  time_adjustment: UiTimeAdjustment;
+  next_run?: string | null;
+  last_run?: UiJobRun | null;
+};
+
+export type UiJobSchedule_Serialize = {
+  job: UiScheduledJob;
+  enabled: UiJobSwitch;
+  time: UiKstTime | null;
+  time_adjustment: UiTimeAdjustment;
+  next_run: string | null;
+  last_run: UiJobRun | null;
+};
+
+export type UiJobSchedulesView =
+  UiJobSchedulesView_Serialize | UiJobSchedulesView_Deserialize;
+
+export type UiJobSchedulesView_Deserialize = {
+  jobs: UiJobSchedule_Deserialize[];
+};
+
+export type UiJobSchedulesView_Serialize = {
+  jobs: UiJobSchedule_Serialize[];
+};
+
+export type UiJobSwitch = "on" | "off";
+
+export type UiKstTime = {
+  hour: number;
+  minute: number;
+};
+
 export type UiMarket = "Kr" | "Us";
 
 export type UiNewsSource =
@@ -1487,6 +1561,16 @@ export type UiOrderSwitchOutcomeKind =
 
 export type UiRiskAppetite = "conservative" | "neutral" | "aggressive";
 
+export type UiScheduledJob =
+  | "morning-briefing"
+  | "closing-review"
+  | "pre-us-market-check"
+  | "estimate-cycle"
+  | "candidate-discovery"
+  | "weekly-review"
+  | "intraday-watch"
+  | "news-collection";
+
 export type UiSettingsView = {
   toss_connection: UiConnectionState;
   horizon: UiHorizon;
@@ -1507,6 +1591,8 @@ export type UiSettingsView = {
   auto_start_at_login: UiToggleState;
   account_count: number;
 };
+
+export type UiTimeAdjustment = "adjustable" | "not-adjustable";
 
 export type UiToggleState = "off" | "on";
 
@@ -1625,6 +1711,12 @@ export type MockCommandHandlers = {
   getBriefings: (args: {
     request: GetBriefingsRequest;
   }) => UiBriefingsView_Serialize | Promise<UiBriefingsView_Serialize>;
+  getJobSchedules: (args: {
+    request: GetJobSchedulesRequest;
+  }) => UiJobSchedulesView_Serialize | Promise<UiJobSchedulesView_Serialize>;
+  setJobSchedule: (args: {
+    request: SetJobScheduleRequest_Deserialize;
+  }) => UiJobSchedule_Serialize | Promise<UiJobSchedule_Serialize>;
 };
 
 /**
@@ -1712,6 +1804,18 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.getBriefings,
             "get_briefings",
+            args,
+          );
+        case "get_job_schedules":
+          return mockCommandHandler(
+            mockHandlers.getJobSchedules,
+            "get_job_schedules",
+            args,
+          );
+        case "set_job_schedule":
+          return mockCommandHandler(
+            mockHandlers.setJobSchedule,
+            "set_job_schedule",
             args,
           );
         default:

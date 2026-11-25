@@ -1,0 +1,11 @@
+{
+  "job": "morning-briefing",
+  "enabled": "on",
+  "time": {
+    "hour": 7,
+    "minute": 45
+  },
+  "time_adjustment": "adjustable",
+  "next_run": "2026-11-26T07:45:00+09:00",
+  "last_run": null
+}

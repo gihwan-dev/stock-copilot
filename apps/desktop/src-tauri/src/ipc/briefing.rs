@@ -128,7 +128,7 @@ fn two(value: i64) -> String {
     format!("{value:02}")
 }
 
-fn kst_iso(at: Timestamp) -> Option<String> {
+pub(crate) fn kst_iso(at: Timestamp) -> Option<String> {
     let date = at.date_at_offset(OffsetSeconds::new(KST_OFFSET)).ok()?;
     let local = at
         .utc_seconds()

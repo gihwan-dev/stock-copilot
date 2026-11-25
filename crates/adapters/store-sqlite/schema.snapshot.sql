@@ -14,6 +14,7 @@ CREATE UNIQUE INDEX instrument_mappings_active_retired_symbol_key ON instrument_
 CREATE INDEX instrument_mappings_isin_key ON instrument_mappings(upper(isin));
 CREATE UNIQUE INDEX instrument_mappings_superseded_event_key ON instrument_mappings(superseded_event_seq) WHERE superseded_event_seq IS NOT NULL;
 CREATE INDEX instrument_mappings_symbol_key ON instrument_mappings(market, upper(symbol));
+CREATE INDEX job_execution_records_by_job ON job_execution_records(job, seq);
 CREATE INDEX order_submissions_by_time ON order_submissions(utc_seconds, nanos);
 CREATE INDEX proposal_drafts_instrument_current ON proposal_drafts(instrument, state, id DESC);
 CREATE INDEX proposal_drafts_proposal ON proposal_drafts(proposal_id, id DESC);
@@ -209,6 +210,18 @@ CREATE TABLE investment_principles (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     schema_version INTEGER NOT NULL CHECK (schema_version >= 1),
     payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE job_execution_records (
+    seq INTEGER PRIMARY KEY,
+    job TEXT NOT NULL,
+    payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE job_schedule_settings (
+    job TEXT PRIMARY KEY,
+    enabled TEXT NOT NULL CHECK (enabled IN ('enabled', 'disabled')),
+    hour INTEGER CHECK (hour IS NULL OR (hour >= 0 AND hour <= 23)),
+    minute INTEGER CHECK (minute IS NULL OR (minute >= 0 AND minute <= 59)),
+    CHECK ((hour IS NULL) = (minute IS NULL))
 ) STRICT;
 CREATE TABLE market_candles (
     instrument TEXT NOT NULL,

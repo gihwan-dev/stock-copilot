@@ -247,6 +247,9 @@ mod briefing_tests;
 mod shared_tests;
 
 #[cfg(test)]
+mod jobs_tests;
+
+#[cfg(test)]
 mod signal_store_boundary_tests;
 
 #[cfg(test)]
@@ -259,3 +262,6 @@ mod ai_jobs_tests;
 
 #[cfg(test)]
 mod scorecard_tests;
+
+mod jobs;
+pub use jobs::JobScheduleSqlStore;

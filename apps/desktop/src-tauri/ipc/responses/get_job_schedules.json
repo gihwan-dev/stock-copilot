@@ -1,0 +1,26 @@
+{
+  "jobs": [
+    {
+      "job": "morning-briefing",
+      "enabled": "on",
+      "time": {
+        "hour": 8,
+        "minute": 20
+      },
+      "time_adjustment": "adjustable",
+      "next_run": "2026-11-26T08:20:00+09:00",
+      "last_run": {
+        "at": "2026-11-25T08:20:05+09:00",
+        "outcome": "succeeded"
+      }
+    },
+    {
+      "job": "pre-us-market-check",
+      "enabled": "off",
+      "time": null,
+      "time_adjustment": "not-adjustable",
+      "next_run": null,
+      "last_run": null
+    }
+  ]
+}
