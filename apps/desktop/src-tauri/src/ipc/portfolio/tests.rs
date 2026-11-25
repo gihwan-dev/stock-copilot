@@ -215,6 +215,16 @@ impl ScreenBackend for FixedBackend {
     ) -> BoxFuture<'_, Result<Option<SyncRecord<domain::SettledRowSet>>, SystemPortError>> {
         Box::pin(std::future::ready(Ok(None)))
     }
+
+    fn update_profile(
+        &self,
+        _requested: application::InvestorProfileRequest,
+    ) -> BoxFuture<'_, Result<application::RiskSettingsChangeOutcome, SystemPortError>> {
+        Box::pin(std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::InvalidData,
+        ))))
+    }
 }
 
 fn app_with(backend: FixedBackend) -> tauri::App<tauri::test::MockRuntime> {

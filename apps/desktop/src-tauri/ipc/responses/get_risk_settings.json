@@ -1,0 +1,15 @@
+{
+  "profile": {
+    "horizon": "weeks-to-months",
+    "risk_appetite": "neutral",
+    "instrument_cap": "20",
+    "sector_cap": "40",
+    "excluded_types": []
+  },
+  "order": {
+    "market_orders": "off",
+    "hours_horizon": "off",
+    "card_expiry": "10",
+    "order_count_limit": "off"
+  }
+}

@@ -14,7 +14,7 @@ use super::state::ScreenState;
 
 const RESPONSE_DIRECTORY: &str = "ipc/responses";
 
-fn assert_response_snapshot<T: Serialize>(name: &str, value: &T) {
+pub(crate) fn assert_response_snapshot<T: Serialize>(name: &str, value: &T) {
     let path = Path::new(RESPONSE_DIRECTORY).join(format!("{name}.json"));
     let mut actual = serde_json::to_string_pretty(value).expect("serialize response");
     actual.push('\n');

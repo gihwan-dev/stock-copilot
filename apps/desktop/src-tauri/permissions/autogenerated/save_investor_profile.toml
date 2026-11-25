@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-investor-profile"
+description = "Enables the save_investor_profile command without any pre-configured scope."
+commands.allow = ["save_investor_profile"]
+
+[[permission]]
+identifier = "deny-save-investor-profile"
+description = "Denies the save_investor_profile command without any pre-configured scope."
+commands.deny = ["save_investor_profile"]

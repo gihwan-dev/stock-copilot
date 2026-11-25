@@ -130,6 +130,21 @@ export const responses = {
     total_coverage: "complete",
   },
   getPublicIp: { address: "203.0.113.10" },
+  getRiskSettings: {
+    order: {
+      card_expiry: "10",
+      hours_horizon: "off",
+      market_orders: "off",
+      order_count_limit: "off",
+    },
+    profile: {
+      excluded_types: [],
+      horizon: "weeks-to-months",
+      instrument_cap: "20",
+      risk_appetite: "neutral",
+      sector_cap: "40",
+    },
+  },
   getSettings: {
     account_count: 0,
     ai_budget_percent: "70",
@@ -165,6 +180,8 @@ export const responses = {
     state: "Finished",
     turn_id: "turn-1",
   },
+  saveInvestorProfile: { kind: "declined", rejection: "none" },
+  saveOrderSettings: { kind: "unavailable", rejection: "none" },
   sendChatMessage: {
     actual_model: "claude-sonnet-5-5",
     failure_reason: null,
