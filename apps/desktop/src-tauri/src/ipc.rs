@@ -12,6 +12,7 @@ pub mod registry;
 pub mod schedule;
 pub mod settings;
 pub mod state;
+pub mod toss;
 
 #[cfg(test)]
 mod tests;

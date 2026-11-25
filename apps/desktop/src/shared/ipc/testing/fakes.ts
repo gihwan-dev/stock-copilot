@@ -36,6 +36,14 @@ export const returnRecordedCommandError = (): void => {
   });
 };
 
+export const failTossCommands = (): void => {
+  mockCommands({
+    submitTossKeys: () => {
+      throw { kind: "retryable" };
+    },
+  });
+};
+
 export const answerWithMalformedResponse = (): void => {
   mockCommands({ appVersion: () => ({ version: "not a version" }) });
 };

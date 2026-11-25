@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-toss-connection"
+description = "Enables the check_toss_connection command without any pre-configured scope."
+commands.allow = ["check_toss_connection"]
+
+[[permission]]
+identifier = "deny-check-toss-connection"
+description = "Denies the check_toss_connection command without any pre-configured scope."
+commands.deny = ["check_toss_connection"]

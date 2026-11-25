@@ -330,6 +330,16 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
             .await
             .map(Acquisition::token)
     }
+    async fn forget_token(&self) {
+        let mut state = self.state.lock().await;
+        state.token = None;
+        state.last_error = None;
+        self.generation.0.fetch_add(1, Ordering::SeqCst);
+    }
+    pub async fn reconnect_with_stored_keys(&self) -> Result<TokenLease, TokenError> {
+        self.forget_token().await;
+        self.retry_connection().await
+    }
     pub async fn retry_connection(&self) -> Result<TokenLease, TokenError> {
         self.acquire(None, ConnectionAttempt::Recovery)
             .await

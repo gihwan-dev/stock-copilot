@@ -41,7 +41,7 @@ import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
 
-const frameworkFailure: IpcFailure = { kind: "framework" };
+export const frameworkFailure: IpcFailure = { kind: "framework" };
 const timeoutFailure: IpcFailure = { kind: "timeout" };
 
 const createTimeout = <T>(): {
@@ -127,7 +127,7 @@ export const listenUiEvent = (
     })
     .then(ok, (): Result<() => void, IpcFailure> => err(frameworkFailure));
 
-const raceTimeout = <T>(
+export const raceTimeout = <T>(
   pending: Promise<Result<T, IpcFailure>>,
 ): Promise<Result<T, IpcFailure>> => {
   const timer = createTimeout<T>();

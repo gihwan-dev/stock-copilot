@@ -1,6 +1,7 @@
 export const responses = {
   appVersion: { version: "0.1.0" },
   cancelChatTurn: { outcome: "NotRunning", turn_id: "turn-1" },
+  checkTossConnection: { state: "connected" },
   getBriefings: {
     latest: {
       body: "밤사이 미국장은 올랐습니다 [1]",
@@ -123,4 +124,5 @@ export const responses = {
     time_adjustment: "adjustable",
   },
   setOrderPermission: { kind: "denied", order_enabled: "off" },
+  submitTossKeys: { state: "ip-not-allowed" },
 } as const;

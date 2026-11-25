@@ -8,7 +8,8 @@ import {
   type PercentDisplay,
   type Result,
 } from "../lib";
-import type { IpcFailure } from "./schema";
+import { settleWithSchema, type IpcFailure } from "./schema";
+import { connectionSchema, type TossConnection } from "./setup-schema";
 
 type ConnectionState = "connected" | "needs-key";
 type OptionalKeyState = "configured" | "unconfigured";
@@ -207,3 +208,8 @@ export const settleOrderSwitchOutcome = (
       })
     : err(invalidFailure);
 };
+
+export const settleTossConnection = (
+  outcome: CommandOutcome,
+): Result<TossConnection, IpcFailure> =>
+  settleWithSchema(outcome, connectionSchema);

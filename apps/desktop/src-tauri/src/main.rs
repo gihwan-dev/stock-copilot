@@ -23,6 +23,7 @@ use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, atta
 use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
 };
+use src_tauri::toss_link::{TossLink, TossLinkState, live_toss_read};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
     database::{DatabaseFactory, DatabaseKeyProvision},
@@ -85,13 +86,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let ports = product_ports(&repositories, notifier, &shared_clock, events, ai);
+    let toss = toss_link_state(&ports.secrets, &shared_clock, &ports.events);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
             .manage(intraday)
-            .manage(turns),
+            .manage(turns)
+            .manage(toss),
         ports,
         context,
     )?;
+    run_primary(app)
+}
+
+fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
             .app_data_dir()?
@@ -150,6 +157,30 @@ fn product_ports(
 }
 
 type ProductSecrets = secrets_keychain::KeychainSecretStore<secrets_keychain::SystemKeychain>;
+
+fn toss_link_state(
+    secrets: &Arc<ProductSecrets>,
+    clock: &Arc<platform_macos::SystemClock>,
+    events: &Arc<application::EventBus>,
+) -> TossLinkState {
+    let probe: Arc<dyn src_tauri::toss_link::TossProbe> = match live_toss_read(
+        &broker_toss::TossEndpoint::production(),
+        Arc::clone(secrets),
+        Arc::clone(clock),
+        Arc::clone(events),
+    ) {
+        Ok(reader) => Arc::new(reader),
+        Err(_error) => Arc::new(src_tauri::toss_link::UnavailableProbe),
+    };
+    let shared_clock: Arc<dyn application::Clock> =
+        Arc::<platform_macos::SystemClock>::clone(clock);
+    TossLinkState::new(Arc::new(TossLink::new(
+        Arc::clone(secrets),
+        probe,
+        Arc::new(src_tauri::toss_link::NoListener),
+        shared_clock,
+    )))
+}
 
 fn product_secrets() -> ProductSecrets {
     let build = if tauri::is_dev() {
