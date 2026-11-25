@@ -87,7 +87,7 @@ pub(crate) async fn order<S: SecretStore, T: Clock, R: TokenRenewal>(
     if decoded.id != order_id.as_str() {
         return Err(invalid(ReadEndpoint::Order, ResponseMismatch::Validation));
     }
-    let parsed = match row::parse_decoded(&decoded, reader.market_master()) {
+    let parsed = match row::parse_decoded(&decoded, &reader.market_master()) {
         Ok(parsed) => parsed,
         Err(RowFailure::Schema) => {
             return Err(invalid(ReadEndpoint::Order, ResponseMismatch::Schema));
@@ -218,7 +218,7 @@ pub(crate) async fn open_orders<S: SecretStore, T: Clock, R: TokenRenewal>(
     }
     let (page, status) = parse_open_page(response.body().as_exposed_secret())?;
     let observed = reader.market_now();
-    build_open_set(page, status, account, reader.market_master(), observed)
+    build_open_set(page, status, account, &reader.market_master(), observed)
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
@@ -437,7 +437,7 @@ pub(crate) async fn closed_orders<S: SecretStore, T: Clock, R: TokenRenewal>(
             &mut pages,
             &mut restarted,
             &response,
-            reader.market_master(),
+            &reader.market_master(),
         )? == PageStep::Stop
         {
             break;
