@@ -29,6 +29,20 @@ test("settlePortfolio carries the master name, symbol and signed profit of each 
   expect(holding?.name).toBe(recordedHolding.name);
   expect(holding?.ticker).toBe(recordedHolding.symbol);
   expect(holding?.profit.direction).toBe("up");
+  expect(holding?.trading).toBe("trading");
+});
+
+test("settlePortfolio keeps a suspended holding as a row marked suspended", () => {
+  const result = settlePortfolio({
+    status: "ok",
+    data: wire({
+      ...recorded,
+      holdings: [{ ...recordedHolding, trading: "suspended" }],
+    }),
+  });
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") return;
+  expect(result.value.holdings[0]?.trading).toBe("suspended");
 });
 
 test("settlePortfolio rejects malformed money and extra fields", () => {

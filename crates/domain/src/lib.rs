@@ -439,8 +439,8 @@ pub use known_market::{KnownMarket, UnknownKnownMarket};
 pub use master_instrument::{
     CommonShare, KoreanMasterDetail, LiquidationTrading, ListingStatus, MasterCode,
     MasterInstrument, MasterInstrumentError, MasterInstrumentFacts, MasterInstrumentRow,
-    MasterSecurityType, NxtTrading, QuoteInstrument, SavedQuoteInstrument, SecurityTypeKnowledge,
-    TradingSuspension,
+    MasterSecurityType, MasterTradingState, NxtTrading, QuoteInstrument, SavedQuoteInstrument,
+    SecurityTypeKnowledge, TradingSuspension,
 };
 mod master_order_gate;
 pub use master_order_gate::{MasterOrderGateFacts, NxtSupport};

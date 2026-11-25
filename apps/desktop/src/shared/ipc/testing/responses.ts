@@ -117,6 +117,7 @@ export const responses = {
         },
         quantity: "100",
         symbol: "005930",
+        trading: "trading",
         value: { amount: "7200000", currency: "KRW" },
       },
     ],

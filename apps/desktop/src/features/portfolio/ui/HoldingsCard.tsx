@@ -1,7 +1,9 @@
 import type { ReactElement } from "react";
 import {
+  Badge,
   Card,
   DataText,
+  Inline,
   Money,
   PriceChange,
   Quantity,
@@ -21,7 +23,14 @@ const TableCell = Table.Cell;
 const Row = (props: { readonly row: HoldingRow }): ReactElement => (
   <TableRow>
     <TableRowHeader>
-      <DataText value={props.row.name} variant="body-sm" />
+      {props.row.trading === "suspended" ? (
+        <Inline gap="space-2" align="center" wrap="wrap">
+          <DataText value={props.row.name} variant="body-sm" />
+          <Badge tone="alert">{portfolioText("tradingSuspended", "ko")}</Badge>
+        </Inline>
+      ) : (
+        <DataText value={props.row.name} variant="body-sm" />
+      )}
     </TableRowHeader>
     <TableCell>
       <DataText value={props.row.ticker} variant="code" />

@@ -41,6 +41,7 @@ export type HoldingRow = {
   readonly id: EntityId;
   readonly name: FreeText;
   readonly ticker: Ticker | FreeText;
+  readonly trading?: "trading" | "suspended" | undefined;
   readonly quantity: Quantity;
   readonly value: Money;
   readonly profit: SignedAmount;

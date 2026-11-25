@@ -354,6 +354,22 @@ impl MasterInstrument {
         self.order_gate_facts()?
             .instrument_for(crate::OrderSide::Buy)
     }
+    pub fn held_instrument(&self) -> Result<ResolvedOrderInstrument, MasterInstrumentError> {
+        self.resolved_instrument()
+    }
+    #[must_use]
+    pub fn trading_state(&self) -> MasterTradingState {
+        match (self.row.listing_status, self.row.korean_detail) {
+            (ListingStatus::Active, None) => MasterTradingState::Trading,
+            (ListingStatus::Active, Some(detail)) => match detail.krx {
+                TradingSuspension::Clear => MasterTradingState::Trading,
+                TradingSuspension::Suspended => MasterTradingState::Suspended,
+            },
+            (ListingStatus::Scheduled | ListingStatus::Delisted, _) => {
+                MasterTradingState::Suspended
+            }
+        }
+    }
     pub fn price_observation(
         &self,
         price: crate::Price,
@@ -391,6 +407,12 @@ impl MasterInstrument {
         ))
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MasterTradingState {
+    Trading,
+    Suspended,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MasterInstrumentFacts(Vec<MasterInstrument>);
 impl MasterInstrumentFacts {
