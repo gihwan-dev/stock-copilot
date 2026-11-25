@@ -422,3 +422,262 @@ fn open_external_default_product_assembly_fails_closed_without_opening() {
     });
     assert_eq!(code, 0_i32);
 }
+
+const SECRET_SENTINEL: &str = "client-secret-sentinel-91bc";
+
+struct ScriptedProbe(std::sync::RwLock<Vec<crate::toss_link::ProbeResult>>);
+
+impl crate::toss_link::TossProbe for ScriptedProbe {
+    fn check(&self) -> crate::ipc::state::BoxFuture<'_, crate::toss_link::ProbeResult> {
+        let reply = self.0.write().map_or(
+            Err(crate::toss_link::ProbeFailure::Unavailable),
+            |mut replies| {
+                replies
+                    .pop()
+                    .unwrap_or(Err(crate::toss_link::ProbeFailure::Unavailable))
+            },
+        );
+        Box::pin(std::future::ready(reply))
+    }
+
+    fn reconnect(&self) -> crate::ipc::state::BoxFuture<'_, crate::toss_link::ProbeResult> {
+        self.check()
+    }
+}
+
+struct FixedIp;
+
+impl crate::ipc::public_ip::PublicIpLookup for FixedIp {
+    fn lookup(
+        &self,
+    ) -> crate::ipc::state::BoxFuture<
+        '_,
+        Result<std::net::IpAddr, crate::ipc::public_ip::LookupFailed>,
+    > {
+        Box::pin(std::future::ready(
+            "203.0.114.7"
+                .parse::<std::net::IpAddr>()
+                .map_err(|_error| crate::ipc::public_ip::LookupFailed),
+        ))
+    }
+}
+
+struct RecordingClipboard(std::sync::Arc<std::sync::RwLock<Vec<String>>>);
+
+impl crate::ipc::public_ip::TextClipboard for RecordingClipboard {
+    fn copy(
+        &self,
+        text: String,
+    ) -> crate::ipc::state::BoxFuture<'_, Result<(), crate::ipc::public_ip::LookupFailed>> {
+        let stored = self
+            .0
+            .write()
+            .map(|mut copied| copied.push(text))
+            .map_err(|_poison| crate::ipc::public_ip::LookupFailed);
+        Box::pin(std::future::ready(stored))
+    }
+}
+
+fn first_run_app(
+    secrets: &std::sync::Arc<testkit_ports::system_fakes::MemorySecretStore>,
+    copied: &std::sync::Arc<std::sync::RwLock<Vec<String>>>,
+) -> tauri::App<MockRuntime> {
+    let clock: std::sync::Arc<dyn application::Clock> =
+        std::sync::Arc::new(testkit_ports::SteppedClock::new(
+            domain::Timestamp::from_parts(
+                domain::UnixSeconds::new(1_795_564_800),
+                domain::Nanosecond::new(0),
+                domain::OffsetSeconds::new(0),
+            )
+            .expect("시각"),
+        ));
+    let probe = ScriptedProbe(std::sync::RwLock::new(vec![
+        Ok(()),
+        Err(crate::toss_link::ProbeFailure::Denied(
+            application::AccessDenial::IpNotAllowed,
+        )),
+    ]));
+    let link =
+        crate::toss_link::TossLinkState::new(std::sync::Arc::new(crate::toss_link::TossLink::new(
+            std::sync::Arc::clone(secrets),
+            std::sync::Arc::new(probe),
+            std::sync::Arc::new(crate::toss_link::NoListener),
+            std::sync::Arc::clone(&clock),
+        )));
+    let public_ip = crate::ipc::public_ip::PublicIpRuntime::new(
+        std::sync::Arc::new(FixedIp),
+        std::sync::Arc::new(RecordingClipboard(std::sync::Arc::clone(copied))),
+        clock,
+    );
+    let ports = super::support::ports();
+    ports
+        .settings
+        .script_profile()
+        .push(MemoryReply::Return(Ok(None)));
+    ports
+        .settings
+        .script_risk_settings()
+        .push(MemoryReply::Return(Ok(None)));
+    ports
+        .secrets
+        .script_load()
+        .push(MemoryReply::Return(Ok(None)));
+    ports
+        .broker_read
+        .script_accounts()
+        .push(Ok(domain::BrokerAccountRows::try_new(vec![]).expect("계좌")));
+    let mut context = mock_context(noop_assets());
+    context
+        .config_mut()
+        .app
+        .windows
+        .push(tauri::utils::config::WindowConfig::default());
+    crate::build_app(
+        mock_builder().manage(link).manage(public_ip),
+        ports,
+        context,
+    )
+    .expect("제품 조립")
+}
+
+fn command(cmd: &str, body: serde_json::Value) -> tauri::webview::InvokeRequest {
+    tauri::webview::InvokeRequest {
+        cmd: cmd.into(),
+        callback: tauri::ipc::CallbackFn(83),
+        error: tauri::ipc::CallbackFn(97),
+        url: "tauri://localhost".parse().expect("로컬 출처"),
+        body: tauri::ipc::InvokeBody::Json(body),
+        headers: tauri::http::HeaderMap::new(),
+        invoke_key: tauri::test::INVOKE_KEY.into(),
+    }
+}
+
+fn answer(
+    handle: &tauri::AppHandle<MockRuntime>,
+    cmd: &str,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, serde_json::Value> {
+    let window = handle.get_webview_window("main").expect("주 창");
+    tauri::test::get_ipc_response(&window, command(cmd, body)).map(|response| {
+        response
+            .deserialize::<serde_json::Value>()
+            .expect("응답 JSON")
+    })
+}
+
+fn assert_stored_keys(secrets: &testkit_ports::system_fakes::MemorySecretStore) {
+    let stored: Vec<String> = secrets
+        .calls()
+        .into_iter()
+        .filter_map(|call| match call {
+            testkit_ports::system_fakes::SecretCall::Store(key, value) => Some(format!(
+                "{key:?}={}",
+                String::from_utf8_lossy(value.as_exposed_secret())
+            )),
+            testkit_ports::system_fakes::SecretCall::Load(_)
+            | testkit_ports::system_fakes::SecretCall::Remove(_) => None,
+        })
+        .collect();
+    assert_eq!(
+        stored,
+        vec![
+            String::from("TossClientId=fake-client-id"),
+            format!("TossClientSecret={SECRET_SENTINEL}"),
+            String::from("TossClientId=fake-client-id"),
+            format!("TossClientSecret={SECRET_SENTINEL}"),
+        ]
+    );
+}
+
+fn assert_first_run_flow(
+    window: &tauri::AppHandle<MockRuntime>,
+    copied: &std::sync::RwLock<Vec<String>>,
+) {
+    let keys =
+        serde_json::json!({"request":{"client_id":" fake-client-id\n","secret":SECRET_SENTINEL}});
+    let first = answer(window, "submit_toss_keys", keys.clone()).expect("키 저장");
+    assert_eq!(first, serde_json::json!({"state":"ip-not-allowed"}));
+    assert!(!first.to_string().contains(SECRET_SENTINEL));
+    assert_eq!(
+        answer(
+            window,
+            "get_public_ip",
+            serde_json::json!({"request":{"query":"current"}})
+        ),
+        Ok(serde_json::json!({"address":"203.0.114.7"}))
+    );
+    assert_eq!(
+        answer(
+            window,
+            "copy_text",
+            serde_json::json!({"request":{"text":"203.0.114.7"}})
+        ),
+        Ok(serde_json::json!({"status":"copied"}))
+    );
+    let refused = answer(
+        window,
+        "copy_text",
+        serde_json::json!({"request":{"text":SECRET_SENTINEL}}),
+    )
+    .expect_err("IP가 아닌 글자는 복사하지 않음");
+    assert!(!refused.to_string().contains(SECRET_SENTINEL));
+    assert_eq!(
+        answer(window, "submit_toss_keys", keys),
+        Ok(serde_json::json!({"state":"connected"}))
+    );
+    let _extra = answer(
+        window,
+        "submit_toss_keys",
+        serde_json::json!({"request":{"client_id":"a","secret":"b","extra":"probe"}}),
+    )
+    .expect_err("추가 필드 거부");
+    assert_eq!(
+        copied.read().expect("복사 기록").clone(),
+        vec![String::from("203.0.114.7")]
+    );
+}
+
+#[test]
+fn first_run_ipc_pastes_keys_shows_and_copies_the_public_ip_then_connects() {
+    let secrets = std::sync::Arc::new(testkit_ports::system_fakes::MemorySecretStore::default());
+    for _ in 0_u8..16_u8 {
+        secrets.script_load().push(MemoryReply::Memory);
+        secrets.script_store().push(MemoryReply::Memory);
+    }
+    let copied = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
+    let checked = std::sync::Arc::clone(&copied);
+    let code = first_run_app(&secrets, &copied).run_return(move |handle, event| match event {
+        tauri::RunEvent::Ready => {
+            assert_first_run_flow(handle, &checked);
+            tauri::async_runtime::block_on(
+                handle.state::<crate::lifecycle::Lifecycle>().shutdown(),
+            );
+            handle
+                .get_webview_window("main")
+                .expect("주 창")
+                .close()
+                .expect("창 닫기");
+        }
+        tauri::RunEvent::ExitRequested { .. } => {
+            assert!(
+                handle
+                    .state::<crate::lifecycle::Lifecycle>()
+                    .outcome()
+                    .try_lock()
+                    .expect("종료 기록")
+                    .is_some()
+            );
+        }
+        tauri::RunEvent::Exit
+        | tauri::RunEvent::WindowEvent { .. }
+        | tauri::RunEvent::WebviewEvent { .. }
+        | tauri::RunEvent::Resumed
+        | tauri::RunEvent::MainEventsCleared
+        | tauri::RunEvent::Opened { .. }
+        | tauri::RunEvent::MenuEvent(_)
+        | tauri::RunEvent::Reopen { .. }
+        | _ => {}
+    });
+    assert_eq!(code, 0_i32);
+    assert_stored_keys(&secrets);
+}
