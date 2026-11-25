@@ -2713,3 +2713,220 @@ mod toss_assembly_tests {
         assert_eq!(server.finish().expect("요청"), Vec::<u8>::new());
     }
 }
+
+#[cfg(test)]
+mod first_run_ipc_tests {
+    use src_tauri::broker_link::{AccountSelector, AccountSlot};
+    use src_tauri::ipc::public_ip::PublicIpRuntime;
+    use src_tauri::toss_link::{TossLink, TossLinkState};
+    use std::sync::Arc;
+    use tauri::Manager;
+    use tauri::test::{MockRuntime, mock_builder, mock_context, noop_assets};
+    use testkit::ScriptedHttpServer;
+    use testkit_ports::memory::MemoryReply;
+    use testkit_ports::system_fakes::MemorySecretStore;
+
+    const SECRET_SENTINEL: &str = "client-secret-sentinel-91bc";
+
+    fn http(status: &str, content: &str, body: &str) -> Vec<u8> {
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {content}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .into_bytes()
+    }
+
+    fn invoke(cmd: &str, body: serde_json::Value) -> tauri::webview::InvokeRequest {
+        tauri::webview::InvokeRequest {
+            cmd: cmd.into(),
+            callback: tauri::ipc::CallbackFn(41),
+            error: tauri::ipc::CallbackFn(59),
+            url: "tauri://localhost".parse().expect("로컬 출처"),
+            body: tauri::ipc::InvokeBody::Json(body),
+            headers: tauri::http::HeaderMap::new(),
+            invoke_key: tauri::test::INVOKE_KEY.into(),
+        }
+    }
+
+    fn reply(
+        window: &tauri::WebviewWindow<MockRuntime>,
+        cmd: &str,
+        body: serde_json::Value,
+    ) -> serde_json::Value {
+        tauri::test::get_ipc_response(window, invoke(cmd, body))
+            .expect("명령 성공")
+            .deserialize::<serde_json::Value>()
+            .expect("응답 JSON")
+    }
+
+    struct Fixture {
+        app: tauri::App<MockRuntime>,
+        toss: ScriptedHttpServer,
+        ip_service: ScriptedHttpServer,
+        slot: AccountSlot,
+        copied: Arc<std::sync::RwLock<Vec<String>>>,
+    }
+
+    fn toss_script() -> Vec<Vec<u8>> {
+        vec![
+            http(
+                "403 Forbidden",
+                "application/json",
+                r#"{"error":"access_denied"}"#,
+            ),
+            http(
+                "200 OK",
+                "application/json",
+                r#"{"access_token":"fake-access-token","token_type":"Bearer","expires_in":3600}"#,
+            ),
+            http(
+                "200 OK",
+                "application/json",
+                r#"{"result":[{"accountNo":"00000000731","accountSeq":413,"accountType":"BROKERAGE"}]}"#,
+            ),
+        ]
+    }
+
+    fn assert_wire(toss: ScriptedHttpServer, ip_service: ScriptedHttpServer) {
+        let toss_requests = String::from_utf8(toss.finish().expect("요청")).expect("UTF-8");
+        assert_eq!(
+            toss_requests
+                .matches("grant_type=client_credentials")
+                .count(),
+            2
+        );
+        assert!(toss_requests.contains("client_id=fake-client-id&"));
+        assert_ne!(ip_service.finish().expect("요청"), Vec::<u8>::new());
+    }
+
+    fn fixture() -> Fixture {
+        let toss = ScriptedHttpServer::start(toss_script()).expect("가짜 토스");
+        let ip_service =
+            ScriptedHttpServer::start(vec![http("200 OK", "text/plain", "203.0.114.7\n")])
+                .expect("가짜 IP 서비스");
+        let secrets = Arc::new(MemorySecretStore::default());
+        for _ in 0_u8..24_u8 {
+            secrets.script_load().push(MemoryReply::Memory);
+            secrets.script_store().push(MemoryReply::Memory);
+        }
+        let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let events = Arc::new(application::EventBus::default());
+        let broker = Arc::new(
+            super::live_toss_read(
+                &broker_toss::TossEndpoint::local(toss.port()).expect("주소"),
+                Arc::clone(&secrets),
+                Arc::clone(&clock),
+                Arc::clone(&events),
+            )
+            .expect("어댑터"),
+        );
+        let slot = AccountSlot::default();
+        let link = TossLinkState::new(Arc::new(TossLink::new(
+            Arc::clone(&secrets),
+            Arc::new(super::LiveProbe(Arc::clone(&broker))),
+            Arc::new(AccountSelector::new(broker, slot.clone(), events)),
+            Arc::<platform_macos::SystemClock>::clone(&clock),
+        )));
+        let lookup = sources::PublicIpEndpoint::local(ip_service.port(), "/")
+            .and_then(sources::PublicIpClient::new)
+            .ok();
+        let copied = Arc::new(std::sync::RwLock::new(Vec::<String>::new()));
+        let public_ip = PublicIpRuntime::new(
+            Arc::new(super::ServicePublicIp(lookup)),
+            Arc::new(RecordingClipboard(Arc::clone(&copied))),
+            clock,
+        );
+        let app = mock_builder()
+            .invoke_handler(
+                src_tauri::ipc::registry::specta_builder::<MockRuntime>().invoke_handler(),
+            )
+            .manage(link)
+            .manage(public_ip)
+            .build(mock_context(noop_assets()))
+            .expect("앱");
+        Fixture {
+            app,
+            toss,
+            ip_service,
+            slot,
+            copied,
+        }
+    }
+
+    #[test]
+    fn first_run_through_ipc_pastes_keys_shows_the_public_ip_copies_nothing_but_an_ip_and_connects()
+    {
+        let Fixture {
+            app,
+            toss,
+            ip_service,
+            slot,
+            copied,
+        } = fixture();
+        let window = tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::default())
+            .build()
+            .expect("주 창");
+        let keys = serde_json::json!({"request":{"client_id":" fake-client-id\n","secret":SECRET_SENTINEL}});
+        let first = reply(&window, "submit_toss_keys", keys.clone());
+        assert_eq!(first, serde_json::json!({"state":"ip-not-allowed"}));
+        assert!(!first.to_string().contains(SECRET_SENTINEL));
+        let shown = reply(
+            &window,
+            "get_public_ip",
+            serde_json::json!({"request":{"query":"current"}}),
+        );
+        assert_eq!(shown, serde_json::json!({"address":"203.0.114.7"}));
+        assert_eq!(
+            reply(
+                &window,
+                "copy_text",
+                serde_json::json!({"request":{"text":"203.0.114.7"}})
+            ),
+            serde_json::json!({"status":"copied"})
+        );
+        let _refused = tauri::test::get_ipc_response(
+            &window,
+            invoke(
+                "copy_text",
+                serde_json::json!({"request":{"text":SECRET_SENTINEL}}),
+            ),
+        )
+        .expect_err("IP가 아닌 글자는 복사하지 않음");
+        assert_eq!(
+            reply(&window, "submit_toss_keys", keys),
+            serde_json::json!({"state":"connected"})
+        );
+        assert_eq!(slot.current(), vec![domain::AccountId::new(413)]);
+        let _extra = tauri::test::get_ipc_response(
+            &window,
+            invoke(
+                "submit_toss_keys",
+                serde_json::json!({"request":{"client_id":"a","secret":"b","extra":"probe"}}),
+            ),
+        )
+        .expect_err("추가 필드 거부");
+        assert_eq!(
+            copied.read().expect("복사 기록").clone(),
+            vec![String::from("203.0.114.7")]
+        );
+        assert_wire(toss, ip_service);
+        assert!(app.try_state::<TossLinkState>().is_some());
+    }
+
+    struct RecordingClipboard(Arc<std::sync::RwLock<Vec<String>>>);
+
+    impl src_tauri::ipc::public_ip::TextClipboard for RecordingClipboard {
+        fn copy(
+            &self,
+            text: String,
+        ) -> src_tauri::ipc::state::BoxFuture<'_, Result<(), src_tauri::ipc::public_ip::LookupFailed>>
+        {
+            let stored = self
+                .0
+                .write()
+                .map(|mut copied| copied.push(text))
+                .map_err(|_poison| src_tauri::ipc::public_ip::LookupFailed);
+            Box::pin(std::future::ready(stored))
+        }
+    }
+}
