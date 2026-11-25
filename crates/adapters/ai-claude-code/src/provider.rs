@@ -470,6 +470,53 @@ impl ClaudeCodeProvider {
         self.spawn_stream_with(&spec, Some(prompt_text), Some(attachment))
             .await
     }
+
+    pub async fn verify_isolation_attached(
+        &self,
+        attachment: RunMcpAttachment,
+    ) -> Result<IsolationCheck, InformationError> {
+        self.probe_isolation(RunKind::Analysis, Some(attachment))
+            .await
+    }
+
+    async fn probe_isolation(
+        &self,
+        kind: RunKind,
+        attachment: Option<RunMcpAttachment>,
+    ) -> Result<IsolationCheck, InformationError> {
+        let seq = PROBE_SEQUENCE.fetch_add(1_u64, std::sync::atomic::Ordering::Relaxed);
+        let probe_id = AiRunId::try_new(&format!("isolation-probe-{seq}"))
+            .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))?;
+        let prompt = application::AnalysisPrompt::try_new(PREFLIGHT_MESSAGE)
+            .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))?;
+        let (input, purpose) = match kind {
+            RunKind::Analysis => (RunInput::Analysis(prompt), application::RunPurpose::Chat),
+            RunKind::Collection => (
+                RunInput::Collection(CollectionQuery::CodeTopics {
+                    instruments: Vec::new(),
+                    topics: Vec::new(),
+                }),
+                application::RunPurpose::WebCollection,
+            ),
+        };
+        let probe_spec = RunSpec::new(
+            probe_id,
+            input,
+            ModelSelection::Default,
+            ReasoningEffort::Default,
+            purpose,
+        );
+        let mut stream = self
+            .spawn_stream_with(&probe_spec, None, attachment)
+            .await?;
+        let Some(AiEvent::IsolationChecked(check)) = stream.next().await? else {
+            return Err(InformationError::InvalidResponse(
+                ResponseMismatch::Validation,
+            ));
+        };
+        while stream.next().await?.is_some() {}
+        Ok(check)
+    }
 }
 
 impl AiProvider for ClaudeCodeProvider {
@@ -505,36 +552,7 @@ impl AiProvider for ClaudeCodeProvider {
     }
 
     async fn verify_isolation(&self, kind: RunKind) -> Result<IsolationCheck, InformationError> {
-        let seq = PROBE_SEQUENCE.fetch_add(1_u64, std::sync::atomic::Ordering::Relaxed);
-        let probe_id = AiRunId::try_new(&format!("isolation-probe-{seq}"))
-            .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))?;
-        let prompt = application::AnalysisPrompt::try_new(PREFLIGHT_MESSAGE)
-            .map_err(|_error| InformationError::InvalidResponse(ResponseMismatch::Validation))?;
-        let (input, purpose) = match kind {
-            RunKind::Analysis => (RunInput::Analysis(prompt), application::RunPurpose::Chat),
-            RunKind::Collection => (
-                RunInput::Collection(CollectionQuery::CodeTopics {
-                    instruments: Vec::new(),
-                    topics: Vec::new(),
-                }),
-                application::RunPurpose::WebCollection,
-            ),
-        };
-        let probe_spec = RunSpec::new(
-            probe_id,
-            input,
-            ModelSelection::Default,
-            ReasoningEffort::Default,
-            purpose,
-        );
-        let mut stream = self.spawn_stream(&probe_spec, None).await?;
-        let Some(AiEvent::IsolationChecked(check)) = stream.next().await? else {
-            return Err(InformationError::InvalidResponse(
-                ResponseMismatch::Validation,
-            ));
-        };
-        while stream.next().await?.is_some() {}
-        Ok(check)
+        self.probe_isolation(kind, None).await
     }
 }
 

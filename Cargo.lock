@@ -3778,6 +3778,7 @@ dependencies = [
  "approval-command",
  "broker-toss",
  "domain",
+ "mcp-server",
  "platform-macos",
  "scheduler",
  "serde",

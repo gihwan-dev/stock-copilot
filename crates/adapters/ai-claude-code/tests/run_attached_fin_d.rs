@@ -6,8 +6,8 @@ mod tests {
     };
     use application::{
         AiEvent, AiEventStream, AiRunId, AnalysisPrompt, ChatHistory, CollectionQuery,
-        InformationError, ModelSelection, ProcessId, ReasoningEffort, ResponseMismatch, RunInput,
-        RunPurpose, RunSpec, SecretValue, ToolStatus,
+        InformationError, IsolationCheck, ModelSelection, ProcessId, ReasoningEffort,
+        ResponseMismatch, RunInput, RunPurpose, RunSpec, SecretValue, ToolStatus,
     };
     use domain::UntrustedText;
     use serde_json::{Value, json};
@@ -332,6 +332,35 @@ mod tests {
                 Ok(()) | Err(_) => {}
             }
             assert_eq!(succeeded_tool_calls(&events), 1, "{events:?}");
+            assert_eq!(
+                seen.try_iter().collect::<Vec<_>>(),
+                vec![format!("AUTH {RUN_TOKEN}")]
+            );
+        });
+    }
+
+    #[test]
+    fn attached_isolation_probe_checks_the_per_run_server_connection() {
+        run_async(async {
+            let dir = TempDirGuard::new("probe");
+            let sock = dir.path().join("run.sock");
+            let (seen_tx, seen) = mpsc::channel();
+            let server = spawn_run_server(&sock, seen_tx);
+            let prep =
+                PreparedFakeAiCli::prepare(dir.path(), "fake-cli", &scenario()).expect("prepare");
+            let provider = provider(prep.executable_path(), dir.path());
+            let attachment = RunMcpAttachment::new(
+                bridge(prep.executable_path(), &sock, "app"),
+                SecretValue::new(RUN_TOKEN.as_bytes().to_vec()),
+            );
+            let check = provider
+                .verify_isolation_attached(attachment)
+                .await
+                .expect("probe");
+            match server.join() {
+                Ok(()) | Err(_) => {}
+            }
+            assert_eq!(check, IsolationCheck::Passed);
             assert_eq!(
                 seen.try_iter().collect::<Vec<_>>(),
                 vec![format!("AUTH {RUN_TOKEN}")]
