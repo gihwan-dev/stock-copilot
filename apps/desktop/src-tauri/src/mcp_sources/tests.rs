@@ -1,7 +1,7 @@
 use super::{ArticleBodies, StoredArticles, StoredNews, StoredThesis};
 use crate::ai_runtime::RunMetadataBook;
 use application::{
-    AiRunId, ArticleBody, ArticleFetchFailure, ArticleToolPort, BodyReadingSetting, CollectedEntry,
+    AiRunId, ArticleFetchFailure, ArticleToolPort, BodyReadingSetting, CollectedEntry,
     CollectedItemHandle, CollectedItemQuery, CollectedItemReads, CollectedKind, LookbackDays,
     NewsDataSettings, NewsDataSettingsChange, NewsDataSettingsRepository, NewsKeyword,
     NewsToolReads, ObservedCollectedItem, PublicationTime, SystemPortError, ThesisToolPort,
@@ -168,14 +168,11 @@ impl ArticleBodies for EchoBodies {
         source: &NewsSource,
         url: &NormalizedUrl,
         settings: &NewsDataSettings,
-    ) -> impl Future<Output = Result<ArticleBody, ArticleFetchFailure>> + Send {
+    ) -> impl Future<Output = Result<UntrustedText, ArticleFetchFailure>> + Send {
         let allowed =
             settings.body_read().policy_for(source) == domain::AiBodyReadPolicy::BodyAllowed;
         ready(if allowed && *source == NewsSource::Hankyung {
-            Ok(ArticleBody {
-                text: text(url.as_str()),
-                fetched_at: at(NOW),
-            })
+            Ok(text(url.as_str()))
         } else {
             Err(ArticleFetchFailure::NotFound)
         })
@@ -188,6 +185,10 @@ fn query(days: u16, symbol: Option<&str>, keyword: Option<&str>) -> CollectedIte
         keyword: keyword.map(|raw| NewsKeyword::try_new(raw).expect("검색어")),
         lookback: LookbackDays::try_new(days).expect("기간"),
     }
+}
+
+fn clock() -> Arc<testkit_ports::SteppedClock> {
+    Arc::new(testkit_ports::SteppedClock::new(at(NOW)))
 }
 
 fn news_tools() -> StoredNews<Store, testkit_ports::SteppedClock> {
@@ -242,7 +243,7 @@ fn disclosure_tool_lists_filings_with_their_filed_time() {
 #[test]
 fn article_tool_locates_press_items_and_reads_only_when_body_reading_is_on() {
     let mut store = Store::new();
-    let closed = StoredArticles::new(Arc::new(Store::new()), Arc::new(EchoBodies));
+    let closed = StoredArticles::new(Arc::new(Store::new()), Arc::new(EchoBodies), clock());
     let located = tauri::async_runtime::block_on(closed.locate(&handle("n-1")))
         .expect("위치")
         .expect("기사");
@@ -269,12 +270,13 @@ fn article_tool_locates_press_items_and_reads_only_when_body_reading_is_on() {
         ))
         .expect("켜기");
     store.settings = Some(settings);
-    let open = StoredArticles::new(Arc::new(store), Arc::new(EchoBodies));
+    let open = StoredArticles::new(Arc::new(store), Arc::new(EchoBodies), clock());
     assert_eq!(
         tauri::async_runtime::block_on(open.body_reading(&NewsSource::Hankyung)),
         Ok(BodyReadingSetting::Enabled)
     );
     let body = tauri::async_runtime::block_on(open.fetch_body(&located.url)).expect("본문");
+    assert_eq!(body.fetched_at, at(NOW));
     assert_eq!(body.text, text("https://www.hankyung.com/article/n-1"));
     assert_eq!(
         tauri::async_runtime::block_on(
