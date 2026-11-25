@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-risk-settings"
+description = "Enables the get_risk_settings command without any pre-configured scope."
+commands.allow = ["get_risk_settings"]
+
+[[permission]]
+identifier = "deny-get-risk-settings"
+description = "Denies the get_risk_settings command without any pre-configured scope."
+commands.deny = ["get_risk_settings"]

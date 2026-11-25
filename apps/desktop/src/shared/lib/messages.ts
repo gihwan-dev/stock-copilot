@@ -110,6 +110,15 @@ const catalog = {
     ko: "앱과 연결하지 못했어요. 다시 시도해 주세요." as UiText,
   },
   "app.ipcNoData": { ko: "아직 불러온 자료가 없어요." as UiText },
+  "risk.rejectInvalidProfile": {
+    ko: "이 조합으로는 저장할 수 없어요. 비중 상한을 다시 골라 주세요." as UiText,
+  },
+  "risk.rejectUnsupportedExclusion": {
+    ko: "우선주와 스팩은 아직 제외 목록에 넣을 수 없어요." as UiText,
+  },
+  "risk.rejectUnsupportedOrderSetting": {
+    ko: "카드 만료 시간과 주문 횟수 상한은 아직 기본값만 쓸 수 있어요." as UiText,
+  },
   "notice.aiContent": {
     ko: "이 분석과 제안은 AI가 만들었습니다. 사실과 다르거나 오래된 내용이 있을 수 있습니다. 숫자는 앱이 계산한 값이고, 근거 글은 AI가 쓴 것입니다. 투자 판단과 그 결과에 대한 책임은 본인에게 있습니다." as UiText,
   },

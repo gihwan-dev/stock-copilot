@@ -10,6 +10,7 @@ pub mod open_external;
 pub mod order_approval;
 pub mod public_ip;
 pub mod registry;
+pub mod risk_editor;
 pub mod schedule;
 pub mod settings;
 pub mod state;
