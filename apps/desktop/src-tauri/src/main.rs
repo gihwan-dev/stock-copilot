@@ -16,6 +16,7 @@ use src_tauri::ipc::state::BoxFuture;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
 };
+use src_tauri::mcp_portfolio::{CatalogPortfolio, StoredPortfolioTools};
 use src_tauri::mcp_sources::ArticleBodies;
 use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
 use src_tauri::platform::intraday::{BridgedIntradayWatch, IntradayWatchSlot};
@@ -83,8 +84,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         intraday: Arc::clone(&intraday),
     });
     let events = Arc::new(bus);
-    let toss = product_toss(&shared_clock, &events)?;
+    let toss = product_toss(&shared_clock, &events, &repositories)?;
     let turns = ChatTurnBook::new();
+    let directory = InstrumentDirectory::default();
     let ai = assemble_ai(
         discover_ai_setup(
             &context.config().identifier,
@@ -93,14 +95,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .with_market(BrokerMarketTools::connected(Arc::<ProductBroker>::clone(
             &toss.broker,
-        ))),
+        )))
+        .with_portfolio(catalog_portfolio(&toss, &repositories, &directory)),
         &shared_clock,
         &events,
         &repositories,
     )
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
-    let directory = InstrumentDirectory::default();
     let holdings = holdings_listener(&ports, &toss, &repositories, &directory, &shared_clock);
     let link = toss_link_state(&toss, holdings, &shared_clock);
     let app = build_app(
@@ -272,11 +274,30 @@ fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Er
 struct ProductToss {
     secrets: Arc<ProductSecrets>,
     broker: Arc<ProductBroker>,
+    portfolios: Arc<store_sqlite::SqlitePortfolioStore>,
+    accounts: src_tauri::broker_link::AccountSlot,
+}
+
+fn catalog_portfolio(
+    toss: &ProductToss,
+    repositories: &Arc<SqliteRepositories>,
+    directory: &InstrumentDirectory,
+) -> CatalogPortfolio {
+    CatalogPortfolio::connected(
+        Arc::new(StoredPortfolioTools::new(
+            Arc::clone(&toss.portfolios),
+            Arc::clone(repositories),
+            toss.accounts.clone(),
+            directory.clone(),
+        )),
+        directory.clone(),
+    )
 }
 
 fn product_toss(
     clock: &Arc<platform_macos::SystemClock>,
     events: &Arc<application::EventBus>,
+    repositories: &Arc<SqliteRepositories>,
 ) -> Result<ProductToss, std::io::Error> {
     let secrets = Arc::new(product_secrets());
     let broker = live_toss_read(
@@ -289,6 +310,10 @@ fn product_toss(
     Ok(ProductToss {
         secrets,
         broker: Arc::new(broker),
+        portfolios: Arc::new(store_sqlite::SqlitePortfolioStore::new(
+            repositories.as_ref().clone(),
+        )),
+        accounts: src_tauri::broker_link::AccountSlot::default(),
     })
 }
 
@@ -310,9 +335,7 @@ fn product_ports(
         chat_queue: ai.queue,
         warm_chat: Arc::new(Unavailable),
         ai_jobs: ai.jobs,
-        portfolios: Arc::new(store_sqlite::SqlitePortfolioStore::new(
-            repositories.as_ref().clone(),
-        )),
+        portfolios: Arc::clone(&toss.portfolios),
         transactions: Arc::clone(repositories),
         market_data: Arc::clone(repositories),
         news: Arc::clone(repositories),
@@ -329,7 +352,7 @@ fn product_ports(
         clock: Arc::clone(shared_clock),
         presence: Arc::new(platform_macos::MacOsRiskDialogPresence::unavailable()),
         events,
-        saved_accounts: src_tauri::broker_link::AccountSlot::default(),
+        saved_accounts: toss.accounts.clone(),
         database: Arc::new(database_factory(Arc::clone(shared_clock))),
     }
 }
@@ -763,11 +786,16 @@ struct AiSetup {
     cli_projects_dir: Option<PathBuf>,
     turns: ChatTurnBook,
     market: BrokerMarketTools,
+    portfolio: CatalogPortfolio,
 }
 
 impl AiSetup {
     fn with_market(self, market: BrokerMarketTools) -> Self {
         Self { market, ..self }
+    }
+
+    fn with_portfolio(self, portfolio: CatalogPortfolio) -> Self {
+        Self { portfolio, ..self }
     }
 }
 
@@ -918,6 +946,7 @@ fn product_catalog(
             turns: setup.turns.clone(),
             events: Arc::clone(events),
             market: setup.market.clone(),
+            portfolio: setup.portfolio.clone(),
         },
     )
     .ok()
@@ -1021,6 +1050,7 @@ fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBo
         cli_projects_dir: None,
         turns,
         market: BrokerMarketTools::unconnected(),
+        portfolio: CatalogPortfolio::default(),
     }
 }
 
@@ -1517,6 +1547,7 @@ mod ai_composition_tests {
             cli_projects_dir: None,
             turns: ChatTurnBook::new(),
             market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
+            portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
         };
         assemble_ai(setup, clock, events, repositories).expect("AI 조립")
     }
@@ -1625,6 +1656,7 @@ mod ai_composition_tests {
             cli_projects_dir: Some(root.join("projects")),
             turns: ChatTurnBook::new(),
             market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
+            portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
         }
     }
 
@@ -2119,7 +2151,7 @@ mod collector_store_tests {
         ));
         let events = Arc::new(application::EventBusBuilder::default().build());
         let ai = super::ai_composition_tests::without_claude(&clock, &events, repositories);
-        let toss = super::product_toss(&clock, &events).expect("토스 조립");
+        let toss = super::product_toss(&clock, &events, repositories).expect("토스 조립");
         let ports: Ports =
             super::product_ports(repositories, (notifier, &toss), &clock, events, ai);
         tauri::test::mock_builder()
