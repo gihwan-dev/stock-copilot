@@ -644,7 +644,11 @@ fn product_ports(
         notifier,
         news_feeds: Vec::new(),
         clock: Arc::clone(shared_clock),
-        presence: Arc::new(platform_macos::MacOsRiskDialogPresence::unavailable()),
+        presence: Arc::new(platform_macos::MacOsPresence::new(
+            platform_macos::NativeRiskDialog,
+            platform_macos::NativeOrderDialog,
+            platform_macos::UnavailableDeviceOwnerAuth,
+        )),
         events,
         saved_accounts: toss.accounts.clone(),
         database: Arc::new(database_factory(Arc::clone(shared_clock))),

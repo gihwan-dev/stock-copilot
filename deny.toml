@@ -365,6 +365,8 @@ allow = [
   { crate = "zerovec", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "zerovec-derive", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "zmij", reason = "cargo_metadata, tauri, tauri-build 전이 의존성" },
+  { crate = "rfd", reason = "fin-gaps: ADR 0002 24·architecture 4.5 확정 네이티브 요약·위험 확인 창(=0.18.0, 기본 기능 끔, platform-macos만)" },
+  { crate = "objc2-uniform-type-identifiers", reason = "fin-gaps: rfd =0.18.0 macOS 전이 의존성" },
   { crate = "tauri-plugin-updater", reason = "fin-update: 사용자 승인 자동 업데이트 공식 Tauri 플러그인(=2.14.1, zip 기능만, rustls-tls 끔)" },
   { crate = "tauri-plugin", reason = "fin-update: tauri-plugin-updater =2.14.1(사용자 승인 자동 업데이트, zip 기능만) 전이 의존성" },
   { crate = "minisign-verify", reason = "fin-update: tauri-plugin-updater =2.14.1(사용자 승인 자동 업데이트, zip 기능만) 전이 의존성" },
@@ -407,6 +409,7 @@ allow-build-scripts = [
   { crate = "httparse" },
   { crate = "rustls" },
   { crate = "tauri-plugin-updater" },
+  { crate = "rfd" },
   { crate = "filetime" },
   { crate = "rustix" },
 

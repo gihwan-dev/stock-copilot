@@ -10,6 +10,7 @@ workspace = true
 [dependencies]
 application = { path = "../../application" }
 domain = { path = "../../domain" }
+rfd = { version = "=0.18.0", default-features = false }
 
 [dev-dependencies]
 testkit-ports = { path = "../../testkit-ports" }

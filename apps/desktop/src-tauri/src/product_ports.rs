@@ -63,6 +63,9 @@ where
     type SecretStore = Secrets;
     type Clock = platform_macos::SystemClock;
     type Notifier = FilteredNotifier<UnavailableNotificationDelivery>;
-    type UserPresence =
-        platform_macos::MacOsRiskDialogPresence<platform_macos::UnavailableRiskDialogBackend>;
+    type UserPresence = platform_macos::MacOsPresence<
+        platform_macos::NativeRiskDialog,
+        platform_macos::NativeOrderDialog,
+        platform_macos::UnavailableDeviceOwnerAuth,
+    >;
 }
