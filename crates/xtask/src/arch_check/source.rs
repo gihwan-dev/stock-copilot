@@ -7,6 +7,7 @@ mod ast;
 mod composition;
 mod endpoint;
 pub(super) mod identity_confirmation;
+mod order_collector;
 mod schema_surface;
 
 use proc_macro2::{TokenStream, TokenTree};
@@ -103,6 +104,12 @@ fn scan_rust(
         .into_iter()
         .map(|rule| Finding::new(rule, String::from(relative))),
     );
+    if order_collector::mentions_collector(&rules.order_collector, crate_name, relative, &stream) {
+        findings.insert(Finding::new(
+            Rule::OrderCollectorStart,
+            String::from(relative),
+        ));
+    }
     let mut ast = AstRules::new(rules, crate_name, relative, &file);
     ast.visit_file(&file);
     findings.extend(

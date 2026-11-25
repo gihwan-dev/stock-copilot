@@ -8,8 +8,8 @@ use application::{
 };
 use std::marker::PhantomData;
 #[derive(Debug)]
-pub struct ProductPorts<Store>(PhantomData<fn() -> Store>);
-impl<Store> PortTypes for ProductPorts<Store>
+pub struct ProductPorts<Store, Secrets>(PhantomData<fn() -> (Store, Secrets)>);
+impl<Store, Secrets> PortTypes for ProductPorts<Store, Secrets>
 where
     Store: ChatRepository
         + ChatRunLedger
@@ -25,6 +25,7 @@ where
         + SettingsRepository
         + AuditLog
         + 'static,
+    Secrets: application::SecretStore + 'static,
 {
     type BrokerRead = Unavailable;
     type MarketInfo = Unavailable;
@@ -47,7 +48,7 @@ where
     type ValuationRepository = Store;
     type SettingsRepository = Store;
     type AuditLog = Store;
-    type SecretStore = Unavailable;
+    type SecretStore = Secrets;
     type Clock = platform_macos::SystemClock;
     type Notifier = FilteredNotifier<UnavailableNotificationDelivery>;
     type UserPresence =

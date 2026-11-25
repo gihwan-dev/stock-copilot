@@ -900,6 +900,26 @@ path = "apps/desktop/src-tauri/src/lib.rs"
 expect = ["macro:paste"]
 
 [[source]]
+example = "macro-pastey-use-glob.rs"
+path = "crates/mcp-server/src/lib.rs"
+expect = ["macro:pastey"]
+
+[[source]]
+example = "macro-pastey-path.rs"
+path = "crates/mcp-server/src/lib.rs"
+expect = ["macro:paste"]
+
+[[source]]
+example = "macro-rmcp-paste.rs"
+path = "crates/mcp-server/src/lib.rs"
+expect = ["macro:paste"]
+
+[[source]]
+example = "macro-rmcp-paste-use-alias.rs"
+path = "crates/mcp-server/src/lib.rs"
+expect = ["macro:paste"]
+
+[[source]]
 example = "macro-tauri-specta-paste.rs"
 path = "apps/desktop/src-tauri/src/lib.rs"
 expect = ["macro:_tauri_specta_paste"]
