@@ -6,9 +6,6 @@ use domain::{AccountId, BriefingKind, InstrumentId, Symbol, SyncOutcome, Timesta
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 
-pub const BRIEFING_INSTRUMENT_LIMIT: usize = 20;
-pub const BRIEFING_NEWS_PER_INSTRUMENT: usize = 5;
-
 pub struct HoldingsBriefingContext<'a, Portfolios, News> {
     pub portfolios: &'a Portfolios,
     pub news: &'a News,
@@ -39,7 +36,7 @@ impl<Portfolios: PortfolioRepository, News: NewsRepository>
                 let _inserted = seen.insert(holding.instrument().symbol().clone());
             }
         }
-        Ok(seen.into_iter().take(BRIEFING_INSTRUMENT_LIMIT).collect())
+        Ok(seen.into_iter().take(20).collect())
     }
 }
 
@@ -58,7 +55,7 @@ impl<Portfolios: PortfolioRepository, News: NewsRepository> BriefingContextSourc
                 continue;
             };
             let items = self.news.for_instrument(&instrument).await?;
-            evidence.extend(items.iter().take(BRIEFING_NEWS_PER_INSTRUMENT).map(|item| {
+            evidence.extend(items.iter().take(5).map(|item| {
                 let collected = item.collected();
                 BriefingSource {
                     title: collected.title().clone(),

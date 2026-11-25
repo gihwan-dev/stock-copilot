@@ -1,11 +1,20 @@
+use application::{AiProvider, AiRunId, ChatHistory, InformationError, RunSpec};
+use src_tauri::ai_runtime::{
+    AiAvailability, AttachableAi, BridgeLocation, McpAttachedAi, McpRunLink, McpServerHost,
+    McpServerHostParts,
+};
 use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
+use src_tauri::mcp_catalog::{
+    ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
+};
 use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
     NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
 };
+use src_tauri::platform::peer_process::PsPeerInspector;
 use src_tauri::platform::scheduling::SpecWatchInputs;
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::product_events::{
@@ -18,6 +27,8 @@ use src_tauri::{
     product_ports::ProductPorts,
     unavailable::Unavailable,
 };
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use store_sqlite::{SharedDatabase, SqliteRepositories};
 
@@ -49,18 +60,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         NotificationPreferences::default(),
     ));
     let ui_events = Arc::new(UiEventSlot::<tauri::Wry>::default());
-    let (events, scheduler_events) = product_event_bus(ProductSubscribers {
+    let (bus, scheduler_events) = product_event_bus(ProductSubscribers {
         notifier: Arc::clone(&notifier),
         audit: Arc::clone(&repositories),
         clock: Arc::clone(&shared_clock),
         ui_events: Arc::clone(&ui_events),
     });
-    let ports = product_ports(&repositories, notifier, &shared_clock, events);
+    let events = Arc::new(bus);
+    let bridge = BridgeLocation::new();
+    let ai = assemble_ai(
+        discover_ai_setup(&context.config().identifier, bridge.clone()),
+        &shared_clock,
+        &events,
+        &repositories,
+    )
+    .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let ports = product_ports(&repositories, notifier, &shared_clock, events, ai);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock),
         ports,
         context,
     )?;
+    let _first = bridge.set(
+        tauri::Manager::path(&app)
+            .resource_dir()?
+            .join(BRIDGE_FILE_NAME),
+    );
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
             .app_data_dir()?
@@ -82,18 +107,20 @@ fn product_ports(
     repositories: &Arc<SqliteRepositories>,
     notifier: Arc<ProductNotifier>,
     shared_clock: &Arc<platform_macos::SystemClock>,
-    events: application::EventBus,
-) -> Ports<ProductPorts<SqliteRepositories, ProductSecrets>> {
-    Ports::<ProductPorts<SqliteRepositories, ProductSecrets>> {
+    events: Arc<application::EventBus>,
+    ai: ProductAiParts,
+) -> Ports<AppPortTypes> {
+    Ports::<AppPortTypes> {
         broker_read: Arc::new(Unavailable),
         market_info: Arc::new(Unavailable),
         macro_series: Arc::new(Unavailable),
         fundamentals: Arc::new(Unavailable),
-        ai_provider: Arc::new(Unavailable),
+        ai_provider: ai.ai,
         chat_repository: Arc::clone(repositories),
         chat_ledger: Arc::clone(repositories),
-        chat_queue: Arc::new(Unavailable),
+        chat_queue: ai.queue,
         warm_chat: Arc::new(Unavailable),
+        ai_jobs: ai.jobs,
         portfolios: Arc::new(Unavailable),
         transactions: Arc::clone(repositories),
         market_data: Arc::clone(repositories),
@@ -215,6 +242,342 @@ fn spec_watch_inputs(clock: &Arc<platform_macos::SystemClock>) -> Option<SpecWat
         source: Arc::new(broker_toss::TossSpecClient::new(http)),
         baseline,
     })
+}
+
+type ProductMcpHost =
+    McpServerHost<platform_macos::SystemClock, PsPeerInspector, SqliteRepositories>;
+type ProductAi = AiAvailability<McpAttachedAi<ProductClaude, ProductMcpHost>>;
+type ProductQueue = ai_claude_code::AiRunnerQueue<ProductAi>;
+type AppPortTypes =
+    ProductPorts<SqliteRepositories, ProductSecrets, ProductAi, ProductQueue, ProductAiJobs>;
+
+const ALLOWED_BUILTIN_PLUGINS: [&str; 4] = [
+    "cc-plugin-agents-md",
+    "cc-plugin-telemetry",
+    "cc-plugin-privacy",
+    "cc-plugin-plugin-authoring",
+];
+const BRIDGE_SOCKET_FLAG: &str = "--socket";
+const BRIDGE_FILE_NAME: &str = "mcp-bridge";
+
+struct ProductClaude {
+    provider: Arc<ai_claude_code::ClaudeCodeProvider>,
+    bridge: BridgeLocation,
+}
+
+impl std::fmt::Debug for ProductClaude {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProductClaude")
+    }
+}
+
+fn bridge_config(
+    bridge: &Path,
+    socket: &Path,
+) -> Result<ai_claude_code::McpBridgeConfig, ai_claude_code::CommandBuildError> {
+    ai_claude_code::McpBridgeConfig::try_new(
+        String::from(ANALYSIS_MCP_SERVER),
+        bridge.to_path_buf(),
+        vec![
+            String::from(BRIDGE_SOCKET_FLAG),
+            socket.to_string_lossy().into_owned(),
+        ],
+    )
+}
+
+impl ProductClaude {
+    fn attachment(
+        &self,
+        link: McpRunLink,
+    ) -> Result<ai_claude_code::RunMcpAttachment, InformationError> {
+        let McpRunLink {
+            socket_path,
+            token,
+            binder,
+        } = link;
+        let location = self.bridge.get().ok_or(InformationError::Unavailable(
+            application::ResetTime::NotProvided,
+        ))?;
+        let bridge = bridge_config(location, &socket_path)
+            .map_err(ai_claude_code::CommandBuildError::to_information_error)?;
+        Ok(
+            ai_claude_code::RunMcpAttachment::new(bridge, token).with_spawned_notice(
+                ai_claude_code::SpawnedPidNotice::new(move |pid| binder.bind(pid)),
+            ),
+        )
+    }
+}
+
+impl AiProvider for ProductClaude {
+    type Stream = ai_claude_code::ClaudeEventStream;
+
+    async fn run(&self, spec: RunSpec) -> Result<Self::Stream, InformationError> {
+        self.provider.run(spec).await
+    }
+
+    async fn resume(
+        &self,
+        spec: RunSpec,
+        history: ChatHistory,
+        message: domain::UntrustedText,
+    ) -> Result<Self::Stream, InformationError> {
+        self.provider.resume(spec, history, message).await
+    }
+
+    async fn usage(&self) -> Result<application::AiUsage, InformationError> {
+        self.provider.usage().await
+    }
+
+    async fn interrupt(&self, run: &AiRunId) -> Result<(), InformationError> {
+        self.provider.interrupt(run).await
+    }
+
+    async fn verify_isolation(
+        &self,
+        kind: application::RunKind,
+    ) -> Result<application::IsolationCheck, InformationError> {
+        self.provider.verify_isolation(kind).await
+    }
+}
+
+impl AttachableAi for ProductClaude {
+    async fn run_with_mcp(
+        &self,
+        spec: RunSpec,
+        link: McpRunLink,
+    ) -> Result<Self::Stream, InformationError> {
+        self.provider
+            .run_attached(spec, self.attachment(link)?)
+            .await
+    }
+
+    async fn resume_with_mcp(
+        &self,
+        spec: RunSpec,
+        history: ChatHistory,
+        message: domain::UntrustedText,
+        link: McpRunLink,
+    ) -> Result<Self::Stream, InformationError> {
+        self.provider
+            .resume_attached(spec, history, message, self.attachment(link)?)
+            .await
+    }
+
+    async fn verify_with_mcp(
+        &self,
+        link: McpRunLink,
+    ) -> Result<application::IsolationCheck, InformationError> {
+        self.provider
+            .verify_isolation_attached(self.attachment(link)?)
+            .await
+    }
+}
+
+struct ProductAiJobs {
+    queue: Arc<ProductQueue>,
+    grants: tokio::sync::Mutex<BTreeMap<scheduler::ScheduledJobId, AiRunId>>,
+}
+
+impl std::fmt::Debug for ProductAiJobs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProductAiJobs")
+    }
+}
+
+impl scheduler::AiJobQueue for ProductAiJobs {
+    async fn request_background_slot(
+        &self,
+        job: scheduler::ScheduledJobId,
+        _now: domain::Timestamp,
+    ) -> Result<scheduler::AiQueueAdmission, scheduler::AiQueueError> {
+        use ai_claude_code::ScheduledSlotAdmission as Slot;
+        let admission = self
+            .queue
+            .request_scheduled_slot(job.as_code())
+            .await
+            .map_err(|_error| scheduler::AiQueueError::Unavailable)?;
+        Ok(match admission {
+            Slot::Admitted(grant) => {
+                let (run, _session, _token) = grant.credentials.into_parts();
+                let _previous = self.grants.lock().await.insert(job, run);
+                scheduler::AiQueueAdmission::Admitted
+            }
+            Slot::PausedForChat | Slot::Busy => scheduler::AiQueueAdmission::PausedForChat,
+            Slot::BudgetReached { .. } => {
+                scheduler::AiQueueAdmission::BudgetReached { resumes_at: None }
+            }
+            Slot::RateLimited { resumes_at, .. } => scheduler::AiQueueAdmission::RateLimited {
+                resumes_at: Some(resumes_at),
+            },
+        })
+    }
+
+    async fn release_background_slot(
+        &self,
+        job: scheduler::ScheduledJobId,
+        _now: domain::Timestamp,
+    ) -> Result<(), scheduler::AiQueueError> {
+        let Some(run) = self.grants.lock().await.remove(&job) else {
+            return Ok(());
+        };
+        self.queue
+            .release_scheduled_slot(&run, ai_claude_code::ScheduledReleaseOutcome::Completed)
+            .await
+            .map(|_written| ())
+            .map_err(|_error| scheduler::AiQueueError::Unavailable)
+    }
+}
+
+struct AiSetup {
+    executable: Option<PathBuf>,
+    host_env: ai_claude_code::HostEnvironment,
+    work_root: PathBuf,
+    mcp_base: PathBuf,
+    bridge: BridgeLocation,
+    sandbox: Option<ai_claude_code::SandboxLayer>,
+    cli_projects_dir: Option<PathBuf>,
+}
+
+impl std::fmt::Debug for AiSetup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AiSetup")
+            .field("has_executable", &self.executable.is_some())
+            .field("has_sandbox", &self.sandbox.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+struct ProductAiParts {
+    ai: Arc<ProductAi>,
+    queue: Arc<ProductQueue>,
+    jobs: Arc<ProductAiJobs>,
+}
+
+fn assemble_ai(
+    setup: AiSetup,
+    clock: &Arc<platform_macos::SystemClock>,
+    events: &Arc<application::EventBus>,
+    repositories: &Arc<SqliteRepositories>,
+) -> Result<ProductAiParts, ai_claude_code::QuotaConfigError> {
+    let ai = Arc::new(
+        claude_ai(setup, clock, events, repositories)
+            .map_or(AiAvailability::Missing, AiAvailability::Ready),
+    );
+    let shared_clock: Arc<dyn application::Clock> =
+        Arc::<platform_macos::SystemClock>::clone(clock);
+    let queue = Arc::new(ai_claude_code::AiRunnerQueue::with_default_policy(
+        Arc::clone(&ai),
+        shared_clock,
+        Arc::clone(events),
+    )?);
+    let jobs = Arc::new(ProductAiJobs {
+        queue: Arc::clone(&queue),
+        grants: tokio::sync::Mutex::new(BTreeMap::new()),
+    });
+    Ok(ProductAiParts { ai, queue, jobs })
+}
+
+fn claude_ai(
+    setup: AiSetup,
+    clock: &Arc<platform_macos::SystemClock>,
+    events: &Arc<application::EventBus>,
+    repositories: &Arc<SqliteRepositories>,
+) -> Option<McpAttachedAi<ProductClaude, ProductMcpHost>> {
+    let registry = analysis_catalog(
+        clock,
+        CatalogStores {
+            theses: Arc::clone(repositories),
+            estimates: Arc::clone(repositories),
+            events: Arc::clone(events),
+        },
+    )
+    .ok()?;
+    let base = ai_claude_code::ClaudeCodeConfig::new(
+        setup.executable?,
+        setup.work_root,
+        String::from(ANALYSIS_MCP_SERVER),
+        allowed_tool_names(ANALYSIS_MCP_SERVER, &registry),
+        ALLOWED_BUILTIN_PLUGINS
+            .into_iter()
+            .map(String::from)
+            .collect(),
+    )?
+    .with_host_environment(setup.host_env)
+    .with_collection_json_schema(String::from(ai_claude_code::WEB_COLLECTION_JSON_SCHEMA));
+    let config = match (setup.sandbox, setup.cli_projects_dir) {
+        (Some(layer), None) => base.with_sandbox(layer),
+        (None, None) => base.without_sandbox(),
+        (Some(layer), Some(dir)) => base.with_sandbox(layer).with_cli_projects_dir(dir),
+        (None, Some(dir)) => base.without_sandbox().with_cli_projects_dir(dir),
+    };
+    let shared_clock: Arc<dyn application::Clock> =
+        Arc::<platform_macos::SystemClock>::clone(clock);
+    let provider = ai_claude_code::ClaudeCodeProvider::new(config).with_clock_and_quota(
+        shared_clock,
+        ai_claude_code::QuotaPolicy::default_policy().ok()?,
+    );
+    let host = McpServerHost::new(McpServerHostParts {
+        clock: Arc::clone(clock),
+        inspector: mcp_server::PeerInspectorMode::Configured(Arc::new(PsPeerInspector::default())),
+        config: mcp_server::McpServerConfig::default_config().ok()?,
+        registry: Arc::new(registry),
+        ledger: mcp_server::ToolLedgerMode::Configured(Arc::clone(repositories)),
+        base_dir: setup.mcp_base,
+        bridge: setup.bridge.clone(),
+    });
+    Some(McpAttachedAi::new(
+        Arc::new(ProductClaude {
+            provider: Arc::new(provider),
+            bridge: setup.bridge,
+        }),
+        Arc::new(host),
+    ))
+}
+
+fn discover_ai_setup(identifier: &str, bridge: BridgeLocation) -> AiSetup {
+    let host_env = ai_claude_code::HostEnvironment::from_pairs(std::env::vars());
+    let temp_root = host_env
+        .tmpdir()
+        .and_then(|tmp| std::fs::canonicalize(tmp).ok())
+        .unwrap_or_else(|| PathBuf::from("/private/tmp"));
+    let app_data = host_env.home().map(|home| {
+        PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join(identifier)
+    });
+    let work_root = temp_root.join("stock-copilot-ai");
+    let executable = match ai_claude_code::find_claude_executable(
+        &ai_claude_code::DiscoveryConfig::new(host_env.clone()),
+        &ai_claude_code::SystemLoginShellPathResolver,
+    ) {
+        ai_claude_code::DiscoveryOutcome::Found { path, .. } => Some(path),
+        ai_claude_code::DiscoveryOutcome::NotInstalled => None,
+    };
+    AiSetup {
+        executable,
+        sandbox: app_data.and_then(|dir| probed_sandbox(&dir, &work_root)),
+        host_env,
+        mcp_base: temp_root.join("sc-mcp"),
+        work_root,
+        bridge,
+        cli_projects_dir: None,
+    }
+}
+
+fn probed_sandbox(app_data: &Path, scratch: &Path) -> Option<ai_claude_code::SandboxLayer> {
+    std::fs::create_dir_all(app_data).ok()?;
+    std::fs::create_dir_all(scratch).ok()?;
+    let profile = ai_claude_code::SandboxProfile::try_new(&[app_data.to_path_buf()]).ok()?;
+    let layer = ai_claude_code::SandboxLayer::new(
+        PathBuf::from(ai_claude_code::SYSTEM_SANDBOX_EXEC),
+        profile,
+    );
+    match ai_claude_code::probe_sandbox_layer(&layer, scratch) {
+        ai_claude_code::SandboxProbeOutcome::Applied => Some(layer),
+        ai_claude_code::SandboxProbeOutcome::NotApplied
+        | ai_claude_code::SandboxProbeOutcome::Unavailable => None,
+    }
 }
 
 type ProductNotifier = FilteredNotifier<UnavailableNotificationDelivery>;
@@ -652,6 +1015,439 @@ mod briefing_store_tests {
 }
 
 #[cfg(test)]
+mod ai_composition_tests {
+    use super::{ANALYSIS_MCP_SERVER, AiSetup, ProductAiParts, assemble_ai, bridge_config};
+    use ai_claude_code::HostEnvironment;
+    use application::{
+        AiEvent, AiEventStream, AiProvider, AiRunId, AnalysisPrompt, CollectionQuery,
+        InformationError, IsolationCheck, ModelSelection, ReasoningEffort, ResetTime, RunInput,
+        RunPurpose, RunSpec,
+    };
+    use serde_json::{Value, json};
+    use src_tauri::ai_runtime::BridgeLocation;
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use store_sqlite::{SharedDatabase, SqliteRepositories};
+    use testkit::fake_ai_cli::{
+        EnvPresence, FakeAiMode, FakeAiScenario, InvocationRecord, NonessentialTrafficFlag,
+        PreparedFakeAiCli, ReplayScenario, ReplayTurn, TurnStop,
+    };
+
+    static COUNTER: AtomicU64 = AtomicU64::new(1_u64);
+    const BRIDGE: &str = "/Applications/Stock Copilot.app/Contents/Resources/mcp-bridge";
+
+    pub(super) fn without_claude(
+        clock: &Arc<platform_macos::SystemClock>,
+        events: &Arc<application::EventBus>,
+        repositories: &Arc<SqliteRepositories>,
+    ) -> ProductAiParts {
+        let setup = AiSetup {
+            executable: None,
+            host_env: HostEnvironment::from_pairs(Vec::<(String, String)>::new()),
+            work_root: PathBuf::from("/private/tmp/stock-copilot-ai"),
+            mcp_base: PathBuf::from("/private/tmp/sc-mcp"),
+            bridge: BridgeLocation::new(),
+            sandbox: None,
+            cli_projects_dir: None,
+        };
+        assemble_ai(setup, clock, events, repositories).expect("AI 조립")
+    }
+
+    struct TempRoot(PathBuf);
+
+    impl TempRoot {
+        fn new() -> Self {
+            let seq = COUNTER.fetch_add(1_u64, Ordering::Relaxed);
+            let path =
+                PathBuf::from("/private/tmp").join(format!("sc-fdm-{}-{seq}", std::process::id()));
+            std::fs::create_dir_all(&path).expect("폴더");
+            Self(path)
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            match std::fs::remove_dir_all(&self.0) {
+                Ok(()) | Err(_) => {}
+            }
+        }
+    }
+
+    fn analysis_tools() -> Vec<String> {
+        let golden: Value = serde_json::from_str(
+            &std::fs::read_to_string("../../../fixtures/mcp/tools_list.json").expect("골든"),
+        )
+        .expect("골든 JSON");
+        golden
+            .as_array()
+            .expect("도구 배열")
+            .iter()
+            .map(|tool| format!("mcp__stock__{}", tool["name"].as_str().expect("이름")))
+            .collect()
+    }
+
+    fn init_line(tools: &[String], servers: &Value) -> String {
+        json!({
+            "type": "system",
+            "subtype": "init",
+            "tools": tools,
+            "mcp_servers": servers,
+            "model": "claude-opus-5-5",
+            "permissionMode": "dontAsk",
+            "slash_commands": [],
+            "skills": [],
+            "plugins": ["cc-plugin-privacy"],
+            "apiKeySource": "none",
+            "claude_code_version": "2.1.322"
+        })
+        .to_string()
+    }
+
+    fn turn(lines: Vec<String>) -> ReplayTurn {
+        ReplayTurn {
+            stdout_lines: lines,
+            stderr_lines: Vec::new(),
+            stop_after: TurnStop::Continue,
+        }
+    }
+
+    fn scenario(init: String) -> FakeAiScenario {
+        let result = |turns: u32| {
+            json!({"type": "result", "subtype": "success", "is_error": false, "num_turns": turns})
+                .to_string()
+        };
+        FakeAiScenario {
+            mode: FakeAiMode::Replay(ReplayScenario {
+                immediate_lines: Vec::new(),
+                turns: vec![
+                    turn(vec![init, result(0)]),
+                    turn(vec![
+                        json!({
+                            "type": "assistant",
+                            "message": {"model": "claude-opus-5-5", "content": [{"type": "text", "text": "확인했습니다"}]}
+                        })
+                        .to_string(),
+                        result(1),
+                    ]),
+                ],
+                final_stderr_lines: Vec::new(),
+                trailing_without_newline: None,
+                exit_code: 0_u8,
+            }),
+            capture_path: None,
+        }
+    }
+
+    fn setup(executable: Option<PathBuf>, root: &Path) -> AiSetup {
+        let bridge = BridgeLocation::new();
+        assert_eq!(bridge.set(PathBuf::from(BRIDGE)), Ok(()));
+        AiSetup {
+            executable,
+            host_env: HostEnvironment::new_clean(
+                String::from("/private/tmp/fake-home"),
+                String::from("/usr/bin:/bin"),
+                String::from("tester"),
+                Some(String::from("tester")),
+                String::from("/private/tmp"),
+            ),
+            work_root: root.join("w"),
+            mcp_base: root.join("m"),
+            bridge,
+            sandbox: None,
+            cli_projects_dir: Some(root.join("projects")),
+        }
+    }
+
+    fn parts(setup: AiSetup) -> ProductAiParts {
+        let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let events = Arc::new(application::EventBusBuilder::default().build());
+        let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
+        assemble_ai(setup, &clock, &events, &repositories).expect("조립")
+    }
+
+    fn spec(id: &str, input: RunInput, purpose: RunPurpose) -> RunSpec {
+        RunSpec::new(
+            AiRunId::try_new(id).expect("id"),
+            input,
+            ModelSelection::Default,
+            ReasoningEffort::Default,
+            purpose,
+        )
+    }
+
+    async fn drain<S: AiEventStream>(stream: &mut S) -> Vec<AiEvent> {
+        let mut events = Vec::new();
+        while let Ok(Some(event)) = stream.next().await {
+            events.push(event);
+        }
+        events
+    }
+
+    fn only_invocation(prepared: &PreparedFakeAiCli) -> InvocationRecord {
+        let invocations = prepared.read_invocations().expect("호출 기록");
+        assert_eq!(invocations.len(), 1_usize);
+        invocations.into_iter().next().expect("호출 하나")
+    }
+
+    fn value_after<'a>(argv: &'a [String], flag: &str) -> Vec<&'a str> {
+        argv.iter()
+            .zip(argv.iter().skip(1))
+            .filter(|(left, _right)| *left == flag)
+            .map(|(_left, right)| right.as_str())
+            .collect()
+    }
+
+    fn assert_common_isolation(argv: &[String]) {
+        for flag in [
+            "-p",
+            "--restricted",
+            "--disable-slash-commands",
+            "--strict-mcp-config",
+            "--no-session-persistence",
+        ] {
+            assert!(argv.iter().any(|arg| arg == flag), "{flag}");
+        }
+        assert_eq!(value_after(argv, "--permission-mode"), vec!["dontAsk"]);
+        assert_eq!(value_after(argv, "--permission-prompts"), vec!["none"]);
+        assert!(argv.iter().all(|arg| arg != "--resume"));
+    }
+
+    #[test]
+    fn composed_chat_run_keeps_isolation_and_connects_through_a_per_run_server() {
+        let root = TempRoot::new();
+        let tools = analysis_tools();
+        let prepared = PreparedFakeAiCli::prepare(
+            &root.0,
+            "fake-claude",
+            &scenario(init_line(
+                &tools,
+                &json!([{"name": ANALYSIS_MCP_SERVER, "status": "connected"}]),
+            )),
+        )
+        .expect("가짜 CLI");
+        let composed = parts(setup(
+            Some(prepared.executable_path().to_path_buf()),
+            &root.0,
+        ));
+        let events = tauri::async_runtime::block_on(async {
+            let mut stream = composed
+                .ai
+                .run(spec(
+                    "chat-fin-d",
+                    RunInput::Analysis(AnalysisPrompt::try_new("보유 종목").expect("prompt")),
+                    RunPurpose::Chat,
+                ))
+                .await
+                .expect("분석 실행");
+            drain(&mut stream).await
+        });
+        assert_eq!(
+            events.first(),
+            Some(&AiEvent::IsolationChecked(IsolationCheck::Passed))
+        );
+        assert!(events.iter().any(is_text));
+        assert_analysis_invocation(&only_invocation(&prepared), tools, &root.0);
+        let leftover = std::fs::read_dir(root.0.join("m"))
+            .expect("소켓 기반 폴더")
+            .count();
+        assert_eq!(leftover, 0_usize, "실행이 끝나면 실행별 소켓 폴더가 없다");
+    }
+
+    const fn is_text(event: &AiEvent) -> bool {
+        match event {
+            AiEvent::TextDelta(_) => true,
+            AiEvent::IsolationChecked(_)
+            | AiEvent::ToolCall { .. }
+            | AiEvent::WebSearch { .. }
+            | AiEvent::TokenUsage(_)
+            | AiEvent::Quota(_)
+            | AiEvent::RateLimited { .. }
+            | AiEvent::ModelRerouted(_)
+            | AiEvent::ActualModel(_)
+            | AiEvent::McpUnavailable
+            | AiEvent::Unknown(_) => false,
+        }
+    }
+
+    fn assert_analysis_invocation(invocation: &InvocationRecord, tools: Vec<String>, root: &Path) {
+        assert_common_isolation(&invocation.argv);
+        assert_eq!(value_after(&invocation.argv, "--tools"), vec![""]);
+        let allowed_at = invocation
+            .argv
+            .iter()
+            .position(|arg| arg == "--allowedTools")
+            .expect("--allowedTools");
+        let allowed: Vec<String> = invocation
+            .argv
+            .iter()
+            .skip(allowed_at.saturating_add(1))
+            .take(tools.len())
+            .cloned()
+            .collect();
+        let mut expected = tools;
+        expected.sort();
+        assert_eq!(allowed, expected);
+        let mcp_config = value_after(&invocation.argv, "--mcp-config");
+        assert_eq!(mcp_config.len(), 1_usize);
+        assert!(
+            mcp_config
+                .iter()
+                .all(|path| path.starts_with(root.join("w").to_str().expect("경로")))
+        );
+        assert_eq!(invocation.env_observation.mcp_token, EnvPresence::Present);
+        assert_eq!(
+            invocation.env_observation.anthropic_api_key,
+            EnvPresence::Absent
+        );
+        assert_eq!(
+            invocation.env_observation.disable_nonessential_traffic,
+            NonessentialTrafficFlag::Disabled
+        );
+        assert_eq!(
+            invocation
+                .stdin_lines
+                .first()
+                .map(|line| line.contains("/usage")),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn composed_collection_run_has_web_search_only_and_no_app_mcp() {
+        let root = TempRoot::new();
+        let prepared = PreparedFakeAiCli::prepare(
+            &root.0,
+            "fake-claude",
+            &scenario(init_line(&[String::from("WebSearch")], &json!([]))),
+        )
+        .expect("가짜 CLI");
+        let composed = parts(setup(
+            Some(prepared.executable_path().to_path_buf()),
+            &root.0,
+        ));
+        let events = tauri::async_runtime::block_on(async {
+            let mut stream = composed
+                .ai
+                .run(spec(
+                    "collect-fin-d",
+                    RunInput::Collection(CollectionQuery::CodeTopics {
+                        instruments: Vec::new(),
+                        topics: Vec::new(),
+                    }),
+                    RunPurpose::WebCollection,
+                ))
+                .await
+                .expect("수집 실행");
+            drain(&mut stream).await
+        });
+        assert_eq!(
+            events.first(),
+            Some(&AiEvent::IsolationChecked(IsolationCheck::Passed))
+        );
+        let invocation = only_invocation(&prepared);
+        assert_common_isolation(&invocation.argv);
+        assert_eq!(value_after(&invocation.argv, "--tools"), vec!["WebSearch"]);
+        assert_eq!(
+            value_after(&invocation.argv, "--allowedTools"),
+            vec!["WebSearch"]
+        );
+        assert_eq!(
+            value_after(&invocation.argv, "--json-schema").len(),
+            1_usize
+        );
+        assert_eq!(invocation.env_observation.mcp_token, EnvPresence::Absent);
+        assert!(
+            !root.0.join("m").exists(),
+            "수집 실행은 앱 MCP를 열지 않는다"
+        );
+    }
+
+    #[test]
+    fn missing_claude_leaves_ai_unavailable_but_keeps_queue_and_jobs_working() {
+        let root = TempRoot::new();
+        let composed = parts(setup(None, &root.0));
+        tauri::async_runtime::block_on(async {
+            assert_eq!(
+                composed
+                    .ai
+                    .run(spec(
+                        "chat-missing",
+                        RunInput::Analysis(AnalysisPrompt::try_new("x").expect("prompt")),
+                        RunPurpose::Chat,
+                    ))
+                    .await
+                    .err(),
+                Some(InformationError::Unavailable(ResetTime::NotProvided))
+            );
+            let at = domain::Timestamp::from_parts(
+                domain::UnixSeconds::new(1_790_000_000_i64),
+                domain::Nanosecond::new(0_u32),
+                domain::OffsetSeconds::new(0_i32),
+            )
+            .expect("시각");
+            assert_eq!(
+                scheduler::AiJobQueue::request_background_slot(
+                    composed.jobs.as_ref(),
+                    scheduler::ScheduledJobId::MorningBriefing,
+                    at,
+                )
+                .await,
+                Ok(scheduler::AiQueueAdmission::Admitted)
+            );
+            assert_eq!(
+                scheduler::AiJobQueue::request_background_slot(
+                    composed.jobs.as_ref(),
+                    scheduler::ScheduledJobId::ClosingReview,
+                    at,
+                )
+                .await,
+                Ok(scheduler::AiQueueAdmission::PausedForChat),
+                "예약 작업은 한 번에 하나"
+            );
+            assert_eq!(
+                scheduler::AiJobQueue::release_background_slot(
+                    composed.jobs.as_ref(),
+                    scheduler::ScheduledJobId::MorningBriefing,
+                    at,
+                )
+                .await,
+                Ok(())
+            );
+            assert_eq!(
+                scheduler::AiJobQueue::request_background_slot(
+                    composed.jobs.as_ref(),
+                    scheduler::ScheduledJobId::ClosingReview,
+                    at,
+                )
+                .await,
+                Ok(scheduler::AiQueueAdmission::Admitted)
+            );
+        });
+    }
+
+    #[test]
+    fn bridge_config_points_the_cli_at_the_bundled_bridge_with_a_token_reference_only() {
+        let config = bridge_config(
+            Path::new(BRIDGE),
+            Path::new("/private/tmp/sc-mcp/r0123/m.sock"),
+        )
+        .expect("브리지 설정");
+        let rendered: Value =
+            serde_json::from_str(&config.render_mcp_json(None).expect("렌더")).expect("JSON");
+        assert_eq!(
+            rendered,
+            json!({"mcpServers": {"stock": {
+                "type": "stdio",
+                "command": BRIDGE,
+                "args": ["--socket", "/private/tmp/sc-mcp/r0123/m.sock"],
+                "env": {"STOCK_MCP_TOKEN": "${STOCK_MCP_TOKEN}"}
+            }}})
+        );
+    }
+}
+
+#[cfg(test)]
 mod key_provision_tests {
     use application::SecretValue;
     use src_tauri::database::{DatabaseKeyProvision, DatabaseStatus, open_provisioned_database};
@@ -760,7 +1556,6 @@ mod collector_store_tests {
     use src_tauri::platform::notifier::{
         FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
     };
-    use src_tauri::product_ports::ProductPorts;
     use std::sync::{Arc, RwLock};
     use store_sqlite::{SharedDatabase, SqliteRepositories};
 
@@ -822,7 +1617,7 @@ mod collector_store_tests {
         }
     }
 
-    type Ports = src_tauri::ports::Ports<ProductPorts<SqliteRepositories, super::ProductSecrets>>;
+    type Ports = src_tauri::ports::Ports<super::AppPortTypes>;
 
     fn mock_app(repositories: &Arc<SqliteRepositories>) -> tauri::App<tauri::test::MockRuntime> {
         let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
@@ -830,12 +1625,9 @@ mod collector_store_tests {
             UnavailableNotificationDelivery,
             NotificationPreferences::default(),
         ));
-        let ports: Ports = super::product_ports(
-            repositories,
-            notifier,
-            &clock,
-            application::EventBusBuilder::default().build(),
-        );
+        let events = Arc::new(application::EventBusBuilder::default().build());
+        let ai = super::ai_composition_tests::without_claude(&clock, &events, repositories);
+        let ports: Ports = super::product_ports(repositories, notifier, &clock, events, ai);
         tauri::test::mock_builder()
             .manage(ports)
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
@@ -848,15 +1640,12 @@ mod collector_store_tests {
         let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
         let app = mock_app(&repositories);
         let calls = Arc::new(RwLock::new(Vec::new()));
-        let runner = AppFeedRunner::<
-            tauri::test::MockRuntime,
-            ProductPorts<SqliteRepositories, super::ProductSecrets>,
-            CountingFeed,
-        >::new(
-            app.handle().clone(),
-            repositories.as_ref().clone(),
-            one_article_feed(&calls),
-        );
+        let runner =
+            AppFeedRunner::<tauri::test::MockRuntime, super::AppPortTypes, CountingFeed>::new(
+                app.handle().clone(),
+                repositories.as_ref().clone(),
+                one_article_feed(&calls),
+            );
         let directory = std::path::PathBuf::from("../../../target/fin-e")
             .join(format!("collector-{}", std::process::id()));
         tauri::async_runtime::block_on(async {
@@ -887,5 +1676,27 @@ mod collector_store_tests {
             let _closed = shared.close().await;
         });
         std::fs::remove_dir_all(directory).expect("정리");
+    }
+
+    #[test]
+    fn daily_valuation_without_market_calendar_fails_without_recording_and_skips_backfill() {
+        use scheduler::{DailyValuationPort, JobError};
+        use src_tauri::platform::scheduled_ports::AppStoredJobs;
+        let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
+        let app = mock_app(&repositories);
+        let jobs = AppStoredJobs::<tauri::test::MockRuntime, super::AppPortTypes>::new(
+            app.handle().clone(),
+            repositories.as_ref().clone(),
+        );
+        let now = broker_toss::TossTimestamp::try_from("2026-11-25T07:00:00Z")
+            .expect("clock")
+            .into_domain();
+        tauri::async_runtime::block_on(async {
+            assert_eq!(
+                jobs.record_today(now).await,
+                Err(JobError::PortUnavailable(String::from("market-calendar")))
+            );
+            assert_eq!(jobs.missing_days(now).await, Ok(Vec::new()));
+        });
     }
 }
