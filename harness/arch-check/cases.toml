@@ -886,6 +886,21 @@ findings = [
 ]
 
 [[case]]
+name = "pastey-direct-dependency-fail"
+findings = [
+    { rule = "external-location", subject = "mcp-server => pastey" },
+    { rule = "external-location", subject = "store-sqlite => pastey" },
+]
+
+[[case]]
+name = "identity-confirmation-rmcp-paste-fail"
+findings = [
+    { rule = "identity-confirmation-issuance", subject = "crates/mcp-server/src/aliased_rmcp.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/mcp-server/src/direct_rmcp.rs" },
+    { rule = "identity-confirmation-issuance", subject = "crates/mcp-server/src/glob_rmcp.rs" },
+]
+
+[[case]]
 name = "identity-confirmation-reexported-paste-fail"
 findings = [
     { rule = "identity-confirmation-issuance", subject = "apps/desktop/e2e-app/src/lib.rs" },
