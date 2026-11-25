@@ -107,9 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             bundled_bridge(),
             turns.clone(),
         )
-        .with_market(BrokerMarketTools::connected(Arc::<ProductBroker>::clone(
-            &toss.broker,
-        )))
+        .with_market(market_tools(&toss, &shared_clock))
         .with_portfolio(catalog_portfolio(&toss, &repositories, &directory))
         .with_estimate_runs(estimate_runs.clone()),
         &shared_clock,
@@ -186,6 +184,14 @@ fn estimate_identity() -> Option<application::EstimateRunIdentity> {
             hash: domain::PromptHash::try_new(digest.as_str()).ok()?,
         },
     })
+}
+
+fn market_tools(toss: &ProductToss, clock: &Arc<platform_macos::SystemClock>) -> BrokerMarketTools {
+    BrokerMarketTools::connected(Arc::<ProductBroker>::clone(&toss.broker)).with_clock(Arc::<
+        platform_macos::SystemClock,
+    >::clone(
+        clock
+    ))
 }
 
 type ProductCalendars = ResolutionData<TossResolutionSource>;

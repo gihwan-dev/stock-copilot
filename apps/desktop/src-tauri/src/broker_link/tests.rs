@@ -152,3 +152,36 @@ fn quote_tool_fails_closed_when_unconnected_or_when_the_broker_fails() {
     let _broker_failure =
         tauri::async_runtime::block_on(tools.quote(&symbol, KnownMarket::Kr)).expect_err("fails");
 }
+
+#[test]
+fn candles_tool_reads_recent_daily_candles_and_keeps_only_the_requested_days() {
+    let broker = Arc::new(ScriptedBrokerRead::default());
+    let symbol = Symbol::try_new("005930").expect("symbol");
+    let candles = testkit_ports::estimate_fixtures::sample_daily_candles(10).expect("일봉");
+    let last_close = candles.last().expect("마지막").values().close().as_money();
+    broker.script_candles().push(Ok(candles));
+    let now = testkit_ports::estimate_fixtures::sample_day(11).expect("시각");
+    let tools = BrokerMarketTools::connected(Arc::<ScriptedBrokerRead>::clone(&broker))
+        .with_clock(Arc::new(testkit_ports::SteppedClock::new(now)));
+    let window = application::CandleWindow::try_new(3).expect("창");
+    let view = tauri::async_runtime::block_on(tools.candles(&symbol, KnownMarket::Kr, window))
+        .expect("view")
+        .expect("candles");
+    assert_eq!(view.lines.len(), 3);
+    assert_eq!(view.lines.last().expect("마지막 줄").close, last_close);
+    assert_eq!(view.collected_at, now);
+    let Some(testkit_ports::scripted::BrokerReadCall::Candles(_, interval, period, _)) =
+        broker.calls().into_iter().next()
+    else {
+        panic!("일봉 조회");
+    };
+    assert_eq!(interval.end(), now);
+    assert_eq!(period, domain::CandlePeriod::Daily);
+    let without_clock = BrokerMarketTools::connected(broker);
+    let _unavailable = tauri::async_runtime::block_on(without_clock.candles(
+        &symbol,
+        KnownMarket::Kr,
+        application::CandleWindow::try_new(3).expect("창"),
+    ))
+    .expect_err("시계 없으면 닫힘");
+}

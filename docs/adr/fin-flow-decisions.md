@@ -22,4 +22,5 @@
 | FF-5 | 저장소 `SqliteRepositories`에 신호 무효화 포트(`SignalInvalidationRepository`) 위임을 더한다(신호 저장소에는 있었으나 공유 저장소에 빠져 있었음) | - |
 | FF-6 | 조립 시험: 가짜 CLI 대신 제품 MCP 카탈로그(`analysis_catalog`)의 `get_estimate_task`·`submit_estimate` 도구를 실행 ID로 직접 부르는 가짜 AI로, 코드 발급 과제 → 실행 맥락 장부 → SQLite 제출 기록(프롬프트 해시 포함) → `EstimateSubmitted` 이벤트까지 확인한다. 토스는 대본 브로커(`ScriptedBrokerRead`)로 재료 어댑터를 시험한다. 실제 `claude`·토스 호출 없음 | 가짜 CLI 대본 MCP 모드(소켓 경로가 실행 때 정해져 대본에 못 넣음) |
 | 채팅 | 채팅 실행은 추정 과제를 만들지 않는다. 채팅 입력은 사용자 원문만 넘기는 규칙(design 4.2)이라 과제 ID를 끼워 넣을 자리가 없고, 신호 카드는 코어 자료로 그린다 | 화면 종목으로 채팅 실행에 과제 배정 |
-| 남은 것 | 신호 평가 정책에 투자 원칙(`with_unresolved_principle` 등) 미반영, 실제 모델별 보정 분리, 긴급 공시의 종목 연결, MCP `get_candles`(미연결) | - |
+| 남은 것 | 신호 평가 정책에 투자 원칙(`with_unresolved_principle` 등) 미반영, 실제 모델별 보정 분리, 긴급 공시의 종목 연결 | - |
+| FF-7 | MCP `get_candles`(추정 프롬프트가 쓰는 도구, 전에는 늘 미연결)를 토스 일봉 조회로 잇는다: 요청 일수의 두 배 달력 기간을 수정주가(기준 시각 = 조회 시각)로 받아 마지막 N개 봉만 준다. 시계가 없으면 닫힌 실패 | 저장된 일봉 캐시에서만 읽기(아직 채우는 경로 없음) |
