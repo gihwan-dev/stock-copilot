@@ -32,7 +32,7 @@ fn status(connection: &Connection, proposal: &ProposalId) -> rusqlite::Result<Co
     }
     Ok(ConsumptionStatus::Consumed)
 }
-fn consume(
+pub(crate) fn consume(
     transaction: &Transaction<'_>,
     proposal: &ProposalId,
 ) -> rusqlite::Result<ConsumptionOutcome> {

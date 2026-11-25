@@ -62,7 +62,7 @@ fn last(connection: &Connection) -> rusqlite::Result<Option<(i64, String)>> {
         .optional()
 }
 
-fn append(
+pub(crate) fn append(
     transaction: &Transaction<'_>,
     entry: &EncodedEntry,
 ) -> rusqlite::Result<(RecordOutcome, AuditHead)> {
