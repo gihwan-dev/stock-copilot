@@ -1,5 +1,7 @@
 use std::fmt;
 
+use super::structure::Structure;
+
 pub(crate) const MONEY_FUNCTIONS: [&str; 8] =
     ["sum", "avg", "total", "min", "max", "abs", "round", "cast"];
 
@@ -85,6 +87,7 @@ pub(crate) enum Rule {
     OutsideStore,
     Assembly(String),
     Unparsable,
+    Structure(Structure),
 }
 
 impl fmt::Display for Rule {
@@ -99,6 +102,7 @@ impl fmt::Display for Rule {
             Self::OutsideStore => f.write_str("sql:outside-store"),
             Self::Assembly(name) => write!(f, "sql:assembly:{name}"),
             Self::Unparsable => f.write_str("sql:unparsable"),
+            Self::Structure(structure) => structure.fmt(f),
         }
     }
 }
