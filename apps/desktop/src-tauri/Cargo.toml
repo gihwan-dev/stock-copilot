@@ -8,6 +8,7 @@ default-run = "src-tauri"
 [dependencies]
 application = { path = "../../../crates/application" }
 approval-command = { path = "../../../crates/approval-command" }
+broker-toss-trade = { path = "../../../crates/adapters/broker-toss-trade" }
 domain = { path = "../../../crates/domain" }
 platform-macos = { path = "../../../crates/adapters/platform-macos" }
 store-sqlite = { path = "../../../crates/adapters/store-sqlite" }

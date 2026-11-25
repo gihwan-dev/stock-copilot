@@ -16,6 +16,7 @@ use src_tauri::holdings_link::{
 };
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
+use src_tauri::ipc::order_approval::OrderApprovalRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
 use src_tauri::ipc::scorecard::ScorecardIpcState;
 use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
@@ -25,6 +26,7 @@ use src_tauri::mcp_catalog::{
 };
 use src_tauri::mcp_portfolio::{CatalogPortfolio, StoredPortfolioTools};
 use src_tauri::mcp_sources::ArticleBodies;
+use src_tauri::order_runtime::{LedgerTxPort, SubmissionLedger, forwarding_bus};
 use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
 use src_tauri::platform::intraday::{BridgedIntradayWatch, IntradayWatchSlot};
 use src_tauri::platform::notifier::{
@@ -42,8 +44,8 @@ use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
 };
 use src_tauri::signal_flow::{
-    BridgedSignalPipeline, FlowReestimate, ProductSignalData, ProductSignalPipeline,
-    SignalDataParts, SignalPipelineSlot,
+    BridgedSignalPipeline, FlowReestimate, OrderContexts, ProductSignalData, ProductSignalPipeline,
+    ProposalInstruments, SignalDataParts, SignalPipelineSlot,
 };
 use src_tauri::toss_link::{
     ProbeFailure, ProbeResult, SharedClock, SharedSecrets, TossLink, TossLinkState, TossProbe,
@@ -86,10 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shared_clock = Arc::new(clock);
     let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
     let notification_handle = Arc::new(NotificationHandleSlot::<tauri::Wry>::default());
-    let notifier = Arc::new(FilteredNotifier::new(
-        SystemNotificationDelivery::new(Arc::clone(&notification_handle)),
-        NotificationPreferences::default(),
-    ));
+    let notifier = product_notifier(&notification_handle);
     let ui_events = Arc::new(UiEventSlot::<tauri::Wry>::default());
     let intraday = Arc::new(IntradayWatchSlot::new());
     let signals = Arc::new(SignalPipelineSlot::default());
@@ -122,23 +121,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let self_check = product_self_check(&ai, &repositories);
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
     let holdings = holdings_listener(&ports, &toss, &repositories, &directory, &shared_clock);
-    let (flow, calendars) =
-        product_estimate_flow(&ports, &toss, (&directory, estimate_runs), &signals);
+    let estimates = product_estimate_flow(&ports, &toss, (&directory, estimate_runs), &signals);
     let app = build_app(
-        product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
-            .manage(notification_handle)
-            .manage(directory)
-            .manage(intraday)
-            .manage(turns)
-            .manage(toss_link_state(&toss, holdings.clone(), &shared_clock))
-            .manage(holdings)
-            .manage(self_check)
-            .manage(ResolutionDataSlot(calendars))
-            .manage(flow),
+        with_estimates(
+            product_builder(scheduler_events, &repositories, ui_events, &shared_clock),
+            estimates,
+        )
+        .manage(notification_handle)
+        .manage(directory)
+        .manage(intraday)
+        .manage(turns)
+        .manage(toss_link_state(&toss, holdings.clone(), &shared_clock))
+        .manage(holdings)
+        .manage(self_check),
         ports,
         context,
     )?;
     run_primary(app)
+}
+
+fn product_notifier(handle: &Arc<NotificationHandleSlot<tauri::Wry>>) -> Arc<ProductNotifier> {
+    Arc::new(FilteredNotifier::new(
+        SystemNotificationDelivery::new(Arc::clone(handle)),
+        NotificationPreferences::default(),
+    ))
 }
 
 struct QueueQuota(Arc<ProductQueue>);
@@ -212,12 +218,17 @@ fn product_estimate_flow(
     toss: &ProductToss,
     (directory, runs): (&InstrumentDirectory, EstimateRunBook),
     signals: &SignalPipelineSlot,
-) -> (EstimateFlowSlot, Arc<ProductCalendars>) {
+) -> (
+    EstimateFlowSlot,
+    Arc<ProductCalendars>,
+    Option<OrderApprovalRuntime>,
+) {
     let calendars = product_calendars(toss);
     let Some(identity) = estimate_identity() else {
         return (
             EstimateFlowSlot(Arc::new(UnavailableEstimateFlow)),
             calendars,
+            None,
         );
     };
     let days: Arc<dyn CalendarDays> = Arc::<ProductCalendars>::clone(&calendars);
@@ -238,7 +249,7 @@ fn product_estimate_flow(
         runs,
         identity,
     }));
-    signals.bind(Arc::new(ProductSignalPipeline {
+    let pipeline = Arc::new(ProductSignalPipeline {
         data: ProductSignalData::new(SignalDataParts {
             broker: Arc::clone(&toss.broker),
             store: Arc::clone(&ports.settings),
@@ -251,8 +262,132 @@ fn product_estimate_flow(
         clock: Arc::clone(&ports.clock),
         events: Arc::clone(&ports.events),
         reestimate: FlowReestimate(Arc::clone(&flow)),
-    }));
-    (EstimateFlowSlot(flow), calendars)
+    });
+    signals.bind(Arc::<ProductPipeline>::clone(&pipeline));
+    let orders = order_approval_runtime(ports, toss, Some(pipeline));
+    (EstimateFlowSlot(flow), calendars, orders)
+}
+
+type ProductPipeline = ProductSignalPipeline<
+    ProductBroker,
+    SqliteRepositories,
+    store_sqlite::SqlitePortfolioStore,
+    platform_macos::SystemClock,
+>;
+
+struct StoredProposalInstruments(Arc<SqliteRepositories>);
+
+impl ProposalInstruments for StoredProposalInstruments {
+    fn instrument_of(
+        &self,
+        proposal: &domain::ProposalId,
+    ) -> BoxFuture<'_, Result<Option<domain::InstrumentId>, application::SystemPortError>> {
+        let owned = proposal.clone();
+        Box::pin(async move { store_sqlite::proposal_instrument(self.0.as_ref(), &owned).await })
+    }
+}
+
+struct StoredSubmissionLedger(Arc<SqliteRepositories>);
+
+impl SubmissionLedger for StoredSubmissionLedger {
+    fn commit_prepared<'a>(
+        &'a self,
+        proposal: &'a domain::ProposalId,
+        client_order_id: &'a domain::ClientOrderId,
+        prepared_at: domain::Timestamp,
+    ) -> BoxFuture<'a, Result<application::ConsumptionOutcome, application::SystemPortError>> {
+        Box::pin(store_sqlite::commit_prepared_submission(
+            self.0.as_ref(),
+            proposal,
+            client_order_id,
+            prepared_at,
+        ))
+    }
+}
+
+type ProductOrderContexts = OrderContexts<
+    ProductBroker,
+    SqliteRepositories,
+    store_sqlite::SqlitePortfolioStore,
+    platform_macos::SystemClock,
+    StoredProposalInstruments,
+>;
+
+type ProductPresence = <AppPortTypes as src_tauri::ports::PortTypes>::UserPresence;
+
+struct ProductApprovalTypes;
+
+impl approval_command::service::ApprovalServiceTypes for ProductApprovalTypes {
+    type Broker = ProductBroker;
+    type Market = ProductBroker;
+    type Settings = SqliteRepositories;
+    type Rates = SqliteRepositories;
+    type Proposals = SqliteRepositories;
+    type Consumption = SqliteRepositories;
+    type Reports = SqliteRepositories;
+    type Audit = SqliteRepositories;
+    type Contexts = ProductOrderContexts;
+    type Redrafter = ProductOrderContexts;
+    type Freeze = approval_command::ports::NeverFrozen;
+    type Clock = platform_macos::SystemClock;
+    type Presence = ProductPresence;
+    type TxPort = LedgerTxPort;
+    type Trade = broker_toss_trade::TossBrokerTrade<ProductBroker>;
+}
+
+fn with_estimates(
+    builder: tauri::Builder<tauri::Wry>,
+    (flow, calendars, runtime): (
+        EstimateFlowSlot,
+        Arc<ProductCalendars>,
+        Option<OrderApprovalRuntime>,
+    ),
+) -> tauri::Builder<tauri::Wry> {
+    let managed = builder.manage(ResolutionDataSlot(calendars)).manage(flow);
+    match runtime {
+        Some(approvals) => managed.manage(approvals),
+        None => managed,
+    }
+}
+
+fn order_approval_runtime(
+    ports: &Ports<AppPortTypes>,
+    toss: &ProductToss,
+    built: Option<Arc<ProductPipeline>>,
+) -> Option<OrderApprovalRuntime> {
+    let pipeline = built?;
+    let trade = broker_toss_trade::TossBrokerTrade::new(
+        &broker_toss::TossEndpoint::production(),
+        Arc::clone(&toss.broker),
+    )
+    .ok()?;
+    let contexts = Arc::new(OrderContexts {
+        pipeline,
+        proposals: Arc::new(StoredProposalInstruments(Arc::clone(&ports.settings))),
+    });
+    let service = approval_command::service::ApprovalService::new(
+        approval_command::service::ApprovalServiceParts::<ProductApprovalTypes> {
+            broker: Arc::clone(&toss.broker),
+            market: Arc::clone(&toss.broker),
+            settings: Arc::clone(&ports.settings),
+            rates: Arc::clone(&ports.settings),
+            proposals: Arc::clone(&ports.settings),
+            consumption: Arc::clone(&ports.settings),
+            reports: Arc::clone(&ports.settings),
+            audit: Arc::clone(&ports.settings),
+            contexts: Arc::clone(&contexts),
+            redrafter: contexts,
+            freeze: Arc::new(approval_command::ports::NeverFrozen),
+            clock: Arc::clone(&ports.clock),
+            presence: Arc::clone(&ports.presence),
+            tx_port: Arc::new(LedgerTxPort(Arc::new(StoredSubmissionLedger(Arc::clone(
+                &ports.settings,
+            ))))),
+            trade: Arc::new(trade),
+            events: forwarding_bus(&ports.events),
+        },
+    );
+    Some(OrderApprovalRuntime::new(Arc::new(service)))
 }
 
 struct ProductAiStatus {

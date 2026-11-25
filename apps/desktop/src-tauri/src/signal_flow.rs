@@ -439,6 +439,52 @@ where
         Ok((inputs, master))
     }
 
+    pub async fn policy_context(
+        &self,
+        instrument: &InstrumentId,
+        now: Timestamp,
+    ) -> Result<Option<application::OrderGatePolicyContext>, SystemPortError> {
+        let Some(master) = self.parts.directory.master(instrument) else {
+            return Ok(None);
+        };
+        let account = self.account()?;
+        let holdings = self.holdings(&account).await?;
+        let Some(valuation) = holdings
+            .portfolio
+            .as_ref()
+            .map(|portfolio| portfolio.evaluate(holdings.rate))
+        else {
+            return Ok(None);
+        };
+        let (security_facts, assignments) = self.classified(&master, &holdings, now).await?;
+        let profile = self
+            .parts
+            .store
+            .profile()
+            .await?
+            .unwrap_or_else(InvestorProfile::default);
+        let market_orders = self
+            .parts
+            .store
+            .risk_settings()
+            .await?
+            .map_or(domain::SavedMarketOrderSetting::Disabled, |risk| {
+                risk.market_orders()
+            });
+        Ok(Some(application::OrderGatePolicyContext {
+            master,
+            market_order_policy: domain::restore_market_order_policy(
+                domain::SavedMarketOrderPolicy {
+                    policy: Policy::new(profile),
+                    market_orders,
+                },
+            ),
+            valuation,
+            assignments,
+            security_facts,
+        }))
+    }
+
     async fn draft_inputs(
         &self,
         instrument: &InstrumentId,
@@ -792,5 +838,132 @@ where
 {
     fn on_submitted(&self, instrument: InstrumentId) -> crate::ipc::state::BoxFuture<'_, ()> {
         Box::pin(self.run(instrument))
+    }
+}
+
+pub trait ProposalInstruments: Send + Sync {
+    fn instrument_of(
+        &self,
+        proposal: &domain::ProposalId,
+    ) -> crate::ipc::state::BoxFuture<'_, Result<Option<InstrumentId>, SystemPortError>>;
+}
+
+pub struct OrderContexts<B, S, F, C, L> {
+    pub pipeline: Arc<ProductSignalPipeline<B, S, F, C>>,
+    pub proposals: Arc<L>,
+}
+
+impl<B, S, F, C, L> std::fmt::Debug for OrderContexts<B, S, F, C, L> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OrderContexts")
+    }
+}
+
+#[must_use]
+pub fn redraft_outcome(
+    outcome: application::DraftProposalOutcome,
+    existing: Option<domain::Proposal<domain::Draft>>,
+) -> approval_command::ports::RedraftOutcome {
+    use approval_command::ports::RedraftOutcome;
+    match outcome {
+        application::DraftProposalOutcome::Created { proposal, .. } => {
+            RedraftOutcome::Redrafted(proposal)
+        }
+        application::DraftProposalOutcome::Existing { .. } => existing
+            .map_or(RedraftOutcome::NoSignal, |proposal| {
+                RedraftOutcome::Redrafted(Box::new(proposal))
+            }),
+        application::DraftProposalOutcome::NoSignal => RedraftOutcome::NoSignal,
+        application::DraftProposalOutcome::MarketClosed => RedraftOutcome::MarketClosed,
+        application::DraftProposalOutcome::ReestimateScheduled { .. } => {
+            RedraftOutcome::OutOfEstimateRange
+        }
+    }
+}
+
+impl<B, S, F, C, L> approval_command::ports::ProposalContextPort for OrderContexts<B, S, F, C, L>
+where
+    B: BrokerRead + MarketInfo + 'static,
+    S: EstimateResolutionRepository
+        + EstimateRepository
+        + MarketDataRepository
+        + SettingsRepository
+        + application::SignalRepository
+        + application::SignalInvalidationRepository
+        + application::EstimateSubmissionRepository
+        + application::ProposalRepository
+        + 'static,
+    F: PortfolioRepository + 'static,
+    C: application::Clock + 'static,
+    L: ProposalInstruments + 'static,
+{
+    async fn policy_context(
+        &self,
+        proposal_id: &domain::ProposalId,
+    ) -> Result<Option<application::OrderGatePolicyContext>, SystemPortError> {
+        let Some(instrument) = self.proposals.instrument_of(proposal_id).await? else {
+            return Ok(None);
+        };
+        self.pipeline
+            .data
+            .policy_context(&instrument, self.pipeline.clock.now())
+            .await
+    }
+}
+
+impl<B, S, F, C, L> approval_command::ports::ExpiredProposalRedrafter
+    for OrderContexts<B, S, F, C, L>
+where
+    B: BrokerRead + MarketInfo + 'static,
+    S: EstimateResolutionRepository
+        + EstimateRepository
+        + MarketDataRepository
+        + SettingsRepository
+        + application::SignalRepository
+        + application::SignalInvalidationRepository
+        + application::EstimateSubmissionRepository
+        + application::ProposalRepository
+        + 'static,
+    F: PortfolioRepository + 'static,
+    C: application::Clock + 'static,
+    L: ProposalInstruments + 'static,
+{
+    async fn redraft(
+        &self,
+        expired: &domain::Proposal<domain::Draft>,
+        now: Timestamp,
+    ) -> Result<approval_command::ports::RedraftOutcome, SystemPortError> {
+        let pipeline = self.pipeline.as_ref();
+        let Some(instrument) = self.proposals.instrument_of(expired.id()).await? else {
+            return Ok(approval_command::ports::RedraftOutcome::NoSignal);
+        };
+        let account = pipeline.data.account()?;
+        if expired.intent().account_id() != &account {
+            return Ok(approval_command::ports::RedraftOutcome::NoSignal);
+        }
+        let id = proposal_id(&instrument, now).ok_or_else(unavailable)?;
+        let outcome = application::DraftProposal::new(
+            pipeline.store.as_ref(),
+            &pipeline.data,
+            &pipeline.reestimate,
+            pipeline.clock.as_ref(),
+            &pipeline.events,
+        )
+        .execute(&instrument, &account, id)
+        .await
+        .map_err(port_unavailable)?;
+        let existing = match &outcome {
+            application::DraftProposalOutcome::Existing { proposal_id } => {
+                match pipeline.data.parts.directory.master(&instrument) {
+                    Some(master) => pipeline.store.draft(proposal_id, &master).await?,
+                    None => None,
+                }
+            }
+            application::DraftProposalOutcome::Created { .. }
+            | application::DraftProposalOutcome::NoSignal
+            | application::DraftProposalOutcome::MarketClosed
+            | application::DraftProposalOutcome::ReestimateScheduled { .. } => None,
+        };
+        Ok(redraft_outcome(outcome, existing))
     }
 }

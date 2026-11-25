@@ -79,7 +79,7 @@ fn quantity(value: &str) -> Quantity {
     Quantity::parse(&NumericInput::try_new(value).expect("숫자")).expect("수량")
 }
 
-fn master() -> MasterInstrument {
+pub(crate) fn master() -> MasterInstrument {
     MasterInstrument::try_new(MasterInstrumentRow {
         listing_market: MasterCode::try_new("KOSPI").expect("시장"),
         symbol: Symbol::try_new("069500").expect("심볼"),
@@ -124,7 +124,7 @@ fn volatility(master: &MasterInstrument) -> Volatility {
     Volatility::calculate(&candles).expect("변동성")
 }
 
-fn draft(master: &MasterInstrument, size: OrderSize) -> Proposal<Draft> {
+pub(crate) fn draft(master: &MasterInstrument, size: OrderSize) -> Proposal<Draft> {
     let client_id = ClientOrderId::try_new(PROPOSAL).expect("주문 키");
     let obs = master
         .price_observation(price("35000"), now())
@@ -159,7 +159,7 @@ fn draft(master: &MasterInstrument, size: OrderSize) -> Proposal<Draft> {
     .expect("초안")
 }
 
-fn context(master: &MasterInstrument, size: OrderSize) -> OrderGatePolicyContext {
+pub(crate) fn context(master: &MasterInstrument, size: OrderSize) -> OrderGatePolicyContext {
     let portfolio = Portfolio::new(
         Vec::new(),
         BuyingPower::new(money(size.cash(), Currency::Krw), now()),
@@ -208,7 +208,7 @@ fn calendar() -> MarketCalendar {
     .expect("달력")
 }
 
-fn quote(master: &MasterInstrument) -> QuoteObservation {
+pub(crate) fn quote(master: &MasterInstrument) -> QuoteObservation {
     quote_at(master, "35000")
 }
 
@@ -226,7 +226,7 @@ fn quote_at(master: &MasterInstrument, quoted: &str) -> QuoteObservation {
     }
 }
 
-fn push_gate_round(
+pub(crate) fn push_gate_round(
     broker: &ScriptedBrokerRead,
     market: &ScriptedMarketInfo,
     master: &MasterInstrument,
@@ -315,6 +315,16 @@ impl OrderRateRepository for FixedRates {
 
 pub(crate) struct FixedProposals(BTreeMap<ProposalId, Proposal<Draft>>);
 
+impl FixedProposals {
+    pub(crate) const fn from_map(drafts: BTreeMap<ProposalId, Proposal<Draft>>) -> Self {
+        Self(drafts)
+    }
+}
+
+pub(crate) fn path_time() -> Timestamp {
+    now()
+}
+
 impl ProposalRepository for FixedProposals {
     fn store_draft(
         &self,
@@ -359,6 +369,15 @@ pub(crate) const GATE_HELD: u8 = 1;
 pub(crate) struct FixedContexts {
     contexts: BTreeMap<ProposalId, OrderGatePolicyContext>,
     gate: Arc<AtomicU8>,
+}
+
+impl FixedContexts {
+    pub(crate) fn open(contexts: BTreeMap<ProposalId, OrderGatePolicyContext>) -> Self {
+        Self {
+            contexts,
+            gate: Arc::new(AtomicU8::new(GATE_OPEN)),
+        }
+    }
 }
 
 impl ProposalContextPort for FixedContexts {
@@ -559,7 +578,7 @@ impl Default for Options {
     }
 }
 
-fn settings_with(permission: OrderPermission) -> MemorySettingsRepository {
+pub(crate) fn settings_with(permission: OrderPermission) -> MemorySettingsRepository {
     let settings = MemorySettingsRepository::default();
     settings
         .script_store_risk_settings()
@@ -583,7 +602,7 @@ pub(crate) fn fixture(presence: Arc<ScriptedPresence>, accept: &str) -> PathFixt
     fixture_with(presence, accept, Options::default())
 }
 
-fn rates(state: HourlyState) -> FixedRates {
+pub(crate) fn rates(state: HourlyState) -> FixedRates {
     match state {
         HourlyState::Room => FixedRates {
             limit: None,
@@ -596,13 +615,13 @@ fn rates(state: HourlyState) -> FixedRates {
     }
 }
 
-type Storage = (
+pub(crate) type Storage = (
     Arc<MemoryProposalConsumptionRepository>,
     Arc<MemoryValidationReportRepository>,
     Arc<MemoryAuditLog>,
 );
 
-fn storage(mode: AuditMode) -> Storage {
+pub(crate) fn storage(mode: AuditMode) -> Storage {
     let consumption = Arc::new(MemoryProposalConsumptionRepository::default());
     let reports = Arc::new(MemoryValidationReportRepository::default());
     let audit = Arc::new(MemoryAuditLog::default());

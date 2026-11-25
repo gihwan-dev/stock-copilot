@@ -89,3 +89,5 @@ pub(crate) const SUPERSEDE_DRAFT_BY_ROW_ID: &str =
 pub(crate) const SUPERSEDE_STANDALONE_BY_PROPOSAL_ID: &str = "UPDATE proposal_drafts SET state = 'superseded' WHERE proposal_id = ?1 AND mode = 'standalone' AND state = 'current'";
 pub(crate) const SUPERSEDE_GUARDED_BY_INSTRUMENT: &str = "UPDATE proposal_drafts SET state = 'superseded' WHERE instrument = ?1 AND mode = 'guarded' AND state = 'current'";
 pub(crate) const INSERT_DRAFT: &str = "INSERT INTO proposal_drafts(proposal_id, mode, instrument, account, expires_seconds, expires_nanos, expires_offset, state, snapshot_payload, evidence_payload) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'current', ?8, ?9)";
+pub(crate) const DRAFT_INSTRUMENT_BY_ID: &str =
+    "SELECT instrument FROM proposal_drafts WHERE proposal_id = ?1 ORDER BY id DESC LIMIT 1";

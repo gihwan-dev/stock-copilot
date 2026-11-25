@@ -1,5 +1,6 @@
 mod extended;
 mod fixture;
+mod product;
 mod unknown_retry;
 
 use std::sync::Arc;
