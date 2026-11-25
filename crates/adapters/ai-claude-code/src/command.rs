@@ -42,6 +42,7 @@ pub enum CommandBuildError {
     InvalidAnalysisTools,
     MissingMcpConfigForAnalysis,
     InvalidMcpServerName,
+    McpAttachedToCollection,
     InvalidMcpConfigFile,
     SecretInConfig,
     InvalidToken,
@@ -63,6 +64,7 @@ impl CommandBuildError {
             | Self::InvalidAnalysisTools
             | Self::MissingMcpConfigForAnalysis
             | Self::InvalidMcpServerName
+            | Self::McpAttachedToCollection
             | Self::InvalidMcpConfigFile
             | Self::SecretInConfig
             | Self::InvalidToken
