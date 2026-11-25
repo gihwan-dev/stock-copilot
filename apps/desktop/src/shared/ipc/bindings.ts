@@ -2359,6 +2359,7 @@ export type UiSignalCard_Deserialize = {
   rationale: string;
   counterargument: string;
   sources: UiSignalSource[];
+  proposal?: string | null;
 };
 
 export type UiSignalCard_Serialize = {
@@ -2376,6 +2377,7 @@ export type UiSignalCard_Serialize = {
   rationale: string;
   counterargument: string;
   sources: UiSignalSource[];
+  proposal: string | null;
 };
 
 export type UiSignalDirection = "buy" | "sell";

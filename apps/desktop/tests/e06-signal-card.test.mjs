@@ -177,6 +177,28 @@ test("E-06 order buttons appear only when the switch is on, the market is open, 
   }
 });
 
+test("fin-gaps: a stored proposal with sizing still pending offers the order button and orders off explain how to turn them on", async () => {
+  const bundle = await screenDom(bundleSource);
+  try {
+    const w = bundle.open();
+    const pending = w.mount([w.card({ sizing: { kind: "pending" } })]);
+    await w.waitText(pending, "주문할 때 최신 호가로 계산");
+    assert.equal(orderButtons(pending), 1, "제안이 있으면 주문 버튼");
+    w.click(pending.getByRole("button", { name: "주문" }));
+    await pending.findByText("예시전자");
+    assert.equal(w.calls.approval.length, 1, "승인 요청은 제안 ID 하나만");
+    assert.equal(w.calls.approval[0][0], "proposal-1");
+    w.cleanup();
+    const off = w.mount([w.card({ orderSwitch: "off" })]);
+    const offText = await w.waitText(off, "주문 켜기");
+    assert.equal(orderButtons(off), 0);
+    assert.ok(offText.includes("설정"), "켜는 곳 안내");
+    w.cleanup();
+  } finally {
+    bundle.close();
+  }
+});
+
 test("E-07 a closed market shows the check-when-open card without buttons", async () => {
   const bundle = await screenDom(bundleSource);
   try {

@@ -128,5 +128,32 @@ pub async fn proposal_instrument(
         .transpose()
 }
 
+pub async fn current_proposal(
+    repositories: &SqliteRepositories,
+    instrument: &domain::InstrumentId,
+) -> Result<Option<ProposalId>, SystemPortError> {
+    let guard = repositories.shared().read().await;
+    let database = opened(guard.as_ref(), REPOSITORY)?;
+    let wanted = String::from(instrument.as_str());
+    let stored: Option<String> = database
+        .read(move |connection| {
+            rusqlite::OptionalExtension::optional(connection.query_row(
+                crate::sql::signals::CURRENT_UNCONSUMED_DRAFT,
+                [wanted],
+                |row| row.get(0),
+            ))
+        })
+        .await?;
+    stored
+        .map(|text| {
+            ClientOrderId::try_new(&text)
+                .map(ProposalId::new)
+                .map_err(|_error| {
+                    SystemPortError::new(REPOSITORY, application::SystemFailure::InvalidData)
+                })
+        })
+        .transpose()
+}
+
 #[cfg(test)]
 mod tests;

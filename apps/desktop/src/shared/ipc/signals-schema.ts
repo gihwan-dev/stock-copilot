@@ -35,6 +35,13 @@ const symbolSchema = z
     return z.NEVER;
   });
 
+const proposalSchema = z.unknown().transform((value, context): EntityId => {
+  const id = parseEntityId(value);
+  if (id.kind === "ok") return id.value;
+  context.addIssue({ code: "custom", message: "proposal" });
+  return z.NEVER;
+});
+
 const sourceSchema = z.strictObject({
   kind: z.enum(["tool", "web", "news", "disclosure"]),
   label: freeTextSchema,
@@ -56,6 +63,7 @@ const cardSchema = z
     rationale: freeTextSchema,
     counterargument: freeTextSchema,
     sources: z.array(sourceSchema),
+    proposal: z.union([proposalSchema, z.null()]),
   })
   .transform((raw, context): SignalCardView => {
     const cited = raw.sources.flatMap(
@@ -77,7 +85,7 @@ const cardSchema = z
       direction: raw.direction,
       market: raw.market,
       orderSwitch: raw.order_switch,
-      proposal: undefined,
+      proposal: raw.proposal ?? undefined,
       price: raw.price ?? undefined,
       sizing: { kind: "pending" },
       aiProbability: raw.ai_probability,
@@ -95,6 +103,19 @@ const viewSchema = z
   .strictObject({ cards: z.array(cardSchema) })
   .transform((raw): SignalsView => ({ cards: raw.cards }));
 
+const approvalSchema = z
+  .strictObject({
+    status: z.enum([
+      "submitted",
+      "rejected",
+      "broker-rejected",
+      "outcome-unknown",
+      "unavailable",
+    ]),
+    reason: z.string(),
+  })
+  .transform((raw) => raw.status);
+
 const skipSchema = z
   .strictObject({ outcome: z.literal("recorded") })
   .transform((): "recorded" => "recorded");
@@ -106,3 +127,16 @@ export const settleSignals = (
 export const settleSkip = (
   outcome: WireOutcome,
 ): Result<"recorded", IpcFailure> => settleWithSchema(outcome, skipSchema);
+
+export const settleApproval = (
+  outcome: WireOutcome,
+): Result<"requested", IpcFailure> => {
+  const settled = settleWithSchema(outcome, approvalSchema);
+  if (settled.kind === "err") return settled;
+  return settled.value === "submitted" || settled.value === "outcome-unknown"
+    ? { kind: "ok", value: "requested" }
+    : {
+        kind: "err",
+        error: { kind: "command", error: { kind: "user-fixable" } },
+      };
+};

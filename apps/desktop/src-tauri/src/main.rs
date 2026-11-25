@@ -185,13 +185,16 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
             Arc::clone(events),
         ))
         .manage(ThesisIpcState::from_repository(Arc::clone(repositories)))
-        .manage(SignalsIpcState::new(
-            Arc::clone(repositories),
-            Arc::new(TossResolutionSource(Arc::<ProductBroker>::clone(
-                &toss.broker,
-            ))),
-            Arc::<platform_macos::SystemClock>::clone(clock),
-        ))
+        .manage(
+            SignalsIpcState::new(
+                Arc::clone(repositories),
+                Arc::new(TossResolutionSource(Arc::<ProductBroker>::clone(
+                    &toss.broker,
+                ))),
+                Arc::<platform_macos::SystemClock>::clone(clock),
+            )
+            .with_proposals(Arc::new(StoredCurrentProposals(Arc::clone(repositories)))),
+        )
         .manage(NewsSettingsIpcState::new(
             Arc::clone(repositories),
             Arc::clone(&toss.secrets),
@@ -457,6 +460,18 @@ impl ProposalInstruments for StoredProposalInstruments {
     ) -> BoxFuture<'_, Result<Option<domain::InstrumentId>, application::SystemPortError>> {
         let owned = proposal.clone();
         Box::pin(async move { store_sqlite::proposal_instrument(self.0.as_ref(), &owned).await })
+    }
+}
+
+struct StoredCurrentProposals(Arc<SqliteRepositories>);
+
+impl src_tauri::ipc::signals::CurrentProposals for StoredCurrentProposals {
+    fn current(
+        &self,
+        instrument: &domain::InstrumentId,
+    ) -> BoxFuture<'_, Result<Option<domain::ProposalId>, application::SystemPortError>> {
+        let owned = instrument.clone();
+        Box::pin(async move { store_sqlite::current_proposal(self.0.as_ref(), &owned).await })
     }
 }
 

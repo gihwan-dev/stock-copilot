@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { wire } from "./schema";
-import { settleSignals, settleSkip } from "./signals-schema";
+import { settleApproval, settleSignals, settleSkip } from "./signals-schema";
 import { responses } from "./testing/responses";
 
 const card = {
@@ -21,6 +21,7 @@ const card = {
     { kind: "news", label: "headline" },
     { kind: "tool", label: "tool:get_quote" },
   ],
+  proposal: null,
 };
 
 test("settleSignals keeps the recorded empty list", () => {
@@ -53,4 +54,33 @@ test("settleSignals refuses an unknown direction and settleSkip keeps the record
   expect(
     settleSkip({ status: "ok", data: wire(responses.skipSignal) }),
   ).toStrictEqual({ kind: "ok", value: "recorded" });
+});
+
+test("settleSignals carries the stored proposal so the card can offer the order button", () => {
+  const result = settleSignals({
+    status: "ok",
+    data: wire({
+      cards: [{ ...card, proposal: "p-0123abcd-1795566600000000000" }],
+    }),
+  });
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") return;
+  expect(result.value.cards[0]?.proposal).toBe(
+    "p-0123abcd-1795566600000000000",
+  );
+});
+
+test("settleApproval treats only a sent order as requested", () => {
+  expect(
+    settleApproval({
+      status: "ok",
+      data: wire({ status: "submitted", reason: "none" }),
+    }),
+  ).toStrictEqual({ kind: "ok", value: "requested" });
+  expect(
+    settleApproval({
+      status: "ok",
+      data: wire({ status: "rejected", reason: "switch-off" }),
+    }).kind,
+  ).toBe("err");
 });

@@ -201,7 +201,7 @@ export { getSelfCheck, getStatus } from "./status-call";
 export { getScorecard } from "./scorecard-call";
 export { getTransactions } from "./transactions-call";
 export { getThesis } from "./thesis-call";
-export { getSignals, skipSignal } from "./signals-call";
+export { getSignals, requestOrderApproval, skipSignal } from "./signals-call";
 export {
   addWatchlist,
   getInstrumentDetail,

@@ -192,6 +192,7 @@ impl Clock for FixedClock {
 
 fn state(board: Arc<FakeBoard>) -> SignalsIpcState {
     SignalsIpcState {
+        proposals: None,
         board,
         calendars: Arc::new(NoCalendars),
         clock: Arc::new(FixedClock),

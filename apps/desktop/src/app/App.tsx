@@ -23,6 +23,7 @@ import {
   pendingScreenSources,
   saveInvestorProfile,
   saveOrderSettings,
+  requestOrderApproval,
   skipSignal,
   type ScreenSources,
   type SettingsClient,
@@ -61,6 +62,7 @@ const coreScreenSources: ScreenSources = {
   thesis: getThesis,
   signals: getSignals,
   skipSignal,
+  requestOrderApproval,
 };
 
 const CoreEventBridge = (): null => {

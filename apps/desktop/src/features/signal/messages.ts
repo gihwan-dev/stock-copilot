@@ -43,6 +43,9 @@ const catalog = {
     ko: "장이 열리면 그때 가격으로 다시 확인해 주문 카드로 바꿔 드려요." as UiText,
   },
   order: { ko: "주문" as UiText },
+  switchOff: {
+    ko: '주문 기능이 꺼져 있어요. 설정 > 기본의 "주문 켜기"를 켜면 이 카드에서 주문할 수 있어요.' as UiText,
+  },
   skip: { ko: "넘기기" as UiText },
   skipReason: { ko: "넘기는 이유 (선택)" as UiText },
   skipReasonHint: {

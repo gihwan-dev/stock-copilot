@@ -68,6 +68,15 @@ const Actions = (props: {
       );
     case "market-closed":
       return <Stack gap="space-2">{[]}</Stack>;
+    case "switch-off":
+      return (
+        <Stack gap="space-2">
+          <Text variant="body-sm" tone="ink-muted">
+            {signalText("switchOff", "ko")}
+          </Text>
+          {skip}
+        </Stack>
+      );
     case "no-order":
     case "zero-quantity":
       return skip;

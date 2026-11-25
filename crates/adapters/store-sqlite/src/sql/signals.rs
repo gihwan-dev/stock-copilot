@@ -91,3 +91,4 @@ pub(crate) const SUPERSEDE_GUARDED_BY_INSTRUMENT: &str = "UPDATE proposal_drafts
 pub(crate) const INSERT_DRAFT: &str = "INSERT INTO proposal_drafts(proposal_id, mode, instrument, account, expires_seconds, expires_nanos, expires_offset, state, snapshot_payload, evidence_payload) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'current', ?8, ?9)";
 pub(crate) const DRAFT_INSTRUMENT_BY_ID: &str =
     "SELECT instrument FROM proposal_drafts WHERE proposal_id = ?1 ORDER BY id DESC LIMIT 1";
+pub(crate) const CURRENT_UNCONSUMED_DRAFT: &str = "SELECT d.proposal_id FROM proposal_drafts AS d WHERE d.instrument = ?1 AND d.state = 'current' AND NOT EXISTS (SELECT 1 FROM proposal_consumptions AS c WHERE c.proposal_id = d.proposal_id) ORDER BY d.id DESC LIMIT 1";

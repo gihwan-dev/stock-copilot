@@ -71,5 +71,49 @@ fn unknown_proposal_has_no_instrument() {
             crate::proposal_instrument(&repositories, &proposal).await,
             Ok(None)
         );
+        let instrument = domain::InstrumentId::try_new("005930").expect("종목");
+        assert_eq!(
+            crate::current_proposal(&repositories, &instrument).await,
+            Ok(None),
+            "초안이 없으면 주문 버튼도 없다"
+        );
+    });
+}
+
+#[test]
+fn current_proposal_is_the_latest_unconsumed_draft_of_the_instrument() {
+    let fixture = Fixture::new();
+    let shared = SharedDatabase::new();
+    let repositories = SqliteRepositories::new(shared.clone());
+    let (proposal, client) = proposal();
+    let instrument = domain::InstrumentId::try_new("sample-a").expect("종목");
+    runtime().block_on(async {
+        let database =
+            Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+        let row = database
+            .write(|transaction| {
+                transaction.execute(
+                    crate::sql::signals_tests::INSERT_DRAFT_ROW,
+                    rusqlite::params!["sc-ord-0001", "sample-a"],
+                )
+            })
+            .await;
+        assert_eq!(row, Ok(1));
+        assert!(shared.install(database).await.is_none());
+        assert_eq!(
+            crate::current_proposal(&repositories, &instrument).await,
+            Ok(Some(proposal.clone()))
+        );
+        assert_eq!(
+            crate::proposal_instrument(&repositories, &proposal).await,
+            Ok(Some(instrument.clone()))
+        );
+        let _consumed =
+            crate::commit_prepared_submission(&repositories, &proposal, &client, timestamp()).await;
+        assert_eq!(
+            crate::current_proposal(&repositories, &instrument).await,
+            Ok(None),
+            "보낸 제안은 버튼에서 빠진다"
+        );
     });
 }

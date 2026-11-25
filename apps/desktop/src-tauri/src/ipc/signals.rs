@@ -131,8 +131,16 @@ where
     }
 }
 
+pub trait CurrentProposals: Send + Sync {
+    fn current(
+        &self,
+        instrument: &InstrumentId,
+    ) -> BoxFuture<'_, Result<Option<domain::ProposalId>, SystemPortError>>;
+}
+
 #[derive(Clone)]
 pub struct SignalsIpcState {
+    proposals: Option<Arc<dyn CurrentProposals>>,
     board: Arc<dyn SignalBoard>,
     calendars: Arc<dyn MarketCalendars>,
     clock: Arc<dyn Clock>,
@@ -147,6 +155,14 @@ impl fmt::Debug for SignalsIpcState {
 
 impl SignalsIpcState {
     #[must_use]
+    pub fn with_proposals(self, proposals: Arc<dyn CurrentProposals>) -> Self {
+        Self {
+            proposals: Some(proposals),
+            ..self
+        }
+    }
+
+    #[must_use]
     pub fn new<R, C>(repository: Arc<R>, calendars: Arc<dyn MarketCalendars>, clock: Arc<C>) -> Self
     where
         R: SignalRepository
@@ -158,6 +174,7 @@ impl SignalsIpcState {
         C: Clock + 'static,
     {
         Self {
+            proposals: None,
             board: Arc::new(StoredBoard {
                 repository,
                 clock: Arc::clone(&clock),
@@ -248,6 +265,7 @@ pub struct UiSignalCard {
     pub rationale: String,
     pub counterargument: String,
     pub sources: Vec<UiSignalSource>,
+    pub proposal: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -407,6 +425,7 @@ struct CardInputs<'a> {
     market: UiMarketState,
     switch: UiOrderSwitch,
     scorecards: Option<&'a ScorecardView>,
+    proposal: Option<domain::ProposalId>,
 }
 
 fn card(
@@ -444,6 +463,10 @@ fn card(
         rationale: narrative.rationale.as_untrusted_str().to_owned(),
         counterargument: narrative.counterargument.as_untrusted_str().to_owned(),
         sources: cited(facts),
+        proposal: inputs
+            .proposal
+            .as_ref()
+            .map(|id| id.as_client_order_id().as_str().to_owned()),
     })
 }
 
@@ -513,6 +536,13 @@ pub async fn load_signals(
             .await
             .map_err(|failure| storage(&failure))?;
         let market = market_state(state, known_market(&stored.signal.market())).await;
+        let proposal = match &state.proposals {
+            Some(lookup) => lookup
+                .current(&row.entry.master.row().instrument_id)
+                .await
+                .map_err(|failure| storage(&failure))?,
+            None => None,
+        };
         let inputs = CardInputs {
             symbol: &row.symbol,
             name: row.entry.name.as_str(),
@@ -522,6 +552,7 @@ pub async fn load_signals(
             market,
             switch,
             scorecards: scorecards.as_ref(),
+            proposal,
         };
         cards.push(card(&inputs, stored, record, &facts).ok_or(error(IpcErrorKind::Bug))?);
     }
