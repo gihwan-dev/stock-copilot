@@ -123,6 +123,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "mountApp",
         "readCanvasTheme",
         "useCanvasChartTheme",
+        "useColorScheme",
       ],
     );
     const platformFunctions = checker.getExportsOfModule(symbol);
@@ -140,6 +141,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         ["mountApp", ["void"]],
         ["readCanvasTheme", ["CandleThemePalette | undefined"]],
         ["useCanvasChartTheme", ["CandleThemePalette | undefined"]],
+        ["useColorScheme", ['"light" | "dark"']],
       ],
     );
     assert.deepEqual(DOM_ACCESS_FILES, [
@@ -185,7 +187,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'export * from "./brand"; export * from "./money"; export * from "./result"; export * from "./query-keys"; export * from "./canvas-chart";',
+      'export * from "./brand"; export * from "./money"; export * from "./result"; export * from "./query-keys"; export * from "./canvas-chart"; export { text, type MessageKey } from "./messages";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(

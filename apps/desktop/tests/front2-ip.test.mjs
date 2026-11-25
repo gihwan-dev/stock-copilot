@@ -19,7 +19,11 @@ before(async () => {
     window.fireEvent = fireEvent;
     window.act = act;
     window.mount = (fake) => {
-      mockCommands({ appVersion: () => responses.appVersion });
+      mockCommands({
+      getPortfolio: () => {
+        throw { kind: "no-data" };
+      },
+      appVersion: () => responses.appVersion });
       const client = createAppQueryClient();
       const view = render(h(App, { initialPath: "/", queryClient: client, settingsClient: fake }));
       return { view, client };

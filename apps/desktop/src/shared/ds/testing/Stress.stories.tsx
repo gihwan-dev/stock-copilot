@@ -61,6 +61,7 @@ type Component =
   | "Money"
   | "Percent"
   | "Quantity"
+  | "ChartNumber"
   | "Probability"
   | "PriceChange"
   | "DirectionBadge"

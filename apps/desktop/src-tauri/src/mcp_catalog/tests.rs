@@ -262,6 +262,7 @@ fn catalog() -> ToolRegistry {
             turns: crate::ai_runtime::ChatTurnBook::new(),
             events: Arc::new(EventBusBuilder::default().build()),
             market: crate::broker_link::BrokerMarketTools::unconnected(),
+            portfolio: crate::mcp_portfolio::CatalogPortfolio::default(),
         },
     )
     .expect("제품 카탈로그")

@@ -14,6 +14,7 @@ import { DonutChart } from "../DonutChart";
 import { Treemap } from "../Treemap";
 import { CandleChart } from "../CandleChart";
 import {
+  ChartNumber,
   DataText,
   Money,
   Percent,
@@ -43,6 +44,7 @@ type ContentStory = {
     | "DirectionBadge"
     | "DataText"
     | "TimestampText"
+    | "ChartNumber"
     | "Markdown"
     | "ChatInput";
   readonly render: (theme?: "light" | "dark") => ReactElement | null;
@@ -124,6 +126,13 @@ export const contentStressStories: readonly ContentStory[] = [
     component: "Percent",
     render: (): ReactElement | null =>
       percent.kind === "ok" ? <Percent value={percent.value} /> : null,
+  },
+  {
+    component: "ChartNumber",
+    render: (): ReactElement | null =>
+      chartValue.kind === "ok" ? (
+        <ChartNumber value={chartValue.value} />
+      ) : null,
   },
   {
     component: "Quantity",

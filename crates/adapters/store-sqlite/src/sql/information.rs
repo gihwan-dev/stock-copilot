@@ -20,3 +20,4 @@ pub(crate) const RECORD_TIMES: &str = "INSERT INTO information_times(item_id, pu
 pub(crate) const OBSERVED_BY_CATEGORY: &str = "SELECT i.id, i.category, i.source, i.external_id, i.url, i.title, i.body, t.published_payload, t.collected_payload FROM information_items AS i INNER JOIN information_times AS t ON t.item_id = i.id WHERE i.category = ?1 ORDER BY i.id DESC LIMIT 1000";
 pub(crate) const OBSERVED_BY_ID: &str = "SELECT i.id, i.category, i.source, i.external_id, i.url, i.title, i.body, t.published_payload, t.collected_payload FROM information_items AS i INNER JOIN information_times AS t ON t.item_id = i.id WHERE i.id = ?1 AND i.category = ?2";
 pub(crate) const LINKED_INSTRUMENTS: &str = "SELECT instrument FROM information_links WHERE category = ?1 AND source = ?2 AND external_id = ?3 ORDER BY instrument";
+pub(crate) const KNOWN_URL: &str = "SELECT url FROM information_items WHERE url = ?1 LIMIT 1";

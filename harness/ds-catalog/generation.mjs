@@ -42,6 +42,7 @@ export const groups = {
     "DirectionBadge",
     "DataText",
     "TimestampText",
+    "ChartNumber",
   ],
   차트: ["LineChart", "AreaChart", "DonutChart", "Treemap", "CandleChart"],
   콘텐츠: ["Markdown", "ChatInput"],
