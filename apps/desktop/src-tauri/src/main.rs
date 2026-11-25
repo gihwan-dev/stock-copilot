@@ -27,6 +27,7 @@ use src_tauri::platform::notifier::{
     NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
 };
 use src_tauri::platform::peer_process::PsPeerInspector;
+use src_tauri::platform::resolution::{ResolutionData, ResolutionDataSlot, ResolutionSource};
 use src_tauri::platform::scheduling::SpecWatchInputs;
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::product_events::{
@@ -115,6 +116,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .manage(turns)
             .manage(link)
             .manage(self_check)
+            .manage(ResolutionDataSlot(Arc::new(ResolutionData::new(
+                TossResolutionSource(Arc::<ProductBroker>::clone(&toss.broker)),
+            ))))
             .manage(ScorecardIpcState::from_repository(
                 Arc::clone(&repositories),
                 Arc::<platform_macos::SystemClock>::clone(&shared_clock),
@@ -164,6 +168,29 @@ fn product_self_check(
         }),
         Arc::clone(repositories),
     )
+}
+
+struct TossResolutionSource(Arc<ProductBroker>);
+
+impl ResolutionSource for TossResolutionSource {
+    fn candles<'a>(
+        &'a self,
+        instrument: &'a domain::QuoteInstrument,
+        window: domain::TimeInterval,
+        period: domain::CandlePeriod,
+        adjustment: domain::PriceAdjustment,
+    ) -> BoxFuture<'a, Result<Vec<domain::Candle>, application::PortError>> {
+        use application::BrokerRead as _;
+        Box::pin(self.0.candles(instrument, window, period, adjustment))
+    }
+
+    fn calendar_on(
+        &self,
+        market: domain::KnownMarket,
+        date: domain::CalendarDate,
+    ) -> BoxFuture<'_, Result<domain::MarketCalendar, application::PortError>> {
+        Box::pin(self.0.calendar_on(market, date))
+    }
 }
 
 const OPEN_COMMAND: &str = "/usr/bin/open";
