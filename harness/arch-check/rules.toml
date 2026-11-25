@@ -189,11 +189,15 @@ crates = ["serde"]
 forbidden-in = ["domain"]
 
 [[external-location]]
-crates = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml"]
+crates = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml", "sqlparser"]
 allowed-in = ["xtask"]
 
 [[external-location]]
 crates = ["paste"]
+allowed-in = []
+
+[[external-location]]
+crates = ["pastey"]
 allowed-in = []
 
 [[external-location-exception]]
@@ -278,7 +282,7 @@ allowed = ["rust_decimal", "time"]
 
 [[external-allowlist]]
 crate = "xtask"
-allowed = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml", "typify", "schemars", "serde_json", "quote", "sha2"]
+allowed = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml", "typify", "schemars", "serde_json", "quote", "sha2", "sqlparser"]
 
 [[feature-location]]
 external = "tokio"
@@ -319,6 +323,18 @@ prompt-module = "identity_confirmation_prompt"
 prompt-defining-crate = "application"
 prompt-impl-crates = ["platform-macos"]
 prompt-impl-files = ["crates/testkit-ports/src/scripted_identity_confirmation.rs"]
+
+[source.order-collector]
+collector-types = ["ClosedOrderPageCollector", "OpenOrderCollector"]
+allowed-crates = ["broker-toss"]
+allowed-files = [
+    "crates/domain/src/lib.rs",
+    "crates/domain/src/order_query_proof.rs",
+    "crates/domain/tests/t15_completeness_boundary.rs",
+    "crates/application/tests/ports.rs",
+    "crates/approval-command/tests/o19_reconcile.rs",
+    "crates/testkit-ports/tests/o25_order_reconciliation.rs",
+]
 
 [source.toss-order]
 write-means = [
@@ -525,6 +541,12 @@ crates = ["mcp-server"]
 externals = ["socket2", "syn", "proc-macro2"]
 through = "rmcp"
 reason = "M-01: rmcp =3.9.0(server, transport-async-rw)이 tokio·schemars·serde·thiserror·futures·tracing을 경유해 연결하는 socket2·syn·proc-macro2 전이 경로"
+
+[[external-location-exception]]
+crates = ["mcp-server"]
+externals = ["pastey"]
+through = "rmcp"
+reason = "H-70: rmcp =3.9.0이 paste!를 재수출하려고 pastey에 의존한다. 직접 의존과 매크로 사용은 허용하지 않는다(소스 검사 BANNED_MACROS)"
 
 [[external-location-exception]]
 crates = ["mcp-server"]

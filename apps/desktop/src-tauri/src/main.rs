@@ -9,6 +9,7 @@ use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
 };
+use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
     NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
@@ -154,9 +155,55 @@ fn product_builder(
         .manage(Arc::clone(repositories))
         .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
         .manage(ui_events);
+    let with_feeds = builder.manage(collector_feeds(clock));
     match spec_watch_inputs(clock) {
-        Some(inputs) => builder.manage(inputs),
-        None => builder,
+        Some(inputs) => with_feeds.manage(inputs),
+        None => with_feeds,
+    }
+}
+
+fn collector_feeds(clock: &Arc<platform_macos::SystemClock>) -> CollectorFeeds {
+    let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
+    let Ok(http) = sources::SourceHttpClient::new(
+        sources::SourceEndpoint::live(),
+        shared,
+        Arc::new(sources::TokioSourceWait),
+        None,
+    ) else {
+        return CollectorFeeds::default();
+    };
+    let client = Arc::new(http);
+    let mut feeds: Vec<CollectorFeed> = sources::PressMacroSource::ALL
+        .into_iter()
+        .map(|source| CollectorFeed {
+            target: press_target(source),
+            startup: None,
+            regular: SharedFeed::new(sources::RssNewsFeed::new(Arc::clone(&client), source)),
+        })
+        .collect();
+    let kind = |window| {
+        SharedFeed::new(sources::KindDisclosureFeed::new(
+            sources::KindDisclosureClient::new(Arc::clone(&client)),
+            window,
+        ))
+    };
+    feeds.push(CollectorFeed {
+        target: application::CollectionTarget::KindDisclosure,
+        startup: Some(kind(sources::KindFetchWindow::StartupCatchUp)),
+        regular: kind(sources::KindFetchWindow::Regular),
+    });
+    CollectorFeeds(feeds)
+}
+
+const fn press_target(source: sources::PressMacroSource) -> application::CollectionTarget {
+    match source {
+        sources::PressMacroSource::Hankyung => application::CollectionTarget::HankyungRss,
+        sources::PressMacroSource::Maekyung
+        | sources::PressMacroSource::Yonhap
+        | sources::PressMacroSource::Edaily => application::CollectionTarget::PressRss,
+        sources::PressMacroSource::BankOfKorea | sources::PressMacroSource::FederalReserve => {
+            application::CollectionTarget::CentralBankRss
+        }
     }
 }
 
@@ -755,6 +802,36 @@ mod tests {
     }
 
     #[test]
+    fn composition_root_registers_keyless_press_and_kind_feeds_for_the_collector() {
+        use application::{CollectionTarget, FeedSource, NewsFeed};
+        let clock = std::sync::Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let feeds = super::collector_feeds(&clock);
+        let sources: Vec<(CollectionTarget, FeedSource)> = feeds
+            .0
+            .iter()
+            .map(|feed| (feed.target, feed.regular.source()))
+            .collect();
+        assert_eq!(sources.len(), 7);
+        assert!(sources.contains(&(
+            CollectionTarget::HankyungRss,
+            FeedSource::News(domain::NewsSource::Hankyung)
+        )));
+        assert!(sources.contains(&(
+            CollectionTarget::CentralBankRss,
+            FeedSource::News(domain::NewsSource::FederalReserve)
+        )));
+        let kind = feeds
+            .0
+            .iter()
+            .find(|feed| feed.target == CollectionTarget::KindDisclosure)
+            .expect("KIND");
+        assert_eq!(
+            kind.startup.as_ref().map(NewsFeed::source),
+            Some(FeedSource::Disclosure(domain::DisclosureSource::Kind))
+        );
+    }
+
+    #[test]
     fn composition_root_constructs_sources_client_without_broker_credentials_or_hosts() {
         let clock = std::sync::Arc::new(testkit_ports::SteppedClock::new(
             broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
@@ -936,6 +1013,23 @@ mod ai_composition_tests {
 
     static COUNTER: AtomicU64 = AtomicU64::new(1_u64);
     const BRIDGE: &str = "/Applications/Stock Copilot.app/Contents/Resources/mcp-bridge";
+
+    pub(super) fn without_claude(
+        clock: &Arc<platform_macos::SystemClock>,
+        events: &Arc<application::EventBus>,
+        repositories: &Arc<SqliteRepositories>,
+    ) -> ProductAiParts {
+        let setup = AiSetup {
+            executable: None,
+            host_env: HostEnvironment::from_pairs(Vec::<(String, String)>::new()),
+            work_root: PathBuf::from("/private/tmp/stock-copilot-ai"),
+            mcp_base: PathBuf::from("/private/tmp/sc-mcp"),
+            bridge: BridgeLocation::new(),
+            sandbox: None,
+            cli_projects_dir: None,
+        };
+        assemble_ai(setup, clock, events, repositories).expect("AI 조립")
+    }
 
     struct TempRoot(PathBuf);
 
@@ -1263,8 +1357,12 @@ mod ai_composition_tests {
                     .err(),
                 Some(InformationError::Unavailable(ResetTime::NotProvided))
             );
-            let now = platform_macos::SystemClock::new().expect("시계");
-            let at = application::Clock::now(&now);
+            let at = domain::Timestamp::from_parts(
+                domain::UnixSeconds::new(1_790_000_000_i64),
+                domain::Nanosecond::new(0_u32),
+                domain::OffsetSeconds::new(0_i32),
+            )
+            .expect("시각");
             assert_eq!(
                 scheduler::AiJobQueue::request_background_slot(
                     composed.jobs.as_ref(),
@@ -1323,5 +1421,141 @@ mod ai_composition_tests {
                 "env": {"STOCK_MCP_TOKEN": "${STOCK_MCP_TOKEN}"}
             }}})
         );
+    }
+}
+
+#[cfg(test)]
+mod collector_store_tests {
+    use application::{
+        AiReadPolicy, CollectedEntry, CollectedObservation, ConditionalGet, DataAvailability,
+        FeedCursor, FeedPosition, FeedSource, InformationError, NewsFeed, NewsMetadata,
+        PublicationTime, Retention, RetryDelay, SecretValue, SourceState, SourceStatusRepository,
+        SystemFailure, SystemPort, SystemPortError, UserAgentRequirement,
+    };
+    use domain::{DataSource, NewsItem, NewsSource, NormalizedUrl, UntrustedText};
+    use src_tauri::platform::collector::{AppFeedRunner, FeedRunner};
+    use src_tauri::platform::notifier::{
+        FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
+    };
+    use std::sync::{Arc, RwLock};
+    use store_sqlite::{SharedDatabase, SqliteRepositories};
+
+    type Items = DataAvailability<(Vec<CollectedObservation>, FeedCursor)>;
+
+    struct CountingFeed {
+        calls: Arc<RwLock<Vec<FeedCursor>>>,
+        reply: RwLock<Option<Items>>,
+    }
+
+    impl NewsFeed for CountingFeed {
+        fn source(&self) -> FeedSource {
+            FeedSource::News(NewsSource::Yonhap)
+        }
+        fn metadata(&self) -> NewsMetadata {
+            NewsMetadata::new(
+                Retention::NotStored,
+                AiReadPolicy::TitleOnly,
+                ConditionalGet::Unsupported,
+                UserAgentRequirement::Standard,
+            )
+        }
+        fn new_items(
+            &self,
+            since: FeedCursor,
+        ) -> impl Future<Output = Result<Items, InformationError>> + Send {
+            self.calls.write().expect("잠금").push(since);
+            let reply = self.reply.write().expect("잠금").take();
+            std::future::ready(Ok(reply.unwrap_or(DataAvailability::NoData)))
+        }
+    }
+
+    fn position(value: &str) -> FeedCursor {
+        FeedCursor::Continue(FeedPosition::new(
+            UntrustedText::try_new(value).expect("텍스트"),
+        ))
+    }
+
+    fn one_article_feed(calls: &Arc<RwLock<Vec<FeedCursor>>>) -> CountingFeed {
+        let collected_at = broker_toss::TossTimestamp::try_from("2026-11-25T00:00:00Z")
+            .expect("clock")
+            .into_domain();
+        let item = NewsItem::new(
+            NewsSource::Yonhap,
+            NormalizedUrl::try_new("https://example.com/fin-e").expect("주소"),
+            UntrustedText::try_new("수집 기사").expect("제목"),
+            None,
+        );
+        CountingFeed {
+            calls: Arc::clone(calls),
+            reply: RwLock::new(Some(DataAvailability::Available((
+                vec![CollectedObservation::new(
+                    CollectedEntry::News(item),
+                    PublicationTime::NotProvided,
+                    collected_at,
+                )],
+                position("next"),
+            )))),
+        }
+    }
+
+    type Ports = src_tauri::ports::Ports<super::AppPortTypes>;
+
+    fn mock_app(repositories: &Arc<SqliteRepositories>) -> tauri::App<tauri::test::MockRuntime> {
+        let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let notifier = Arc::new(FilteredNotifier::new(
+            UnavailableNotificationDelivery,
+            NotificationPreferences::default(),
+        ));
+        let events = Arc::new(application::EventBusBuilder::default().build());
+        let ai = super::ai_composition_tests::without_claude(&clock, &events, repositories);
+        let ports: Ports = super::product_ports(repositories, notifier, &clock, events, ai);
+        tauri::test::mock_builder()
+            .manage(ports)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("앱")
+    }
+
+    #[test]
+    fn app_runner_stores_collected_news_and_source_status_only_once_the_database_is_open() {
+        let shared = SharedDatabase::new();
+        let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
+        let app = mock_app(&repositories);
+        let calls = Arc::new(RwLock::new(Vec::new()));
+        let runner =
+            AppFeedRunner::<tauri::test::MockRuntime, super::AppPortTypes, CountingFeed>::new(
+                app.handle().clone(),
+                repositories.as_ref().clone(),
+                one_article_feed(&calls),
+            );
+        let directory = std::path::PathBuf::from("../../../target/fin-e")
+            .join(format!("collector-{}", std::process::id()));
+        tauri::async_runtime::block_on(async {
+            assert_eq!(
+                runner.collect(FeedCursor::Start).await,
+                Err(SystemPortError::new(
+                    SystemPort::Repository,
+                    SystemFailure::Unavailable(RetryDelay::Unknown)
+                ))
+            );
+            assert_eq!(*calls.read().expect("잠금"), Vec::<FeedCursor>::new());
+            let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+            src_tauri::database::prepare_directory(&path).expect("폴더");
+            let clock = platform_macos::SystemClock::new().expect("시계");
+            let database =
+                store_sqlite::Database::open(&path, &SecretValue::new(vec![83; 32]), &clock)
+                    .expect("열기");
+            assert!(shared.install(database).await.is_none());
+            let collected = runner.collect(FeedCursor::Start).await.expect("수집");
+            assert_eq!(collected.cursor, position("next"));
+            assert_eq!(*collected.news.as_u32(), 1);
+            let status = repositories
+                .find(DataSource::Yonhap)
+                .await
+                .expect("상태")
+                .expect("기록");
+            assert_eq!(status.state(), SourceState::Healthy);
+            let _closed = shared.close().await;
+        });
+        std::fs::remove_dir_all(directory).expect("정리");
     }
 }

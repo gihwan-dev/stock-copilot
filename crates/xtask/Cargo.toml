@@ -19,3 +19,4 @@ schemars = "=0.8.22"
 serde_json.workspace = true
 quote = "=1.0.47"
 sha2 = "=0.10.9"
+sqlparser = { version = "=0.64.0", default-features = false, features = ["std"] }

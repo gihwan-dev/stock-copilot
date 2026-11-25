@@ -1,0 +1,26 @@
+reason = "rusqlite 실행 메서드에 SQL 상수 이름 대신 매개변수·반복 변수를 넘기는 함수. 여기 적힌 함수 안에서만 경로 식 인자를 받는다. 호출하는 쪽은 상수 이름만 넘긴다 (S-20)"
+
+[[forwarder]]
+file = "crates/adapters/store-sqlite/src/connection.rs"
+function = "verify_number"
+reason = "PRAGMA 상수를 받아 정수 결과를 확인한다"
+
+[[forwarder]]
+file = "crates/adapters/store-sqlite/src/connection.rs"
+function = "verify_text"
+reason = "PRAGMA 상수를 받아 문자열 결과를 확인한다"
+
+[[forwarder]]
+file = "crates/adapters/store-sqlite/src/connection.rs"
+function = "configure"
+reason = "PRAGMA 설정 상수 배열을 차례로 실행한다"
+
+[[forwarder]]
+file = "crates/adapters/store-sqlite/src/instrument_mapping.rs"
+function = "validate_sql_set"
+reason = "스키마 조회 상수를 받아 결과 집합을 비교한다"
+
+[[forwarder]]
+file = "crates/adapters/store-sqlite/src/migration.rs"
+function = "apply_guarded"
+reason = "MIGRATIONS 표의 마이그레이션 상수를 차례로 실행한다"
