@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { desktop } from "./load.mjs";
 export const groups = {
   레이아웃: [
+    "AppFrame",
     "AppShell",
     "Page",
     "Section",

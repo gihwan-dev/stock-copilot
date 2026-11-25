@@ -408,9 +408,23 @@
   {
     "name": "viewport-control",
     "row": 22,
-    "file": "src/shared/ds/AppShell.tsx",
+    "file": "src/shared/ds/AppFrame.tsx",
     "code": "const probe = <div className=\"h-screen\" />;",
     "rule": null
+  },
+  {
+    "name": "viewport-shell",
+    "row": 22,
+    "file": "src/shared/ds/AppShell.tsx",
+    "code": "const probe = <div className=\"h-screen\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-step",
+    "row": 22,
+    "file": "src/shared/ds/StepScreen.tsx",
+    "code": "const probe = <div className=\"min-h-screen\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
   },
   {
     "name": "nowrap-0",

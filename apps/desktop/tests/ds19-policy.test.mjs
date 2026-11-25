@@ -161,7 +161,7 @@ test("DS19 every documented file exception is exact and does not extend to a sib
         "Disclosure",
       ],
     ],
-    ["h-screen", ["AppShell", "StepScreen"]],
+    ["h-screen", ["AppFrame"]],
     [
       "whitespace-nowrap",
       ["Numbers", "Table", "Badge", "Button", "button-variants", "IconButton"],
@@ -250,7 +250,7 @@ test("DS19 policy files equal the documented set without adding a new helper", a
         "Disclosure",
       ]),
     ],
-    [22, ds(["AppShell", "StepScreen"])],
+    [22, ds(["AppFrame"])],
     [
       23,
       ds([
@@ -322,7 +322,8 @@ test("DS19 component dimension exceptions equal the approved exact file token pa
       "src/shared/ds/Divider.tsx",
       ["h-border-hairline", "w-border-hairline", "min-h-control-height-sm"],
     ],
-    ["src/shared/ds/StepScreen.tsx", ["max-w-dialog-width", "h-screen"]],
+    ["src/shared/ds/StepScreen.tsx", ["max-w-dialog-width"]],
+    ["src/shared/ds/AppFrame.tsx", ["h-screen"]],
   ]);
   for (const [file, values] of LENGTH_EXCEPTIONS) {
     for (const value of [...values, ...values.map((v) => `hover:${v}`)]) {
