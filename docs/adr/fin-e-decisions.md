@@ -12,3 +12,4 @@
 | J-12 | 건너뜀: 판정 기간 전체의 장 운영 일정 이력(`MarketInfo`는 오늘 기준 일정만 줌)과 기업 행위 자료 원천이 포트에 없음. 이대로 연결하면 `ResolveEstimates`가 자료 부족을 `record_unavailable`로 영구 기록해 미결 추정을 잃음. `SqliteRepositories`의 판정 저장소 위임과 Brier 집계(E-91)는 준비됨 | 오늘 일정·빈 기업 행위로 판정(오판정 위험) |
 | J-06 | 건너뜀: `IntradayReviewPort`의 본체(논거 재판정·재추정, J-02·E-05 유스케이스)가 master에 없음 | 가짜 재추정 등록 |
 | J-10 | 건너뜀: `JobScheduleSettingsRepository`·`JobRecordSink` 저장에 새 표(마이그레이션 0021)가 필요하고 `JobRecordSink`가 동기 트레이트라 앱 쪽 비동기 쓰기 큐 설계가 따로 필요. 설정 화면 명령도 없음(front 묶음) | settings 표 CHECK 확장(마이그레이션 필요) |
+| 수집 격리 거부 흔들림 | 원인: 격리 거부 이벤트가 채널로 먼저 나가 `ClaudeWebCollectionRunner::collect`가 곧바로 `Rejected`를 돌려주고, 자식 정리(stdin 닫기 → 종료 → 회수)는 읽기 스레드에서 뒤이어 일어남. 시험은 가짜 CLI가 종료 때 쓰는 호출 기록을 회수 전에 읽어 빈 목록을 볼 수 있었음(부하 4코어 점유에서 10회×15번 중 2번 실패). 수정: 거부 뒤 스트림 끝(회수 뒤 보내는 End)까지 비운 다음 `Rejected`를 돌려줌. 같은 부하에서 0/15. 수집 호출이 끝나면 자식 프로세스가 남지 않는 성질도 함께 생김 | 시험에서 기록 파일을 될 때까지 기다림(제품의 프로세스 수명 문제를 가림), 회수 유예 250ms 늘리기 |
