@@ -245,6 +245,8 @@ mod shared;
 pub use shared::{SharedClosure, SharedDatabase, SqliteRepositories, not_opened};
 mod shared_master;
 pub use shared_master::SqliteMasterSession;
+mod master_store;
+pub use master_store::{MasterSnapshots, StoredMaster};
 mod portfolio_store;
 pub use portfolio_store::SqlitePortfolioStore;
 #[cfg(test)]

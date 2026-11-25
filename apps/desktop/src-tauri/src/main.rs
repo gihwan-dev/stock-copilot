@@ -8,6 +8,7 @@ use src_tauri::broker_link::{AccountSelector, BrokerMarketTools};
 use src_tauri::collected_links::{CollectedLinker, TitleLinker};
 use src_tauri::holdings_link::{
     HoldingsListener, InstrumentDirectory, InstrumentMasterFeed, MasterRefresh, PortsHoldingsSync,
+    SavedMaster,
 };
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
@@ -108,13 +109,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let self_check = product_self_check(&ai, &repositories);
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
     let holdings = holdings_listener(&ports, &toss, &repositories, &directory, &shared_clock);
-    let link = toss_link_state(&toss, holdings, &shared_clock);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
             .manage(directory)
             .manage(intraday)
             .manage(turns)
-            .manage(link)
+            .manage(toss_link_state(&toss, holdings.clone(), &shared_clock))
+            .manage(holdings)
             .manage(self_check)
             .manage(ResolutionDataSlot(Arc::new(ResolutionData::new(
                 TossResolutionSource(Arc::<ProductBroker>::clone(&toss.broker)),
@@ -297,10 +298,47 @@ fn public_ip_runtime(clock: &Arc<platform_macos::SystemClock>) -> PublicIpRuntim
 
 const TOSS_RECHECK_SECONDS: u64 = 3_600;
 
+async fn restore_saved_holdings<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(holdings) = tauri::Manager::try_state::<HoldingsListener>(app) {
+        let _restored = holdings.inner().restore_saved().await;
+    }
+    let (Some(ports), Some(repositories)) = (
+        tauri::Manager::try_state::<Ports<AppPortTypes>>(app),
+        tauri::Manager::try_state::<Arc<SqliteRepositories>>(app),
+    ) else {
+        return;
+    };
+    if !ports.saved_accounts.current().is_empty() {
+        return;
+    }
+    let latest = {
+        let guard = repositories.shared().read().await;
+        match guard.as_ref() {
+            Some(database) => store_sqlite::HoldingsStore::new(database)
+                .latest_account()
+                .await
+                .ok()
+                .flatten(),
+            None => None,
+        }
+    };
+    if let Some(account) = latest
+        && ports.saved_accounts.current().is_empty()
+        && ports.saved_accounts.replace(vec![account])
+            == src_tauri::broker_link::SelectionChange::Changed
+    {
+        let _delivery = ports
+            .events
+            .publish(domain::DomainEvent::AccountSelectionChanged);
+    }
+}
+
 fn start_toss_check(app: &tauri::AppHandle<tauri::Wry>) {
     if let Some(state) = tauri::Manager::try_state::<TossLinkState>(app) {
         let link = state.inner().clone();
+        let handle = app.clone();
         let _check = tauri::async_runtime::spawn(async move {
+            restore_saved_holdings(&handle).await;
             loop {
                 let _state = link.backend().check().await;
                 tokio::time::sleep(std::time::Duration::from_secs(TOSS_RECHECK_SECONDS)).await;
@@ -328,6 +366,35 @@ impl<S: application::SecretStore + 'static> InstrumentMasterFeed for ProductMast
 
     fn install(&self, facts: domain::MasterInstrumentFacts) {
         self.broker.replace_market_master(facts);
+    }
+
+    fn save(&self, master: SavedMaster) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            let _saved = store_sqlite::MasterSnapshots(self.store.as_ref())
+                .save(master.market, master.refreshed_at, master.instruments)
+                .await;
+        })
+    }
+
+    fn saved(&self) -> BoxFuture<'_, Vec<SavedMaster>> {
+        Box::pin(async move {
+            store_sqlite::MasterSnapshots(self.store.as_ref())
+                .stored()
+                .await
+                .map_or_else(
+                    |_error| Vec::new(),
+                    |stored| {
+                        stored
+                            .into_iter()
+                            .map(|master| SavedMaster {
+                                market: master.market,
+                                refreshed_at: master.refreshed_at,
+                                instruments: master.instruments,
+                            })
+                            .collect()
+                    },
+                )
+        })
     }
 }
 
@@ -2405,6 +2472,53 @@ mod collector_store_tests {
     }
 
     #[test]
+    fn startup_restore_selects_the_last_synced_account_before_toss_answers() {
+        let shared = SharedDatabase::new();
+        let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
+        let directory = std::path::PathBuf::from("../../../target/fin-hold")
+            .join(format!("restore-{}", std::process::id()));
+        let system = platform_macos::SystemClock::new().expect("시계");
+        let observed = application::Clock::now(&system);
+        tauri::async_runtime::block_on(async {
+            let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+            src_tauri::database::prepare_directory(&path).expect("폴더");
+            let database =
+                store_sqlite::Database::open(&path, &SecretValue::new(vec![61; 32]), &system)
+                    .expect("열기");
+            assert!(shared.install(database).await.is_none());
+            let guard = shared.read().await;
+            let _written = store_sqlite::HoldingsStore::new(guard.as_ref().expect("열림"))
+                .record_holdings(store_sqlite::HoldingsSnapshot {
+                    account: domain::AccountId::new(413),
+                    observed_at: observed,
+                    holdings: Vec::new(),
+                })
+                .await
+                .expect("스냅샷");
+        });
+        let clock = Arc::new(system);
+        let notifier = Arc::new(FilteredNotifier::new(
+            UnavailableNotificationDelivery,
+            NotificationPreferences::default(),
+        ));
+        let events = Arc::new(application::EventBusBuilder::default().build());
+        let ai = super::ai_composition_tests::without_claude(&clock, &events, &repositories);
+        let toss = super::product_toss(&clock, &events, &repositories).expect("토스 조립");
+        let ports: Ports =
+            super::product_ports(&repositories, (notifier, &toss), &clock, events, ai);
+        let accounts = ports.saved_accounts.clone();
+        let app = tauri::test::mock_builder()
+            .manage(ports)
+            .manage(Arc::clone(&repositories))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("앱");
+        tauri::async_runtime::block_on(super::restore_saved_holdings(app.handle()));
+        assert_eq!(accounts.current(), vec![domain::AccountId::new(413)]);
+        let _closed = tauri::async_runtime::block_on(shared.close());
+        let _cleaned = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
     fn app_runner_stores_collected_news_and_source_status_only_once_the_database_is_open() {
         let shared = SharedDatabase::new();
         let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
@@ -3214,6 +3328,21 @@ mod toss_assembly_tests {
                 .expect("이력")
         };
         assert_eq!(history.len(), 1);
+        let saved = store_sqlite::MasterSnapshots(repositories)
+            .stored()
+            .await
+            .expect("저장된 마스터");
+        assert_eq!(saved.len(), 2, "국내·미국 마스터가 SQLite에 남음");
+        let restarted = store_sqlite::SqlitePortfolioStore::new(repositories.clone());
+        let restored = restarted
+            .latest(&domain::AccountId::new(413))
+            .await
+            .expect("복원")
+            .expect("재시작 직후 보유");
+        let domain::SyncOutcome::Partial(value) = restored.outcome() else {
+            panic!("복원 기록: {:?}", restored.outcome());
+        };
+        assert_eq!(value.holdings().len(), 2);
     }
 
     #[test]
