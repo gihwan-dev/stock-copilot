@@ -96,6 +96,10 @@ impl BrokerAccountRow {
         self.observed_at
     }
     #[must_use]
+    pub const fn masked_number(&self) -> &MaskedAccountNumber {
+        &self.suffix
+    }
+    #[must_use]
     pub fn display_fact(&self) -> AccountDisplayFact {
         AccountDisplayFact::from_account_lookup_result(
             AccountLookupDisplayRow::from_broker_account_result(

@@ -332,3 +332,109 @@ fn user_message_mode_researches_the_stored_message_of_the_running_chat_turn() {
         "사용자 문장 조사도 감사에 남긴다"
     );
 }
+
+struct HeldOnly(Vec<&'static str>);
+
+type ToolRead<T> = Result<Option<T>, SystemPortError>;
+
+impl crate::mcp_portfolio::PortfolioToolSource for HeldOnly {
+    fn portfolio(
+        &self,
+    ) -> crate::ipc::state::BoxFuture<'_, ToolRead<application::PortfolioToolView>> {
+        Box::pin(ready(Ok(None)))
+    }
+
+    fn allocation(
+        &self,
+    ) -> crate::ipc::state::BoxFuture<'_, ToolRead<application::AllocationToolView>> {
+        Box::pin(ready(Ok(None)))
+    }
+
+    fn transactions(
+        &self,
+    ) -> crate::ipc::state::BoxFuture<'_, ToolRead<application::TransactionsToolView>> {
+        Box::pin(ready(Ok(None)))
+    }
+
+    fn performance(
+        &self,
+        _period: application::PerformancePeriod,
+    ) -> crate::ipc::state::BoxFuture<'_, ToolRead<application::PerformanceToolView>> {
+        Box::pin(ready(Ok(None)))
+    }
+
+    fn held(&self) -> crate::ipc::state::BoxFuture<'_, Vec<Symbol>> {
+        Box::pin(ready(
+            self.0
+                .iter()
+                .map(|symbol| Symbol::try_new(symbol).expect("종목"))
+                .collect(),
+        ))
+    }
+}
+
+fn samsung_master() -> domain::MasterInstrument {
+    domain::MasterInstrument::try_new(domain::MasterInstrumentRow {
+        listing_market: domain::MasterCode::try_new("KOSPI").expect("시장"),
+        symbol: Symbol::try_new("005930").expect("심볼"),
+        instrument_id: InstrumentId::try_new("inst-1").expect("ID"),
+        name: domain::DisplayInstrumentName::try_new("삼성전자").expect("이름"),
+        security_type: domain::MasterSecurityType::from_code(
+            domain::MasterCode::try_new("STOCK").expect("유형"),
+        ),
+        currency: domain::Currency::Krw,
+        listing_status: domain::ListingStatus::Active,
+        common_share: domain::CommonShare::Common,
+        korean_detail: Some(domain::KoreanMasterDetail {
+            liquidation: domain::LiquidationTrading::Regular,
+            krx: domain::TradingSuspension::Clear,
+            nxt: domain::NxtTrading::Unsupported,
+        }),
+        observed_at: at(),
+    })
+    .expect("마스터")
+}
+
+#[test]
+fn held_instruments_are_research_targets_and_domestic_codes_search_by_master_name() {
+    let provider = Arc::new(ScriptedAiProvider::default());
+    for _ in 0_u8..2_u8 {
+        provider
+            .script_run()
+            .push(Ok(ScriptedAiEventStream::from_events(vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                AiEvent::TextDelta(UntrustedText::try_new("요약").expect("요약")),
+            ])));
+    }
+    let store = Arc::new(Store::default());
+    let directory = crate::holdings_link::InstrumentDirectory::default();
+    directory.replace(&[samsung_master()]);
+    let port = research(&provider, &store).with_holdings(
+        crate::mcp_portfolio::CatalogPortfolio::connected(
+            Arc::new(HeldOnly(vec!["005930", "NVDA"])),
+            directory,
+        ),
+    );
+    let known = tauri::async_runtime::block_on(port.known_targets(&run_id())).expect("대상");
+    assert!(known.contains(&Symbol::try_new("005930").expect("종목")));
+    assert!(known.contains(&Symbol::try_new("NVDA").expect("종목")));
+    let samsung = tauri::async_runtime::block_on(
+        port.request_research(&run_id(), &request("005930", vec![ResearchTopic::Earnings])),
+    )
+    .expect("종목명으로 검색해 SEC-9 통과");
+    assert_eq!(samsung.summary.as_untrusted_str(), "요약");
+    let nvidia = tauri::async_runtime::block_on(
+        port.request_research(&run_id(), &request("NVDA", vec![ResearchTopic::Earnings])),
+    )
+    .expect("보유 종목은 관심 목록에 없어도 대상");
+    assert_eq!(nvidia.summary.as_untrusted_str(), "요약");
+    assert_eq!(provider.calls().len(), 2_usize);
+    assert_eq!(
+        tauri::async_runtime::block_on(
+            port.request_research(&run_id(), &request("MSFT", vec![ResearchTopic::Earnings])),
+        )
+        .err(),
+        Some(WebResearchToolFailure::QueryRejected),
+        "보유도 관심도 아닌 종목은 거부"
+    );
+}

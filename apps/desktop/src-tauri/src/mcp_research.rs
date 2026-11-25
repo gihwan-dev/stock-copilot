@@ -1,4 +1,5 @@
 use crate::ai_runtime::ChatTurnBook;
+use crate::mcp_portfolio::CatalogPortfolio;
 use application::{
     AiEvent, AiEventStream, AiProvider, AiRunId, AuditLog, Clock, CollectionQuery, CollectionTopic,
     IsolationCheck, ModelSelection, ReasoningEffort, ResearchTopic, RunInput, RunPurpose, RunSpec,
@@ -61,18 +62,25 @@ pub struct AppWebResearch<S, A, C> {
     clock: Arc<C>,
     turns: ChatTurnBook,
     sequence: AtomicU64,
+    holdings: CatalogPortfolio,
 }
 
 impl<S, A, C> AppWebResearch<S, A, C> {
     #[must_use]
-    pub const fn new(store: Arc<S>, collector: Arc<A>, clock: Arc<C>, turns: ChatTurnBook) -> Self {
+    pub fn new(store: Arc<S>, collector: Arc<A>, clock: Arc<C>, turns: ChatTurnBook) -> Self {
         Self {
             store,
             collector,
             clock,
             turns,
             sequence: AtomicU64::new(1_u64),
+            holdings: CatalogPortfolio::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_holdings(self, holdings: CatalogPortfolio) -> Self {
+        Self { holdings, ..self }
     }
 }
 
@@ -147,12 +155,15 @@ where
     }
 
     async fn targets(&self) -> Result<Vec<Symbol>, SystemPortError> {
-        Ok(WatchlistRepository::load(self.store.as_ref())
-            .await?
-            .instruments()
-            .iter()
-            .filter_map(|instrument| Symbol::try_new(instrument.as_str()).ok())
-            .collect())
+        let watched = WatchlistRepository::load(self.store.as_ref()).await?;
+        let mut symbols: BTreeSet<Symbol> = self.holdings.held().await.into_iter().collect();
+        symbols.extend(
+            watched
+                .instruments()
+                .iter()
+                .filter_map(|instrument| Symbol::try_new(instrument.as_str()).ok()),
+        );
+        Ok(symbols.into_iter().collect())
     }
 
     async fn approve(
@@ -165,8 +176,11 @@ where
         let context = WebSearchSensitiveContext::new();
         let mut candidates = Vec::new();
         for symbol in symbols {
-            let name = DisplayInstrumentName::try_new(symbol.as_str())
-                .map_err(|_error| WebResearchToolFailure::QueryRejected)?;
+            let name = match self.holdings.name(symbol) {
+                Some(name) => name,
+                None => DisplayInstrumentName::try_new(symbol.as_str())
+                    .map_err(|_error| WebResearchToolFailure::QueryRejected)?,
+            };
             candidates.extend(research_search_plan(&name, &plan));
         }
         for candidate in &candidates {

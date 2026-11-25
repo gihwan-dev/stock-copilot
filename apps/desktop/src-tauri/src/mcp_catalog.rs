@@ -153,6 +153,7 @@ pub struct CatalogStores<R, E, B, W> {
     pub runs: RunMetadataBook,
     pub events: Arc<EventBus>,
     pub market: crate::broker_link::BrokerMarketTools,
+    pub portfolio: crate::mcp_portfolio::CatalogPortfolio,
 }
 
 impl<R, E, B, W> std::fmt::Debug for CatalogStores<R, E, B, W> {
@@ -186,18 +187,21 @@ where
     let data = Arc::new(UnconnectedToolData);
     let cursors = make_cursor_store(Arc::clone(clock));
     let ports = AnalysisCatalogPorts {
-        portfolio: Arc::clone(&data),
+        portfolio: Arc::new(stores.portfolio.clone()),
         market: Arc::new(stores.market),
         news: Arc::new(StoredNews::new(
             Arc::clone(&stores.estimates),
             Arc::clone(clock),
         )),
-        research: Arc::new(AppWebResearch::new(
-            Arc::clone(&stores.estimates),
-            stores.collector,
-            Arc::clone(clock),
-            stores.turns,
-        )),
+        research: Arc::new(
+            AppWebResearch::new(
+                Arc::clone(&stores.estimates),
+                stores.collector,
+                Arc::clone(clock),
+                stores.turns,
+            )
+            .with_holdings(stores.portfolio),
+        ),
         article: Arc::new(StoredArticles::new(
             Arc::clone(&stores.estimates),
             stores.bodies,

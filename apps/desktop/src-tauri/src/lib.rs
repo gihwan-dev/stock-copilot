@@ -9,6 +9,7 @@ pub mod holdings_link;
 pub mod ipc;
 pub mod lifecycle;
 pub mod mcp_catalog;
+pub mod mcp_portfolio;
 pub mod mcp_research;
 pub mod mcp_sources;
 pub mod platform;
