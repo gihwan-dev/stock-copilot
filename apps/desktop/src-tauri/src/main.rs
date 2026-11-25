@@ -1684,10 +1684,10 @@ mod collector_store_tests {
         use src_tauri::platform::scheduled_ports::AppStoredJobs;
         let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
         let app = mock_app(&repositories);
-        let jobs = AppStoredJobs::<
-            tauri::test::MockRuntime,
-            ProductPorts<SqliteRepositories, super::ProductSecrets>,
-        >::new(app.handle().clone(), repositories.as_ref().clone());
+        let jobs = AppStoredJobs::<tauri::test::MockRuntime, super::AppPortTypes>::new(
+            app.handle().clone(),
+            repositories.as_ref().clone(),
+        );
         let now = broker_toss::TossTimestamp::try_from("2026-11-25T07:00:00Z")
             .expect("clock")
             .into_domain();
