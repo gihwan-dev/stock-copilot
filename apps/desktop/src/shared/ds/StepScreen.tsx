@@ -89,7 +89,10 @@ export const StepScreen = (props: Props): ReactElement => (
         </div>
       </div>
     </ScrollArea>
-    <div className="flex justify-center w-full px-space-6 pt-space-4 pb-space-8">
+    <div
+      data-pinned-actions=""
+      className="flex justify-center w-full px-space-6 pt-space-4 pb-space-8"
+    >
       <div className="flex flex-col w-full max-w-dialog-width">
         <Actions primary={props.primary} secondary={props.secondary} />
       </div>
