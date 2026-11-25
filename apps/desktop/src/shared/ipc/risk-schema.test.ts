@@ -7,12 +7,13 @@ import {
   settleRiskSave,
   settleRiskSettings,
 } from "./risk-schema";
+import { wire } from "./schema";
 import { responses } from "./testing/responses";
 
 test("settleRiskSettings turns the recorded defaults into the editor drafts", () => {
   const result = settleRiskSettings({
     status: "ok",
-    data: responses.getRiskSettings,
+    data: wire(responses.getRiskSettings),
   });
   expect(result).toStrictEqual({
     kind: "ok",
@@ -24,14 +25,14 @@ test("settleRiskSettings rejects unknown values and classifies command errors", 
   expect(
     settleRiskSettings({
       status: "ok",
-      data: {
+      data: wire({
         ...responses.getRiskSettings,
         order: { ...responses.getRiskSettings.order, card_expiry: "60" },
-      },
+      }),
     }).kind,
   ).toBe("err");
   expect(
-    settleRiskSettings({ status: "error", error: { kind: "no-data" } }),
+    settleRiskSettings({ status: "error", error: wire({ kind: "no-data" }) }),
   ).toStrictEqual({
     kind: "err",
     error: { kind: "command", error: { kind: "no-data" } },
@@ -40,11 +41,11 @@ test("settleRiskSettings rejects unknown values and classifies command errors", 
 
 test("settleRiskSave keeps declined and explains a rejection in one sentence", () => {
   expect(
-    settleRiskSave({ status: "ok", data: responses.saveInvestorProfile }),
+    settleRiskSave({ status: "ok", data: wire(responses.saveInvestorProfile) }),
   ).toStrictEqual({ kind: "ok", value: { kind: "declined" } });
   const rejected = settleRiskSave({
     status: "ok",
-    data: { kind: "rejected", rejection: "unsupported-exclusion" },
+    data: wire({ kind: "rejected", rejection: "unsupported-exclusion" }),
   });
   expect(rejected.kind).toBe("ok");
   if (rejected.kind === "ok" && rejected.value.kind === "rejected") {

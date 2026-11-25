@@ -1143,7 +1143,7 @@ where
     let path = child_path(login.as_deref(), process_env.path(), executable.as_deref());
     let host_env = ai_claude_code::HostEnvironment::from_pairs(
         vars.filter(|(key, _value)| key != "PATH")
-            .chain(std::iter::once((String::from("PATH"), path))),
+            .chain([(String::from("PATH"), path)]),
     );
     DiscoveredCli {
         executable,

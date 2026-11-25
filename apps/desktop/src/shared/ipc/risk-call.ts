@@ -13,14 +13,13 @@ import {
   settleRiskSettings,
   type RiskSettingsView,
 } from "./risk-schema";
-import type { IpcFailure } from "./schema";
+import { wireOutcome, type IpcFailure } from "./schema";
 
 export const getRiskSettings = (): Promise<
   Result<RiskSettingsView, IpcFailure>
 > =>
-  settleCall(
-    commands.getRiskSettings({ scope: "current" }),
-    settleRiskSettings,
+  settleCall(commands.getRiskSettings({ scope: "current" }), (outcome) =>
+    settleRiskSettings(wireOutcome(outcome)),
   );
 
 export const investorProfile = (): Promise<Result<ProfileDraft, IpcFailure>> =>
@@ -40,7 +39,7 @@ export const saveInvestorProfile = (
 ): Promise<Result<RiskSaveOutcome, IpcFailure>> =>
   settleCall(
     commands.saveInvestorProfile({ draft: profileRequest(draft) }),
-    settleRiskSave,
+    (outcome) => settleRiskSave(wireOutcome(outcome)),
   );
 
 export const saveOrderSettings = (
@@ -48,5 +47,5 @@ export const saveOrderSettings = (
 ): Promise<Result<RiskSaveOutcome, IpcFailure>> =>
   settleCall(
     commands.saveOrderSettings({ draft: orderRequest(draft) }),
-    settleRiskSave,
+    (outcome) => settleRiskSave(wireOutcome(outcome)),
   );
