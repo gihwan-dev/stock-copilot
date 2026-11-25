@@ -218,6 +218,8 @@ mod backup_tests;
 
 mod order_rate;
 pub use order_rate::OrderRateStore;
+mod order_ledger;
+pub use order_ledger::commit_prepared_submission;
 #[cfg(test)]
 mod order_rate_tests;
 
@@ -243,6 +245,8 @@ mod shared;
 pub use shared::{SharedClosure, SharedDatabase, SqliteRepositories, not_opened};
 mod shared_master;
 pub use shared_master::SqliteMasterSession;
+mod master_store;
+pub use master_store::{MasterSnapshots, StoredMaster};
 mod portfolio_store;
 pub use portfolio_store::SqlitePortfolioStore;
 #[cfg(test)]

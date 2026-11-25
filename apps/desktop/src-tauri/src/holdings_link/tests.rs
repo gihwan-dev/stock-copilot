@@ -15,7 +15,7 @@ use testkit_ports::SteppedClock;
 
 use super::{
     HoldingsListener, HoldingsSync, InstrumentDirectory, InstrumentMasterFeed, MasterRefresh,
-    RefreshOutcome,
+    RefreshOutcome, SavedMaster,
 };
 use crate::ipc::state::BoxFuture;
 use crate::toss_link::NoListener;
@@ -73,6 +73,7 @@ struct FakeFeed {
     fetches: AtomicUsize,
     us_failures: AtomicUsize,
     installed: std::sync::RwLock<Vec<MasterInstrumentFacts>>,
+    saved: std::sync::RwLock<Vec<SavedMaster>>,
 }
 
 impl InstrumentMasterFeed for FakeFeed {
@@ -102,6 +103,28 @@ impl InstrumentMasterFeed for FakeFeed {
 
     fn install(&self, facts: MasterInstrumentFacts) {
         self.installed.write().expect("installed").push(facts);
+    }
+
+    fn save(&self, master: SavedMaster) -> BoxFuture<'_, ()> {
+        let mut saved = self.saved.write().expect("saved");
+        saved.retain(|stored| stored.market != master.market);
+        saved.push(master);
+        Box::pin(std::future::ready(()))
+    }
+
+    fn saved(&self) -> BoxFuture<'_, Vec<SavedMaster>> {
+        let copies = self
+            .saved
+            .read()
+            .expect("saved")
+            .iter()
+            .map(|master| SavedMaster {
+                market: master.market,
+                refreshed_at: master.refreshed_at,
+                instruments: master.instruments.clone(),
+            })
+            .collect();
+        Box::pin(std::future::ready(copies))
     }
 }
 
@@ -218,6 +241,12 @@ fn nothing_installed_when_every_market_fails() {
         fn install(&self, _facts: MasterInstrumentFacts) {
             panic!("설치하면 안 됨");
         }
+        fn save(&self, _master: SavedMaster) -> BoxFuture<'_, ()> {
+            panic!("저장하면 안 됨");
+        }
+        fn saved(&self) -> BoxFuture<'_, Vec<SavedMaster>> {
+            Box::pin(std::future::ready(Vec::new()))
+        }
     }
     let refresh = MasterRefresh::new(
         Arc::new(Failing),
@@ -228,4 +257,42 @@ fn nothing_installed_when_every_market_fails() {
         tauri::async_runtime::block_on(refresh.refresh_due()),
         RefreshOutcome::Failed
     );
+}
+
+#[test]
+fn saved_masters_install_at_restore_and_skip_the_fetch_while_fresh() {
+    let feed = Arc::new(FakeFeed::default());
+    let clock = Arc::new(SteppedClock::new(at(1_790_000_000)));
+    let first = MasterRefresh::new(
+        Arc::<FakeFeed>::clone(&feed),
+        InstrumentDirectory::default(),
+        Arc::<SteppedClock>::clone(&clock),
+    );
+    tauri::async_runtime::block_on(async {
+        assert_eq!(first.restore().await, RefreshOutcome::Fresh, "저장 전");
+        assert_eq!(first.refresh_due().await, RefreshOutcome::Refreshed);
+        assert_eq!(feed.saved.read().expect("saved").len(), 2);
+        let directory = InstrumentDirectory::default();
+        let restarted = MasterRefresh::new(
+            Arc::<FakeFeed>::clone(&feed),
+            directory.clone(),
+            Arc::<SteppedClock>::clone(&clock),
+        );
+        assert_eq!(restarted.restore().await, RefreshOutcome::Refreshed);
+        assert_eq!(
+            directory
+                .name(&Symbol::try_new("AAPL").expect("심볼"))
+                .map(|name| name.as_str().to_owned()),
+            Some(String::from("애플"))
+        );
+        assert_eq!(restarted.refresh_due().await, RefreshOutcome::Fresh);
+        assert_eq!(
+            feed.fetches.load(Ordering::SeqCst),
+            2,
+            "저장분이 신선하면 다시 받지 않음"
+        );
+        let _next = clock.advance_by(day()).expect("하루 뒤");
+        assert_eq!(restarted.refresh_due().await, RefreshOutcome::Refreshed);
+        assert_eq!(feed.fetches.load(Ordering::SeqCst), 4);
+    });
 }

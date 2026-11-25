@@ -182,7 +182,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     ) -> Result<domain::MarketCalendar, PortError> {
         crate::market_calendar::fetch_on(self, market, date).await
     }
-    pub(crate) fn tokens(&self) -> &TokenManager<Store, Time, Renewal> {
+    pub fn tokens(&self) -> &TokenManager<Store, Time, Renewal> {
         &self.tokens
     }
     pub(crate) async fn fetch_order(

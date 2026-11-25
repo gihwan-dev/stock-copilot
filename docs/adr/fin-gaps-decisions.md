@@ -47,3 +47,16 @@
 | G-07 (J-12) | 판정 작업 두 개(국내 `EstimateResolution`, 미국 `UsEstimateResolution`, native 묶음이 정한 일정)를 등록하고 `ResolveEstimates`를 제품 이벤트 버스로 부른다(`ResolveEstimatesRunner`는 버스를 값으로 받아 쓰지 않음). 장 일정은 토스 `market-calendar?date=`(새 `TossAccountRead::calendar_on`)를 기준일부터 영업일마다 이어 받아 메모리에 캐시한다(처음 8일, 부족하면 20일씩, 최대 140일) | 오늘 일정만으로 판정(fin-e가 버림) |
 | G-07 (J-12) | 기업 행위 자료 원천이 없어, 수정주가 일봉과 무수정 일봉을 둘 다 받아 한 봉이라도 다르면(분할 등) 판정하지 않고 `Incomplete(Adjustment)`로 미룬다(판정 불가 기록은 별도 로그 표라 다음 실행에 다시 시도). 같으면 기업 행위 없음으로 `OutcomeAdjustment::from_actions(.., &[])`. 기준일 분봉은 늘 받고, 판정이 분봉 부족이면 창 안의 다음 장 최대 10일 분봉을 더 받는다. 경계가·비율 계산은 domain에만 있다 | 기업 행위 없음으로 가정(분할 뒤 즉시 손절 오판), 전 기간 분봉 |
 | G-07 (J-12) | 이 묶음 시점에는 제품에서 추정 과제를 만드는 경로(종목 추정 순환 E-05)가 아직 없어, 판정 작업은 채팅·장중 감시에서 제출된 추정이 있을 때만 일한다 | - |
+
+## 남은 것 (묶음 끝)
+
+| 기능 | 지금 상태 | 막힌 이유·다음에 할 것 |
+|---|---|---|
+| 주문 켜기·위험 완화 확인 창, 주문 요약 창 | 구현은 로컬 브랜치 `fin-gaps-native-dialog`(1c61b255)에만 있음 | `harness/arch-check/rules.toml`에 rfd 전이 예외 한 항목이 필요(보호 하네스, 자동 모드가 거부) — 사용자 승인 |
+| 본인 확인(Touch ID) | `UnavailableDeviceOwnerAuth` | `objc2-local-authentication`과 `platform-macos`의 `unsafe_code` 예외 ADR(O-07)이 사용자 몫 |
+| macOS 알림 | `UnavailableNotificationDelivery` | `tauri-plugin-notification` 추가와 구조 검사 예외가 보호 하네스 변경 |
+| 주문 승인 런타임 | `OrderApprovalRuntime` 미조립(요청은 항상 `unavailable`) | `ProposalContextPort`·`ExpiredProposalRedrafter`·`PreSubmitTransactionPort` 구현과 `broker-toss-trade` 조립이 필요(등급 3), 위 확인 창이 먼저 |
+| 추정 → 신호 → 제안 사슬 | 추정 과제 생성(`CreateEstimateTask`)·종목 추정 순환(E-05)·신호 평가(`EvaluateSignals`)·제안 초안이 제품 경로에서 불리지 않음 | `SignalEvaluationData` 등 자료 포트 구현이 큼. 다음 묶음 |
+| 신호 카드·넘기기·종목 목록·종목 상세·논거 노트·관심 추가/삭제·거래내역 | 화면 원본 `pending` | 신호는 위 사슬 뒤, 종목 목록은 종목별 당일 등락 자료 경로가 없음, 논거 이력은 시각이 저장되지 않음 |
+| 설정 고급(AI·뉴스·원칙·계좌 선택·백업·내보내기·전체 삭제) | 설치 앱에 숨김 | IPC 19개, 다음 묶음 |
+| 미리 띄운 채팅·거시·재무 | `Unavailable` | 선택 기능, 다음 묶음 |

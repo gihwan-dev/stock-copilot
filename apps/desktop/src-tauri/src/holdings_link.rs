@@ -18,9 +18,18 @@ mod tests;
 const MASTER_REFRESH_SECONDS: u64 = 86_400;
 const MARKETS: [KnownMarket; 2] = [KnownMarket::Kr, KnownMarket::Us];
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedMaster {
+    pub market: KnownMarket,
+    pub refreshed_at: Timestamp,
+    pub instruments: Vec<MasterInstrument>,
+}
+
 pub trait InstrumentMasterFeed: Send + Sync {
     fn fetch(&self, market: KnownMarket) -> BoxFuture<'_, Result<InstrumentMaster, PortError>>;
     fn install(&self, facts: MasterInstrumentFacts);
+    fn save(&self, master: SavedMaster) -> BoxFuture<'_, ()>;
+    fn saved(&self) -> BoxFuture<'_, Vec<SavedMaster>>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -143,13 +152,16 @@ impl MasterRefresh {
             }
             match self.feed.fetch(market).await {
                 Ok(master) => {
-                    let _previous = loaded.insert(
-                        market,
-                        LoadedMarket {
-                            at: self.clock.now(),
-                            instruments: available(&master),
-                        },
-                    );
+                    let at = self.clock.now();
+                    let instruments = available(&master);
+                    self.feed
+                        .save(SavedMaster {
+                            market,
+                            refreshed_at: at,
+                            instruments: instruments.clone(),
+                        })
+                        .await;
+                    let _previous = loaded.insert(market, LoadedMarket { at, instruments });
                     changed.push(market);
                 }
                 Err(_error) => failed.push(market),
@@ -162,19 +174,47 @@ impl MasterRefresh {
                 RefreshOutcome::Failed
             };
         }
+        if self.install(&loaded) {
+            RefreshOutcome::Refreshed
+        } else {
+            for market in changed {
+                let _dropped = loaded.remove(&market);
+            }
+            RefreshOutcome::Failed
+        }
+    }
+
+    fn install(&self, loaded: &BTreeMap<KnownMarket, LoadedMarket>) -> bool {
         let combined: Vec<MasterInstrument> = loaded
             .values()
             .flat_map(|market| market.instruments.iter().cloned())
             .collect();
         let Ok(facts) = MasterInstrumentFacts::try_new(combined.clone()) else {
-            for market in changed {
-                let _dropped = loaded.remove(&market);
-            }
-            return RefreshOutcome::Failed;
+            return false;
         };
         self.feed.install(facts);
         self.directory.replace(&combined);
-        RefreshOutcome::Refreshed
+        true
+    }
+
+    pub async fn restore(&self) -> RefreshOutcome {
+        let saved = self.feed.saved().await;
+        if saved.is_empty() {
+            return RefreshOutcome::Fresh;
+        }
+        let mut loaded = self.loaded.lock().await;
+        for master in saved {
+            let _previous = loaded.entry(master.market).or_insert(LoadedMarket {
+                at: master.refreshed_at,
+                instruments: master.instruments,
+            });
+        }
+        if self.install(&loaded) {
+            RefreshOutcome::Refreshed
+        } else {
+            loaded.clear();
+            RefreshOutcome::Failed
+        }
     }
 }
 
@@ -297,6 +337,10 @@ impl HoldingsListener {
             sync,
             running: Arc::new(Mutex::new(())),
         }
+    }
+
+    pub async fn restore_saved(&self) -> RefreshOutcome {
+        self.refresh.restore().await
     }
 
     pub async fn refresh_holdings(&self) -> RefreshOutcome {

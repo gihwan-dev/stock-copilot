@@ -69,7 +69,10 @@ pub const fn not_opened(port: SystemPort) -> SystemPortError {
     SystemPortError::new(port, SystemFailure::Unavailable(RetryDelay::Unknown))
 }
 
-fn opened(guard: Option<&Database>, port: SystemPort) -> Result<&Database, SystemPortError> {
+pub(crate) fn opened(
+    guard: Option<&Database>,
+    port: SystemPort,
+) -> Result<&Database, SystemPortError> {
     guard.ok_or_else(|| not_opened(port))
 }
 
