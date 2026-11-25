@@ -52,9 +52,9 @@
 
 | 기능 | 지금 상태 | 막힌 이유·다음에 할 것 |
 |---|---|---|
-| 주문 켜기·위험 완화 확인 창, 주문 요약 창 | 구현은 로컬 브랜치 `fin-gaps-native-dialog`(1c61b255)에만 있음 | `harness/arch-check/rules.toml`에 rfd 전이 예외 한 항목이 필요(보호 하네스, 자동 모드가 거부) — 사용자 승인 |
-| 본인 확인(Touch ID) | `UnavailableDeviceOwnerAuth` | `objc2-local-authentication`과 `platform-macos`의 `unsafe_code` 예외 ADR(O-07)이 사용자 몫 |
-| macOS 알림 | `UnavailableNotificationDelivery` | `tauri-plugin-notification` 추가와 구조 검사 예외가 보호 하네스 변경 |
+| 주문 켜기·위험 완화 확인 창, 주문 요약 창 | 반영됨(fin-native, 아래 3차) | - |
+| 본인 확인(Touch ID) | 반영됨(fin-native, `LocalDeviceOwnerAuth`, ADR 0180) | - |
+| macOS 알림 | 반영됨(fin-native, `SystemNotificationDelivery`) | - |
 | 주문 승인 런타임 | `OrderApprovalRuntime` 미조립(요청은 항상 `unavailable`) | `ProposalContextPort`·`ExpiredProposalRedrafter`·`PreSubmitTransactionPort` 구현과 `broker-toss-trade` 조립이 필요(등급 3), 위 확인 창이 먼저 |
 | 추정 → 신호 → 제안 사슬 | 추정 과제 생성(`CreateEstimateTask`)·종목 추정 순환(E-05)·신호 평가(`EvaluateSignals`)·제안 초안이 제품 경로에서 불리지 않음 | `SignalEvaluationData` 등 자료 포트 구현이 큼. 다음 묶음 |
 | 신호 카드·넘기기·종목 목록·종목 상세·논거 노트·관심 추가/삭제·거래내역 | 화면 원본 `pending` | 신호는 위 사슬 뒤, 종목 목록은 종목별 당일 등락 자료 경로가 없음, 논거 이력은 시각이 저장되지 않음 |
@@ -69,3 +69,11 @@
 | O-조립 1 | `PreSubmitTransactionPort`의 저장 부분은 store-sqlite `commit_prepared_submission`: 한 쓰기 트랜잭션에서 제안 소비 → 감사 `SubmissionPrepared` 추가(해시 사슬) → 시간당 주문 수용 `order_submissions` 시각 추가. 이미 소비면 아무것도 쓰지 않음. `SqliteRepositories`에 주문 횟수·제안 소비·검증 보고 위임을 더함. 응답 기록(`record_submission_outcome`)은 저장 표가 없고 승인 서비스가 `SubmissionResponseRecorded`를 따로 감사하므로 쓰지 않는다 | 소비·감사를 따로 씀(사이에 죽으면 감사 없는 소비) |
 | O-조립 2 | 거래 어댑터(`TossBrokerTrade`)는 읽기 어댑터(`TossAccountRead`)를 토큰 원천으로 받는다(`TradeAccessToken` 위임, 읽기 어댑터 `tokens()` 공개). 같은 키로 토큰 관리자를 둘 만들면 서로의 토큰을 폐기한다(API-3) | 거래용 토큰 관리자를 따로 만듦 |
 | 주문 런타임 남은 것 | `ProposalContextPort`(투자 원칙 정책·섹터 배정·종목 유형 사실·평가)는 fin-flow가 신호 평가 입력용으로 만드는 같은 구조라 겹쳐 만들지 않았다. 재초안(`ExpiredProposalRedrafter`)도 fin-flow의 제안 초안이 필요하다. 둘이 들어오면 `ApprovalService` 조립(`OrderApprovalRuntime` 관리)과 가짜 토스 종단 시험을 붙인다. 확인 창·본인 확인이 보류라 조립해도 실제 주문은 확인 단계에서 멈춘다 | 빈 섹터 배정으로 조립(비중 상한 우회 위험) |
+
+## 3차 (사용자 직접 승인, fin-native)
+
+| 작업 | 정한 것 | 다른 선택지 |
+|---|---|---|
+| G-02 | `fin-gaps-native-dialog`(1c61b255)를 그대로 가져왔다. `harness/arch-check/rules.toml`에 `platform-macos` → `socket2`·`syn`·`proc-macro2`, `through = "rfd"` 예외 한 항목. 설치 앱의 "주문 켜기"·위험 완화 저장과 주문 요약은 rfd 네이티브 확인 창을 띄운다 | - |
+| O-07 | `platform-macos`의 `LocalDeviceOwnerAuth`가 `LAContext.evaluatePolicy(.deviceOwnerAuthentication)`을 별도 스레드에서 부르고 제품 조립의 `UnavailableDeviceOwnerAuth`를 대신한다. `unsafe` 예외의 범위와 하네스 항목(source-check `[[unsafe-lints]]`, disable-control `[[expect]]` 세 문, arch-check `through` 네 항목)은 [ADR 0180](0180-local-authentication-unsafe.md). 지시의 "모듈 단위 `#[allow(unsafe_code)]`"는 `allow` 금지와 모듈 위치 끄기 금지 때문에 문 단위 `#[expect]`로 했다 | 모듈 단위 `allow`, 작업 공간 `deny` |
+| U-14 | `tauri-plugin-notification =2.8.1`(tauri ^2.12, 기본 기능 끔)을 `src-tauri`에만 넣고 `product_builder`에서 등록한다. `SystemNotificationDelivery`가 앱 시작 때 묶이는 `AppHandle`로 알림 센터에 보낸다. 앱이 묶이기 전이거나 플러그인 상태가 없으면 `Unavailable`. WebView capability에는 알림 권한을 주지 않는다(발송은 코어만, 업데이트 플러그인과 같은 SEC-10 방식). arch-check `through = "tauri-plugin-notification"` 예외 한 항목, deny 허용 목록에 `tauri-plugin-notification`·`notify-rust`·`mac-notification-sys`(빌드 스크립트 둘)과 `objc2-local-authentication` | capability에 `notification:default` |

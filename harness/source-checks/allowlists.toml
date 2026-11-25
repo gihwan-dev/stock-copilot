@@ -153,3 +153,7 @@ reason = "E-91 조합 전체 표본의 선형 재보정과 기준 확률 쪽 축
 path = "crates/domain/src/calibration_arithmetic.rs"
 reason = "E-91 보정한 확률을 저장·복원에서 같은 값이 되도록 소수 6자리로 고정한다"
 
+
+[[unsafe-lints]]
+path = "crates/adapters/platform-macos/Cargo.toml"
+reason = "O-07(docs/adr/0180-local-authentication-unsafe.md): Touch ID 본인 확인의 LocalAuthentication 호출만 unsafe가 필요하다. 이 crate만 작업 공간 린트를 그대로 옮기고 unsafe_code를 forbid 대신 deny로 둔다. 다른 린트가 하나라도 다르면 위반이고, 허용은 local_auth.rs의 let 문 세 개의 #[expect]뿐이다 (architecture 4.5)"

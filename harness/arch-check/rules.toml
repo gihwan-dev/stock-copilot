@@ -276,6 +276,42 @@ externals = ["socket2", "syn", "proc-macro2"]
 through = "tokio"
 reason = "U-20: 자식 프로세스 그룹 정리와 감사 로그 쓰기 완료 대기를 위한 tokio(rt·sync·time)의 작업 공간 기능 통합 전이 경로. 네트워크 소켓은 직접 열지 않는다"
 
+[[external-location-exception]]
+crates = ["platform-macos"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "rfd"
+reason = "G-02(docs/adr/fin-gaps-decisions.md, ADR 0002 24): 네이티브 위험 확인·주문 요약 창 rfd =0.18.0의 Linux(xdg-portal·zbus)·wasm 백엔드가 전체 대상 metadata에 보이는 전이 경로. macOS 제품은 AppKit 경로만 쓰고 네트워크 소켓을 열지 않는다"
+
+[[external-location-exception]]
+crates = ["platform-macos"]
+externals = ["syn", "proc-macro2"]
+through = "objc2"
+reason = "O-07(docs/adr/0180-local-authentication-unsafe.md): Touch ID 본인 확인 objc2 바인딩의 빌드 의존(objc2-exception-helper → cc → jobserver → getrandom의 wasm 대상)과 bitflags → serde_core의 serde_derive 버전 고정 경로. 실행 코드에 절차 매크로를 쓰지 않는다"
+
+[[external-location-exception]]
+crates = ["platform-macos"]
+externals = ["syn", "proc-macro2"]
+through = "block2"
+reason = "O-07(docs/adr/0180-local-authentication-unsafe.md): Touch ID 본인 확인 objc2 바인딩의 빌드 의존(objc2-exception-helper → cc → jobserver → getrandom의 wasm 대상)과 bitflags → serde_core의 serde_derive 버전 고정 경로. 실행 코드에 절차 매크로를 쓰지 않는다"
+
+[[external-location-exception]]
+crates = ["platform-macos"]
+externals = ["syn", "proc-macro2"]
+through = "objc2-foundation"
+reason = "O-07(docs/adr/0180-local-authentication-unsafe.md): Touch ID 본인 확인 objc2 바인딩의 빌드 의존(objc2-exception-helper → cc → jobserver → getrandom의 wasm 대상)과 bitflags → serde_core의 serde_derive 버전 고정 경로. 실행 코드에 절차 매크로를 쓰지 않는다"
+
+[[external-location-exception]]
+crates = ["platform-macos"]
+externals = ["syn", "proc-macro2"]
+through = "objc2-local-authentication"
+reason = "O-07(docs/adr/0180-local-authentication-unsafe.md): Touch ID 본인 확인 objc2 바인딩의 빌드 의존(objc2-exception-helper → cc → jobserver → getrandom의 wasm 대상)과 bitflags → serde_core의 serde_derive 버전 고정 경로. 실행 코드에 절차 매크로를 쓰지 않는다"
+
+[[external-location-exception]]
+crates = ["src-tauri"]
+externals = ["reqwest", "hyper", "hyper-util", "socket2", "hyper-rustls", "rustls", "tokio-rustls", "security-framework", "cargo_metadata", "toml", "syn", "proc-macro2", "paste"]
+through = "tauri-plugin-notification"
+reason = "U-14(docs/adr/fin-gaps-decisions.md): macOS 알림 공식 플러그인 tauri-plugin-notification =2.8.1이 tauri·tauri-plugin에 의존해 위의 tauri 예외와 같은 전이 crate가 보이고, Linux 대상 zbus가 socket2·절차 매크로를 들인다. 플러그인은 알림 센터에만 쓰고 HTTP를 열지 않는다"
+
 [[external-allowlist]]
 crate = "domain"
 allowed = ["rust_decimal", "time"]

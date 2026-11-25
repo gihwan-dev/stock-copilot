@@ -167,6 +167,11 @@ fn ensure_default_runtimes<R: Runtime>(app: &App<R>) {
     if let Some(slot) = app.try_state::<Arc<product_events::UiEventSlot<R>>>() {
         let _binding = slot.bind(ipc::event_bridge::UiEventBridge::new(app.handle().clone()));
     }
+    if let Some(slot) =
+        app.try_state::<Arc<platform::system_notification::NotificationHandleSlot<R>>>()
+    {
+        let _binding = slot.bind(app.handle().clone());
+    }
     if app
         .try_state::<ipc::open_external::ExternalLinkRuntime>()
         .is_none()
