@@ -1,4 +1,11 @@
 export type { IpcFailure } from "./call";
+export { coreUpdateClient, type UpdateClient } from "./update-client";
+export type {
+  UpdateFailureKind,
+  UpdateState,
+  UpdateStatus,
+  UpdateStatusQuery,
+} from "./update-schema";
 export {
   appVersion,
   getBriefings,

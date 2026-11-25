@@ -30,6 +30,8 @@ import {
   type IpcFailure,
   type OpenExternalResult,
 } from "./schema";
+import { settleUpdateStatus } from "./update-schema";
+import type { UpdateRequest, UpdateStatus } from "./update-schema";
 import {
   settleOrderSwitchOutcome,
   settleSettingsView,
@@ -55,35 +57,32 @@ const createTimeout = <T>(): {
   return { promise: deferred.promise, cancel };
 };
 
-export const appVersion = (): Promise<Result<AppVersion, IpcFailure>> => {
-  const timer = createTimeout<AppVersion>();
-  const request = commands
-    .appVersion({ query: "current" })
-    .then((outcome): Result<AppVersion, IpcFailure> => {
-      timer.cancel();
-      return settleAppVersion(outcome);
-    })
-    .catch((): Result<AppVersion, IpcFailure> => {
-      timer.cancel();
-      return err(frameworkFailure);
-    });
-  return Promise.race([request, timer.promise]);
+export const raceTimeout = <T>(
+  pending: Promise<Result<T, IpcFailure>>,
+): Promise<Result<T, IpcFailure>> => {
+  const timer = createTimeout<T>();
+  const settled = pending.then((result): Result<T, IpcFailure> => {
+    timer.cancel();
+    return result;
+  });
+  return Promise.race([settled, timer.promise]);
 };
 
-export const getSettings = (): Promise<Result<SettingsView, IpcFailure>> => {
-  const timer = createTimeout<SettingsView>();
-  const request = commands
-    .getSettings({ scope: "all" })
-    .then((outcome): Result<SettingsView, IpcFailure> => {
-      timer.cancel();
-      return settleSettingsView(outcome);
-    })
-    .catch((): Result<SettingsView, IpcFailure> => {
-      timer.cancel();
-      return err(frameworkFailure);
-    });
-  return Promise.race([request, timer.promise]);
-};
+export const appVersion = (): Promise<Result<AppVersion, IpcFailure>> =>
+  raceTimeout(
+    commands
+      .appVersion({ query: "current" })
+      .then(settleAppVersion)
+      .catch((): Result<AppVersion, IpcFailure> => err(frameworkFailure)),
+  );
+
+export const getSettings = (): Promise<Result<SettingsView, IpcFailure>> =>
+  raceTimeout(
+    commands
+      .getSettings({ scope: "all" })
+      .then(settleSettingsView)
+      .catch((): Result<SettingsView, IpcFailure> => err(frameworkFailure)),
+  );
 
 export const openExternal = (
   url: ExternalUrl,
@@ -126,17 +125,6 @@ export const listenUiEvent = (
       if (parsed.kind === "ok") onEvent(parsed.value);
     })
     .then(ok, (): Result<() => void, IpcFailure> => err(frameworkFailure));
-
-export const raceTimeout = <T>(
-  pending: Promise<Result<T, IpcFailure>>,
-): Promise<Result<T, IpcFailure>> => {
-  const timer = createTimeout<T>();
-  const settled = pending.then((result): Result<T, IpcFailure> => {
-    timer.cancel();
-    return result;
-  });
-  return Promise.race([settled, timer.promise]);
-};
 
 export type ChatListener = (event: Result<ChatStreamEvent, IpcFailure>) => void;
 
@@ -244,4 +232,16 @@ export const cancelChatTurn = (
       .catch((): Result<ChatCancelOutcome, IpcFailure> =>
         err(frameworkFailure),
       ),
+  );
+
+export const updateCommand = (
+  request: UpdateRequest,
+): Promise<Result<UpdateStatus, IpcFailure>> =>
+  raceTimeout(
+    (request === "restart"
+      ? commands.restartToUpdate({ confirm: request })
+      : commands.getUpdateStatus({ query: request })
+    )
+      .then((outcome) => settleUpdateStatus(wireOutcome(outcome)))
+      .catch((): Result<UpdateStatus, IpcFailure> => err(frameworkFailure)),
   );
