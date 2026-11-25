@@ -67,6 +67,7 @@
         "./pnpm-workspace.yaml",
         "./rust-toolchain.toml",
         "./rustfmt.toml",
+        "./scripts",
         "./*.yml",
         "./*.json",
         "./*.js",
