@@ -67,9 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui_events: Arc::clone(&ui_events),
     });
     let events = Arc::new(bus);
-    let bridge = BridgeLocation::new();
     let ai = assemble_ai(
-        discover_ai_setup(&context.config().identifier, bridge.clone()),
+        discover_ai_setup(&context.config().identifier, bundled_bridge()),
         &shared_clock,
         &events,
         &repositories,
@@ -81,11 +80,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ports,
         context,
     )?;
-    let _first = bridge.set(
-        tauri::Manager::path(&app)
-            .resource_dir()?
-            .join(BRIDGE_FILE_NAME),
-    );
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
             .app_data_dir()?
@@ -532,6 +526,17 @@ fn claude_ai(
         }),
         Arc::new(host),
     ))
+}
+
+fn bundled_bridge() -> BridgeLocation {
+    let location = BridgeLocation::new();
+    if let Some(path) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(BRIDGE_FILE_NAME)))
+    {
+        let _first = location.set(path);
+    }
+    location
 }
 
 fn discover_ai_setup(identifier: &str, bridge: BridgeLocation) -> AiSetup {
