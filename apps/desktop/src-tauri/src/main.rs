@@ -25,7 +25,7 @@ use src_tauri::ipc::scorecard::ScorecardIpcState;
 use src_tauri::ipc::self_check::{AiLimit, AiStatusProbe, ClaudeInstall, SelfCheckIpcState};
 use src_tauri::ipc::signals::{MarketCalendars, SignalsIpcState};
 use src_tauri::ipc::state::BoxFuture;
-use src_tauri::ipc::system_data::{DataCare, SystemDataIpcState};
+use src_tauri::ipc::system_data::{DataCare, ExportTarget, SystemDataIpcState};
 use src_tauri::ipc::thesis::ThesisIpcState;
 use src_tauri::mcp_catalog::{
     ANALYSIS_MCP_SERVER, CatalogStores, allowed_tool_names, analysis_catalog,
@@ -204,12 +204,15 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
                 Arc::clone(events),
             ),
             toss.accounts.clone(),
-            Arc::new(ProductDataCare {
-                repositories: Arc::clone(repositories),
-                secrets: Arc::clone(&toss.secrets),
-                clock: Arc::<platform_macos::SystemClock>::clone(clock),
-                events: Arc::clone(events),
-            }),
+            (
+                Arc::new(ProductDataCare {
+                    repositories: Arc::clone(repositories),
+                    secrets: Arc::clone(&toss.secrets),
+                    clock: Arc::<platform_macos::SystemClock>::clone(clock),
+                    events: Arc::clone(events),
+                }),
+                Arc::new(SavePanelTarget),
+            ),
             Arc::clone(repositories),
         ))
     }
@@ -257,7 +260,49 @@ fn remove_stored_files(data_directory: &Path) -> Result<(), application::SystemP
     Ok(())
 }
 
+const EXPORT_FILE_NAME: &str = "stock-copilot-backup.db";
+
+struct SavePanelTarget;
+
+impl ExportTarget for SavePanelTarget {
+    fn choose(&self) -> BoxFuture<'_, Option<PathBuf>> {
+        Box::pin(async move {
+            tauri::async_runtime::spawn_blocking(|| {
+                platform_macos::pick_save_path(EXPORT_FILE_NAME)
+            })
+            .await
+            .ok()
+            .flatten()
+        })
+    }
+}
+
+fn copy_staged_backup(staging: &Path, target: &Path) -> Result<(), application::SystemPortError> {
+    let staged = std::fs::read_dir(staging)
+        .map_err(|_unreadable| storage_failure())?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.is_file())
+        .ok_or_else(storage_failure)?;
+    std::fs::copy(&staged, target).map_err(|_unwritable| storage_failure())?;
+    std::fs::remove_dir_all(staging).map_err(|_locked| storage_failure())
+}
+
 impl DataCare for ProductDataCare {
+    fn export_to(
+        &self,
+        staging: PathBuf,
+        target: PathBuf,
+    ) -> BoxFuture<'_, Result<(), application::SystemPortError>> {
+        Box::pin(async move {
+            if staging.exists() {
+                std::fs::remove_dir_all(&staging).map_err(|_locked| storage_failure())?;
+            }
+            self.back_up(staging.clone()).await?;
+            copy_staged_backup(&staging, &target)
+        })
+    }
+
     fn back_up(
         &self,
         directory: PathBuf,

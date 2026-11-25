@@ -26,7 +26,16 @@ pub trait AccountBook: Send + Sync {
 
 pub trait DataCare: Send + Sync {
     fn back_up(&self, directory: PathBuf) -> BoxFuture<'_, Result<(), SystemPortError>>;
+    fn export_to(
+        &self,
+        staging: PathBuf,
+        target: PathBuf,
+    ) -> BoxFuture<'_, Result<(), SystemPortError>>;
     fn wipe(&self, data_directory: PathBuf) -> BoxFuture<'_, Result<(), SystemPortError>>;
+}
+
+pub trait ExportTarget: Send + Sync {
+    fn choose(&self) -> BoxFuture<'_, Option<PathBuf>>;
 }
 
 pub trait PrinciplesBook: Send + Sync {
@@ -74,6 +83,7 @@ impl<R: PrinciplesRepository + 'static> PrinciplesBook for StoredPrinciples<R> {
 pub struct SystemDataIpcState {
     accounts: Arc<dyn AccountBook>,
     care: Arc<dyn DataCare>,
+    target: Arc<dyn ExportTarget>,
     principles: Arc<dyn PrinciplesBook>,
 }
 
@@ -88,7 +98,7 @@ impl SystemDataIpcState {
     pub fn new<B, R>(
         selector: AccountSelector<B>,
         slot: AccountSlot,
-        care: Arc<dyn DataCare>,
+        (care, target): (Arc<dyn DataCare>, Arc<dyn ExportTarget>),
         principles: Arc<R>,
     ) -> Self
     where
@@ -98,6 +108,7 @@ impl SystemDataIpcState {
         Self {
             accounts: Arc::new(SelectorBook { selector, slot }),
             care,
+            target,
             principles: Arc::new(StoredPrinciples(principles)),
         }
     }
@@ -203,6 +214,8 @@ pub struct UiBackupResult {
 pub enum UiExportStatus {
     #[serde(rename = "exported")]
     Exported,
+    #[serde(rename = "cancelled")]
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
@@ -383,6 +396,27 @@ pub async fn save_principles(
     Ok(to_ui_principles(&principles))
 }
 
+const EXPORT_STAGING: &str = "export-staging";
+
+pub async fn export_chosen(
+    state: &SystemDataIpcState,
+    staging: PathBuf,
+) -> Result<UiExportResult, IpcError> {
+    let Some(target) = state.target.choose().await else {
+        return Ok(UiExportResult {
+            status: UiExportStatus::Cancelled,
+        });
+    };
+    state
+        .care
+        .export_to(staging, target)
+        .await
+        .map_err(|failure| storage(&failure))?;
+    Ok(UiExportResult {
+        status: UiExportStatus::Exported,
+    })
+}
+
 fn managed<R: Runtime>(app: &AppHandle<R>) -> Result<SystemDataIpcState, IpcError> {
     app.try_state::<SystemDataIpcState>()
         .map(|managed_state| managed_state.inner().clone())
@@ -468,19 +502,8 @@ pub async fn export_data<R: Runtime>(
         scope: SystemScope::Current,
     } = request;
     let state = managed(&app)?;
-    let directory = app
-        .path()
-        .download_dir()
-        .map_err(|_missing| error(IpcErrorKind::Retryable))?
-        .join("Stock Copilot");
-    state
-        .care
-        .back_up(directory)
-        .await
-        .map_err(|failure| storage(&failure))?;
-    Ok(UiExportResult {
-        status: UiExportStatus::Exported,
-    })
+    let staging = data_directory(&app)?.join(EXPORT_STAGING);
+    export_chosen(&state, staging).await
 }
 
 #[tauri::command]
