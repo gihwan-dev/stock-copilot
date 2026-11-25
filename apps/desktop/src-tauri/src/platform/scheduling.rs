@@ -5,11 +5,12 @@ use crate::ports::{PortTypes, Ports};
 use application::SyncPortfolio;
 use domain::Timestamp;
 use scheduler::{
-    DEFAULT_TICK_INTERVAL_SECONDS, DisabledAiJobQueue, JobError, JobRegistry, NoMarketCalendar,
-    PortfolioSyncJob, PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
+    BriefingJob, DailyBackupJob, IntradayCompactionJob, RegistryError, TossSpecWatchJob,
+    TransactionsSyncJob,
 };
 use scheduler::{
-    DailyBackupJob, IntradayCompactionJob, RegistryError, TossSpecWatchJob, TransactionsSyncJob,
+    DEFAULT_TICK_INTERVAL_SECONDS, DisabledAiJobQueue, JobError, JobRegistry, NoMarketCalendar,
+    PortfolioSyncJob, PortfolioSyncPort, Scheduler, SchedulerEventBridge, SyncDemand,
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -167,6 +168,9 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     };
     registry.register(IntradayCompactionJob::new(stored()))?;
     registry.register(DailyBackupJob::new(stored()))?;
+    registry.register(BriefingJob::morning(stored()))?;
+    registry.register(BriefingJob::closing_review(stored()))?;
+    registry.register(BriefingJob::pre_us_market(stored()))?;
     registry.register(TransactionsSyncJob::new(
         stored(),
         Arc::new(NoMarketCalendar),

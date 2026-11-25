@@ -696,3 +696,8 @@ pub use collect_feed::{
     CollectFeed, CollectedCount, CollectionDue, FeedRound, FeedRoundOutcome, collection_due,
     feed_data_source,
 };
+
+mod briefing_context;
+pub use briefing_context::{
+    BRIEFING_INSTRUMENT_LIMIT, BRIEFING_NEWS_PER_INSTRUMENT, HoldingsBriefingContext,
+};
