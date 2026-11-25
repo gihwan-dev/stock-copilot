@@ -68,16 +68,20 @@ export const PortfolioOverview = (props: Props): ReactElement => {
           {portfolioText("emptyBody", "ko")}
         </EmptyState>
       );
-    case "error":
-      return (
-        <EmptyState
-          title={portfolioText("errorTitle", "ko")}
-          action={{
-            label: portfolioText("retry", "ko"),
-            onPress: portfolio.retry,
-          }}
-        />
+    case "error": {
+      const action = {
+        label: portfolioText("retry", "ko"),
+        onPress: portfolio.retry,
+      };
+      return portfolio.view.failure.kind === "command" &&
+        portfolio.view.failure.error.kind === "user-fixable" ? (
+        <EmptyState title={portfolioText("errorTitle", "ko")} action={action}>
+          {portfolioText("errorAccessBody", "ko")}
+        </EmptyState>
+      ) : (
+        <EmptyState title={portfolioText("errorTitle", "ko")} action={action} />
       );
+    }
     case "ready":
       return (
         <OverviewReady

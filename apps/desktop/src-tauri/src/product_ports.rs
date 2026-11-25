@@ -48,7 +48,7 @@ where
     type ChatQueuePort = Queue;
     type WarmChatRuntime = Unavailable;
     type AiJobQueue = Jobs;
-    type PortfolioRepository = Unavailable;
+    type PortfolioRepository = store_sqlite::SqlitePortfolioStore;
     type TransactionRepository = Store;
     type MarketDataRepository = Store;
     type NewsRepository = Store;

@@ -13,6 +13,7 @@ import {
   Stack,
   StatusBar,
   Table,
+  Text,
 } from "../../../shared/ds";
 import type {
   AllocationRow,
@@ -36,10 +37,22 @@ const levelKeys = {
   "over-cap": "levelOverCap",
 } as const satisfies Record<AllocationRow["level"], PortfolioMessageKey>;
 
+const RowLabel = (props: { readonly row: AllocationRow }): ReactElement => {
+  switch (props.row.kind) {
+    case "cash-krw":
+      return <Text variant="body-sm">{portfolioText("cashKrw", "ko")}</Text>;
+    case "cash-usd":
+      return <Text variant="body-sm">{portfolioText("cashUsd", "ko")}</Text>;
+    case "holding":
+    case undefined:
+      return <DataText value={props.row.label} variant="body-sm" />;
+  }
+};
+
 const Row = (props: { readonly row: AllocationRow }): ReactElement => (
   <TableRow>
     <TableRowHeader>
-      <DataText value={props.row.label} variant="body-sm" />
+      <RowLabel row={props.row} />
     </TableRowHeader>
     <TableCell align="end">
       <Money value={props.row.value} notation="compact" />

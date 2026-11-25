@@ -6,6 +6,9 @@ use src_tauri::ai_runtime::{
 use src_tauri::audit_queue::AuditEventQueue;
 use src_tauri::broker_link::{AccountSelector, BrokerMarketTools};
 use src_tauri::collected_links::{CollectedLinker, TitleLinker};
+use src_tauri::holdings_link::{
+    HoldingsListener, InstrumentDirectory, InstrumentMasterFeed, MasterRefresh, PortsHoldingsSync,
+};
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
@@ -97,9 +100,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let ports = product_ports(&repositories, (notifier, &toss), &shared_clock, events, ai);
-    let link = toss_link_state(&ports, &toss, &shared_clock);
+    let directory = InstrumentDirectory::default();
+    let holdings = holdings_listener(&ports, &toss, &repositories, &directory, &shared_clock);
+    let link = toss_link_state(&toss, holdings, &shared_clock);
     let app = build_app(
         product_builder(scheduler_events, &repositories, ui_events, &shared_clock)
+            .manage(directory)
             .manage(intraday)
             .manage(turns)
             .manage(link)
@@ -179,13 +185,68 @@ fn public_ip_runtime(clock: &Arc<platform_macos::SystemClock>) -> PublicIpRuntim
     )
 }
 
+const TOSS_RECHECK_SECONDS: u64 = 3_600;
+
 fn start_toss_check(app: &tauri::AppHandle<tauri::Wry>) {
     if let Some(state) = tauri::Manager::try_state::<TossLinkState>(app) {
         let link = state.inner().clone();
         let _check = tauri::async_runtime::spawn(async move {
-            let _state = link.backend().check().await;
+            loop {
+                let _state = link.backend().check().await;
+                tokio::time::sleep(std::time::Duration::from_secs(TOSS_RECHECK_SECONDS)).await;
+            }
         });
     }
+}
+
+struct ProductMasterFeed<S: application::SecretStore + 'static = ProductSecrets> {
+    broker: Arc<ProductBrokerFor<S>>,
+    store: Arc<SqliteRepositories>,
+}
+
+impl<S: application::SecretStore + 'static> InstrumentMasterFeed for ProductMasterFeed<S> {
+    fn fetch(
+        &self,
+        market: domain::KnownMarket,
+    ) -> BoxFuture<'_, Result<domain::InstrumentMaster, application::PortError>> {
+        Box::pin(async move {
+            self.broker
+                .instrument_master(self.store.as_ref(), self.store.as_ref(), market)
+                .await
+        })
+    }
+
+    fn install(&self, facts: domain::MasterInstrumentFacts) {
+        self.broker.replace_market_master(facts);
+    }
+}
+
+fn holdings_listener(
+    ports: &Ports<AppPortTypes>,
+    toss: &ProductToss,
+    repositories: &Arc<SqliteRepositories>,
+    directory: &InstrumentDirectory,
+    clock: &Arc<platform_macos::SystemClock>,
+) -> HoldingsListener {
+    let shared_clock: Arc<dyn application::Clock> =
+        Arc::<platform_macos::SystemClock>::clone(clock);
+    let refresh = MasterRefresh::new(
+        Arc::new(ProductMasterFeed {
+            broker: Arc::clone(&toss.broker),
+            store: Arc::clone(repositories),
+        }),
+        directory.clone(),
+        shared_clock,
+    );
+    HoldingsListener::new(
+        Arc::new(AccountSelector::new(
+            Arc::clone(&toss.broker),
+            ports.saved_accounts.clone(),
+            Arc::clone(&ports.events),
+        )),
+        Arc::new(refresh),
+        Arc::new(PortsHoldingsSync::from_ports(ports)),
+    )
 }
 
 fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
@@ -249,7 +310,9 @@ fn product_ports(
         chat_queue: ai.queue,
         warm_chat: Arc::new(Unavailable),
         ai_jobs: ai.jobs,
-        portfolios: Arc::new(Unavailable),
+        portfolios: Arc::new(store_sqlite::SqlitePortfolioStore::new(
+            repositories.as_ref().clone(),
+        )),
         transactions: Arc::clone(repositories),
         market_data: Arc::clone(repositories),
         news: Arc::clone(repositories),
@@ -273,7 +336,8 @@ fn product_ports(
 
 type ProductSecrets = secrets_keychain::KeychainSecretStore<secrets_keychain::SystemKeychain>;
 
-type ProductBroker = LiveTossRead<ProductSecrets, platform_macos::SystemClock>;
+type ProductBrokerFor<S> = LiveTossRead<S, platform_macos::SystemClock>;
+type ProductBroker = ProductBrokerFor<ProductSecrets>;
 
 #[derive(Debug, Default, Clone, Copy)]
 struct NoStreamRenewal;
@@ -372,8 +436,8 @@ where
 }
 
 fn toss_link_state(
-    ports: &Ports<AppPortTypes>,
     toss: &ProductToss,
+    holdings: HoldingsListener,
     clock: &Arc<platform_macos::SystemClock>,
 ) -> TossLinkState {
     let shared_clock: Arc<dyn application::Clock> =
@@ -381,11 +445,7 @@ fn toss_link_state(
     TossLinkState::new(Arc::new(TossLink::new(
         Arc::clone(&toss.secrets),
         Arc::new(LiveProbe(Arc::clone(&toss.broker))),
-        Arc::new(AccountSelector::new(
-            Arc::clone(&toss.broker),
-            ports.saved_accounts.clone(),
-            Arc::clone(&ports.events),
-        )),
+        Arc::new(holdings),
         shared_clock,
     )))
 }
@@ -2684,6 +2744,253 @@ mod toss_assembly_tests {
         assert!(requests.contains(ID_SENTINEL));
         assert!(requests.contains(SECRET_SENTINEL));
         assert!(!format!("{link:?}").contains(SECRET_SENTINEL));
+    }
+
+    fn ok(body: &serde_json::Value) -> Vec<u8> {
+        http("200 OK", &body.to_string())
+    }
+
+    fn listing(rows: &serde_json::Value) -> Vec<u8> {
+        ok(&serde_json::json!({ "result": rows }))
+    }
+
+    fn kr_listing() -> serde_json::Value {
+        serde_json::json!([{"symbol":"005930","name":"삼성전자","securityType":"STOCK","isCommonShare":true,"isinCode":"KR7005930003"}])
+    }
+
+    fn kr_details() -> serde_json::Value {
+        serde_json::json!([{"symbol":"005930","name":"삼성전자","englishName":"Samsung","isinCode":"KR7005930003","market":"KOSPI","securityType":"STOCK","isCommonShare":true,"status":"ACTIVE","currency":"KRW","sharesOutstanding":"91","koreanMarketDetail":{"liquidationTrading":false,"nxtSupported":false,"krxTradingSuspended":false,"nxtTradingSuspended":null}}])
+    }
+
+    fn us_listing() -> serde_json::Value {
+        serde_json::json!([{"symbol":"AAPL","name":"애플","securityType":"STOCK","isCommonShare":true,"isinCode":"US0378331005"}])
+    }
+
+    fn us_details() -> serde_json::Value {
+        serde_json::json!([{"symbol":"AAPL","name":"애플","englishName":"Apple","isinCode":"US0378331005","market":"NASDAQ","securityType":"STOCK","isCommonShare":true,"status":"ACTIVE","currency":"USD","sharesOutstanding":"15000","koreanMarketDetail":null}])
+    }
+
+    fn holdings() -> Vec<u8> {
+        let recorded: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                "../../../crates/adapters/broker-toss/tests/recordings/t05-holdings-kr.json",
+            )
+            .expect("녹화"),
+        )
+        .expect("JSON");
+        ok(&recorded["body"])
+    }
+
+    fn buying_power(currency: &str, amount: &str) -> Vec<u8> {
+        ok(&serde_json::json!({"result":{"currency":currency,"cashBuyingPower":amount}}))
+    }
+
+    fn brokerage_accounts() -> Vec<u8> {
+        http(
+            "200 OK",
+            r#"{"result":[{"accountNo":"00000000731","accountSeq":413,"accountType":"BROKERAGE"}]}"#,
+        )
+    }
+
+    fn master_and_holdings_script() -> Vec<Vec<u8>> {
+        let empty = serde_json::json!([]);
+        vec![
+            token_ok(),
+            brokerage_accounts(),
+            listing(&kr_listing()),
+            listing(&empty),
+            listing(&empty),
+            listing(&kr_details()),
+            listing(&empty),
+            listing(&us_listing()),
+            listing(&empty),
+            listing(&empty),
+            listing(&us_details()),
+            brokerage_accounts(),
+            holdings(),
+            buying_power("KRW", "5000000"),
+            buying_power("USD", "3500.525"),
+        ]
+    }
+
+    async fn open_store(directory: &std::path::Path) -> Arc<store_sqlite::SqliteRepositories> {
+        let shared = store_sqlite::SharedDatabase::new();
+        let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+        src_tauri::database::prepare_directory(&path).expect("폴더");
+        let clock = platform_macos::SystemClock::new().expect("시계");
+        let database = store_sqlite::Database::open(&path, &SecretValue::new(vec![71; 32]), &clock)
+            .expect("열기");
+        assert!(shared.install(database).await.is_none());
+        Arc::new(store_sqlite::SqliteRepositories::new(shared))
+    }
+
+    async fn store_keys(secrets: &MemorySecretStore) {
+        for (key, value) in [
+            (application::SecretKey::TossClientId, ID_SENTINEL),
+            (application::SecretKey::TossClientSecret, SECRET_SENTINEL),
+        ] {
+            let _stored = application::SecretStore::store(
+                secrets,
+                key,
+                SecretValue::new(value.as_bytes().to_vec()),
+            )
+            .await
+            .expect("키");
+        }
+    }
+
+    type TestBroker = super::ProductBrokerFor<MemorySecretStore>;
+
+    struct HoldingsParts {
+        listener: src_tauri::holdings_link::HoldingsListener,
+        names: src_tauri::holdings_link::InstrumentDirectory,
+        portfolios: Arc<store_sqlite::SqlitePortfolioStore>,
+        slot: AccountSlot,
+    }
+
+    fn holdings_parts(
+        broker: &Arc<TestBroker>,
+        repositories: &Arc<store_sqlite::SqliteRepositories>,
+        events: &Arc<application::EventBus>,
+    ) -> HoldingsParts {
+        let clock = Arc::new(platform_macos::SystemClock::new().expect("시계"));
+        let portfolios = Arc::new(store_sqlite::SqlitePortfolioStore::new(
+            repositories.as_ref().clone(),
+        ));
+        let slot = AccountSlot::default();
+        let names = src_tauri::holdings_link::InstrumentDirectory::default();
+        let shared_clock: Arc<dyn application::Clock> =
+            Arc::<platform_macos::SystemClock>::clone(&clock);
+        let refresh = src_tauri::holdings_link::MasterRefresh::new(
+            Arc::new(super::ProductMasterFeed {
+                broker: Arc::clone(broker),
+                store: Arc::clone(repositories),
+            }),
+            names.clone(),
+            shared_clock,
+        );
+        let sync = HoldingsSyncFor {
+            broker: Arc::clone(broker),
+            portfolios: Arc::clone(&portfolios),
+            clock,
+            events: Arc::clone(events),
+            slot: slot.clone(),
+        };
+        HoldingsParts {
+            listener: src_tauri::holdings_link::HoldingsListener::new(
+                Arc::new(src_tauri::toss_link::NoListener),
+                Arc::new(refresh),
+                Arc::new(sync),
+            ),
+            names,
+            portfolios,
+            slot,
+        }
+    }
+
+    async fn assert_stored_holdings(
+        parts: &HoldingsParts,
+        repositories: &store_sqlite::SqliteRepositories,
+    ) {
+        use application::PortfolioRepository;
+        let record = parts
+            .portfolios
+            .latest(&domain::AccountId::new(413))
+            .await
+            .expect("조회")
+            .expect("기록");
+        let domain::SyncOutcome::Complete(portfolio) = record.outcome() else {
+            panic!("완료여야 함: {:?}", record.outcome());
+        };
+        assert_eq!(portfolio.holdings().len(), 1);
+        assert_eq!(
+            portfolio.holdings()[0].instrument().symbol().as_str(),
+            "005930"
+        );
+        let name = |symbol: &str| {
+            parts
+                .names
+                .name(&domain::Symbol::try_new(symbol).expect("심볼"))
+                .map(|name| name.as_str().to_owned())
+        };
+        assert_eq!(name("005930"), Some(String::from("삼성전자")));
+        assert_eq!(name("AAPL"), Some(String::from("애플")));
+        let history = {
+            let guard = repositories.shared().read().await;
+            store_sqlite::HoldingsStore::new(guard.as_ref().expect("열림"))
+                .holdings_history(domain::AccountId::new(413))
+                .await
+                .expect("이력")
+        };
+        assert_eq!(history.len(), 1);
+    }
+
+    #[test]
+    fn connected_toss_loads_both_masters_then_stores_converted_holdings_and_names() {
+        let server = ScriptedHttpServer::start(master_and_holdings_script()).expect("가짜 토스");
+        let secrets = memory_secrets();
+        tauri::async_runtime::block_on(store_keys(&secrets));
+        let events = Arc::new(application::EventBus::default());
+        let broker = Arc::new(
+            super::live_toss_read(
+                &broker_toss::TossEndpoint::local(server.port()).expect("주소"),
+                Arc::clone(&secrets),
+                Arc::new(platform_macos::SystemClock::new().expect("시계")),
+                Arc::clone(&events),
+            )
+            .expect("어댑터"),
+        );
+        let directory = std::path::PathBuf::from("../../../target/fin-hold")
+            .join(format!("holdings-{}", std::process::id()));
+        tauri::async_runtime::block_on(async {
+            let repositories = open_store(&directory).await;
+            let parts = holdings_parts(&broker, &repositories, &events);
+            let _selected =
+                AccountSelector::new(Arc::clone(&broker), parts.slot.clone(), Arc::clone(&events))
+                    .select()
+                    .await;
+            assert_eq!(parts.slot.current(), vec![domain::AccountId::new(413)]);
+            assert_eq!(
+                parts.listener.refresh_holdings().await,
+                src_tauri::holdings_link::RefreshOutcome::Refreshed
+            );
+            assert_stored_holdings(&parts, &repositories).await;
+            let _closed = repositories.shared().close().await;
+        });
+        let requests = String::from_utf8(server.finish().expect("요청")).expect("UTF-8");
+        assert_eq!(requests.matches("GET /api/v1/stocks/all").count(), 7);
+        assert_eq!(requests.matches("GET /api/v1/stocks?").count(), 2);
+        assert_eq!(requests.matches("GET /api/v1/holdings").count(), 1);
+        assert!(!requests.contains("POST /api/v1/orders"));
+        let _cleaned = std::fs::remove_dir_all(&directory);
+    }
+
+    struct HoldingsSyncFor {
+        broker: Arc<TestBroker>,
+        portfolios: Arc<store_sqlite::SqlitePortfolioStore>,
+        clock: Arc<platform_macos::SystemClock>,
+        events: Arc<application::EventBus>,
+        slot: AccountSlot,
+    }
+
+    impl HoldingsSyncFor {
+        async fn sync_accounts(&self) {
+            let use_case = application::SyncPortfolio::new(
+                self.broker.as_ref(),
+                self.portfolios.as_ref(),
+                self.clock.as_ref(),
+                &self.events,
+            );
+            for account in &self.slot.current() {
+                let _report = use_case.execute(account).await.expect("동기화");
+            }
+        }
+    }
+
+    impl src_tauri::holdings_link::HoldingsSync for HoldingsSyncFor {
+        fn sync(&self) -> src_tauri::ipc::state::BoxFuture<'_, ()> {
+            Box::pin(self.sync_accounts())
+        }
     }
 
     #[test]

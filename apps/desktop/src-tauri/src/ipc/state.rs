@@ -43,6 +43,10 @@ pub trait ScreenBackend: Send + Sync {
     fn load_transactions(
         &self,
     ) -> BoxFuture<'_, Result<Option<SyncRecord<SettledRowSet>>, SystemPortError>>;
+    fn update_profile(
+        &self,
+        requested: application::InvestorProfileRequest,
+    ) -> BoxFuture<'_, Result<RiskSettingsChangeOutcome, SystemPortError>>;
 }
 
 struct PortsBackend<P: PortTypes> {
@@ -52,7 +56,7 @@ struct PortsBackend<P: PortTypes> {
     transactions: Arc<P::TransactionRepository>,
     market_data: Arc<P::MarketDataRepository>,
     presence: Arc<P::UserPresence>,
-    events: application::EventBus,
+    events: Arc<application::EventBus>,
     saved_accounts: crate::broker_link::AccountSlot,
 }
 
@@ -120,6 +124,21 @@ impl<P: PortTypes> ScreenBackend for PortsBackend<P> {
         })
     }
 
+    fn update_profile(
+        &self,
+        requested: application::InvestorProfileRequest,
+    ) -> BoxFuture<'_, Result<RiskSettingsChangeOutcome, SystemPortError>> {
+        Box::pin(async move {
+            application::UpdateInvestorProfile::new(
+                self.settings.as_ref(),
+                self.presence.as_ref(),
+                &self.events,
+            )
+            .execute(requested)
+            .await
+        })
+    }
+
     fn load_portfolio_view(
         &self,
     ) -> BoxFuture<'_, Result<application::StoredView<domain::PortfolioValuation>, SystemPortError>>
@@ -174,6 +193,11 @@ impl std::fmt::Debug for ScreenState {
 
 impl ScreenState {
     #[must_use]
+    pub fn new(backend: Arc<dyn ScreenBackend>) -> Self {
+        Self { backend }
+    }
+
+    #[must_use]
     pub fn from_ports<P: PortTypes>(ports: &Ports<P>) -> Self {
         Self {
             backend: Arc::new(PortsBackend::<P> {
@@ -183,7 +207,7 @@ impl ScreenState {
                 transactions: Arc::clone(&ports.transactions),
                 market_data: Arc::clone(&ports.market_data),
                 presence: Arc::clone(&ports.presence),
-                events: application::EventBusBuilder::default().build(),
+                events: Arc::clone(&ports.events),
                 saved_accounts: ports.saved_accounts.clone(),
             }),
         }

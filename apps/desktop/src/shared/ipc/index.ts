@@ -1,5 +1,6 @@
 export type { IpcFailure } from "./call";
 export { coreUpdateClient, type UpdateClient } from "./update-client";
+export { getAllocation, getPortfolio } from "./portfolio-call";
 export type {
   UpdateFailureKind,
   UpdateState,
@@ -186,3 +187,9 @@ export {
 } from "./news-schema";
 export type { SettingsClient, TossKeys } from "./settings-client";
 export { coreSetupClient, unavailableSettingsClient } from "./settings-client";
+export {
+  investorProfile,
+  orderSettings,
+  saveInvestorProfile,
+  saveOrderSettings,
+} from "./risk-call";

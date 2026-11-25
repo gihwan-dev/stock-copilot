@@ -13,6 +13,16 @@ const catalog = {
     ko: "인터넷에 연결되지 않아 저장된 자료를 보여 드리고 있어요." as UiText,
   },
   todayTitle: { ko: "오늘 손익" as UiText },
+  todayPending: { ko: "오늘 손익은 아직 받지 못했어요." as UiText },
+  totalPartial: {
+    ko: "환율을 아직 받지 못해 달러 자산은 총평가에서 빠져 있어요." as UiText,
+  },
+  notObserved: { ko: "확인 안 됨" as UiText },
+  cashKrw: { ko: "원화 매수가능금액" as UiText },
+  cashUsd: { ko: "달러 매수가능금액" as UiText },
+  errorAccessBody: {
+    ko: "토스증권 연결을 확인하지 못했어요. 설정에서 연결 상태를 확인해 주세요." as UiText,
+  },
   currencyTitle: { ko: "통화별 평가" as UiText },
   currencyColumn: { ko: "통화" as UiText },
   holdingsColumn: { ko: "보유 평가" as UiText },

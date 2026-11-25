@@ -40,7 +40,7 @@ type SignedAmount = {
 export type HoldingRow = {
   readonly id: EntityId;
   readonly name: FreeText;
-  readonly ticker: Ticker;
+  readonly ticker: Ticker | FreeText;
   readonly quantity: Quantity;
   readonly value: Money;
   readonly profit: SignedAmount;
@@ -49,7 +49,7 @@ export type HoldingRow = {
 export type CurrencyValue = {
   readonly currency: Currency;
   readonly holdings: Money;
-  readonly buyingPower: Money;
+  readonly buyingPower: Money | undefined;
 };
 
 type ExchangeRateNote = {
@@ -59,18 +59,22 @@ type ExchangeRateNote = {
 
 type DataConnection = "live" | "stored";
 
+type TotalCoverage = "complete" | "partial";
+
 export type PortfolioView = {
   readonly recordedAt: Timestamp;
   readonly connection: DataConnection;
   readonly totalApproximate: Money;
+  readonly totalCoverage?: TotalCoverage | undefined;
   readonly exchangeRate: ExchangeRateNote | undefined;
   readonly currencies: readonly CurrencyValue[];
   readonly holdings: readonly HoldingRow[];
-  readonly today: SignedAmount;
+  readonly today: SignedAmount | undefined;
 };
 
 export type AllocationRow = {
   readonly id: EntityId;
+  readonly kind?: "holding" | "cash-krw" | "cash-usd" | undefined;
   readonly label: FreeText;
   readonly value: Money;
   readonly weight: PercentDisplay;
