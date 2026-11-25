@@ -1,6 +1,9 @@
-import { err, ok, type Result } from "../lib";
-import { getSettings } from "./call";
-import type { SettingsView } from "./settings-schema";
+import { err, type Result } from "../lib";
+import {
+  checkTossConnection,
+  submitTossKeys,
+  type TossKeys,
+} from "./toss-call";
 import type {
   AiSettings,
   AiTaskSetting,
@@ -36,10 +39,7 @@ import type {
 
 type Reply<T> = Promise<Result<T, IpcFailure>>;
 
-export type TossKeys = {
-  readonly clientId: SecretText;
-  readonly secret: SecretText;
-};
+export type { TossKeys } from "./toss-call";
 
 type SetupClient = {
   readonly checkTossConnection: () => Reply<TossConnection>;
@@ -115,19 +115,8 @@ export const unavailableSettingsClient: SettingsClient = {
   setPrinciples: unavailable,
 };
 
-const connectionOf = (
-  reply: Result<SettingsView, IpcFailure>,
-): Result<TossConnection, IpcFailure> =>
-  reply.kind === "ok"
-    ? ok({
-        state:
-          reply.value.tossConnection === "connected"
-            ? "connected"
-            : "needs-keys",
-      })
-    : reply;
-
 export const coreSetupClient: SettingsClient = {
   ...unavailableSettingsClient,
-  checkTossConnection: () => getSettings().then(connectionOf),
+  checkTossConnection,
+  submitTossKeys,
 };

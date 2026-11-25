@@ -43,7 +43,7 @@ import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
 
-const frameworkFailure: IpcFailure = { kind: "framework" };
+export const frameworkFailure: IpcFailure = { kind: "framework" };
 const timeoutFailure: IpcFailure = { kind: "timeout" };
 
 const createTimeout = <T>(): {
@@ -57,7 +57,7 @@ const createTimeout = <T>(): {
   return { promise: deferred.promise, cancel };
 };
 
-const raceTimeout = <T>(
+export const raceTimeout = <T>(
   pending: Promise<Result<T, IpcFailure>>,
 ): Promise<Result<T, IpcFailure>> => {
   const timer = createTimeout<T>();

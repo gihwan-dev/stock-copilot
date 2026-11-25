@@ -1,5 +1,6 @@
 app_version
 cancel_chat_turn
+check_toss_connection
 get_briefings
 get_chat_history
 get_job_schedules
@@ -12,3 +13,4 @@ resubscribe_chat_turn
 send_chat_message
 set_job_schedule
 set_order_permission
+submit_toss_keys

@@ -60,6 +60,14 @@ export const commands = {
     typedError<UiJobSchedule_Serialize, IpcError>(
       __TAURI_INVOKE("set_job_schedule", { request }),
     ),
+  checkTossConnection: (request: CheckTossConnectionRequest) =>
+    typedError<UiTossConnection, IpcError>(
+      __TAURI_INVOKE("check_toss_connection", { request }),
+    ),
+  submitTossKeys: (request: SubmitTossKeysRequest) =>
+    typedError<UiTossConnection, IpcError>(
+      __TAURI_INVOKE("submit_toss_keys", { request }),
+    ),
   getUpdateStatus: (request: UpdateStatusRequest) =>
     typedError<UpdateStatusView, IpcError>(
       __TAURI_INVOKE("get_update_status", { request }),
@@ -489,6 +497,10 @@ export type ChatTurnStatusDto =
   | "RateLimited"
   | "Failed";
 
+export type CheckTossConnectionRequest = {
+  query: TossConnectionQuery;
+};
+
 export type GetBriefingsRequest = {
   scope: BriefingsScope;
 };
@@ -684,6 +696,13 @@ export type StoredChatEntryDto_Serialize = {
 };
 
 export type StoredChatEntryRoleDto = "User" | "Assistant";
+
+export type SubmitTossKeysRequest = {
+  client_id: string;
+  secret: string;
+};
+
+export type TossConnectionQuery = "current";
 
 export type UiBriefing = UiBriefing_Serialize | UiBriefing_Deserialize;
 
@@ -1610,6 +1629,19 @@ export type UiTimeAdjustment = "adjustable" | "not-adjustable";
 
 export type UiToggleState = "off" | "on";
 
+export type UiTossConnection = {
+  state: UiTossConnectionState;
+};
+
+export type UiTossConnectionState =
+  | "needs-keys"
+  | "connected"
+  | "ip-not-allowed"
+  | "invalid-key"
+  | "forbidden"
+  | "account-not-found"
+  | "key-in-use";
+
 export type UiUpdateFailure = "check" | "download" | "install";
 
 export type UiUpdateState =
@@ -1766,6 +1798,12 @@ export type MockCommandHandlers = {
   setJobSchedule: (args: {
     request: SetJobScheduleRequest_Deserialize;
   }) => UiJobSchedule_Serialize | Promise<UiJobSchedule_Serialize>;
+  checkTossConnection: (args: {
+    request: CheckTossConnectionRequest;
+  }) => UiTossConnection | Promise<UiTossConnection>;
+  submitTossKeys: (args: {
+    request: SubmitTossKeysRequest;
+  }) => UiTossConnection | Promise<UiTossConnection>;
   getUpdateStatus: (args: {
     request: UpdateStatusRequest;
   }) => UpdateStatusView | Promise<UpdateStatusView>;
@@ -1871,6 +1909,18 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.setJobSchedule,
             "set_job_schedule",
+            args,
+          );
+        case "check_toss_connection":
+          return mockCommandHandler(
+            mockHandlers.checkTossConnection,
+            "check_toss_connection",
+            args,
+          );
+        case "submit_toss_keys":
+          return mockCommandHandler(
+            mockHandlers.submitTossKeys,
+            "submit_toss_keys",
             args,
           );
         case "get_update_status":

@@ -140,6 +140,15 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     pub(crate) fn market_master(&self) -> &MasterInstrumentFacts {
         &self.master
     }
+    pub async fn reconnect(&self) -> Result<(), crate::TokenError> {
+        self.tokens
+            .reconnect_with_stored_keys()
+            .await
+            .map(|_lease| ())
+    }
+    pub async fn connection_status(&self) -> Result<(), crate::TokenError> {
+        self.tokens.token().await.map(|_lease| ())
+    }
     pub(crate) fn tokens(&self) -> &TokenManager<Store, Time, Renewal> {
         &self.tokens
     }

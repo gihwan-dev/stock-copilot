@@ -2,7 +2,7 @@ use tauri::Runtime;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
-    app_version, briefing, chat, open_external, order_approval, schedule, settings, updates,
+    app_version, briefing, chat, open_external, order_approval, schedule, settings, toss, updates,
 };
 
 #[must_use]
@@ -24,6 +24,8 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         briefing::get_briefings::<tauri::Wry>,
         schedule::get_job_schedules::<tauri::Wry>,
         schedule::set_job_schedule::<tauri::Wry>,
+        toss::check_toss_connection::<tauri::Wry>,
+        toss::submit_toss_keys::<tauri::Wry>,
         updates::get_update_status::<tauri::Wry>,
         updates::restart_to_update::<tauri::Wry>
     ];
