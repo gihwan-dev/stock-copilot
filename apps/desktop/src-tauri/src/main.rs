@@ -12,7 +12,10 @@ use src_tauri::product_events::{
 };
 use src_tauri::{build_app, run_app};
 use src_tauri::{
-    database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
+    database::{DatabaseFactory, DatabaseKeyProvision},
+    ports::Ports,
+    product_ports::ProductPorts,
+    unavailable::Unavailable,
 };
 use std::sync::Arc;
 use store_sqlite::{SharedDatabase, SqliteRepositories};
@@ -79,8 +82,8 @@ fn product_ports(
     notifier: Arc<ProductNotifier>,
     shared_clock: &Arc<platform_macos::SystemClock>,
     events: application::EventBus,
-) -> Ports<ProductPorts<SqliteRepositories>> {
-    Ports::<ProductPorts<SqliteRepositories>> {
+) -> Ports<ProductPorts<SqliteRepositories, ProductSecrets>> {
+    Ports::<ProductPorts<SqliteRepositories, ProductSecrets>> {
         broker_read: Arc::new(Unavailable),
         market_info: Arc::new(Unavailable),
         macro_series: Arc::new(Unavailable),
@@ -101,7 +104,7 @@ fn product_ports(
         valuations: Arc::clone(repositories),
         settings: Arc::clone(repositories),
         audit: Arc::clone(repositories),
-        secrets: Arc::new(Unavailable),
+        secrets: Arc::new(product_secrets()),
         notifier,
         news_feeds: Vec::new(),
         clock: Arc::clone(shared_clock),
@@ -110,6 +113,24 @@ fn product_ports(
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(Arc::clone(shared_clock))),
     }
+}
+
+type ProductSecrets = secrets_keychain::KeychainSecretStore<secrets_keychain::SystemKeychain>;
+
+fn product_secrets() -> ProductSecrets {
+    let build = if tauri::is_dev() {
+        secrets_keychain::BuildKind::Development
+    } else {
+        secrets_keychain::BuildKind::Release
+    };
+    secrets_keychain::KeychainSecretStore::new(
+        secrets_keychain::KeychainProfile::for_build(build),
+        secrets_keychain::SystemKeychain,
+    )
+}
+
+fn database_key_provision() -> DatabaseKeyProvision {
+    DatabaseKeyProvision(Box::new(secrets_keychain::generate_database_key))
 }
 
 fn product_builder(
@@ -126,6 +147,7 @@ fn product_builder(
         .manage(scheduler_events)
         .manage(Arc::clone(repositories))
         .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
+        .manage(database_key_provision())
         .manage(ui_events);
     match spec_watch_inputs(clock) {
         Some(inputs) => builder.manage(inputs),
@@ -549,5 +571,101 @@ mod briefing_store_tests {
             let _closed = shared.close().await;
         });
         std::fs::remove_dir_all(directory).expect("정리");
+    }
+}
+
+#[cfg(test)]
+mod key_provision_tests {
+    use application::SecretValue;
+    use src_tauri::database::{DatabaseKeyProvision, DatabaseStatus, open_provisioned_database};
+    use src_tauri::lifecycle::{DatabaseClosure, Lifecycle};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use testkit_ports::memory::MemoryReply;
+    use testkit_ports::system_fakes::MemorySecretStore;
+
+    const FAKE_KEY: [u8; 32] = *b"fake-db-key-9c41e7-never-on-disk";
+
+    fn clock() -> Arc<testkit_ports::SteppedClock> {
+        Arc::new(testkit_ports::SteppedClock::new(
+            broker_toss::TossTimestamp::try_from("2026-11-25T00:00:00Z")
+                .expect("clock")
+                .into_domain(),
+        ))
+    }
+
+    fn provision(count: Arc<AtomicUsize>) -> DatabaseKeyProvision {
+        DatabaseKeyProvision(Box::new(move || {
+            count.fetch_add(1, Ordering::SeqCst);
+            Ok(SecretValue::new(FAKE_KEY.to_vec()))
+        }))
+    }
+
+    async fn launch(
+        secrets: &MemorySecretStore,
+        count: &Arc<AtomicUsize>,
+        path: &std::path::Path,
+    ) -> DatabaseStatus {
+        let state = open_provisioned_database(
+            secrets,
+            &provision(Arc::clone(count)),
+            Arc::new(super::database_factory(clock())),
+            store_sqlite::DatabasePath::new(path.to_path_buf()),
+        )
+        .await;
+        let status = state.status();
+        let lifecycle = Lifecycle::new(tauri::async_runtime::spawn(std::future::pending()), state);
+        lifecycle.shutdown().await;
+        let guard = lifecycle.outcome().lock().await;
+        match &guard.as_ref().expect("종료 결과").database {
+            Ok(DatabaseClosure::Closed(_receipt)) => {}
+            Ok(DatabaseClosure::NotOpened) => panic!("열린 DB의 명시적 종료 필요"),
+            Err(error) => panic!("종료 실패: {error:?}"),
+        }
+        status
+    }
+
+    fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        (0..=haystack.len().saturating_sub(needle.len()))
+            .any(|start| haystack.get(start..start.saturating_add(needle.len())) == Some(needle))
+    }
+
+    #[test]
+    fn first_launch_creates_the_key_and_the_next_launch_reopens_without_key_bytes_on_disk() {
+        let directory = std::path::PathBuf::from("../../../target/fin-c")
+            .join(format!("product-key-{}", std::process::id()));
+        let path = directory.join("data").join("stock-copilot.db");
+        let secrets = MemorySecretStore::default();
+        for _ in 0..4_usize {
+            secrets.script_load().push(MemoryReply::Memory);
+        }
+        secrets.script_store().push(MemoryReply::Memory);
+        let count = Arc::new(AtomicUsize::new(0));
+        tauri::async_runtime::block_on(async {
+            assert_eq!(launch(&secrets, &count, &path).await, DatabaseStatus::Ready);
+            assert_eq!(launch(&secrets, &count, &path).await, DatabaseStatus::Ready);
+        });
+        assert_eq!(count.load(Ordering::SeqCst), 1, "키는 첫 실행에만 만든다");
+        let hex: Vec<u8> = FAKE_KEY
+            .iter()
+            .flat_map(|byte| format!("{byte:02x}").into_bytes())
+            .collect();
+        let mut scanned = 0_usize;
+        for entry in std::fs::read_dir(path.parent().expect("폴더")).expect("목록") {
+            let bytes = std::fs::read(entry.expect("항목").path()).expect("파일");
+            assert!(!contains(&bytes, &FAKE_KEY), "원시 키가 파일에 있음");
+            assert!(!contains(&bytes, &hex), "16진 키가 파일에 있음");
+            scanned = scanned.saturating_add(1);
+        }
+        assert!(scanned >= 1, "DB 파일을 검사함");
+        std::fs::remove_dir_all(directory).expect("정리");
+    }
+
+    #[test]
+    fn product_secrets_use_the_development_keychain_profile_outside_tauri_build() {
+        assert_eq!(
+            super::product_secrets().profile(),
+            &secrets_keychain::KeychainProfile::development()
+        );
     }
 }

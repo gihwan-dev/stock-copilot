@@ -6,6 +6,7 @@ mod database;
 mod e2e_smoke;
 mod exit;
 mod ipc_contract;
+mod key_provision;
 mod lifecycle;
 mod notifier;
 mod order_path;
