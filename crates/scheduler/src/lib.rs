@@ -13,7 +13,8 @@ mod types;
 
 pub use ai_queue::{AiJobQueue, AiQueueAdmission, AiQueueError, DisabledAiJobQueue};
 pub use briefing_jobs::{
-    BriefingJob, BriefingPort, BriefingRunResult, PRE_US_MARKET_LEAD_MINUTES, RunBriefingRunner,
+    BriefingJob, BriefingPort, BriefingRunResult, EstimateCycleJob, EstimateCyclePort,
+    EstimateCycleTally, PRE_US_MARKET_LEAD_MINUTES, RunBriefingRunner,
 };
 pub use code_jobs::{
     BACKUP_RETENTION_DAYS, BackupResult, BackupRetention, CompactionResult, DailyBackupJob,

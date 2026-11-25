@@ -22,6 +22,7 @@ pub trait BackgroundBudget: Send + Sync {
 pub enum SingleEstimateOutcome {
     Submitted,
     NotSubmitted,
+    NoTask,
     Failed,
 }
 

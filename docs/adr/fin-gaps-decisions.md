@@ -60,3 +60,12 @@
 | 신호 카드·넘기기·종목 목록·종목 상세·논거 노트·관심 추가/삭제·거래내역 | 화면 원본 `pending` | 신호는 위 사슬 뒤, 종목 목록은 종목별 당일 등락 자료 경로가 없음, 논거 이력은 시각이 저장되지 않음 |
 | 설정 고급(AI·뉴스·원칙·계좌 선택·백업·내보내기·전체 삭제) | 설치 앱에 숨김 | IPC 19개, 다음 묶음 |
 | 미리 띄운 채팅·거시·재무 | `Unavailable` | 선택 기능, 다음 묶음 |
+
+## 2차 (메인 결정 뒤)
+
+| 작업 | 정한 것 | 다른 선택지 |
+|---|---|---|
+| G-02·O-07·알림 | 메인이 전한 승인(rfd 예외, `unsafe` 예외, `tauri-plugin-notification`)으로 `fin-gaps-native-dialog` 합류를 시도했으나 자동 모드 분류기가 다시 거부했다(메인 에이전트를 거친 승인은 사용자 승인으로 인정되지 않음). 우회하지 않고 세 항목 모두 보류. 사용자가 직접 승인하거나 권한 규칙을 주면 1c61b255 합류부터 이어 간다 | 우회 |
+| O-조립 1 | `PreSubmitTransactionPort`의 저장 부분은 store-sqlite `commit_prepared_submission`: 한 쓰기 트랜잭션에서 제안 소비 → 감사 `SubmissionPrepared` 추가(해시 사슬) → 시간당 주문 수용 `order_submissions` 시각 추가. 이미 소비면 아무것도 쓰지 않음. `SqliteRepositories`에 주문 횟수·제안 소비·검증 보고 위임을 더함. 응답 기록(`record_submission_outcome`)은 저장 표가 없고 승인 서비스가 `SubmissionResponseRecorded`를 따로 감사하므로 쓰지 않는다 | 소비·감사를 따로 씀(사이에 죽으면 감사 없는 소비) |
+| O-조립 2 | 거래 어댑터(`TossBrokerTrade`)는 읽기 어댑터(`TossAccountRead`)를 토큰 원천으로 받는다(`TradeAccessToken` 위임, 읽기 어댑터 `tokens()` 공개). 같은 키로 토큰 관리자를 둘 만들면 서로의 토큰을 폐기한다(API-3) | 거래용 토큰 관리자를 따로 만듦 |
+| 주문 런타임 남은 것 | `ProposalContextPort`(투자 원칙 정책·섹터 배정·종목 유형 사실·평가)는 fin-flow가 신호 평가 입력용으로 만드는 같은 구조라 겹쳐 만들지 않았다. 재초안(`ExpiredProposalRedrafter`)도 fin-flow의 제안 초안이 필요하다. 둘이 들어오면 `ApprovalService` 조립(`OrderApprovalRuntime` 관리)과 가짜 토스 종단 시험을 붙인다. 확인 창·본인 확인이 보류라 조립해도 실제 주문은 확인 단계에서 멈춘다 | 빈 섹터 배정으로 조립(비중 상한 우회 위험) |

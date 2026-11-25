@@ -355,6 +355,12 @@ impl EstimateOutcome {
         }
     }
 }
+pub fn estimate_maturity(
+    task: &EstimateTask,
+    calendars: &[MarketCalendar],
+) -> Result<Timestamp, OutcomeUnavailable> {
+    schedule(task, calendars).map(|found| found.interval.end())
+}
 #[derive(Clone, Copy)]
 enum MissingMinutePolicy {
     Ambiguous,
@@ -1722,6 +1728,21 @@ mod tests {
                 .expect("달력")
             })
             .collect::<Vec<_>>()
+    }
+
+    #[test]
+    fn maturity_is_the_regular_close_after_horizon_business_days() {
+        let original = task();
+        let full = full_calendars();
+        assert_eq!(
+            super::estimate_maturity(&original, &full),
+            Ok(instant(66, 904))
+        );
+        let short = full.iter().take(3).cloned().collect::<Vec<_>>();
+        assert_eq!(
+            super::estimate_maturity(&original, &short),
+            Err(OutcomeUnavailable::Calendar)
+        );
     }
 
     #[test]

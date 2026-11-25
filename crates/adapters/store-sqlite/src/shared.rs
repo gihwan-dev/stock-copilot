@@ -387,6 +387,23 @@ impl SignalRepository for SqliteRepositories {
     }
 }
 
+impl application::SignalInvalidationRepository for SqliteRepositories {
+    async fn invalidate(
+        &self,
+        instrument: &InstrumentId,
+        expected: &SignalSnapshot,
+    ) -> Result<application::SignalInvalidationOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::SignalInvalidationRepository::invalidate(
+            &SignalStore::new(database),
+            instrument,
+            expected,
+        )
+        .await
+    }
+}
+
 impl ProposalRepository for SqliteRepositories {
     async fn current_draft(
         &self,

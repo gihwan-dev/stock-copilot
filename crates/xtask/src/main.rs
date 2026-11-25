@@ -8,6 +8,7 @@ mod check_support;
 mod commit_guard;
 mod coverage_check;
 mod disable_control;
+mod ds_check;
 mod fast_check;
 mod gen_schema;
 mod gen_tokens;
@@ -50,6 +51,7 @@ fn main() -> ExitCode {
         [command] if command == "arch-check" => arch_check::command(Path::new("Cargo.toml")),
         [command] if command == "source-check" => source_check::command(),
         [command] if command == "sql-check" => sql_check::command(),
+        [command] if command == "ds-check" => ds_check::command(),
         [command] if command == "coverage-check" => coverage_check::command(),
         [command] if command == "migration-check" => migration_check::command(),
         [command] if command == "capability-check" => capability_check::command(),
