@@ -1,19 +1,20 @@
 use crate::ports::{PortTypes, Ports};
 use application::MarketInfo as _;
 use application::{
-    BriefingOutcome, CheckTossSpec, FullInspectionRun, HoldingsBriefingContext, RunBriefing,
-    RunFullInspection, SecretKey, SecretStore, SpecDriftStatus, TakeValuationSnapshot,
+    BriefingOutcome, CheckTossSpec, FullInspectionRun, HoldingsBriefingContext,
+    IntradayReviewOutcome, IntradayReviewSubject, RunBriefing, RunFullInspection,
+    RunIntradayReview, SecretKey, SecretStore, SpecDriftStatus, TakeValuationSnapshot,
     TossSpecBaseline, TossSpecSource, TransactionSchedule,
 };
 use domain::{
     BriefingKind, CalendarDate, InspectionRangeDays, KnownMarket, SnapshotCalendar, Timestamp,
 };
-use scheduler::DailyValuationPort;
 use scheduler::{
     BackupResult, BackupRetention, BriefingPort, BriefingRunResult, CompactionResult,
     DatabaseBackupPort, IntradayCompactionPort, JobError, SpecWatchPort, SpecWatchResult,
     TransactionSyncPort, TransactionSyncTally,
 };
+use scheduler::{DailyValuationPort, IntradayReviewPort, WatchCause};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use store_sqlite::SqliteRepositories;
@@ -271,5 +272,32 @@ impl<R: Runtime, P: PortTypes> DailyValuationPort for AppStoredJobs<R, P> {
         std::future::ready(Err(JobError::PortUnavailable(String::from(
             "valuation-backfill",
         ))))
+    }
+}
+
+impl<R: Runtime, P: PortTypes> IntradayReviewPort for AppStoredJobs<R, P> {
+    async fn review(&self, cause: WatchCause, _now: Timestamp) -> Result<(), JobError> {
+        let ports = self.ports()?;
+        let subject = match cause {
+            WatchCause::UrgentDisclosure(key) => IntradayReviewSubject::UrgentDisclosure(key),
+            WatchCause::PriceMove(instrument) => IntradayReviewSubject::PriceMove(instrument),
+            WatchCause::NewsSurge(instrument) => IntradayReviewSubject::NewsSurge(instrument),
+        };
+        let outcome = RunIntradayReview {
+            ai: ports.ai_provider.as_ref(),
+            clock: ports.clock.as_ref(),
+        }
+        .execute(&subject)
+        .await;
+        match outcome {
+            IntradayReviewOutcome::Completed => Ok(()),
+            IntradayReviewOutcome::IsolationRejected
+            | IntradayReviewOutcome::ToolsUnavailable
+            | IntradayReviewOutcome::RateLimited
+            | IntradayReviewOutcome::ProviderUnavailable
+            | IntradayReviewOutcome::PromptRejected => {
+                Err(JobError::ExecutionFailed(format!("{outcome:?}")))
+            }
+        }
     }
 }

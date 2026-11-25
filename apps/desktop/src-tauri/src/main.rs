@@ -12,6 +12,7 @@ use src_tauri::mcp_catalog::{
 };
 use src_tauri::mcp_sources::ArticleBodies;
 use src_tauri::platform::collector::{CollectorFeed, CollectorFeeds, SharedFeed};
+use src_tauri::platform::intraday::{BridgedIntradayWatch, IntradayWatchSlot};
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
     NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
@@ -62,11 +63,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         NotificationPreferences::default(),
     ));
     let ui_events = Arc::new(UiEventSlot::<tauri::Wry>::default());
+    let intraday = Arc::new(IntradayWatchSlot::new());
     let (bus, scheduler_events) = product_event_bus(ProductSubscribers {
         notifier: Arc::clone(&notifier),
         audit: Arc::clone(&repositories),
         clock: Arc::clone(&shared_clock),
         ui_events: Arc::clone(&ui_events),
+        intraday: Arc::clone(&intraday),
     });
     let events = Arc::new(bus);
     let ai = assemble_ai(
@@ -78,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let ports = product_ports(&repositories, notifier, &shared_clock, events, ai);
     let app = build_app(
-        product_builder(scheduler_events, &repositories, ui_events, &shared_clock),
+        product_builder(scheduler_events, &repositories, ui_events, &shared_clock).manage(intraday),
         ports,
         context,
     )?;
@@ -693,6 +696,7 @@ struct ProductSubscribers<D> {
     audit: Arc<SqliteRepositories>,
     clock: Arc<platform_macos::SystemClock>,
     ui_events: Arc<UiEventSlot<tauri::Wry>>,
+    intraday: Arc<IntradayWatchSlot>,
 }
 
 fn product_event_bus<D: NotificationDelivery + 'static>(
@@ -705,6 +709,10 @@ fn product_event_bus<D: NotificationDelivery + 'static>(
         scheduler::BridgedSchedulerEvents(Arc::clone(&bridge)),
     );
     builder.subscribe(ui_event_kinds(), BridgedUiEvents(subscribers.ui_events));
+    builder.subscribe(
+        IntradayWatchSlot::subscribed_kinds(),
+        BridgedIntradayWatch(subscribers.intraday),
+    );
     builder.subscribe(
         NotificationEventSubscriber::<
             AsyncRuntimeNotificationDispatch<FilteredNotifier<D>>,
@@ -1035,6 +1043,7 @@ mod product_bus_tests {
             audit: Arc::new(SqliteRepositories::new(SharedDatabase::new())),
             clock,
             ui_events: Arc::new(UiEventSlot::<tauri::Wry>::default()),
+            intraday: Arc::new(src_tauri::platform::intraday::IntradayWatchSlot::new()),
         });
         let _cleared = events.publish(DomainEvent::SignalCleared(instrument()));
         let _raised = events.publish(DomainEvent::SignalRaised(instrument()));
@@ -1946,6 +1955,7 @@ mod briefing_assembly_tests {
     fn ports(
         provider: Arc<ScriptedAiProvider>,
         clock: Arc<testkit_ports::SteppedClock>,
+        events: application::EventBus,
     ) -> Ports<AssemblyPorts> {
         Ports {
             broker_read: Arc::new(testkit_ports::scripted::ScriptedBrokerRead::default()),
@@ -1974,7 +1984,7 @@ mod briefing_assembly_tests {
             clock,
             notifier: Arc::new(Unavailable),
             presence: Arc::new(testkit_ports::ScriptedPresence::new([], [])),
-            events: Arc::new(application::EventBusBuilder::default().build()),
+            events: Arc::new(events),
             saved_accounts: Vec::new(),
             database: Arc::new(DatabaseFactory(Box::new(|_path, _key| {
                 Err(application::SystemPortError::new(
@@ -1999,6 +2009,34 @@ mod briefing_assembly_tests {
         }
     }
 
+    fn mock_app(
+        provider: &Arc<ScriptedAiProvider>,
+        clock: &Arc<testkit_ports::SteppedClock>,
+        events: application::EventBus,
+    ) -> tauri::App<tauri::test::MockRuntime> {
+        tauri::test::mock_builder()
+            .manage(ports(Arc::clone(provider), Arc::clone(clock), events))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("앱")
+    }
+
+    fn registry(
+        app: &tauri::App<tauri::test::MockRuntime>,
+        repositories: &SqliteRepositories,
+        inbox: Arc<scheduler::IntradayWatchInbox>,
+    ) -> JobRegistry {
+        let mut registry = JobRegistry::new();
+        register_stored_jobs::<tauri::test::MockRuntime, AssemblyPorts>(
+            &mut registry,
+            app.handle(),
+            repositories,
+            None,
+            inbox,
+        )
+        .expect("등록");
+        registry
+    }
+
     #[test]
     fn admitted_morning_briefing_runs_through_the_scheduler_and_is_stored() {
         let provider = Arc::new(ScriptedAiProvider::default());
@@ -2013,18 +2051,16 @@ mod briefing_assembly_tests {
         )));
         let shared = SharedDatabase::new();
         let repositories = SqliteRepositories::new(shared.clone());
-        let app = tauri::test::mock_builder()
-            .manage(ports(Arc::clone(&provider), Arc::clone(&clock)))
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .expect("앱");
-        let mut registry = JobRegistry::new();
-        register_stored_jobs::<tauri::test::MockRuntime, AssemblyPorts>(
-            &mut registry,
-            app.handle(),
+        let app = mock_app(
+            &provider,
+            &clock,
+            application::EventBusBuilder::default().build(),
+        );
+        let registry = registry(
+            &app,
             &repositories,
-            None,
-        )
-        .expect("등록");
+            Arc::new(scheduler::IntradayWatchInbox::new()),
+        );
         let scheduler =
             Scheduler::new(Arc::clone(&clock), Arc::new(AdmittingQueue), registry).expect("일정");
         let directory = std::path::PathBuf::from("../../../target/fin-e")
@@ -2060,5 +2096,74 @@ mod briefing_assembly_tests {
             let _closed = shared.close().await;
         });
         std::fs::remove_dir_all(directory).expect("정리");
+    }
+
+    #[test]
+    fn price_move_event_wakes_the_intraday_watch_job_and_starts_one_monitoring_run() {
+        use application::{AiEvent, RunPurpose};
+        use src_tauri::platform::intraday::{BridgedIntradayWatch, IntradayWatchSlot};
+        use testkit_ports::chat_fakes::AiProviderCall;
+        let provider = Arc::new(ScriptedAiProvider::default());
+        provider
+            .script_run()
+            .push(Ok(ScriptedAiEventStream::from_events(vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+            ])));
+        let clock = Arc::new(testkit_ports::SteppedClock::new(utc(
+            "2026-11-25T01:00:00Z",
+        )));
+        let slot = Arc::new(IntradayWatchSlot::new());
+        let mut bus = application::EventBusBuilder::default();
+        bus.subscribe(
+            IntradayWatchSlot::subscribed_kinds(),
+            BridgedIntradayWatch(Arc::clone(&slot)),
+        );
+        let app = mock_app(&provider, &clock, bus.build());
+        let inbox = Arc::new(scheduler::IntradayWatchInbox::new());
+        let registry = registry(
+            &app,
+            &SqliteRepositories::new(SharedDatabase::new()),
+            Arc::clone(&inbox),
+        );
+        let scheduler =
+            Scheduler::new(Arc::clone(&clock), Arc::new(AdmittingQueue), registry).expect("일정");
+        slot.bind(scheduler::IntradayWatchSubscriber::new(
+            inbox,
+            scheduler.triggers(),
+        ));
+        let ports = tauri::Manager::state::<Ports<AssemblyPorts>>(&app);
+        let _delivery = ports.events.publish(domain::DomainEvent::PriceMoved(
+            domain::InstrumentId::try_new("005930").expect("종목"),
+        ));
+        tauri::async_runtime::block_on(async {
+            let report = scheduler.tick_once().await;
+            let watch = report
+                .records
+                .iter()
+                .find(|record| record.id == ScheduledJobId::IntradayWatch)
+                .expect("장중 감시 실행");
+            assert!(matches_executed(&watch.outcome), "{:?}", watch.outcome);
+        });
+        let purposes: Vec<RunPurpose> = provider
+            .calls()
+            .iter()
+            .filter_map(|call| match call {
+                AiProviderCall::Run(spec) => Some(spec.purpose()),
+                AiProviderCall::Resume { .. }
+                | AiProviderCall::Usage
+                | AiProviderCall::Interrupt(_)
+                | AiProviderCall::VerifyIsolation(_) => None,
+            })
+            .collect();
+        assert_eq!(purposes, vec![RunPurpose::IntradayMonitoring]);
+    }
+
+    fn matches_executed(outcome: &JobRunOutcome) -> bool {
+        match outcome {
+            JobRunOutcome::Executed(_) => true,
+            JobRunOutcome::SkippedMissedWindow
+            | JobRunOutcome::DeferredByAiQueue { .. }
+            | JobRunOutcome::Failed(_) => false,
+        }
     }
 }
