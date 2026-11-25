@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   DataText,
-  EmptyState,
   Inline,
   Skeleton,
   Stack,
@@ -21,7 +20,7 @@ import {
 import { detach } from "../../../shared/platform";
 import { signalText } from "../messages";
 import { cardAction, useSignals } from "../model/signals";
-import { Facts, Reasons } from "./SignalDetails";
+import { Facts, KeyFacts, Reasons } from "./SignalDetails";
 
 export type SignalHandlers = {
   readonly onRequestApproval: (proposal: EntityId) => void;
@@ -98,9 +97,10 @@ const SignalCard = (props: {
       ) : (
         <Stack gap="space-1">{[]}</Stack>
       )}
-      <Facts card={props.card} />
+      <KeyFacts card={props.card} />
       <Reasons card={props.card} />
       <Actions card={props.card} handlers={props.handlers} />
+      <Facts card={props.card} />
     </Stack>
   </Card>
 );
@@ -157,16 +157,20 @@ const SignalList = (props: {
       );
     case "empty":
       return (
-        <EmptyState title={signalText("emptyTitle", "ko")}>
-          {signalText("emptyBody", "ko")}
-        </EmptyState>
+        <Card title={signalText("emptyTitle", "ko")}>
+          <Text variant="body-sm" tone="ink-muted">
+            {signalText("emptyBody", "ko")}
+          </Text>
+        </Card>
       );
     case "error":
       return (
-        <EmptyState
+        <Card
           title={signalText("errorTitle", "ko")}
-          action={{ label: signalText("retry", "ko"), onPress: signals.retry }}
-        />
+          actions={{ label: signalText("retry", "ko"), onPress: signals.retry }}
+        >
+          <Stack gap="space-1">{[]}</Stack>
+        </Card>
       );
     case "ready":
       return (

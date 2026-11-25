@@ -61,9 +61,11 @@ const Row = (props: { readonly row: TransactionRow }): ReactElement => (
       <Money value={props.row.amount} />
     </TableCell>
     <TableCell>
-      <Badge tone={props.row.presence === "vanished" ? "alert" : "neutral"}>
-        {transactionsText(props.row.presence, "ko")}
-      </Badge>
+      {props.row.presence === "vanished" ? (
+        <Badge tone="alert">{transactionsText("vanished", "ko")}</Badge>
+      ) : (
+        <Stack gap="space-1">{[]}</Stack>
+      )}
     </TableCell>
   </TableRow>
 );
@@ -71,40 +73,38 @@ const Row = (props: { readonly row: TransactionRow }): ReactElement => (
 const TransactionsTable = (props: {
   readonly view: TransactionsView;
 }): ReactElement => (
-  <Card>
-    <Stack gap="space-3">
-      <Inline gap="space-2" align="center" wrap="wrap">
-        <Text variant="caption" tone="ink-muted">
-          {transactionsText("recordedAt", "ko")}
-        </Text>
-        <TimestampText value={props.view.recordedAt} />
-      </Inline>
-      <TableRoot caption={transactionsText("tableCaption", "ko")}>
-        <TableHead>
-          <TableRow>
-            <TableHeader>{transactionsText("dateColumn", "ko")}</TableHeader>
-            <TableHeader>{transactionsText("nameColumn", "ko")}</TableHeader>
-            <TableHeader>{transactionsText("kindColumn", "ko")}</TableHeader>
-            <TableHeader align="end">
-              {transactionsText("quantityColumn", "ko")}
-            </TableHeader>
-            <TableHeader align="end">
-              {transactionsText("amountColumn", "ko")}
-            </TableHeader>
-            <TableHeader>{transactionsText("stateColumn", "ko")}</TableHeader>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {props.view.rows.map((row): ReactElement => (
-            <Row key={row.id} row={row} />
-          ))}
-        </TableBody>
-      </TableRoot>
+  <Stack gap="space-3">
+    <Inline gap="space-2" align="center" wrap="wrap">
       <Text variant="caption" tone="ink-muted">
-        {transactionsText("vanishedNotice", "ko")}
+        {transactionsText("recordedAt", "ko")}
       </Text>
-    </Stack>
-  </Card>
+      <TimestampText value={props.view.recordedAt} />
+    </Inline>
+    <TableRoot caption={transactionsText("tableCaption", "ko")}>
+      <TableHead>
+        <TableRow>
+          <TableHeader>{transactionsText("dateColumn", "ko")}</TableHeader>
+          <TableHeader>{transactionsText("nameColumn", "ko")}</TableHeader>
+          <TableHeader>{transactionsText("kindColumn", "ko")}</TableHeader>
+          <TableHeader align="end">
+            {transactionsText("quantityColumn", "ko")}
+          </TableHeader>
+          <TableHeader align="end">
+            {transactionsText("amountColumn", "ko")}
+          </TableHeader>
+          <TableHeader>{transactionsText("stateColumn", "ko")}</TableHeader>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {props.view.rows.map((row): ReactElement => (
+          <Row key={row.id} row={row} />
+        ))}
+      </TableBody>
+    </TableRoot>
+    <Text variant="caption" tone="ink-muted">
+      {transactionsText("vanishedNotice", "ko")}
+    </Text>
+  </Stack>
 );
 
 const TransactionsBody = (props: {

@@ -4,6 +4,7 @@ import {
   Button,
   DataText,
   EmptyState,
+  IconButton,
   Inline,
   Percent,
   Skeleton,
@@ -33,27 +34,28 @@ const Row = (props: {
   readonly row: InstrumentListRow;
   readonly onSelect: (id: EntityId) => void;
 }): ReactElement => (
-  <Stack gap="space-1">
-    <Inline gap="space-2" align="center" wrap="wrap">
-      <Badge>
-        {instrumentsText(
-          props.row.origin === "holding" ? "holding" : "watchlist",
-          "ko",
-        )}
-      </Badge>
-      <DataText value={props.row.name} variant="body-sm" />
+  <Inline gap="space-2" align="center" justify="between" wrap="nowrap">
+    <Stack gap="space-1">
+      <Inline gap="space-2" align="center" wrap="wrap">
+        <DataText value={props.row.name} variant="body-sm" />
+        <Badge>
+          {instrumentsText(
+            props.row.origin === "holding" ? "holding" : "watchlist",
+            "ko",
+          )}
+        </Badge>
+      </Inline>
       <Percent value={props.row.todayRate} direction={props.row.direction} />
-    </Inline>
-    <Button
-      variant="ghost"
+    </Stack>
+    <IconButton
+      icon="chevron-right"
+      label={instrumentsText("open", "ko")}
       size="control-height-sm"
       onClick={(): void => {
         props.onSelect(props.row.id);
       }}
-    >
-      {instrumentsText("open", "ko")}
-    </Button>
-  </Stack>
+    />
+  </Inline>
 );
 
 const Notice = (props: { readonly notice: WatchlistNotice }): ReactElement => {

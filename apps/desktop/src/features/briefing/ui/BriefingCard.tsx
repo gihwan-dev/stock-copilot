@@ -1,5 +1,12 @@
 import type { ReactElement } from "react";
-import { Card, EmptyState, Page, Skeleton, Stack } from "../../../shared/ds";
+import {
+  Card,
+  EmptyState,
+  Page,
+  Skeleton,
+  Stack,
+  Text,
+} from "../../../shared/ds";
 import type { ScreenSources } from "../../../shared/ipc";
 import { briefingText } from "../messages";
 import { useBriefings, useOpenSource } from "../model/briefings";
@@ -14,10 +21,12 @@ const Loading = (): ReactElement => (
 );
 
 const Failed = (props: { readonly retry: () => void }): ReactElement => (
-  <EmptyState
+  <Card
     title={briefingText("errorTitle", "ko")}
-    action={{ label: briefingText("retry", "ko"), onPress: props.retry }}
-  />
+    actions={{ label: briefingText("retry", "ko"), onPress: props.retry }}
+  >
+    <Stack gap="space-1">{[]}</Stack>
+  </Card>
 );
 
 export const BriefingCard = (props: {
@@ -31,17 +40,21 @@ export const BriefingCard = (props: {
       return <Loading />;
     case "empty":
       return (
-        <EmptyState title={briefingText("emptyTitle", "ko")}>
-          {briefingText("emptyBody", "ko")}
-        </EmptyState>
+        <Card title={briefingText("emptyTitle", "ko")}>
+          <Text variant="body-sm" tone="ink-muted">
+            {briefingText("emptyBody", "ko")}
+          </Text>
+        </Card>
       );
     case "error":
       return <Failed retry={briefings.retry} />;
     case "ready":
       return briefings.view.data.latest === undefined ? (
-        <EmptyState title={briefingText("emptyTitle", "ko")}>
-          {briefingText("emptyBody", "ko")}
-        </EmptyState>
+        <Card title={briefingText("emptyTitle", "ko")}>
+          <Text variant="body-sm" tone="ink-muted">
+            {briefingText("emptyBody", "ko")}
+          </Text>
+        </Card>
       ) : (
         <BriefingView
           briefing={briefings.view.data.latest}

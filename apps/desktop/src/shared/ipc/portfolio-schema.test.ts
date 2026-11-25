@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { readDecimalForNumberDisplay } from "../lib/money";
+import { parseMoney, parsePercentDisplay } from "../lib";
 import { settleAllocation, settlePortfolio } from "./portfolio-schema";
 import { wire } from "./schema";
 import { responses } from "./testing/responses";
@@ -15,14 +15,18 @@ test("settlePortfolio turns the recorded core view into the overview with names 
   expect(view.recordedAt).toBe("2026-11-25T09:00:00+09:00");
   expect(view.totalCoverage).toBe("complete");
   expect(view.exchangeRate).toBeUndefined();
-  expect(readDecimalForNumberDisplay(view.totalApproximate)).toBe("12200000");
+  expect(parseMoney("12200000", "KRW")).toStrictEqual({
+    kind: "ok",
+    value: view.totalApproximate,
+  });
   expect(view.holdings).toHaveLength(1);
-  expect(view.holdings[0]?.name).toBe("삼성전자");
+  expect(view.holdings[0]?.name).toBe(responses.getPortfolio.holdings[0].name);
   expect(view.holdings[0]?.ticker).toBe("005930");
   expect(view.holdings[0]?.profit.direction).toBe("up");
-  expect(readDecimalForNumberDisplay(view.holdings[0]?.profit.rate)).toBe(
-    "10.77",
-  );
+  expect(parsePercentDisplay("10.77")).toStrictEqual({
+    kind: "ok",
+    value: view.holdings[0]?.profit.rate,
+  });
   expect(view.today?.direction).toBe("down");
   expect(view.currencies.map((row) => row.currency)).toStrictEqual([
     "KRW",
@@ -72,7 +76,8 @@ test("settleAllocation keeps the cash row kind so the screen names it, and reads
     "cash-krw",
   ]);
   expect(result.value.instruments[0]?.level).toBe("over-cap");
-  expect(readDecimalForNumberDisplay(result.value.instruments[0]?.weight)).toBe(
-    "59.02",
-  );
+  expect(parsePercentDisplay("59.02")).toStrictEqual({
+    kind: "ok",
+    value: result.value.instruments[0]?.weight,
+  });
 });
