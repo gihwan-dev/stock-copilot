@@ -209,7 +209,7 @@ fn full_report_counts_rust_and_typescript_separately() {
     );
     assert_eq!(
         render_languages(&found),
-        format!("disable-report: Rust {}건, TS 0건", ipc.saturating_add(3)),
+        format!("disable-report: Rust {}건, TS 0건", ipc.saturating_add(6)),
         "{found:#?}"
     );
     let rows = [

@@ -19,6 +19,12 @@ const CASES_FILE: &str = "harness/disable-control/cases.toml";
 const SOURCES_DIRECTORY: &str = "harness/disable-control/sources";
 const MAIN_RS: &str = "apps/desktop/src-tauri/src/main.rs";
 const GENERATE_CONTEXT: &str = "let context = tauri::generate_context!();";
+const LOCAL_AUTH_RS: &str = "crates/adapters/platform-macos/src/local_auth.rs";
+const LOCAL_AUTH_UNSAFE: [&str; 3] = [
+    "let context = unsafe { LAContext::new() };",
+    "let available = unsafe { context.canEvaluatePolicy_error(policy) }.is_ok();",
+    "let () = unsafe { context.evaluatePolicy_localizedReason_reply(policy, &message, &reply) };",
+];
 
 const IPC_MODULE: &str = "apps/desktop/src-tauri/src/ipc";
 
@@ -379,6 +385,13 @@ fn allowlist_holds_only_generate_context_in_main_rs() {
                 String::from(lint),
             )
         })
+        .chain(LOCAL_AUTH_UNSAFE.into_iter().map(|statement| {
+            (
+                String::from(LOCAL_AUTH_RS),
+                String::from(statement),
+                String::from("unsafe_code"),
+            )
+        }))
         .collect();
     assert_eq!(listed, documented, "allowlist entries");
 }
@@ -418,7 +431,7 @@ fn repository_passes_disable_check() {
 }
 
 #[test]
-fn disable_report_lists_the_three_main_rs_expects() {
+fn disable_report_lists_the_main_rs_and_local_auth_expects() {
     let root = repository_root();
     let (ipc, found): (Vec<Row>, Vec<Row>) = repository_rows(&root)
         .expect("collect rows")
@@ -431,13 +444,20 @@ fn disable_report_lists_the_three_main_rs_expects() {
     let expected: BTreeSet<(&str, &str, &str)> = ALLOWLISTED_LINTS
         .into_iter()
         .map(|lint| (RUST_EXPECT_KIND, MAIN_RS, lint))
+        .chain([(RUST_EXPECT_KIND, LOCAL_AUTH_RS, "unsafe_code")])
         .collect();
     assert_eq!(listed, expected, "report rows");
-    assert_eq!(found.len(), 3, "one row per expect");
+    assert_eq!(
+        found.len(),
+        ALLOWLISTED_LINTS
+            .len()
+            .saturating_add(LOCAL_AUTH_UNSAFE.len()),
+        "one row per expect"
+    );
     assert!(
-        found
-            .iter()
-            .all(|row| row.line > 0 && row.reason.contains("generate_context!")),
+        found.iter().all(|row| row.line > 0
+            && (row.reason.contains("generate_context!")
+                || (row.path == LOCAL_AUTH_RS && row.reason.starts_with("O-07:")))),
         "{found:#?}"
     );
     assert!(ipc.iter().all(|row| row.line > 0), "{ipc:#?}");
@@ -449,7 +469,7 @@ fn disable_report_lists_the_three_main_rs_expects() {
     let report = render_report(&found);
     assert_eq!(
         report.lines().last(),
-        Some("disable-report: 끄기 3건 (rust-expect 3건)"),
+        Some("disable-report: 끄기 6건 (rust-expect 6건)"),
         "{report}"
     );
 }
