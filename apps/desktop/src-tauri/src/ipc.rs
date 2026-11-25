@@ -7,6 +7,7 @@ pub mod error;
 pub mod event;
 pub mod event_bridge;
 pub mod instruments;
+pub mod news_settings;
 pub mod open_external;
 pub mod order_approval;
 pub mod portfolio;

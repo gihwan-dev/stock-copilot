@@ -16,6 +16,7 @@ use src_tauri::holdings_link::{
 };
 use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::instruments::InstrumentsIpcState;
+use src_tauri::ipc::news_settings::NewsSettingsIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::ipc::public_ip::{LookupFailed, PublicIpLookup, PublicIpRuntime, TextClipboard};
 use src_tauri::ipc::scorecard::ScorecardIpcState;
@@ -172,6 +173,11 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
                 &toss.broker,
             ))),
             Arc::<platform_macos::SystemClock>::clone(clock),
+        ))
+        .manage(NewsSettingsIpcState::new(
+            Arc::clone(repositories),
+            Arc::clone(&toss.secrets),
+            Arc::clone(events),
         ))
         .manage(SystemDataIpcState::new(
             AccountSelector::new(

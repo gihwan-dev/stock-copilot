@@ -1,0 +1,104 @@
+{
+  "sources": [
+    {
+      "source": "KindDisclosure",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "2"
+    },
+    {
+      "source": "DartDisclosureApi",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "10"
+    },
+    {
+      "source": "DartDisclosureRss",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "10"
+    },
+    {
+      "source": "DartFundamentals",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "10"
+    },
+    {
+      "source": "Hankyung",
+      "state": "on",
+      "body_reading": "off",
+      "interval_minutes": "30"
+    },
+    {
+      "source": "Maekyung",
+      "state": "on",
+      "body_reading": "off",
+      "interval_minutes": "10"
+    },
+    {
+      "source": "Yonhap",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "10"
+    },
+    {
+      "source": "Edaily",
+      "state": "on",
+      "body_reading": "off",
+      "interval_minutes": "10"
+    },
+    {
+      "source": "GoogleNews",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "60"
+    },
+    {
+      "source": "YahooFinance",
+      "state": "on",
+      "body_reading": "off",
+      "interval_minutes": "60"
+    },
+    {
+      "source": "SecEdgar",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "60"
+    },
+    {
+      "source": "BankOfKorea",
+      "state": "on",
+      "body_reading": "off",
+      "interval_minutes": "60"
+    },
+    {
+      "source": "FederalReserve",
+      "state": "on",
+      "body_reading": "off",
+      "interval_minutes": "60"
+    },
+    {
+      "source": "UsTreasury",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "60"
+    },
+    {
+      "source": "Fred",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "60"
+    }
+  ],
+  "keys": {
+    "dart": "unset",
+    "fred": "unset"
+  },
+  "sec_contact": null,
+  "wake": {
+    "daily_move_percent": "5",
+    "news_per_hour": "5"
+  },
+  "aliases": []
+}

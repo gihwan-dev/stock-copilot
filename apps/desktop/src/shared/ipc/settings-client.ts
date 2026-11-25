@@ -1,5 +1,13 @@
 import { err, type Result } from "../lib";
 import {
+  newsSettings,
+  setAliases,
+  setNewsSource,
+  setOptionalKey,
+  setSecContact,
+  setWakeCriteria,
+} from "./news-call";
+import {
   accountSelection,
   backupNow,
   deleteAllData,
@@ -143,4 +151,10 @@ export const coreSettingsClient: SettingsClient = {
   deleteAllData,
   principles,
   setPrinciples,
+  newsSettings,
+  setNewsSource,
+  setOptionalKey,
+  setSecContact,
+  setWakeCriteria,
+  setAliases,
 };

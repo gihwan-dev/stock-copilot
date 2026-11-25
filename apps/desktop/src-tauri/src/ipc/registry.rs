@@ -2,9 +2,9 @@ use tauri::Runtime;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
-    app_version, briefing, chat, instruments, open_external, order_approval, portfolio, public_ip,
-    risk_editor, schedule, scorecard, self_check, settings, signals, system_data, thesis, toss,
-    transactions, updates,
+    app_version, briefing, chat, instruments, news_settings, open_external, order_approval,
+    portfolio, public_ip, risk_editor, schedule, scorecard, self_check, settings, signals,
+    system_data, thesis, toss, transactions, updates,
 };
 
 #[must_use]
@@ -54,7 +54,13 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
         system_data::set_principles::<tauri::Wry>,
         system_data::backup_now::<tauri::Wry>,
         system_data::export_data::<tauri::Wry>,
-        system_data::delete_all_data::<tauri::Wry>
+        system_data::delete_all_data::<tauri::Wry>,
+        news_settings::get_news_settings::<tauri::Wry>,
+        news_settings::set_news_source::<tauri::Wry>,
+        news_settings::set_optional_key::<tauri::Wry>,
+        news_settings::set_sec_contact::<tauri::Wry>,
+        news_settings::set_wake_criteria::<tauri::Wry>,
+        news_settings::set_aliases::<tauri::Wry>
     ];
     Builder::<R>::new()
         .commands(commands)

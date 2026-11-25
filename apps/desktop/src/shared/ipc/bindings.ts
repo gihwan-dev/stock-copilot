@@ -175,6 +175,30 @@ export const commands = {
     typedError<UiDeleteResult, IpcError>(
       __TAURI_INVOKE("delete_all_data", { request }),
     ),
+  getNewsSettings: (request: NewsRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("get_news_settings", { request }),
+    ),
+  setNewsSource: (request: SetNewsSourceRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_news_source", { request }),
+    ),
+  setOptionalKey: (request: SetOptionalKeyRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_optional_key", { request }),
+    ),
+  setSecContact: (request: SetSecContactRequest_Deserialize) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_sec_contact", { request }),
+    ),
+  setWakeCriteria: (request: SetWakeCriteriaRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_wake_criteria", { request }),
+    ),
+  setAliases: (request: SetAliasesRequest) =>
+    typedError<UiNewsSettings_Serialize, IpcError>(
+      __TAURI_INVOKE("set_aliases", { request }),
+    ),
 };
 
 /** Events */
@@ -689,6 +713,12 @@ export type IpcErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
 
 export type JobSchedulesScope = "ai";
 
+export type NewsRequest = {
+  scope: NewsScope;
+};
+
+export type NewsScope = "current";
+
 export type OpenExternalRequest = {
   url: string;
 };
@@ -820,6 +850,10 @@ export type SendChatMessageResponse_Serialize = {
   failure_reason: ChatFailureReasonDto | null;
 };
 
+export type SetAliasesRequest = {
+  aliases: UiAliasInput[];
+};
+
 export type SetJobScheduleRequest =
   SetJobScheduleRequest_Serialize | SetJobScheduleRequest_Deserialize;
 
@@ -835,12 +869,36 @@ export type SetJobScheduleRequest_Serialize = {
   time: UiKstTime | null;
 };
 
+export type SetNewsSourceRequest = {
+  setting: UiSourceSettingInput;
+};
+
+export type SetOptionalKeyRequest = {
+  key: UiOptionalKey;
+  secret: string;
+};
+
 export type SetOrderPermissionRequest = {
   permission: UiOrderPermission;
 };
 
 export type SetPrinciplesRequest = {
   principles: UiPrinciplesInput;
+};
+
+export type SetSecContactRequest =
+  SetSecContactRequest_Serialize | SetSecContactRequest_Deserialize;
+
+export type SetSecContactRequest_Deserialize = {
+  contact?: string | null;
+};
+
+export type SetSecContactRequest_Serialize = {
+  contact: string | null;
+};
+
+export type SetWakeCriteriaRequest = {
+  wake: UiWakeInput;
 };
 
 export type SettingsQueryScope = "all";
@@ -906,6 +964,16 @@ export type UiAccountSelection = {
 
 export type UiAiRuntime = "ready" | "missing";
 
+export type UiAliasInput = {
+  alias: string;
+  ticker: string;
+};
+
+export type UiAliasRow = {
+  alias: string;
+  ticker: string;
+};
+
 export type UiAllocationLabel = "holding" | "cash-krw" | "cash-usd";
 
 export type UiAllocationRow = {
@@ -927,6 +995,8 @@ export type UiBackupResult = {
 };
 
 export type UiBackupStatus = "backed-up";
+
+export type UiBodyReading = "on" | "off" | "locked";
 
 export type UiBriefing = UiBriefing_Serialize | UiBriefing_Deserialize;
 
@@ -1031,6 +1101,8 @@ export type UiDailyChange = {
   rate: string;
   direction: UiDirection;
 };
+
+export type UiDailyMove = "3" | "5" | "7" | "10";
 
 export type UiDataSource =
   | "KindDisclosure"
@@ -1793,6 +1865,23 @@ export type UiExportResult = {
 
 export type UiExportStatus = "exported";
 
+export type UiFeedSource =
+  | "KindDisclosure"
+  | "DartDisclosureApi"
+  | "DartDisclosureRss"
+  | "DartFundamentals"
+  | "Hankyung"
+  | "Maekyung"
+  | "Yonhap"
+  | "Edaily"
+  | "GoogleNews"
+  | "YahooFinance"
+  | "SecEdgar"
+  | "BankOfKorea"
+  | "FederalReserve"
+  | "UsTreasury"
+  | "Fred";
+
 export type UiFxPair = "UsdKrw" | "KrwUsd";
 
 export type UiHolding = {
@@ -1882,6 +1971,8 @@ export type UiInstrumentsView_Serialize = {
   rows: UiInstrumentRow_Serialize[];
 };
 
+export type UiInterval = "1" | "2" | "5" | "10" | "15" | "30" | "60";
+
 export type UiJobRun = {
   at: string;
   outcome: UiJobRunOutcome;
@@ -1922,6 +2013,13 @@ export type UiJobSchedulesView_Serialize = {
 
 export type UiJobSwitch = "on" | "off";
 
+export type UiKeyPresence = "set" | "unset";
+
+export type UiKeys = {
+  dart: UiKeyPresence;
+  fred: UiKeyPresence;
+};
+
 export type UiKstTime = {
   hour: number;
   minute: number;
@@ -1936,6 +2034,27 @@ export type UiMoney = {
   currency: UiCurrency;
 };
 
+export type UiNewsPerHour = "3" | "5" | "10" | "20";
+
+export type UiNewsSettings =
+  UiNewsSettings_Serialize | UiNewsSettings_Deserialize;
+
+export type UiNewsSettings_Deserialize = {
+  sources: UiSourceSetting[];
+  keys: UiKeys;
+  sec_contact?: string | null;
+  wake: UiWake;
+  aliases: UiAliasRow[];
+};
+
+export type UiNewsSettings_Serialize = {
+  sources: UiSourceSetting[];
+  keys: UiKeys;
+  sec_contact: string | null;
+  wake: UiWake;
+  aliases: UiAliasRow[];
+};
+
 export type UiNewsSource =
   | "Hankyung"
   | "Maekyung"
@@ -1945,6 +2064,8 @@ export type UiNewsSource =
   | "FederalReserve"
   | "GoogleNews"
   | "YahooFinance";
+
+export type UiOptionalKey = "dart" | "fred";
 
 export type UiOptionalKeyState = "configured" | "unconfigured";
 
@@ -2217,6 +2338,20 @@ export type UiSkipResult = {
   outcome: UiSkipOutcome;
 };
 
+export type UiSourceSetting = {
+  source: UiFeedSource;
+  state: UiToggle;
+  body_reading: UiBodyReading;
+  interval_minutes: UiInterval;
+};
+
+export type UiSourceSettingInput = {
+  source: UiFeedSource;
+  state: UiToggle;
+  body_reading: UiBodyReading;
+  interval_minutes: UiInterval;
+};
+
 export type UiSourceStatus =
   UiSourceStatus_Serialize | UiSourceStatus_Deserialize;
 
@@ -2292,6 +2427,8 @@ export type UiThesisView_Serialize = {
 };
 
 export type UiTimeAdjustment = "adjustable" | "not-adjustable";
+
+export type UiToggle = "on" | "off";
 
 export type UiToggleState = "off" | "on";
 
@@ -2380,6 +2517,16 @@ export type UiUpdateState =
         failure: UiUpdateFailure;
       };
     } & { downloading?: never; ready?: never });
+
+export type UiWake = {
+  daily_move_percent: UiDailyMove;
+  news_per_hour: UiNewsPerHour;
+};
+
+export type UiWakeInput = {
+  daily_move_percent: UiDailyMove;
+  news_per_hour: UiNewsPerHour;
+};
 
 export type UiWatchlistChange =
   UiWatchlistChange_Serialize | UiWatchlistChange_Deserialize;

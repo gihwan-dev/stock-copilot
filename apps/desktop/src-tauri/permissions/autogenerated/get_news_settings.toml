@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-news-settings"
+description = "Enables the get_news_settings command without any pre-configured scope."
+commands.allow = ["get_news_settings"]
+
+[[permission]]
+identifier = "deny-get-news-settings"
+description = "Denies the get_news_settings command without any pre-configured scope."
+commands.deny = ["get_news_settings"]
