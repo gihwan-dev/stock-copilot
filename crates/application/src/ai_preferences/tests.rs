@@ -51,3 +51,29 @@ fn config_dir_must_be_an_absolute_single_line_path() {
         Err(ClaudeConfigDirError::InvalidCharacter)
     );
 }
+
+#[test]
+fn only_tasks_the_user_chose_override_runs_and_purposes_map_to_tasks() {
+    let mut preferences = AiPreferences::initial();
+    assert_eq!(preferences.chosen(AiTask::Briefing), None);
+    assert_eq!(preferences.chosen_tasks(), Vec::new());
+    let chosen = AiTaskPreference {
+        task: AiTask::Briefing,
+        model: AiModelChoice::Opus,
+        effort: AiEffortChoice::High,
+    };
+    preferences.set_task(chosen);
+    assert_eq!(preferences.chosen(AiTask::Briefing), Some(chosen));
+    assert_eq!(preferences.chosen(AiTask::Chat), None);
+    assert_eq!(preferences.chosen_tasks(), vec![chosen]);
+    for (purpose, task) in [
+        (crate::RunPurpose::Chat, AiTask::Chat),
+        (crate::RunPurpose::Estimate, AiTask::Estimate),
+        (crate::RunPurpose::ClosingReview, AiTask::Briefing),
+        (crate::RunPurpose::ThesisReview, AiTask::DeepResearch),
+        (crate::RunPurpose::NewsClassification, AiTask::NewsSummary),
+        (crate::RunPurpose::WebCollection, AiTask::Collection),
+    ] {
+        assert_eq!(AiTask::for_purpose(purpose), task, "{purpose:?}");
+    }
+}

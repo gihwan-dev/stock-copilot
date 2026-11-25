@@ -2,6 +2,7 @@ mod attachment;
 mod chat_session;
 mod collection;
 mod command;
+mod config_dir;
 mod decoder;
 mod discovery;
 mod error;
@@ -18,6 +19,7 @@ pub use chat_session::{
     ChatProcessReuse, ChatTurnConfig, ChatTurnOutput, CliRecordCleanup, PersistentChatSession,
     cleanup_cli_project_records, encode_claude_project_dir_name,
 };
+pub use config_dir::{CONFIG_DIR_ENV_KEY, ConfigDirSlot};
 
 pub use collection::{
     ClaudeWebCollectionRunner, MAX_WEB_FINDINGS, WEB_COLLECTION_JSON_SCHEMA, parse_web_findings,

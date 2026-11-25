@@ -1239,6 +1239,8 @@ const BRIDGE_FILE_NAME: &str = "mcp-bridge";
 struct ProductClaude {
     provider: Arc<ai_claude_code::ClaudeCodeProvider>,
     bridge: BridgeLocation,
+    preferences: Arc<SqliteRepositories>,
+    config_dir: ai_claude_code::ConfigDirSlot,
 }
 
 impl std::fmt::Debug for ProductClaude {
@@ -1262,6 +1264,22 @@ fn bridge_config(
 }
 
 impl ProductClaude {
+    async fn prepare(&self, spec: RunSpec) -> RunSpec {
+        use application::AiPreferencesRepository as _;
+        match self.preferences.load_ai_preferences().await {
+            Ok(Some(stored)) => {
+                self.config_dir
+                    .set(stored.config_dir().map(|dir| Path::new(dir.as_str())));
+                src_tauri::task_models::tuned(&stored, spec)
+            }
+            Ok(None) => {
+                self.config_dir.set(None);
+                spec
+            }
+            Err(_unreadable) => spec,
+        }
+    }
+
     fn attachment(
         &self,
         link: McpRunLink,
@@ -1288,7 +1306,8 @@ impl AiProvider for ProductClaude {
     type Stream = ai_claude_code::ClaudeEventStream;
 
     async fn run(&self, spec: RunSpec) -> Result<Self::Stream, InformationError> {
-        self.provider.run(spec).await
+        let tuned = self.prepare(spec).await;
+        self.provider.run(tuned).await
     }
 
     async fn resume(
@@ -1297,7 +1316,8 @@ impl AiProvider for ProductClaude {
         history: ChatHistory,
         message: domain::UntrustedText,
     ) -> Result<Self::Stream, InformationError> {
-        self.provider.resume(spec, history, message).await
+        let tuned = self.prepare(spec).await;
+        self.provider.resume(tuned, history, message).await
     }
 
     async fn usage(&self) -> Result<application::AiUsage, InformationError> {
@@ -1322,8 +1342,9 @@ impl AttachableAi for ProductClaude {
         spec: RunSpec,
         link: McpRunLink,
     ) -> Result<Self::Stream, InformationError> {
+        let tuned = self.prepare(spec).await;
         self.provider
-            .run_attached(spec, self.attachment(link)?)
+            .run_attached(tuned, self.attachment(link)?)
             .await
     }
 
@@ -1334,8 +1355,9 @@ impl AttachableAi for ProductClaude {
         message: domain::UntrustedText,
         link: McpRunLink,
     ) -> Result<Self::Stream, InformationError> {
+        let tuned = self.prepare(spec).await;
         self.provider
-            .resume_attached(spec, history, message, self.attachment(link)?)
+            .resume_attached(tuned, history, message, self.attachment(link)?)
             .await
     }
 
@@ -1566,10 +1588,7 @@ fn product_catalog(
     clock: &Arc<platform_macos::SystemClock>,
     events: &Arc<application::EventBus>,
     repositories: &Arc<SqliteRepositories>,
-    (runs, collector): (
-        &RunMetadataBook,
-        &LateAi<ai_claude_code::ClaudeCodeProvider>,
-    ),
+    (runs, collector): (&RunMetadataBook, &LateAi<ProductClaude>),
 ) -> Option<mcp_server::ToolRegistry> {
     analysis_catalog(
         clock,
@@ -1600,7 +1619,8 @@ fn claude_ai(
     repositories: &Arc<SqliteRepositories>,
 ) -> Option<McpAttachedAi<ProductClaude, ProductMcpHost>> {
     let runs = RunMetadataBook::new().with_hasher(Arc::new(store_sqlite::Sha256PromptHasher));
-    let collector = LateAi::<ai_claude_code::ClaudeCodeProvider>::new();
+    let collector = LateAi::<ProductClaude>::new();
+    let config_dir = ai_claude_code::ConfigDirSlot::default();
     let registry = product_catalog(&setup, clock, events, repositories, (&runs, &collector))?;
     let base = ai_claude_code::ClaudeCodeConfig::new(
         setup.executable?,
@@ -1613,7 +1633,8 @@ fn claude_ai(
             .collect(),
     )?
     .with_host_environment(setup.host_env)
-    .with_collection_json_schema(String::from(ai_claude_code::WEB_COLLECTION_JSON_SCHEMA));
+    .with_collection_json_schema(String::from(ai_claude_code::WEB_COLLECTION_JSON_SCHEMA))
+    .with_config_dir_slot(config_dir.clone());
     let config = match (setup.sandbox, setup.cli_projects_dir) {
         (Some(layer), None) => base.with_sandbox(layer),
         (None, None) => base.without_sandbox(),
@@ -1628,7 +1649,13 @@ fn claude_ai(
             ai_claude_code::QuotaPolicy::default_policy().ok()?,
         ),
     );
-    let _bound = collector.bind(Arc::clone(&provider));
+    let product = Arc::new(ProductClaude {
+        provider,
+        bridge: setup.bridge.clone(),
+        preferences: Arc::clone(repositories),
+        config_dir,
+    });
+    let _bound = collector.bind(Arc::clone(&product));
     let host = McpServerHost::new(McpServerHostParts {
         clock: Arc::clone(clock),
         inspector: mcp_server::PeerInspectorMode::Configured(Arc::new(PsPeerInspector::default())),
@@ -1636,18 +1663,9 @@ fn claude_ai(
         registry: Arc::new(registry),
         ledger: mcp_server::ToolLedgerMode::Configured(Arc::clone(repositories)),
         base_dir: setup.mcp_base,
-        bridge: setup.bridge.clone(),
+        bridge: setup.bridge,
     });
-    Some(
-        McpAttachedAi::new(
-            Arc::new(ProductClaude {
-                provider,
-                bridge: setup.bridge,
-            }),
-            Arc::new(host),
-        )
-        .with_runs(runs),
-    )
+    Some(McpAttachedAi::new(product, Arc::new(host)).with_runs(runs))
 }
 
 fn bundled_bridge() -> BridgeLocation {

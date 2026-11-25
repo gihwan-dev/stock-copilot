@@ -1,4 +1,7 @@
+use std::collections::BTreeSet;
 use std::future::Future;
+
+use crate::RunPurpose;
 
 use crate::{SystemPortError, WriteCompleted};
 
@@ -13,6 +16,26 @@ pub enum AiTask {
 }
 
 impl AiTask {
+    #[must_use]
+    pub const fn for_purpose(purpose: RunPurpose) -> Self {
+        match purpose {
+            RunPurpose::Chat => Self::Chat,
+            RunPurpose::Estimate
+            | RunPurpose::CandidateDiscovery
+            | RunPurpose::PairedComparison => Self::Estimate,
+            RunPurpose::DeepResearch | RunPurpose::ThesisReview | RunPurpose::ClaimVerification => {
+                Self::DeepResearch
+            }
+            RunPurpose::MorningBriefing
+            | RunPurpose::IntradayMonitoring
+            | RunPurpose::ClosingReview
+            | RunPurpose::UsMarketCheck
+            | RunPurpose::WeeklyReview => Self::Briefing,
+            RunPurpose::NewsClassification | RunPurpose::NewsSummary => Self::NewsSummary,
+            RunPurpose::WebCollection => Self::Collection,
+        }
+    }
+
     pub const ALL: [Self; 6] = [
         Self::Chat,
         Self::Estimate,
@@ -92,6 +115,7 @@ impl ClaudeConfigDir {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AiPreferences {
     tasks: Vec<AiTaskPreference>,
+    chosen: BTreeSet<AiTask>,
     budget: ScheduledBudgetPercent,
     config_dir: Option<ClaudeConfigDir>,
 }
@@ -115,6 +139,7 @@ impl AiPreferences {
     pub fn initial() -> Self {
         Self {
             tasks: AiTask::ALL.into_iter().map(default_task).collect(),
+            chosen: BTreeSet::new(),
             budget: ScheduledBudgetPercent::Seventy,
             config_dir: None,
         }
@@ -128,6 +153,7 @@ impl AiPreferences {
     ) -> Self {
         let mut restored = Self {
             tasks: AiTask::ALL.into_iter().map(default_task).collect(),
+            chosen: BTreeSet::new(),
             budget,
             config_dir,
         };
@@ -152,7 +178,24 @@ impl AiPreferences {
         self.config_dir.as_ref()
     }
 
+    #[must_use]
+    pub fn chosen(&self, task: AiTask) -> Option<AiTaskPreference> {
+        if !self.chosen.contains(&task) {
+            return None;
+        }
+        self.tasks.iter().find(|slot| slot.task == task).copied()
+    }
+
+    #[must_use]
+    pub fn chosen_tasks(&self) -> Vec<AiTaskPreference> {
+        AiTask::ALL
+            .into_iter()
+            .filter_map(|task| self.chosen(task))
+            .collect()
+    }
+
     pub fn set_task(&mut self, preference: AiTaskPreference) {
+        let _first = self.chosen.insert(preference.task);
         for slot in &mut self.tasks {
             if slot.task == preference.task {
                 *slot = preference;
