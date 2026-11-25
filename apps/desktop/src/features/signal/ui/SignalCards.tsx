@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   DataText,
-  EmptyState,
   Inline,
   Skeleton,
   Stack,
@@ -158,16 +157,20 @@ const SignalList = (props: {
       );
     case "empty":
       return (
-        <EmptyState title={signalText("emptyTitle", "ko")}>
-          {signalText("emptyBody", "ko")}
-        </EmptyState>
+        <Card title={signalText("emptyTitle", "ko")}>
+          <Text variant="body-sm" tone="ink-muted">
+            {signalText("emptyBody", "ko")}
+          </Text>
+        </Card>
       );
     case "error":
       return (
-        <EmptyState
+        <Card
           title={signalText("errorTitle", "ko")}
-          action={{ label: signalText("retry", "ko"), onPress: signals.retry }}
-        />
+          actions={{ label: signalText("retry", "ko"), onPress: signals.retry }}
+        >
+          <Stack gap="space-1">{[]}</Stack>
+        </Card>
       );
     case "ready":
       return (

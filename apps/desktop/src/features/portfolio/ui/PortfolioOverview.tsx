@@ -2,7 +2,6 @@ import type { ReactElement } from "react";
 import {
   Card,
   EmptyState,
-  Section,
   Skeleton,
   Stack,
   StatusBar,
@@ -35,15 +34,13 @@ const OverviewReady = (props: {
             </StatusBar>,
           ]
         : []),
-      <Section key="overview" title={portfolioText("overviewSection", "ko")}>
-        <Stack gap="space-4">
-          <SummaryCards view={props.view} />
-          <HoldingsCard
-            holdings={props.view.holdings}
-            onOpenTransactions={props.onOpenTransactions}
-          />
-        </Stack>
-      </Section>,
+      <Stack key="overview" gap="space-4">
+        <SummaryCards view={props.view} />
+        <HoldingsCard
+          holdings={props.view.holdings}
+          onOpenTransactions={props.onOpenTransactions}
+        />
+      </Stack>,
       <AllocationSection
         key="allocation"
         load={props.sources.allocation}

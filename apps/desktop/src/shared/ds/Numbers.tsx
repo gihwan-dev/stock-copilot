@@ -60,6 +60,21 @@ const Directed = (props: {
     </span>
   </span>
 );
+type NumberEmphasis = "inherit" | "display" | "large";
+const Sized = (props: {
+  readonly emphasis: NumberEmphasis | undefined;
+  readonly children: ReactElement;
+}): ReactElement => {
+  switch (props.emphasis) {
+    case "display":
+      return <span className="text-num-display">{props.children}</span>;
+    case "large":
+      return <span className="text-num-lg">{props.children}</span>;
+    case "inherit":
+    case undefined:
+      return props.children;
+  }
+};
 const Numeric = (props: {
   readonly display: Display;
   readonly direction: Direction | undefined;
@@ -77,14 +92,21 @@ export const Money = (props: {
   readonly value: MoneyValue | Price;
   readonly notation?: "full" | "compact";
   readonly direction?: Direction;
+  readonly emphasis?: NumberEmphasis;
 }): ReactElement => (
-  <Numeric
-    display={formatNumber(
-      { kind: "money", value: props.value, notation: props.notation ?? "full" },
-      props.direction,
-    )}
-    direction={props.direction}
-  />
+  <Sized emphasis={props.emphasis}>
+    <Numeric
+      display={formatNumber(
+        {
+          kind: "money",
+          value: props.value,
+          notation: props.notation ?? "full",
+        },
+        props.direction,
+      )}
+      direction={props.direction}
+    />
+  </Sized>
 );
 export const Percent = (props: {
   readonly value: PercentDisplay;
@@ -168,9 +190,12 @@ export const PriceChange = (props: {
   readonly amount: MoneyValue;
   readonly rate: PercentDisplay;
   readonly direction: Direction;
+  readonly emphasis?: NumberEmphasis;
 }): ReactElement => (
-  <Numeric
-    display={formatPriceChange(props.amount, props.rate, props.direction)}
-    direction={props.direction}
-  />
+  <Sized emphasis={props.emphasis}>
+    <Numeric
+      display={formatPriceChange(props.amount, props.rate, props.direction)}
+      direction={props.direction}
+    />
+  </Sized>
 );

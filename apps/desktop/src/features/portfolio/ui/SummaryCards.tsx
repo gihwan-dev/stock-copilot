@@ -31,13 +31,34 @@ const currencyKeys = {
 
 const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
   <Card title={portfolioText("totalTitle", "ko")}>
-    <Stack gap="space-2">
+    <Stack gap="space-3">
       {[
         <Inline key="total" gap="space-2" align="center" wrap="wrap">
-          <Money value={props.view.totalApproximate} notation="compact" />
+          <Money
+            value={props.view.totalApproximate}
+            notation="compact"
+            emphasis="display"
+          />
           <Badge tone="neutral">
             {portfolioText("totalApproximate", "ko")}
           </Badge>
+        </Inline>,
+        <Inline key="today" gap="space-2" align="center" wrap="wrap">
+          <Text variant="body-sm" tone="ink-muted">
+            {portfolioText("todayTitle", "ko")}
+          </Text>
+          <PriceChange
+            amount={props.view.today.amount}
+            rate={props.view.today.rate}
+            direction={props.view.today.direction}
+            emphasis="large"
+          />
+        </Inline>,
+        <Inline key="recorded" gap="space-2" align="center" wrap="wrap">
+          <Text variant="caption" tone="ink-muted">
+            {portfolioText("recordedAt", "ko")}
+          </Text>
+          <TimestampText value={props.view.recordedAt} />
         </Inline>,
         <Text key="hint" variant="caption" tone="ink-muted">
           {portfolioText("totalHint", "ko")}
@@ -53,24 +74,6 @@ const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
               </Inline>,
             ]),
       ]}
-    </Stack>
-  </Card>
-);
-
-const TodayCard = (props: { readonly view: PortfolioView }): ReactElement => (
-  <Card title={portfolioText("todayTitle", "ko")}>
-    <Stack gap="space-2">
-      <PriceChange
-        amount={props.view.today.amount}
-        rate={props.view.today.rate}
-        direction={props.view.today.direction}
-      />
-      <Inline gap="space-2" align="center" wrap="wrap">
-        <Text variant="caption" tone="ink-muted">
-          {portfolioText("recordedAt", "ko")}
-        </Text>
-        <TimestampText value={props.view.recordedAt} />
-      </Inline>
     </Stack>
   </Card>
 );
@@ -120,13 +123,10 @@ export const SummaryCards = (props: {
   readonly view: PortfolioView;
 }): ReactElement => (
   <Grid>
-    <GridItem span={{ narrow: 12, medium: 6, wide: 4 }}>
+    <GridItem span={{ narrow: 12, medium: 12, wide: 6 }}>
       <TotalCard view={props.view} />
     </GridItem>
-    <GridItem span={{ narrow: 12, medium: 6, wide: 4 }}>
-      <TodayCard view={props.view} />
-    </GridItem>
-    <GridItem span={{ narrow: 12, medium: 12, wide: 4 }}>
+    <GridItem span={{ narrow: 12, medium: 12, wide: 6 }}>
       <CurrencyCard view={props.view} />
     </GridItem>
   </Grid>

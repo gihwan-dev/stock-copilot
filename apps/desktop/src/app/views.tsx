@@ -101,20 +101,20 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
     case "ready":
       return (
         <Stack gap="space-6">
-          <BriefingCard
-            load={sources.briefings}
-            onOpenHistory={(): void => {
-              go("/briefings");
-            }}
-          />
-          <SignalCards sources={sources} />
-          <ScorecardPanel load={sources.scorecard} />
           <PortfolioOverview
             sources={sources}
             onOpenTransactions={(): void => {
               go("/transactions");
             }}
           />
+          <SignalCards sources={sources} />
+          <BriefingCard
+            load={sources.briefings}
+            onOpenHistory={(): void => {
+              go("/briefings");
+            }}
+          />
+          <ScorecardPanel load={sources.scorecard} />
         </Stack>
       );
   }

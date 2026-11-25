@@ -17,7 +17,7 @@ import {
 } from "../../../shared/ds";
 import type { InstrumentDetailView, ScreenSources } from "../../../shared/ipc";
 import type { EntityId, UiText } from "../../../shared/lib";
-import { useCanvasChartTheme } from "../../../shared/platform";
+import { useCanvasChartTheme, useColorScheme } from "../../../shared/platform";
 import { instrumentsText } from "../messages";
 import { useInstrumentDetail, useWatchlistActions } from "../model/instruments";
 import { ThesisNotes } from "./ThesisNotes";
@@ -42,7 +42,8 @@ const Line = (props: {
 const Chart = (props: {
   readonly view: InstrumentDetailView;
 }): ReactElement => {
-  const palette = useCanvasChartTheme("light");
+  const scheme = useColorScheme();
+  const palette = useCanvasChartTheme(scheme);
   const points: readonly CandlePoint[] = props.view.candles.map(
     (candle): CandlePoint => ({
       id: candle.id,
@@ -60,14 +61,14 @@ const Chart = (props: {
           data={points}
           label={instrumentsText("chartLabel", "ko")}
           empty={instrumentsText("chartEmpty", "ko")}
-          theme="light"
+          theme={scheme}
         />
       ) : (
         <CandleChart
           data={points}
           label={instrumentsText("chartLabel", "ko")}
           empty={instrumentsText("chartEmpty", "ko")}
-          theme="light"
+          theme={scheme}
           palette={palette}
         />
       )}
