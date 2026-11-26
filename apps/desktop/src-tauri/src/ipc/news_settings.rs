@@ -6,7 +6,7 @@ use application::{
     CollectionTarget, DartCallCount, DartDailyUsage, DartKeyState, EventBus, FomcDay,
     GetNewsDataSettings, NewsDataSettings, NewsDataSettingsChange, NewsDataSettingsError,
     NewsDataSettingsRepository, SecContactSetting, SecretKey, SecretStore, SecretValue,
-    SourceState, SourceSwitch, StockAlias, SystemPortError, UpdateNewsDataSettings,
+    SourceState, SourceStatus, SourceSwitch, StockAlias, SystemPortError, UpdateNewsDataSettings,
     collection_cadence,
 };
 use domain::{
@@ -22,6 +22,9 @@ use crate::holdings_link::InstrumentDirectory;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod reach_tests;
 
 pub trait NewsBook: Send + Sync {
     fn load(&self) -> BoxFuture<'_, Result<NewsDataSettings, SystemPortError>>;
@@ -98,7 +101,7 @@ impl<R: NewsDataSettingsRepository + 'static, S: SecretStore + 'static> NewsBook
 }
 
 pub trait RouteLookup: Send + Sync {
-    fn source_state(&self, source: DataSource) -> BoxFuture<'_, Option<SourceState>>;
+    fn source_status(&self, source: DataSource) -> BoxFuture<'_, Option<SourceStatus>>;
 }
 
 #[derive(Clone)]
@@ -167,7 +170,10 @@ async fn routes(
 ) -> UiDisclosureRoutes {
     let lookup = |source| async move {
         match &state.1 {
-            Some(routes) => routes.source_state(source).await,
+            Some(routes) => routes
+                .source_status(source)
+                .await
+                .map(|status| status.state()),
             None => None,
         }
     };
@@ -180,6 +186,35 @@ async fn routes(
         Some(_) => route_of(lookup(DataSource::SecEdgar).await),
     };
     UiDisclosureRoutes { dart, sec }
+}
+
+const fn never_reached(status: &SourceStatus) -> bool {
+    match (status.state(), status.last_success_at()) {
+        (SourceState::Failed(_), None) => true,
+        (
+            SourceState::Failed(_)
+            | SourceState::NeverRun
+            | SourceState::Healthy
+            | SourceState::NoData
+            | SourceState::NotConfigured,
+            _,
+        ) => false,
+    }
+}
+
+async fn unreachable_sources(lookup: Option<&dyn RouteLookup>) -> Vec<UiFeedSource> {
+    let Some(routes) = lookup else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    for source in SOURCES {
+        if let Some(status) = routes.source_status(data_source(source)).await
+            && never_reached(&status)
+        {
+            found.push(source);
+        }
+    }
+    found
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Type)]
@@ -357,6 +392,7 @@ pub struct UiNewsSettings {
     pub wake: UiWake,
     pub aliases: Vec<UiAliasRow>,
     pub routes: UiDisclosureRoutes,
+    pub unreachable: Vec<UiFeedSource>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Type)]
@@ -555,6 +591,7 @@ fn to_view(
     settings: &NewsDataSettings,
     keys: UiKeys,
     routes: UiDisclosureRoutes,
+    unreachable: Vec<UiFeedSource>,
     directory: &InstrumentDirectory,
 ) -> UiNewsSettings {
     UiNewsSettings {
@@ -590,6 +627,7 @@ fn to_view(
             })
             .collect(),
         routes,
+        unreachable,
     }
 }
 
@@ -636,7 +674,8 @@ async fn view(
 ) -> Result<UiNewsSettings, IpcError> {
     let found = keys(state).await?;
     let paths = routes(state, found, settings).await;
-    Ok(to_view(settings, found, paths, directory))
+    let unreachable = unreachable_sources(state.1.as_deref()).await;
+    Ok(to_view(settings, found, paths, unreachable, directory))
 }
 
 async fn apply(

@@ -1794,16 +1794,16 @@ fn assemble_ai(
 struct StoredRoutes(Arc<SqliteRepositories>);
 
 impl src_tauri::ipc::news_settings::RouteLookup for StoredRoutes {
-    fn source_state(
+    fn source_status(
         &self,
         source: domain::DataSource,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Option<application::SourceState>> + Send + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Option<application::SourceStatus>> + Send + '_>>
+    {
         Box::pin(async move {
             application::SourceStatusRepository::find(self.0.as_ref(), source)
                 .await
                 .ok()
                 .flatten()
-                .map(|status| status.state())
         })
     }
 }
