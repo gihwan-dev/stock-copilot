@@ -563,3 +563,18 @@ fn read_results_strip_links_and_page_the_largest_list() {
     assert!(!text.contains("https://"), "{text}");
     assert!(!text.contains('\u{200B}'), "{text}");
 }
+
+#[test]
+fn chat_eval_fixture_mirrors_the_app_command_tools() {
+    let built = harness();
+    let actual = serde_json::to_value(built.registry.list_rmcp_tools()).expect("도구 목록");
+    let rendered = serde_json::to_string_pretty(&actual).expect("출력");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../fixtures/mcp/app_tools_list.json");
+    let expected = std::fs::read_to_string(&path).unwrap_or_default();
+    assert_eq!(
+        rendered.trim_end(),
+        expected.trim_end(),
+        "채팅 eval의 앱 명령 도구 목록이 실제와 다르다. 실제 목록:\n{rendered}\n"
+    );
+}

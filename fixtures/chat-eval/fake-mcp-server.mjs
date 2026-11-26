@@ -2,12 +2,15 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { buildResponses } from "./portfolio-model.mjs";
+import { appWrite, buildResponses } from "./portfolio-model.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const catalog = JSON.parse(
-  readFileSync(join(here, "..", "mcp", "tools_list.json"), "utf8"),
-);
+const catalog = [
+  ...JSON.parse(readFileSync(join(here, "..", "mcp", "tools_list.json"), "utf8")),
+  ...JSON.parse(
+    readFileSync(join(here, "..", "mcp", "app_tools_list.json"), "utf8"),
+  ),
+];
 const scenarioPath = process.env.CHAT_EVAL_SCENARIO;
 const callLog = process.env.CHAT_EVAL_CALL_LOG;
 const scenario = JSON.parse(readFileSync(scenarioPath, "utf8"));
@@ -33,6 +36,9 @@ const unavailable = (field) =>
   );
 
 const lookup = (name, args) => {
+  const written = appWrite(scenario, name, args);
+  if (written?.error) return toolResult(written.error, true);
+  if (written) return { ...toolResult(written.ok, false), fabricated: written.fabricated };
   const entry = responses[name];
   if (entry === undefined) return unavailable(null);
   if (entry && entry.__bySymbol) {
@@ -80,10 +86,11 @@ const handle = (message) => {
     if (callLog) {
       appendFileSync(
         callLog,
-        `${JSON.stringify({ name, args, isError: result.isError })}\n`,
+        `${JSON.stringify({ name, args, isError: result.isError, fabricated: result.fabricated === true, result: result.structuredContent })}\n`,
       );
     }
-    send({ jsonrpc: "2.0", id, result });
+    const { fabricated: _fabricated, ...wire } = result;
+    send({ jsonrpc: "2.0", id, result: wire });
     return;
   }
   if (method === "ping") {
