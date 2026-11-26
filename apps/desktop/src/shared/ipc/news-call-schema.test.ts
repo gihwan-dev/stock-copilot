@@ -6,7 +6,7 @@ test("the recorded news settings reply matches the news screen schema", () => {
   const parsed = newsSettingsSchema.safeParse(responses.getNewsSettings);
   expect(parsed.success).toBe(true);
   if (!parsed.success) return;
-  expect(parsed.data.sources).toHaveLength(14);
+  expect(parsed.data.sources).toHaveLength(15);
   expect(newsSettingsSchema.safeParse(responses.setAliases).success).toBe(true);
 });
 

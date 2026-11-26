@@ -24,6 +24,7 @@ impl RetentionDays {
             | NewsSource::Maekyung
             | NewsSource::Yonhap
             | NewsSource::Edaily
+            | NewsSource::SegyeFinance
             | NewsSource::BankOfKorea
             | NewsSource::FederalReserve
             | NewsSource::YahooFinance => Self::Quarter,
@@ -47,6 +48,7 @@ pub fn news_retention_cutoffs(now: Timestamp) -> Vec<RetentionCutoff> {
         NewsSource::Maekyung,
         NewsSource::Yonhap,
         NewsSource::Edaily,
+        NewsSource::SegyeFinance,
         NewsSource::BankOfKorea,
         NewsSource::FederalReserve,
         NewsSource::GoogleNews,

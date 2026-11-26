@@ -14,6 +14,7 @@ pub enum HttpDataSource {
     Maekyung,
     Yonhap,
     Edaily,
+    SegyeFinance,
     GoogleNews,
     YahooFinance,
     SecEdgar,
@@ -24,7 +25,7 @@ pub enum HttpDataSource {
 }
 
 impl HttpDataSource {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::KindDisclosure,
         Self::DartDisclosureApi,
         Self::DartDisclosureRss,
@@ -34,6 +35,7 @@ impl HttpDataSource {
         Self::Maekyung,
         Self::Yonhap,
         Self::Edaily,
+        Self::SegyeFinance,
         Self::GoogleNews,
         Self::YahooFinance,
         Self::SecEdgar,
@@ -55,6 +57,7 @@ impl HttpDataSource {
             Self::Maekyung => DataSource::Maekyung,
             Self::Yonhap => DataSource::Yonhap,
             Self::Edaily => DataSource::Edaily,
+            Self::SegyeFinance => DataSource::SegyeFinance,
             Self::GoogleNews => DataSource::GoogleNews,
             Self::YahooFinance => DataSource::YahooFinance,
             Self::SecEdgar => DataSource::SecEdgar,
@@ -77,6 +80,7 @@ impl HttpDataSource {
             DataSource::Maekyung => Some(Self::Maekyung),
             DataSource::Yonhap => Some(Self::Yonhap),
             DataSource::Edaily => Some(Self::Edaily),
+            DataSource::SegyeFinance => Some(Self::SegyeFinance),
             DataSource::GoogleNews => Some(Self::GoogleNews),
             DataSource::WebSearch => None,
             DataSource::YahooFinance => Some(Self::YahooFinance),
@@ -98,6 +102,7 @@ pub enum RateLimitBucket {
     Maekyung,
     Yonhap,
     Edaily,
+    SegyeFinance,
     GoogleNews,
     YahooFinance,
     SecEdgar,
@@ -108,7 +113,7 @@ pub enum RateLimitBucket {
 }
 
 impl RateLimitBucket {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Kind,
         Self::OpenDart,
         Self::DartRss,
@@ -116,6 +121,7 @@ impl RateLimitBucket {
         Self::Maekyung,
         Self::Yonhap,
         Self::Edaily,
+        Self::SegyeFinance,
         Self::GoogleNews,
         Self::YahooFinance,
         Self::SecEdgar,
@@ -135,6 +141,7 @@ impl RateLimitBucket {
             | Self::Maekyung
             | Self::Yonhap
             | Self::Edaily
+            | Self::SegyeFinance
             | Self::GoogleNews
             | Self::YahooFinance
             | Self::SecEdgar
@@ -156,6 +163,7 @@ impl RateLimitBucket {
             | Self::Maekyung
             | Self::Yonhap
             | Self::Edaily
+            | Self::SegyeFinance
             | Self::GoogleNews
             | Self::YahooFinance
             | Self::BankOfKorea
@@ -270,7 +278,7 @@ impl SourceSpec {
 
 const MIN_INTERVAL: Duration = Duration::from_secs(5);
 
-const SPECS: [SourceSpec; 16] = [
+const SPECS: [SourceSpec; 17] = [
     SourceSpec {
         source: HttpDataSource::KindDisclosure,
         bucket: RateLimitBucket::Kind,
@@ -380,6 +388,18 @@ const SPECS: [SourceSpec; 16] = [
         ai_read_policy: AiReadSettingPolicy::ConfigurableDefaultOff,
     },
     SourceSpec {
+        source: HttpDataSource::SegyeFinance,
+        bucket: RateLimitBucket::SegyeFinance,
+        allowed_hosts: &["www.segyefn.com"],
+        conditional_get: ConditionalGet::Unsupported,
+        user_agent: UserAgentRequirement::Standard,
+        min_interval: MIN_INTERVAL,
+        max_calls_per_second: None,
+        credential: CredentialRequirement::None,
+        default_ai_read: AiReadPolicy::TitleAndSummary,
+        ai_read_policy: AiReadSettingPolicy::LockedOff,
+    },
+    SourceSpec {
         source: HttpDataSource::GoogleNews,
         bucket: RateLimitBucket::GoogleNews,
         allowed_hosts: &["news.google.com"],
@@ -470,7 +490,7 @@ pub struct SourceRegistry;
 
 impl SourceRegistry {
     #[must_use]
-    pub const fn all() -> &'static [SourceSpec; 16] {
+    pub const fn all() -> &'static [SourceSpec; 17] {
         &SPECS
     }
 
@@ -486,6 +506,7 @@ impl SourceRegistry {
             maekyung,
             yonhap,
             edaily,
+            segye_finance,
             google_news,
             yahoo_finance,
             sec_edgar,
@@ -504,6 +525,7 @@ impl SourceRegistry {
             HttpDataSource::Maekyung => maekyung,
             HttpDataSource::Yonhap => yonhap,
             HttpDataSource::Edaily => edaily,
+            HttpDataSource::SegyeFinance => segye_finance,
             HttpDataSource::GoogleNews => google_news,
             HttpDataSource::YahooFinance => yahoo_finance,
             HttpDataSource::SecEdgar => sec_edgar,

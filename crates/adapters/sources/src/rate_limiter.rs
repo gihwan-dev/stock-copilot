@@ -59,7 +59,7 @@ impl BucketBudget {
 pub(crate) struct SourceRateLimiter {
     clock: Arc<dyn Clock>,
     wait: Arc<dyn SourceWait>,
-    buckets: [Mutex<BucketBudget>; 14],
+    buckets: [Mutex<BucketBudget>; 15],
 }
 
 impl SourceRateLimiter {
@@ -91,6 +91,7 @@ impl SourceRateLimiter {
             maekyung,
             yonhap,
             edaily,
+            segye_finance,
             google_news,
             yahoo_finance,
             sec_edgar,
@@ -107,6 +108,7 @@ impl SourceRateLimiter {
             RateLimitBucket::Maekyung => maekyung,
             RateLimitBucket::Yonhap => yonhap,
             RateLimitBucket::Edaily => edaily,
+            RateLimitBucket::SegyeFinance => segye_finance,
             RateLimitBucket::GoogleNews => google_news,
             RateLimitBucket::YahooFinance => yahoo_finance,
             RateLimitBucket::SecEdgar => sec_edgar,

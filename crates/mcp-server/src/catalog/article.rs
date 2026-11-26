@@ -31,6 +31,7 @@ pub const fn press_domains(source: &NewsSource) -> &'static [&'static str] {
         NewsSource::Hankyung => &["hankyung.com"],
         NewsSource::Maekyung => &["mk.co.kr"],
         NewsSource::Edaily => &["edaily.co.kr"],
+        NewsSource::SegyeFinance => &["segyefn.com"],
         NewsSource::Yonhap => &["yna.co.kr"],
         NewsSource::BankOfKorea
         | NewsSource::FederalReserve
@@ -41,7 +42,7 @@ pub const fn press_domains(source: &NewsSource) -> &'static [&'static str] {
 
 const fn is_never_readable(source: &NewsSource) -> bool {
     match source {
-        NewsSource::Yonhap => true,
+        NewsSource::Yonhap | NewsSource::SegyeFinance => true,
         NewsSource::Hankyung
         | NewsSource::Maekyung
         | NewsSource::Edaily

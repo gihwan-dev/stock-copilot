@@ -124,6 +124,7 @@ const catalog = {
   "source.maekyung": { ko: "매일경제" as UiText },
   "source.yonhap": { ko: "연합뉴스" as UiText },
   "source.edaily": { ko: "이데일리" as UiText },
+  "source.segye-finance": { ko: "세계파이낸스" as UiText },
   "source.google-news": { ko: "Google 뉴스" as UiText },
   "source.web-search": { ko: "웹 검색" as UiText },
   "source.yahoo-finance": { ko: "Yahoo Finance" as UiText },
