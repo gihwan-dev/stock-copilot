@@ -4,7 +4,7 @@ mod tests {
         CalendarDate, CalendarYear, Currency, DayNumber, InvestorClass, InvestorFlow,
         MarketFlowRecordInput, MarketFlowRow, MarketIndicatorQuote, MasterCode, Money, MonthNumber,
         Nanosecond, NumericInput, OffsetSeconds, Price, Ratio, StockFlowRecordInput, StockFlowRow,
-        Symbol, TimeError, Timestamp, UnixSeconds,
+        Symbol, TimeError, Timestamp, UnixSeconds, WeekPart,
     };
 
     fn time() -> Timestamp {
@@ -158,5 +158,22 @@ mod tests {
             Ratio::of_amount(krw("1385.20").amount()),
             Ratio::parse(&number("1385.20")).expect("ratio")
         );
+    }
+
+    #[test]
+    fn calendar_dates_know_weekends() {
+        let day = |value: u8| {
+            CalendarDate::from_parts(
+                CalendarYear::new(2026),
+                MonthNumber::new(11),
+                DayNumber::new(value),
+            )
+            .expect("date")
+        };
+        assert_eq!(day(27).week_part(), WeekPart::Weekday);
+        assert_eq!(day(28).week_part(), WeekPart::Weekend);
+        assert_eq!(day(29).week_part(), WeekPart::Weekend);
+        assert_eq!(day(30).week_part(), WeekPart::Weekday);
+        assert_eq!(day(23).week_part(), WeekPart::Weekday);
     }
 }
