@@ -17,7 +17,11 @@ impl<R: Runtime> UiEventBridge<R> {
     }
 
     pub fn emit_domain_event(&self, event: DomainEvent) -> Result<(), SubscriberFailure> {
-        UiEvent::from(event)
+        self.emit_ui_event(&UiEvent::from(event))
+    }
+
+    pub fn emit_ui_event(&self, event: &UiEvent) -> Result<(), SubscriberFailure> {
+        event
             .emit(&self.handle)
             .map_err(|_error| SubscriberFailure::Unavailable)
     }

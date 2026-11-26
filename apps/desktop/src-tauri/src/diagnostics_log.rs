@@ -136,6 +136,11 @@ fn describe(event: &DiagnosticEvent) -> String {
         DiagnosticEvent::TokenIssue(issue) => describe_token(issue),
         DiagnosticEvent::Sync(diagnosis) => describe_sync(diagnosis),
         DiagnosticEvent::Job(diagnosis) => describe_job(diagnosis),
+        DiagnosticEvent::AiCommandApplied { tool, summary } => format!(
+            "ai-command tool={} summary=\"{}\"",
+            tool.as_str(),
+            summary.as_str()
+        ),
     }
 }
 

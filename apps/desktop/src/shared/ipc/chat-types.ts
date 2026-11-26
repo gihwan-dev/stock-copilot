@@ -1,5 +1,24 @@
 import type { Count, EntityId, ExternalUrl, FreeText, Ticker } from "../lib";
 
+export type ChatChangeTopic =
+  | "change-schedule"
+  | "change-profile"
+  | "change-order-settings"
+  | "add-watchlist"
+  | "remove-watchlist"
+  | "skip-signal"
+  | "change-account"
+  | "change-principles"
+  | "backup"
+  | "export"
+  | "change-news"
+  | "change-contact"
+  | "change-wake"
+  | "change-aliases"
+  | "change-model"
+  | "change-budget"
+  | "approval-request";
+
 export type ChatToolTopic =
   | "portfolio"
   | "allocation"
@@ -18,7 +37,29 @@ export type ChatToolTopic =
   | "estimate"
   | "scorecard"
   | "web-research"
+  | "app-data"
+  | ChatChangeTopic
   | "other";
+
+export const chatChangeTopics: readonly ChatChangeTopic[] = [
+  "change-schedule",
+  "change-profile",
+  "change-order-settings",
+  "add-watchlist",
+  "remove-watchlist",
+  "skip-signal",
+  "change-account",
+  "change-principles",
+  "backup",
+  "export",
+  "change-news",
+  "change-contact",
+  "change-wake",
+  "change-aliases",
+  "change-model",
+  "change-budget",
+  "approval-request",
+];
 
 export type ChatToolStatus = "running" | "succeeded" | "failed";
 

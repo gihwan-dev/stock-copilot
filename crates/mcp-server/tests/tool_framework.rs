@@ -300,9 +300,9 @@ mod tests {
     }
 
     #[test]
-    fn tool_spec_rejects_forbidden_names_and_unsafe_schemas() {
+    fn tool_spec_leaves_naming_to_command_policy_and_rejects_unsafe_schemas() {
         let empty_schema = build_object_schema(Map::new(), &[]);
-        for forbidden in [
+        for policy_named in [
             "place_order",
             "submit_trade",
             "approve_proposal",
@@ -311,15 +311,17 @@ mod tests {
             "get_secret",
             "issue_token",
         ] {
-            let err = ToolSpec::try_new(
-                ToolName::try_new(forbidden).expect("문법 유효 이름"),
-                "Forbidden operation",
+            let spec = ToolSpec::try_new(
+                ToolName::try_new(policy_named).expect("문법 유효 이름"),
+                "Policy decides exposure",
                 ToolAccessKind::ReadOnly,
                 empty_schema.clone(),
                 None,
-            )
-            .expect_err("금지 도구 이름은 등록 거부되어야 한다");
-            assert_eq!(err, ToolRegistryError::ForbiddenToolName, "{forbidden}");
+            );
+            assert!(
+                spec.is_ok(),
+                "이름 조각 금지는 명령별 AI 정책으로 대체됐다: {policy_named}"
+            );
         }
 
         let mut open_schema = Map::new();

@@ -1,4 +1,7 @@
-use crate::{OrderConfirmation, RecordOutcome, RiskChangeConfirmation, SystemPortError};
+use crate::{
+    DiagnosticText, OrderConfirmation, RecordOutcome, RiskChangeConfirmation, SystemPortError,
+    ToolName,
+};
 use domain::{
     ClientOrderId, InstrumentId, ProposalId, RiskChange, Timestamp, WebSearchInspection,
     WebSearchQueryDigest, WebSearchRejectionReason,
@@ -114,6 +117,10 @@ pub enum AuditKind {
         outcome: RiskChangeConfirmation,
     },
     WebSearchChecked(WebSearchAuditRecord),
+    AiCommandApplied {
+        tool: ToolName,
+        summary: DiagnosticText,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -150,6 +150,10 @@ pub enum DiagnosticEvent {
     TokenIssue(TokenIssue),
     Sync(SyncDiagnosis),
     Job(JobDiagnosis),
+    AiCommandApplied {
+        tool: DiagnosticText,
+        summary: DiagnosticText,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

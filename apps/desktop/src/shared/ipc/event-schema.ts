@@ -4,7 +4,11 @@ import type { IpcFailure } from "./schema";
 
 const invalidResponseFailure: IpcFailure = { kind: "invalid-response" };
 
-type AllEventKind = "StoredDataChanged" | "AccountSelectionChanged";
+type AllEventKind =
+  | "StoredDataChanged"
+  | "AccountSelectionChanged"
+  | "AiCommandApplied"
+  | "AiApprovalRequested";
 type SettingsEventKind =
   "SettingsChanged" | "PolicyChanged" | "OrderSwitchChanged";
 type PortfolioEventKind =
@@ -166,6 +170,8 @@ const keyedEvents: ReadonlyMap<string, KeyedEntry> = new Map<
     { category: "briefing", kind: "BriefingFinished" },
     briefingIdSchema,
   ),
+  keyedEntry({ category: "all", kind: "AiCommandApplied" }, nonEmptyId),
+  keyedEntry({ category: "all", kind: "AiApprovalRequested" }, nonEmptyId),
   ...idActivityKinds.map((kind) =>
     keyedEntry({ category: "activity", kind }, nonEmptyId),
   ),

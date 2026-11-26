@@ -42,6 +42,53 @@ pub fn check_analysis_tool(tool: &UntrustedText) -> AnalysisToolAllowance {
         | "submit_estimate"
         | "get_scorecard"
         | "request_web_research" => AnalysisToolAllowance::Allowed,
+        _ => check_app_command_tool(tool),
+    }
+}
+
+fn check_app_command_tool(tool: &UntrustedText) -> AnalysisToolAllowance {
+    match tool.as_untrusted_str() {
+        "app_app_version"
+        | "app_get_settings"
+        | "app_get_chat_history"
+        | "app_get_briefings"
+        | "app_get_portfolio"
+        | "app_get_allocation"
+        | "app_get_job_schedules"
+        | "app_get_public_ip"
+        | "app_check_toss_connection"
+        | "app_get_update_status"
+        | "app_get_risk_settings"
+        | "app_get_self_check"
+        | "app_get_status"
+        | "app_get_data_status"
+        | "app_get_scorecard"
+        | "app_get_transactions"
+        | "app_get_instruments"
+        | "app_get_instrument_detail"
+        | "app_get_thesis"
+        | "app_get_signals"
+        | "app_get_account_selection"
+        | "app_get_principles"
+        | "app_get_news_settings"
+        | "app_get_ai_settings"
+        | "app_set_job_schedule"
+        | "app_save_investor_profile"
+        | "app_save_order_settings"
+        | "app_add_watchlist"
+        | "app_remove_watchlist"
+        | "app_skip_signal"
+        | "app_select_account"
+        | "app_set_principles"
+        | "app_backup_now"
+        | "app_export_data"
+        | "app_set_news_source"
+        | "app_set_sec_contact"
+        | "app_set_wake_criteria"
+        | "app_set_aliases"
+        | "app_set_task_model"
+        | "app_set_budget_percent"
+        | "app_request_order_approval" => AnalysisToolAllowance::Allowed,
         _ => AnalysisToolAllowance::Forbidden,
     }
 }

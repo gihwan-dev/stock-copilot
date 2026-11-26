@@ -235,6 +235,8 @@ pub enum UiEvent {
     SourceStatusChanged(UiDataSource),
     AiJobFinished(String),
     BriefingFinished(UiBriefingId),
+    AiCommandApplied(String),
+    AiApprovalRequested(String),
 }
 
 fn proposal_key(id: &domain::ProposalId) -> String {
