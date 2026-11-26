@@ -19,7 +19,6 @@
 모델을 부르므로 `just check`에 넣지 않는다. 에이전트 세션 안에서는 하네스가 `claude` 실행을 막으므로 사용자가 터미널에서 직접 돌린다.
 
 ```sh
-just chat-eval --self-test
 node fixtures/chat-eval/run.mjs --self-test
 CLAUDE_CONFIG_DIR="$HOME/.claude-second" node fixtures/chat-eval/run.mjs
 CLAUDE_CONFIG_DIR="$HOME/.claude-second" node fixtures/chat-eval/run.mjs --only index-etf-heavy-cash,order-request --variants candidate

@@ -21,7 +21,7 @@
 
 매수 정책(`signal_buy_limit`, `check_current`)과 홈 배분 표시(`ipc/portfolio.rs`), 앱 배분 조회 도구가 같은 한도를 쓴다. 사용자는 기존 투자 성향 편집기의 종목당·업종 한도로 이 값을 바꾼다.
 
-5. **eval.** `fixtures/chat-eval/`가 합성 시나리오 29개, 분석·앱 도구 60개를 실제 목록대로 내놓는 가짜 MCP 서버, 결정적 검사와 LLM 판정을 둔다. 앱 도구 목록 골든(`fixtures/mcp/app_tools_list.json`)은 데스크톱 시험이 레지스트리와 맞춘다. 모델을 부르므로 `just check`에는 넣지 않고 `just chat-eval`로 돌린다.
+5. **eval.** `fixtures/chat-eval/`가 합성 시나리오 29개, 분석·앱 도구 60개를 실제 목록대로 내놓는 가짜 MCP 서버, 결정적 검사와 LLM 판정을 둔다. 앱 도구 목록 골든(`fixtures/mcp/app_tools_list.json`)은 데스크톱 시험이 레지스트리와 맞춘다. 모델을 부르므로 `just check`에는 넣지 않고 `node fixtures/chat-eval/run.mjs`로 돌린다. `just chat-eval` 레시피는 보호 시험(`apps/desktop/tests/check-list.test.mjs`)의 justfile 기대값과 함께 사용자 서명 커밋으로 넣는다.
 
 ## 버린 대안
 
