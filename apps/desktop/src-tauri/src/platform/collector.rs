@@ -5,13 +5,14 @@ use crate::platform::background::{CollectorFuture, CollectorWorker};
 use crate::platform::feed_watch::{SharedHeadlines, WatchedFeed, record_feed};
 use crate::ports::{PortTypes, Ports};
 use application::{
-    Clock, CollectFeed, CollectedObservation, CollectionConditions, CollectionDue,
-    CollectionInputs, CollectionPhase, CollectionPlan, CollectionScheduler, CollectionTarget,
-    DartCallCount, DartDailyUsage, DartKeyState, DataAvailability, FeedCursor, FeedRound,
-    FeedSource, FomcDay, InformationError, NewsDataSettings, NewsDataSettingsRepository, NewsFeed,
-    NewsMetadata, PlanCollectionSchedule, SourceSwitch, SystemPortError, WriteCompleted,
-    collection_due,
+    Clock, CollectFeed, CollectedObservation, CollectionCadence, CollectionConditions,
+    CollectionDue, CollectionInputs, CollectionMinutes, CollectionPhase, CollectionPlan,
+    CollectionScheduler, CollectionTarget, DartCallCount, DartDailyUsage, DartKeyState,
+    DataAvailability, FeedCursor, FeedRound, FeedRoundOutcome, FeedSource, FomcDay,
+    InformationError, NewsDataSettings, NewsDataSettingsRepository, NewsFeed, NewsMetadata,
+    PlanCollectionSchedule, SourceSwitch, SystemPortError, WriteCompleted, collection_due,
 };
+use application::{SecretStore, SourceState, SourceStatusRepository};
 use domain::{DataSource, Timestamp};
 use scheduler::LoopControl;
 use sources::{NewsLinkHints, TrackedTargets};
@@ -249,6 +250,22 @@ impl ScheduledFeed {
 struct FeedState {
     cursor: FeedCursor,
     last_attempt: Option<Timestamp>,
+    failures: u8,
+}
+
+pub const FAILURES_BEFORE_BACKOFF: u8 = 3;
+pub const BACKOFF_MINUTES: u16 = 360;
+
+fn effective_cadence(planned: CollectionCadence, failures: u8) -> CollectionCadence {
+    match (planned, failures >= FAILURES_BEFORE_BACKOFF) {
+        (CollectionCadence::Every(minutes), true) => {
+            match CollectionMinutes::try_new(BACKOFF_MINUTES) {
+                Ok(backoff) if backoff > minutes => CollectionCadence::Every(backoff),
+                Ok(_) | Err(_) => planned,
+            }
+        }
+        (cadence, _) => cadence,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -291,6 +308,7 @@ impl FeedCollectorWorker {
             .map(|_feed| FeedState {
                 cursor: FeedCursor::Start,
                 last_attempt: None,
+                failures: 0,
             })
             .collect();
         Self {
@@ -314,7 +332,8 @@ impl FeedCollectorWorker {
                 continue;
             }
             let now = self.inner.clock.now();
-            match collection_due(plan.cadence(feed.target), state.last_attempt, now) {
+            let cadence = effective_cadence(plan.cadence(feed.target), state.failures);
+            match collection_due(cadence, state.last_attempt, now) {
                 CollectionDue::Now => {}
                 CollectionDue::At(_) | CollectionDue::Off => continue,
             }
@@ -328,8 +347,19 @@ impl FeedCollectorWorker {
             report.attempted = report.attempted.saturating_add(1);
             state.last_attempt = Some(now);
             match runner.collect(state.cursor.clone()).await {
-                Ok(round) => state.cursor = round.cursor,
-                Err(_error) => report.failed = report.failed.saturating_add(1),
+                Ok(round) => {
+                    state.failures = match round.outcome {
+                        FeedRoundOutcome::SourceFailed => state.failures.saturating_add(1),
+                        FeedRoundOutcome::Collected
+                        | FeedRoundOutcome::NoData
+                        | FeedRoundOutcome::NotConfigured => 0,
+                    };
+                    state.cursor = round.cursor;
+                }
+                Err(_error) => {
+                    state.failures = state.failures.saturating_add(1);
+                    report.failed = report.failed.saturating_add(1);
+                }
             }
         }
         report
@@ -434,7 +464,7 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed + 'static> FeedRunner for AppFeedRunn
                 Some(found) => plain.with_names(found, hints.as_ref().map(tauri::State::inner)),
                 None => plain,
             };
-            let watched = WatchedFeed::new(&self.feed, &self.headlines);
+            let watched = WatchedFeed::new(&self.feed, &self.headlines, &self.repositories);
             let round = CollectFeed::new(
                 &self.repositories,
                 &self.repositories,
@@ -444,7 +474,11 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed + 'static> FeedRunner for AppFeedRunn
             .with_times(&times)
             .collect(&watched, cursor)
             .await;
-            record_feed(watched.diagnosis(&round, times.linked()).await);
+            record_feed(
+                watched
+                    .diagnosis(&round, times.linked(), times.probe())
+                    .await,
+            );
             round
         })
     }
@@ -493,6 +527,33 @@ impl<R: Runtime, P: PortTypes> AppCollectionPlanner<R, P> {
         }
     }
 
+    async fn dart_working(&self) -> bool {
+        let Some(repositories) = self.app.try_state::<Arc<SqliteRepositories>>() else {
+            return false;
+        };
+        match SourceStatusRepository::find(repositories.as_ref(), DataSource::DartDisclosureApi)
+            .await
+        {
+            Ok(Some(status)) => match status.state() {
+                SourceState::Healthy | SourceState::NoData => true,
+                SourceState::NeverRun | SourceState::NotConfigured | SourceState::Failed(_) => {
+                    false
+                }
+            },
+            Ok(None) | Err(_) => false,
+        }
+    }
+
+    async fn dart_key(&self) -> DartKeyState {
+        let Some(ports) = self.app.try_state::<Ports<P>>() else {
+            return DartKeyState::Missing;
+        };
+        match ports.secrets.load(application::SecretKey::DartApiKey).await {
+            Ok(Some(_present)) => DartKeyState::Configured,
+            Ok(None) | Err(_) => DartKeyState::Missing,
+        }
+    }
+
     async fn settings(&self) -> Option<NewsDataSettings> {
         let repositories = self.app.try_state::<Arc<SqliteRepositories>>()?;
         NewsDataSettingsRepository::load(repositories.as_ref())
@@ -515,7 +576,7 @@ impl<R: Runtime, P: PortTypes> CollectionPlanner for AppCollectionPlanner<R, P> 
             }
             .run(CollectionInputs {
                 fomc: FomcDay::Regular,
-                dart_key: DartKeyState::Missing,
+                dart_key: self.dart_key().await,
                 dart_usage: DartDailyUsage::new(DartCallCount::new(0), DartCallCount::new(1)),
             })
             .await;
@@ -532,13 +593,20 @@ impl<R: Runtime, P: PortTypes> CollectionPlanner for AppCollectionPlanner<R, P> 
 
     fn disabled(&self) -> SwitchFuture<'_> {
         Box::pin(async move {
-            let Some(settings) = self.settings().await else {
-                return BTreeSet::new();
+            let mut off: BTreeSet<DataSource> = match self.settings().await {
+                Some(settings) => DataSource::all()
+                    .into_iter()
+                    .filter(|source| settings.source_switch(*source) == SourceSwitch::Off)
+                    .collect(),
+                None => BTreeSet::new(),
             };
-            DataSource::all()
-                .into_iter()
-                .filter(|source| settings.source_switch(*source) == SourceSwitch::Off)
-                .collect()
+            let dart_primary = self.dart_key().await == DartKeyState::Configured
+                && !off.contains(&DataSource::DartDisclosureApi)
+                && self.dart_working().await;
+            if dart_primary {
+                off.insert(DataSource::KindDisclosure);
+            }
+            off
         })
     }
 }

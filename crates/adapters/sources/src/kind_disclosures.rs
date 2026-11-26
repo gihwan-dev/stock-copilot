@@ -14,7 +14,7 @@ use domain::{
 
 use crate::{
     DartCorpCodeMap, DartDisclosureClient, HttpDataSource, ParsedFeedItem, SourceFetch,
-    SourceFetchOutcome, SourceHttpClient, SourceRegistry, collapse_whitespace,
+    SourceFetchOutcome, SourceHttpClient, SourceRegistry, collapse_whitespace, feed_body_shape,
     http_error_to_information, http_status_to_error, parse_feed,
 };
 
@@ -373,27 +373,54 @@ fn parse_kind_title(raw_title: &str) -> (KindMarket, Option<String>) {
     (market, inferred_corp)
 }
 
-fn parse_kind_item(item: &ParsedFeedItem) -> Option<KindDisclosureEntry> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum KindSkip {
+    MissingField,
+    NoReceipt,
+    BadReceipt,
+    BadUrl,
+    BadTitle,
+    NoCorp,
+}
+
+impl KindSkip {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::MissingField => "missing-field",
+            Self::NoReceipt => "no-acptno",
+            Self::BadReceipt => "bad-acptno",
+            Self::BadUrl => "bad-url",
+            Self::BadTitle => "bad-title",
+            Self::NoCorp => "no-corp",
+        }
+    }
+}
+
+fn parse_kind_item(item: &ParsedFeedItem) -> Result<KindDisclosureEntry, KindSkip> {
     if item.title.is_empty() || item.link.is_empty() {
-        return None;
+        return Err(KindSkip::MissingField);
     }
-    let acpt_no = extract_query_param(&item.link, "acptNo")?;
-    let receipt_no = KindReceiptNo::try_new(&acpt_no).ok()?;
-    let url = NormalizedUrl::try_new(&item.link).ok()?;
-    let title = UntrustedText::try_new(&item.title).ok()?;
+    let acpt_no = extract_query_param(&item.link, "acptNo").ok_or(KindSkip::NoReceipt)?;
+    let receipt_no = KindReceiptNo::try_new(&acpt_no).map_err(|_bad| KindSkip::BadReceipt)?;
+    let url = NormalizedUrl::try_new(&item.link).map_err(|_bad| KindSkip::BadUrl)?;
+    let title = UntrustedText::try_new(&item.title).map_err(|_bad| KindSkip::BadTitle)?;
     let (market, inferred_corp) = parse_kind_title(&item.title);
-    let raw_corp = item.author.as_deref().or(inferred_corp.as_deref())?;
+    let raw_corp = item
+        .author
+        .as_deref()
+        .or(inferred_corp.as_deref())
+        .ok_or(KindSkip::NoCorp)?;
     let corp_clean = collapse_whitespace(raw_corp);
-    if corp_clean.is_empty() {
-        return None;
-    }
-    let corp_name = UntrustedText::try_new(&corp_clean).ok()?;
+    let corp_name = UntrustedText::try_new(&corp_clean)
+        .ok()
+        .filter(|_name| !corp_clean.is_empty())
+        .ok_or(KindSkip::NoCorp)?;
     let category = item
         .category
         .as_deref()
         .and_then(|value| UntrustedText::try_new(value).ok());
     let disclosure = Disclosure::new(ReceiptNo::Kind(receipt_no.clone()), url, title, None);
-    Some(KindDisclosureEntry {
+    Ok(KindDisclosureEntry {
         disclosure,
         receipt_no,
         market,
@@ -403,18 +430,73 @@ fn parse_kind_item(item: &ParsedFeedItem) -> Option<KindDisclosureEntry> {
     })
 }
 
-pub fn parse_kind_rss(bytes: &[u8]) -> Result<Vec<KindDisclosureEntry>, InformationError> {
-    let items = parse_feed(bytes)?;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KindParseReport {
+    pub entries: Vec<KindDisclosureEntry>,
+    pub detail: String,
+    pub rejected: KindRejection,
+    pub skipped: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KindRejection {
+    Accepted,
+    Rejected,
+}
+
+#[must_use]
+pub fn explain_kind_rss(bytes: &[u8]) -> KindParseReport {
+    let shape = feed_body_shape(bytes);
+    let items = match parse_feed(bytes) {
+        Ok(items) => items,
+        Err(_unreadable) => {
+            return KindParseReport {
+                entries: Vec::new(),
+                detail: format!("stage=feed shape={shape} len={}", bytes.len()),
+                rejected: KindRejection::Rejected,
+                skipped: 0,
+            };
+        }
+    };
     let mut entries = Vec::with_capacity(items.len());
+    let mut skipped: BTreeMap<KindSkip, usize> = BTreeMap::new();
     for item in &items {
-        if let Some(entry) = parse_kind_item(item) {
-            entries.push(entry);
+        match parse_kind_item(item) {
+            Ok(entry) => entries.push(entry),
+            Err(reason) => {
+                let slot = skipped.entry(reason).or_insert(0_usize);
+                *slot = slot.saturating_add(1);
+            }
         }
     }
-    if !items.is_empty() && entries.is_empty() {
-        return Err(schema_error());
+    let reasons = skipped
+        .iter()
+        .map(|(reason, count)| format!("{}:{count}", reason.name()))
+        .collect::<Vec<_>>()
+        .join(",");
+    let rejected = if !items.is_empty() && entries.is_empty() {
+        KindRejection::Rejected
+    } else {
+        KindRejection::Accepted
+    };
+    KindParseReport {
+        detail: format!(
+            "stage=items shape={shape} items={} kept={} skipped={reasons}",
+            items.len(),
+            entries.len()
+        ),
+        entries,
+        rejected,
+        skipped: skipped.values().sum(),
     }
-    Ok(entries)
+}
+
+pub fn parse_kind_rss(bytes: &[u8]) -> Result<Vec<KindDisclosureEntry>, InformationError> {
+    let report = explain_kind_rss(bytes);
+    match report.rejected {
+        KindRejection::Accepted => Ok(report.entries),
+        KindRejection::Rejected => Err(schema_error()),
+    }
 }
 
 #[derive(Debug)]
@@ -444,7 +526,18 @@ impl KindDisclosureClient {
                 return Err(http_status_to_error(HttpDataSource::KindDisclosure, status));
             }
         };
-        parse_kind_rss(payload.body())
+        let report = explain_kind_rss(payload.body());
+        if report.rejected == KindRejection::Rejected || report.skipped > 0 {
+            let kind = payload.content_type().unwrap_or("-");
+            self.client.report_rejection(
+                HttpDataSource::KindDisclosure,
+                &format!("{} ct={kind}", report.detail),
+            );
+        }
+        match report.rejected {
+            KindRejection::Accepted => Ok(report.entries),
+            KindRejection::Rejected => Err(schema_error()),
+        }
     }
 }
 
@@ -497,6 +590,28 @@ impl KindDisclosureFeed {
     pub const fn new(kind: KindDisclosureClient, window: KindFetchWindow) -> Self {
         Self { kind, window }
     }
+
+    async fn dart_rss_instead(
+        &self,
+        kind_error: InformationError,
+        since: FeedCursor,
+    ) -> Result<DataAvailability<(Vec<CollectedObservation>, FeedCursor)>, InformationError> {
+        let client = &self.kind.client;
+        match DartRssClient::new(Arc::clone(client)).fetch_today().await {
+            Ok(observations) => {
+                client.report_rejection(
+                    HttpDataSource::KindDisclosure,
+                    &format!("fallback=dart-rss items={}", observations.len()),
+                );
+                if observations.is_empty() {
+                    Ok(DataAvailability::NoData)
+                } else {
+                    Ok(DataAvailability::Available((observations, since)))
+                }
+            }
+            Err(_rss_error) => Err(kind_error),
+        }
+    }
 }
 
 impl NewsFeed for KindDisclosureFeed {
@@ -525,7 +640,10 @@ impl NewsFeed for KindDisclosureFeed {
     ) -> Result<DataAvailability<(Vec<CollectedObservation>, FeedCursor)>, InformationError> {
         let previous = decode_seen_receipts(&since);
         let seen: BTreeSet<&str> = previous.iter().map(String::as_str).collect();
-        let entries = self.kind.fetch_entries(self.window).await?;
+        let entries = match self.kind.fetch_entries(self.window).await {
+            Ok(entries) => entries,
+            Err(kind_error) => return self.dart_rss_instead(kind_error, since).await,
+        };
         let collected_at = self.kind.client.now();
         let mut latest_receipts = Vec::new();
         let mut observations = Vec::new();

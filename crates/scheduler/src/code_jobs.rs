@@ -207,6 +207,39 @@ impl<P: IntradayCompactionPort> ScheduledJob for IntradayCompactionJob<P> {
     }
 }
 
+pub trait NewsRetentionPort: Send + Sync {
+    fn prune_expired_news(&self) -> impl Future<Output = Result<u32, JobError>> + Send;
+}
+
+#[derive(Debug)]
+pub struct NewsRetentionJob<P> {
+    port: Arc<P>,
+}
+
+impl<P: NewsRetentionPort> NewsRetentionJob<P> {
+    #[must_use]
+    pub const fn new(port: Arc<P>) -> Self {
+        Self { port }
+    }
+}
+
+impl<P: NewsRetentionPort> ScheduledJob for NewsRetentionJob<P> {
+    fn id(&self) -> ScheduledJobId {
+        ScheduledJobId::NewsRetention
+    }
+
+    fn default_config(&self) -> JobConfig {
+        code_job(daily(3, 45))
+    }
+
+    fn run(&self, _now: Timestamp) -> JobFuture<'_> {
+        Box::pin(async move {
+            let removed = self.port.prune_expired_news().await?;
+            Ok(JobRunDetail::new("news_pruned", removed))
+        })
+    }
+}
+
 pub trait DailyValuationPort: Send + Sync {
     fn record_today(&self, now: Timestamp) -> impl Future<Output = Result<(), JobError>> + Send;
     fn missing_days(

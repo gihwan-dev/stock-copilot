@@ -1,7 +1,8 @@
 use application::{
-    CollectedCount, CollectedEntry, CollectedObservation, DataAvailability, DiagnosticEvent,
-    FeedCursor, FeedDiagnosis, FeedFailure, FeedRound, FeedRoundOutcome, FeedRunResult, FeedSource,
-    HeadlineAdmission, InformationError, NewsFeed, NewsMetadata, RecentHeadlines, SystemPortError,
+    CollectedCount, CollectedEntry, CollectedObservation, CollectedPresence,
+    CollectedPresenceCheck, DataAvailability, DiagnosticEvent, FeedCursor, FeedDiagnosis,
+    FeedFailure, FeedRound, FeedRoundOutcome, FeedRunResult, FeedSource, HeadlineAdmission,
+    InformationError, LinkProbe, NewsFeed, NewsMetadata, RecentHeadlines, SystemPortError,
     feed_data_source,
 };
 use domain::{InformationSource, NewsSource};
@@ -86,15 +87,17 @@ pub struct AdmittedBatch {
     pub duplicates: u32,
 }
 
-pub struct WatchedFeed<'a, F> {
+pub struct WatchedFeed<'a, F, K> {
     feed: &'a F,
     headlines: &'a SharedHeadlines,
+    known: &'a K,
     fetched: AtomicU32,
     duplicates: AtomicU32,
+    already: AtomicU32,
     failure: Mutex<Option<FeedFailure>>,
 }
 
-impl<F> fmt::Debug for WatchedFeed<'_, F> {
+impl<F, K> fmt::Debug for WatchedFeed<'_, F, K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("WatchedFeed")
     }
@@ -108,14 +111,16 @@ const fn failure_of(error: InformationError) -> FeedFailure {
     }
 }
 
-impl<'a, F: NewsFeed> WatchedFeed<'a, F> {
+impl<'a, F: NewsFeed, K: CollectedPresenceCheck> WatchedFeed<'a, F, K> {
     #[must_use]
-    pub const fn new(feed: &'a F, headlines: &'a SharedHeadlines) -> Self {
+    pub const fn new(feed: &'a F, headlines: &'a SharedHeadlines, known: &'a K) -> Self {
         Self {
             feed,
             headlines,
+            known,
             fetched: AtomicU32::new(0),
             duplicates: AtomicU32::new(0),
+            already: AtomicU32::new(0),
             failure: Mutex::const_new(None),
         }
     }
@@ -124,6 +129,7 @@ impl<'a, F: NewsFeed> WatchedFeed<'a, F> {
         &self,
         round: &Result<FeedRound, SystemPortError>,
         linked: u32,
+        probe: LinkProbe,
     ) -> FeedDiagnosis {
         let source = feed_data_source(&self.feed.source());
         let failure = *self.failure.lock().await;
@@ -156,8 +162,10 @@ impl<'a, F: NewsFeed> WatchedFeed<'a, F> {
             result,
             fetched: CollectedCount::new(self.fetched.load(Ordering::Relaxed)),
             duplicates: CollectedCount::new(self.duplicates.load(Ordering::Relaxed)),
+            known: CollectedCount::new(self.already.load(Ordering::Relaxed)),
             stored: CollectedCount::new(stored),
             linked: CollectedCount::new(linked),
+            probe,
         }
     }
 }
@@ -172,7 +180,26 @@ fn count(items: &[CollectedObservation]) -> u32 {
         .fold(0_u32, |total, _item| total.saturating_add(1))
 }
 
-impl<F: NewsFeed> NewsFeed for WatchedFeed<'_, F> {
+impl<F: NewsFeed, K: CollectedPresenceCheck> WatchedFeed<'_, F, K> {
+    async fn unseen(&self, observations: Vec<CollectedObservation>) -> Vec<CollectedObservation> {
+        let mut fresh = Vec::with_capacity(observations.len());
+        let mut already = 0_u32;
+        for observation in observations {
+            let url = match observation.entry() {
+                CollectedEntry::News(item) => item.collected().url(),
+                CollectedEntry::Disclosure(item) => item.collected().url(),
+            };
+            match self.known.presence(url).await {
+                Ok(CollectedPresence::Stored) => already = already.saturating_add(1),
+                Ok(CollectedPresence::New) | Err(_) => fresh.push(observation),
+            }
+        }
+        self.already.store(already, Ordering::Relaxed);
+        fresh
+    }
+}
+
+impl<F: NewsFeed, K: CollectedPresenceCheck> NewsFeed for WatchedFeed<'_, F, K> {
     fn source(&self) -> FeedSource {
         self.feed.source()
     }
@@ -190,7 +217,10 @@ impl<F: NewsFeed> NewsFeed for WatchedFeed<'_, F> {
                 self.fetched.store(count(&observations), Ordering::Relaxed);
                 let batch = self.headlines.admit(observations).await;
                 self.duplicates.store(batch.duplicates, Ordering::Relaxed);
-                Ok(DataAvailability::Available((batch.kept, next)))
+                Ok(DataAvailability::Available((
+                    self.unseen(batch.kept).await,
+                    next,
+                )))
             }
             Ok(other) => Ok(other),
             Err(error) => {

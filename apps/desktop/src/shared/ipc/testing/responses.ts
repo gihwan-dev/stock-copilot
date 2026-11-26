@@ -183,6 +183,7 @@ export const responses = {
   getNewsSettings: {
     aliases: [],
     keys: { dart: "unset", fred: "unset" },
+    routes: { dart: "unset", sec: "unset" },
     sec_contact: null,
     sources: [
       {
@@ -631,6 +632,7 @@ export const responses = {
   setNewsSource: {
     aliases: [],
     keys: { dart: "unset", fred: "unset" },
+    routes: { dart: "unset", sec: "unset" },
     sec_contact: null,
     sources: [
       {

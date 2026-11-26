@@ -728,7 +728,7 @@ impl SecEdgarClient {
     }
 }
 
-fn sec_feed_metadata() -> NewsMetadata {
+pub(crate) fn sec_feed_metadata() -> NewsMetadata {
     let spec = SourceRegistry::spec(HttpDataSource::SecEdgar);
     let retention = TimeSpan::try_new(
         SpanSeconds::new(DEFAULT_SEC_RETENTION_SECONDS),

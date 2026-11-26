@@ -18,6 +18,7 @@ pub enum ScheduledJobId {
     DailyBackup,
     UsEstimateResolution,
     IntradayWatch,
+    NewsRetention,
 }
 
 impl ScheduledJobId {
@@ -40,6 +41,7 @@ impl ScheduledJobId {
             Self::DailyBackup => "daily_backup",
             Self::UsEstimateResolution => "us_estimate_resolution",
             Self::IntradayWatch => "intraday_watch",
+            Self::NewsRetention => "news_retention",
         }
     }
 
@@ -62,6 +64,7 @@ impl ScheduledJobId {
             "daily_backup" => Some(Self::DailyBackup),
             "us_estimate_resolution" => Some(Self::UsEstimateResolution),
             "intraday_watch" => Some(Self::IntradayWatch),
+            "news_retention" => Some(Self::NewsRetention),
             _ => None,
         }
     }

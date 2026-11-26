@@ -33,12 +33,12 @@ mod tests {
             TreasuryAndFred, YahooFinance,
         };
         let table: [(CollectionTarget, [u16; 3]); 8] = [
-            (KindDisclosure, [2, 30, 30]),
-            (DartList, [10, 30, 30]),
-            (PressRss, [10, 30, 30]),
-            (HankyungRss, [30, 30, 30]),
-            (GoogleNews, [60, 60, 60]),
-            (YahooFinance, [60, 30, 60]),
+            (KindDisclosure, [2, 60, 30]),
+            (DartList, [10, 60, 30]),
+            (PressRss, [10, 60, 30]),
+            (HankyungRss, [30, 60, 30]),
+            (GoogleNews, [60, 120, 60]),
+            (YahooFinance, [60, 15, 60]),
             (SecEdgar, [60, 15, 60]),
             (CentralBankRss, [60, 60, 60]),
         ];

@@ -127,7 +127,7 @@ fn is_ascii_name(name: &str) -> bool {
 }
 
 fn is_korean_leading_boundary(character: char) -> bool {
-    character.is_whitespace() || "([{<'\"‘“「『·&,/…".contains(character)
+    character.is_whitespace() || "([{<'\"‘“「『·&,/…)]}>’”」』:|".contains(character)
 }
 
 fn is_trailing_boundary(character: char) -> bool {

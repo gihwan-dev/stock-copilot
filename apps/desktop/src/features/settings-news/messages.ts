@@ -46,6 +46,34 @@ const catalog = {
   "news.key.fred": { ko: "FRED 키" as UiText },
   "news.keyUnset": { ko: "키를 넣으면 켜집니다" as UiText },
   "news.keySet": { ko: "키가 저장돼 있어요" as UiText },
+  "news.keyBenefit.dart": {
+    ko: "DART 키가 있으면 공시를 DART에서 받아 정정 표시와 종목 코드까지 정확히 이어요." as UiText,
+  },
+  "news.keyBenefit.fred": {
+    ko: "FRED 키가 있으면 지수·원자재·달러·변동성 일별 값을 직접 받아요." as UiText,
+  },
+  "news.route.dart.unset": { ko: "지금은 KIND 공시로 받고 있어요." as UiText },
+  "news.route.dart.waiting": {
+    ko: "DART 첫 수집을 기다리는 중이에요. 그동안 KIND 공시로 받아요." as UiText,
+  },
+  "news.route.dart.connected": {
+    ko: "DART에 연결돼 공시를 DART에서 받고 있어요." as UiText,
+  },
+  "news.route.dart.failing": {
+    ko: "DART에 연결하지 못했어요. 키를 확인해 주세요. 그동안 KIND 공시로 받아요." as UiText,
+  },
+  "news.route.sec.unset": {
+    ko: "연락처가 없어서 미국 공시는 받지 않아요." as UiText,
+  },
+  "news.route.sec.waiting": {
+    ko: "SEC 첫 수집을 기다리는 중이에요." as UiText,
+  },
+  "news.route.sec.connected": {
+    ko: "SEC에 연결돼 미국 보유 종목 공시를 받고 있어요." as UiText,
+  },
+  "news.route.sec.failing": {
+    ko: "SEC에 연결하지 못했어요. 연락처 이메일을 확인해 주세요." as UiText,
+  },
   "news.keyInvalid": {
     ko: "키 형식이 맞지 않아요. 다시 복사해 붙여 넣으세요." as UiText,
   },

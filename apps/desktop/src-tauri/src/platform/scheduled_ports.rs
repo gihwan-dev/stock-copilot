@@ -156,6 +156,20 @@ impl<R: Runtime, P: PortTypes> IntradayCompactionPort for AppStoredJobs<R, P> {
     }
 }
 
+impl<R: Runtime, P: PortTypes> scheduler::NewsRetentionPort for AppStoredJobs<R, P> {
+    async fn prune_expired_news(&self) -> Result<u32, JobError> {
+        let ports = self.ports()?;
+        let removed = application::PruneCollectedNews {
+            store: &self.repositories,
+            clock: ports.clock.as_ref(),
+        }
+        .run()
+        .await
+        .map_err(storage)?;
+        Ok(*removed.as_u32())
+    }
+}
+
 impl<R: Runtime, P: PortTypes> DatabaseBackupPort for AppStoredJobs<R, P> {
     async fn back_up(
         &self,

@@ -1,7 +1,8 @@
 use crate::news_tracking::MatchName;
 use application::{
-    CollectedEntry, CollectedTimes, InformationKey, InformationLinks, NewsDataSettings,
-    NewsDataSettingsRepository, PublicationTime, StockAlias, SystemPortError, WriteCompleted,
+    CollectedCount, CollectedEntry, CollectedTimes, InformationKey, InformationLinks, LinkProbe,
+    NewsDataSettings, NewsDataSettingsRepository, PublicationTime, StockAlias, SystemPortError,
+    WriteCompleted,
 };
 use domain::{InformationSource, InstrumentId, NormalizedUrl, Timestamp, UntrustedText};
 use sources::NewsLinkHints;
@@ -19,6 +20,28 @@ pub trait TitleLinker: Send + Sync {
     fn instruments_named(&self, _title: &UntrustedText, _names: &[MatchName]) -> Vec<InstrumentId> {
         Vec::new()
     }
+
+    fn probe_named(&self, _title: &UntrustedText, _names: &[MatchName]) -> NameProbe {
+        NameProbe::Quiet
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameProbe {
+    Quiet,
+    NeedsContext,
+    GroupOnly,
+}
+
+#[derive(Debug, Default)]
+struct ProbeCounts {
+    name_seen: AtomicU32,
+    needs_context: AtomicU32,
+    group_only: AtomicU32,
+}
+
+fn bump(counter: &AtomicU32) {
+    let _previous = counter.fetch_add(1, Ordering::Relaxed);
 }
 
 #[derive(Clone)]
@@ -36,6 +59,7 @@ pub struct LinkingTimes<'a, S> {
     names: Option<&'a [MatchName]>,
     hints: Option<&'a NewsLinkHints>,
     linked: AtomicU32,
+    probe: ProbeCounts,
 }
 
 impl<S> fmt::Debug for LinkingTimes<'_, S> {
@@ -55,6 +79,11 @@ impl<'a, S> LinkingTimes<'a, S> {
             names: None,
             hints: None,
             linked: AtomicU32::new(0),
+            probe: ProbeCounts {
+                name_seen: AtomicU32::new(0),
+                needs_context: AtomicU32::new(0),
+                group_only: AtomicU32::new(0),
+            },
         }
     }
 
@@ -72,6 +101,39 @@ impl<'a, S> LinkingTimes<'a, S> {
     #[must_use]
     pub fn linked(&self) -> u32 {
         self.linked.load(Ordering::Relaxed)
+    }
+
+    #[must_use]
+    pub fn probe(&self) -> LinkProbe {
+        let read = |counter: &AtomicU32| CollectedCount::new(counter.load(Ordering::Relaxed));
+        LinkProbe {
+            name_seen: read(&self.probe.name_seen),
+            needs_context: read(&self.probe.needs_context),
+            group_only: read(&self.probe.group_only),
+        }
+    }
+
+    fn count_probe(
+        &self,
+        linker: &dyn TitleLinker,
+        entry: &CollectedEntry,
+        names: &[MatchName],
+        outcome: LinkResult,
+    ) {
+        let title = title_of(entry);
+        let text = title.as_untrusted_str();
+        if !names.iter().any(|name| text.contains(name.name.as_str())) {
+            return;
+        }
+        bump(&self.probe.name_seen);
+        if outcome == LinkResult::Linked {
+            return;
+        }
+        match linker.probe_named(title, names) {
+            NameProbe::Quiet => {}
+            NameProbe::NeedsContext => bump(&self.probe.needs_context),
+            NameProbe::GroupOnly => bump(&self.probe.group_only),
+        }
     }
 }
 
@@ -102,6 +164,12 @@ const fn title_of(entry: &CollectedEntry) -> &UntrustedText {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LinkResult {
+    Linked,
+    Unlinked,
+}
+
 fn named(
     linker: &dyn TitleLinker,
     entry: &CollectedEntry,
@@ -127,7 +195,14 @@ where
             return Ok(());
         };
         let instruments = if let Some(names) = self.names {
-            named(linker, entry, names, self.hints)
+            let found = named(linker, entry, names, self.hints);
+            let result = if found.is_empty() {
+                LinkResult::Unlinked
+            } else {
+                LinkResult::Linked
+            };
+            self.count_probe(linker, entry, names, result);
+            found
         } else {
             let settings = self
                 .store

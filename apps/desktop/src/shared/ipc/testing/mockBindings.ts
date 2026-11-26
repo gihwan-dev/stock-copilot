@@ -1332,6 +1332,11 @@ export type UiDisclosureKey = {
   receipt_no: string;
 };
 
+export type UiDisclosureRoutes = {
+  dart: UiRouteState;
+  sec: UiRouteState;
+};
+
 export type UiDisclosureSource = "Kind" | "Dart" | "SecEdgar";
 
 export type UiEvent =
@@ -2384,6 +2389,7 @@ export type UiNewsSettings_Deserialize = {
   sec_contact?: string | null;
   wake: UiWake;
   aliases: UiAliasRow[];
+  routes: UiDisclosureRoutes;
 };
 
 export type UiNewsSettings_Serialize = {
@@ -2392,6 +2398,7 @@ export type UiNewsSettings_Serialize = {
   sec_contact: string | null;
   wake: UiWake;
   aliases: UiAliasRow[];
+  routes: UiDisclosureRoutes;
 };
 
 export type UiNewsSource =
@@ -2501,6 +2508,8 @@ export type UiRiskSettingsView = {
   profile: UiProfileDraft;
   order: UiOrderSettingsDraft;
 };
+
+export type UiRouteState = "unset" | "waiting" | "connected" | "failing";
 
 export type UiScheduledJob =
   | "morning-briefing"

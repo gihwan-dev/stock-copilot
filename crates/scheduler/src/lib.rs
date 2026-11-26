@@ -20,7 +20,8 @@ pub use code_jobs::{
     BACKUP_RETENTION_DAYS, BackupResult, BackupRetention, CompactionResult, DailyBackupJob,
     DailyValuationJob, DailyValuationPort, DatabaseBackupPort, EstimateResolutionJob,
     EstimateResolutionPort, INTRADAY_RETENTION_DAYS, IntradayCompactionJob, IntradayCompactionPort,
-    ResolutionTally, ResolveEstimatesRunner, SpecWatchPort, SpecWatchResult, TossSpecWatchJob,
+    NewsRetentionJob, NewsRetentionPort, ResolutionTally, ResolveEstimatesRunner, SpecWatchPort,
+    SpecWatchResult, TossSpecWatchJob,
 };
 pub use engine::{
     DEFAULT_TICK_INTERVAL_SECONDS, DiscardJobRecords, JobRecordSink, JobTriggers, Scheduler,
