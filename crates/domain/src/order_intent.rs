@@ -90,6 +90,14 @@ impl ResolvedOrderInstrument {
         }
     }
 
+    pub fn reported_by_broker(
+        symbol: Symbol,
+        market: crate::KnownMarket,
+    ) -> Result<Self, crate::MarketDataError> {
+        crate::validate_market_symbol(&symbol, market)?;
+        Ok(Self::from_known_market(symbol, market))
+    }
+
     #[must_use]
     pub fn symbol(&self) -> &Symbol {
         &self.symbol

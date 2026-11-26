@@ -133,3 +133,25 @@ pub fn prepare_directory(path: &DatabasePath) -> Result<(), SystemPortError> {
     }
     Ok(())
 }
+
+const SETUP_POLL: std::time::Duration = std::time::Duration::from_millis(25);
+const SETUP_WAIT_LIMIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SetupWait {
+    Settled(DatabaseStatus),
+    TimedOut,
+}
+
+pub async fn wait_for_setup<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> SetupWait {
+    let waited = tokio::time::timeout(SETUP_WAIT_LIMIT, async {
+        loop {
+            if let Some(status) = tauri::Manager::try_state::<DatabaseStatus>(app) {
+                return *status.inner();
+            }
+            tokio::time::sleep(SETUP_POLL).await;
+        }
+    })
+    .await;
+    waited.map_or(SetupWait::TimedOut, SetupWait::Settled)
+}

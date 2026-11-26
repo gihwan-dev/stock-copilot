@@ -226,7 +226,15 @@ fn holding_row(holding: &ValuedHolding, directory: &InstrumentDirectory) -> Opti
     let profit = holding.valuation().selected_profit().ok()?.value();
     Some(UiHolding {
         symbol: symbol.as_str().to_owned(),
-        name: display_name(symbol, directory),
+        name: directory.name(symbol).map_or_else(
+            || {
+                holding.holding().reported_name().map_or_else(
+                    || symbol.as_str().to_owned(),
+                    |name| name.as_str().to_owned(),
+                )
+            },
+            |name| name.as_str().to_owned(),
+        ),
         trading: match directory.entry(symbol).map(|entry| entry.trading) {
             Some(domain::MasterTradingState::Suspended) => UiTrading::Suspended,
             Some(domain::MasterTradingState::Trading) | None => UiTrading::Trading,

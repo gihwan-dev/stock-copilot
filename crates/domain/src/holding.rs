@@ -1,4 +1,7 @@
-use crate::{Currency, Money, Price, Quantity, Ratio, ResolvedOrderInstrument, Timestamp};
+use crate::{
+    Currency, DisplayInstrumentName, Money, Price, Quantity, Ratio, ResolvedOrderInstrument,
+    Timestamp,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HoldingError {
@@ -137,6 +140,7 @@ pub struct Holding {
     current_price: Option<Price>,
     reported: Option<ReportedHolding>,
     observed_at: Timestamp,
+    reported_name: Option<DisplayInstrumentName>,
 }
 
 impl Holding {
@@ -169,7 +173,17 @@ impl Holding {
             current_price,
             reported,
             observed_at,
+            reported_name: None,
         })
+    }
+    #[must_use]
+    pub fn with_reported_name(mut self, name: DisplayInstrumentName) -> Self {
+        self.reported_name = Some(name);
+        self
+    }
+    #[must_use]
+    pub const fn reported_name(&self) -> Option<&DisplayInstrumentName> {
+        self.reported_name.as_ref()
     }
     #[must_use]
     pub fn evaluate(&self) -> crate::HoldingValuation {

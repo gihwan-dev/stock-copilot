@@ -1,9 +1,10 @@
 use crate::account_read::invalid;
 use application::{HoldingsObservation, ReadEndpoint, ResponseMismatch};
 use domain::{
-    AcquisitionPrice, Currency, CurrencyAmounts, DailyProfitLoss, Holding, HoldingObservation,
-    KnownMarket, MasterInstrumentFacts, Money, NumericInput, PortfolioDailyProfitLoss, Price,
-    Quantity, Ratio, ReportedHolding, ReportedPortfolio, Symbol, Timestamp,
+    AcquisitionPrice, Currency, CurrencyAmounts, DailyProfitLoss, DisplayInstrumentName, Holding,
+    HoldingObservation, KnownMarket, MasterInstrumentFacts, Money, NumericInput,
+    PortfolioDailyProfitLoss, Price, Quantity, Ratio, ReportedHolding, ReportedPortfolio, Symbol,
+    Timestamp,
 };
 use serde_json::Value;
 
@@ -49,6 +50,7 @@ struct ParsedHolding {
     acquisition: AcquisitionPrice,
     price: Price,
     reported: ReportedHolding,
+    name: Option<DisplayInstrumentName>,
 }
 
 fn parse_holding(value: &Value) -> Conversion<ParsedHolding> {
@@ -89,34 +91,87 @@ fn parse_holding(value: &Value) -> Conversion<ParsedHolding> {
         acquisition,
         price,
         reported,
+        name: value
+            .get("name")
+            .and_then(Value::as_str)
+            .and_then(|name| DisplayInstrumentName::try_new(name).ok()),
     })
+}
+
+enum Matched {
+    Master(Holding),
+    Reported(Holding),
+}
+
+impl Matched {
+    fn holding(self) -> Holding {
+        match self {
+            Self::Master(holding) | Self::Reported(holding) => holding,
+        }
+    }
 }
 
 fn holding(
     parsed: &ParsedHolding,
     master: &MasterInstrumentFacts,
     observed: Timestamp,
-    master_errors: crate::account_read::MasterErrorMode,
-) -> Conversion<Holding> {
-    let identified = master
-        .instruments()
+    (master_errors, unmatched): (
+        crate::account_read::MasterErrorMode,
+        crate::account_read::UnmatchedHoldings,
+    ),
+) -> Conversion<Matched> {
+    let identified = master.instruments().iter().find(|row| {
+        row.row().symbol == parsed.symbol
+            && row.row().currency == parsed.currency
+            && row
+                .quote_instrument()
+                .is_ok_and(|instrument| *instrument.market() == parsed.market)
+    });
+    let observation = HoldingObservation::new(Some(parsed.price), Some(parsed.reported), observed);
+    match (identified, unmatched) {
+        (Some(instrument), _) => Holding::new(
+            instrument.held_instrument().map_err(|_error| failure())?,
+            parsed.quantity,
+            parsed.acquisition,
+            observation,
+        )
+        .map(Matched::Master)
+        .map_err(|_error| failure()),
+        (None, crate::account_read::UnmatchedHoldings::Reject) => {
+            Err(master_errors.missing(ReadEndpoint::Holdings, failure()))
+        }
+        (None, crate::account_read::UnmatchedHoldings::ShowReported) => {
+            let instrument = domain::ResolvedOrderInstrument::reported_by_broker(
+                parsed.symbol.clone(),
+                parsed.market,
+            )
+            .map_err(|_error| failure())?;
+            let holding =
+                Holding::new(instrument, parsed.quantity, parsed.acquisition, observation)
+                    .map_err(|_error| failure())?;
+            Ok(Matched::Reported(match parsed.name.clone() {
+                Some(name) => holding.with_reported_name(name),
+                None => holding,
+            }))
+        }
+    }
+}
+fn report_unmatched(matched: &[Matched]) {
+    let unmatched = matched
         .iter()
-        .find(|row| {
-            row.row().symbol == parsed.symbol
-                && row.row().currency == parsed.currency
-                && row
-                    .quote_instrument()
-                    .is_ok_and(|instrument| *instrument.market() == parsed.market)
+        .filter(|item| match item {
+            Matched::Reported(_) => true,
+            Matched::Master(_) => false,
         })
-        .ok_or_else(|| master_errors.missing(ReadEndpoint::Holdings, failure()))?;
-    let instrument = identified.held_instrument().map_err(|_error| failure())?;
-    Holding::new(
-        instrument,
-        parsed.quantity,
-        parsed.acquisition,
-        HoldingObservation::new(Some(parsed.price), Some(parsed.reported), observed),
-    )
-    .map_err(|_error| failure())
+        .count();
+    if unmatched > 0 {
+        crate::diagnostics::validation_failed(
+            ReadEndpoint::Holdings,
+            &format!(
+                "{unmatched} holdings not matched to the instrument master are shown as reported"
+            ),
+        );
+    }
 }
 fn validate_numbers(value: &Value) -> Conversion<()> {
     match value {
@@ -144,7 +199,10 @@ pub(crate) fn holdings(
     value: &Value,
     master: &MasterInstrumentFacts,
     observed: Timestamp,
-    master_errors: crate::account_read::MasterErrorMode,
+    modes: (
+        crate::account_read::MasterErrorMode,
+        crate::account_read::UnmatchedHoldings,
+    ),
 ) -> Conversion<HoldingsObservation> {
     use crate::diagnostics::staged;
     const ENDPOINT: ReadEndpoint = ReadEndpoint::Holdings;
@@ -180,16 +238,18 @@ pub(crate) fn holdings(
         "portfolio summary rejected",
         summary(value, observed),
     )?;
-    let holdings = parsed
+    let matched = parsed
         .iter()
         .map(|row| {
             staged(
                 ENDPOINT,
                 "holding not matched to the instrument master",
-                holding(row, master, observed, master_errors),
+                holding(row, master, observed, modes),
             )
         })
         .collect::<Conversion<Vec<_>>>()?;
+    report_unmatched(&matched);
+    let holdings = matched.into_iter().map(Matched::holding).collect();
     Ok(HoldingsObservation::from_broker_result(holdings, reported))
 }
 

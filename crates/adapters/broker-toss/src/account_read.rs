@@ -8,6 +8,12 @@ use domain::{
     BrokerAccountTypeCode, MasterInstrumentFacts, Timestamp,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnmatchedHoldings {
+    Reject,
+    ShowReported,
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum MasterErrorMode {
     Legacy,
@@ -39,6 +45,7 @@ pub struct TossAccountRead<Store, Time, Renewal> {
     clock: Time,
     master: std::sync::RwLock<std::sync::Arc<MasterInstrumentFacts>>,
     candle_sessions: Vec<domain::MarketSession>,
+    unmatched: UnmatchedHoldings,
 }
 impl<Store, Time, Renewal> std::fmt::Debug for TossAccountRead<Store, Time, Renewal> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -72,7 +79,14 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
             clock,
             master: std::sync::RwLock::new(std::sync::Arc::new(master)),
             candle_sessions: Vec::new(),
+            unmatched: UnmatchedHoldings::Reject,
         }
+    }
+
+    #[must_use]
+    pub const fn showing_unmatched_holdings(mut self) -> Self {
+        self.unmatched = UnmatchedHoldings::ShowReported;
+        self
     }
     async fn read(
         &self,
@@ -127,7 +141,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
             &value,
             &self.market_master(),
             self.clock.now(),
-            master_errors,
+            (master_errors, self.unmatched),
         )
     }
     pub(crate) async fn fetch_transactions(
@@ -170,7 +184,13 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
         issuer: &Issuer,
         market: domain::KnownMarket,
     ) -> Result<domain::InstrumentMaster, PortError> {
-        crate::instrument_master::fetch_parts(self, authority, issuer, market).await
+        crate::instrument_master::fetch_parts(
+            self,
+            (authority, issuer),
+            market,
+            crate::instrument_master::RowPolicy::SkipInvalid,
+        )
+        .await
     }
     pub async fn reconnect(&self) -> Result<(), crate::TokenError> {
         self.tokens

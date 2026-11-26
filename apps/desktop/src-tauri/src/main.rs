@@ -859,6 +859,7 @@ fn start_toss_check(app: &tauri::AppHandle<tauri::Wry>) {
         let link = state.inner().clone();
         let handle = app.clone();
         let _check = tauri::async_runtime::spawn(async move {
+            let _setup = src_tauri::database::wait_for_setup(&handle).await;
             restore_saved_holdings(&handle).await;
             loop {
                 let _state = link.backend().check().await;
@@ -1117,11 +1118,10 @@ where
     );
     let master = domain::MasterInstrumentFacts::try_new(Vec::new())
         .map_err(|_error| broker_toss::TossHttpError::Configuration)?;
-    Ok(broker_toss::TossAccountRead::new(
-        tokens,
-        SharedClock(clock),
-        master,
-    ))
+    Ok(
+        broker_toss::TossAccountRead::new(tokens, SharedClock(clock), master)
+            .showing_unmatched_holdings(),
+    )
 }
 
 const fn probe_failure(error: broker_toss::TokenError) -> ProbeFailure {
@@ -4019,6 +4019,172 @@ mod toss_assembly_tests {
             Ok(TossConnectionState::NeedsKeys)
         );
         assert_eq!(server.finish().expect("요청"), Vec::<u8>::new());
+    }
+
+    fn odd_master_and_unmatched_holdings_script() -> Vec<Vec<u8>> {
+        let empty = serde_json::json!([]);
+        let kr_listing = serde_json::json!([
+            {"symbol":"005930","name":"삼성전자","securityType":"STOCK","isCommonShare":true,"isinCode":"KR7005930003"},
+            {"symbol":"000660","name":"합성 빈 ISIN","securityType":"STOCK","isCommonShare":true,"isinCode":""},
+            {"symbol":"Q500001","name":"합성 ETN","securityType":"ETN","isCommonShare":true,"isinCode":"KRQ500001001"},
+            {"symbol":"005930","name":"삼성전자 중복","securityType":"STOCK","isCommonShare":true,"isinCode":"KR7005930003"}
+        ]);
+        let kr_details = serde_json::json!([
+            {"symbol":"005930","name":"삼성전자보통주","englishName":"Samsung","isinCode":"KR7005930003","market":"KOSPI","securityType":"STOCK","isCommonShare":true,"status":"ACTIVE","currency":"KRW","listDate":null,"delistDate":null,"sharesOutstanding":"91","leverageFactor":null,"koreanMarketDetail":{"liquidationTrading":false,"nxtSupported":false,"krxTradingSuspended":false,"nxtTradingSuspended":false}},
+            {"symbol":"Q500001","name":"합성 ETN","englishName":"Synthetic ETN","isinCode":"KRQ500001001","market":"KOSPI","securityType":"ETN","isCommonShare":true,"status":"ACTIVE","currency":"KRW","sharesOutstanding":"1","leverageFactor":"2.0","koreanMarketDetail":{"liquidationTrading":false,"nxtSupported":false,"krxTradingSuspended":false,"nxtTradingSuspended":null}}
+        ]);
+        let us_listing = serde_json::json!([
+            {"symbol":"AAPL","name":"애플","securityType":"STOCK","isCommonShare":true,"isinCode":"US0378331005"},
+            {"symbol":"BRK/B","name":"합성 버크셔","securityType":"STOCK","isCommonShare":false,"isinCode":"US0846707026"}
+        ]);
+        let us_details = serde_json::json!([
+            {"symbol":"AAPL","name":"애플","englishName":"Apple","isinCode":"US0378331005","market":"NASDAQ","securityType":"STOCK","isCommonShare":true,"status":"ACTIVE","currency":"USD","sharesOutstanding":"15000","koreanMarketDetail":{"liquidationTrading":false,"nxtSupported":false,"krxTradingSuspended":false,"nxtTradingSuspended":null}},
+            {"symbol":"MSFT","name":"합성 요청 외","englishName":"Unrequested","isinCode":"US5949181045","market":"NASDAQ","securityType":"STOCK","isCommonShare":true,"status":"ACTIVE","currency":"USD","sharesOutstanding":"1","koreanMarketDetail":null}
+        ]);
+        let recorded: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                "../../../crates/adapters/broker-toss/tests/recordings/t05-holdings.json",
+            )
+            .expect("녹화"),
+        )
+        .expect("JSON");
+        let mut holdings = recorded["body"].clone();
+        holdings["result"]["items"][1]["symbol"] = serde_json::json!("TSLA");
+        vec![
+            token_ok(),
+            brokerage_accounts(),
+            listing(&kr_listing),
+            listing(&empty),
+            listing(&empty),
+            listing(&kr_details),
+            listing(&empty),
+            listing(&us_listing),
+            listing(&empty),
+            listing(&empty),
+            listing(&us_details),
+            brokerage_accounts(),
+            ok(&holdings),
+            buying_power("KRW", "5000000"),
+            buying_power("USD", "3500.525"),
+            ok(
+                &serde_json::json!({"result":{"baseCurrency":"USD","quoteCurrency":"KRW","rate":"1381.7","midRate":"1374.2","basisPoint":"54.58","rateChangeType":"UP","validFrom":"2000-01-01T00:00:00+09:00","validUntil":"2100-01-01T00:00:00+09:00"}}),
+            ),
+        ]
+    }
+
+    async fn assert_odd_master_holdings(parts: &HoldingsParts) {
+        use application::PortfolioRepository;
+        let name = |symbol: &str| {
+            parts
+                .names
+                .name(&domain::Symbol::try_new(symbol).expect("심볼"))
+                .map(|found| found.as_str().to_owned())
+        };
+        assert_eq!(name("005930"), Some(String::from("삼성전자보통주")));
+        assert_eq!(name("AAPL"), Some(String::from("애플")));
+        assert_eq!(name("Q500001"), None);
+        assert_eq!(name("MSFT"), None);
+        let record = parts
+            .portfolios
+            .latest(&domain::AccountId::new(413))
+            .await
+            .expect("조회")
+            .expect("기록");
+        let domain::SyncOutcome::Complete(portfolio) = record.outcome() else {
+            panic!("완료여야 함: {:?}", record.outcome());
+        };
+        let shown = portfolio
+            .holdings()
+            .iter()
+            .map(|holding| {
+                (
+                    holding.instrument().symbol().as_str().to_owned(),
+                    holding
+                        .reported_name()
+                        .map(|reported| reported.as_str().to_owned()),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            shown,
+            vec![
+                (String::from("005930"), None),
+                (String::from("TSLA"), Some(String::from("Apple Inc."))),
+            ]
+        );
+    }
+
+    #[test]
+    fn first_run_with_odd_master_rows_still_shows_every_holding() {
+        let server = ScriptedHttpServer::start(odd_master_and_unmatched_holdings_script())
+            .expect("가짜 토스");
+        let secrets = memory_secrets();
+        tauri::async_runtime::block_on(store_keys(&secrets));
+        let events = Arc::new(application::EventBus::default());
+        let broker = Arc::new(
+            super::live_toss_read(
+                &broker_toss::TossEndpoint::local(server.port()).expect("주소"),
+                Arc::clone(&secrets),
+                Arc::new(platform_macos::SystemClock::new().expect("시계")),
+                Arc::clone(&events),
+            )
+            .expect("어댑터"),
+        );
+        let directory = std::path::PathBuf::from("../../../target/fin-hold")
+            .join(format!("odd-master-{}", std::process::id()));
+        let _stale = std::fs::remove_dir_all(&directory);
+        tauri::async_runtime::block_on(async {
+            let repositories = open_store(&directory).await;
+            let parts = holdings_parts(&broker, &repositories, &events);
+            assert_eq!(
+                parts.listener.restore_saved().await,
+                src_tauri::holdings_link::RefreshOutcome::Fresh,
+                "빈 저장소는 오류가 아니다"
+            );
+            let _selected =
+                AccountSelector::new(Arc::clone(&broker), parts.slot.clone(), Arc::clone(&events))
+                    .select()
+                    .await;
+            assert_eq!(
+                parts.listener.refresh_holdings().await,
+                src_tauri::holdings_link::RefreshOutcome::Refreshed
+            );
+            assert_odd_master_holdings(&parts).await;
+            let _closed = repositories.shared().close().await;
+        });
+        let requests = String::from_utf8(server.finish().expect("요청")).expect("UTF-8");
+        assert_eq!(requests.matches("GET /api/v1/stocks?").count(), 2);
+        assert!(requests.contains("Q500001"));
+        assert!(!requests.contains("000660"));
+        assert!(!requests.contains("BRK"));
+        let _cleaned = std::fs::remove_dir_all(&directory);
+    }
+
+    async fn wait_for(
+        app: tauri::AppHandle<tauri::test::MockRuntime>,
+    ) -> src_tauri::database::SetupWait {
+        src_tauri::database::wait_for_setup(&app).await
+    }
+
+    #[test]
+    fn toss_check_waits_until_setup_has_settled_the_database() {
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("앱");
+        let handle = app.handle().clone();
+        let waited = tauri::async_runtime::block_on(async {
+            let waiter = handle.clone();
+            let waiting = tauri::async_runtime::spawn(wait_for(waiter));
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            assert!(!waiting.inner().is_finished(), "설정 전에는 기다린다");
+            let _managed =
+                tauri::Manager::manage(&handle, src_tauri::database::DatabaseStatus::Ready);
+            waiting.await.expect("대기")
+        });
+        assert_eq!(
+            waited,
+            src_tauri::database::SetupWait::Settled(src_tauri::database::DatabaseStatus::Ready)
+        );
     }
 }
 
