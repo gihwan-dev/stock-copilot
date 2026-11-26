@@ -67,6 +67,20 @@ export const parseFreeText = (input: unknown): Result<FreeText, BrandError> =>
 export const emptyFreeText = "" as FreeText;
 export const appendFreeText = (head: FreeText, tail: FreeText): FreeText =>
   (head + tail) as FreeText;
+export type FreeTextFold =
+  | { readonly kind: "whole" }
+  | { readonly kind: "folded"; readonly head: FreeText };
+const STRUCTURED_TEXT = /^\s*(?:\||#{1,6}\s|[-*•]\s|\d+[.)]\s)/mu;
+const SENTENCE_BREAK = /(?<=[.?!。])\s+/u;
+export const foldFreeText = (text: FreeText, visible: 4): FreeTextFold => {
+  if (STRUCTURED_TEXT.test(text)) return { kind: "whole" };
+  const sentences = text.trim().split(SENTENCE_BREAK);
+  if (sentences.length <= visible) return { kind: "whole" };
+  return {
+    kind: "folded",
+    head: sentences.slice(0, visible).join(" ") as FreeText,
+  };
+};
 export type ExternalUrl = string & Brand<"ExternalUrl">;
 export const externalUrlSchema = z
   .url({ protocol: /^https$/u })

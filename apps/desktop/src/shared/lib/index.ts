@@ -41,6 +41,7 @@ export type { ChartDecimal, ChartCoordinate, ChartPath } from "./brand";
 export { parseChartDecimal, chartCoordinate, chartPath } from "./brand";
 export type {
   FreeText,
+  FreeTextFold,
   ExternalUrl,
   CanvasColor,
   PanelBounds,
@@ -48,6 +49,7 @@ export type {
 } from "./brand";
 export {
   appendFreeText,
+  foldFreeText,
   clampPanelShare,
   emptyFreeText,
   parseCanvasColor,

@@ -131,8 +131,26 @@ pub struct UiPrincipleCheck {
     pub cash: UiPrincipleStatus,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum UiLimitSource {
+    #[serde(rename = "user-setting")]
+    UserSetting,
+    #[serde(rename = "app-default")]
+    AppDefault,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiValuationFx {
+    pub pair: String,
+    pub rate: UiMoney,
+    pub basis: String,
+    pub as_of: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct UiTradeSimulation {
+    pub limits_source: UiLimitSource,
+    pub valuation_fx: Option<UiValuationFx>,
     pub outcome: UiSimulationOutcome,
     pub problem_symbol: Option<String>,
     pub fills: Vec<UiSimulatedFill>,
@@ -205,6 +223,8 @@ fn parse_trade(
 
 fn failure(outcome: UiSimulationOutcome, symbol: Option<&Symbol>) -> UiTradeSimulation {
     UiTradeSimulation {
+        limits_source: UiLimitSource::AppDefault,
+        valuation_fx: None,
         outcome,
         problem_symbol: symbol.map(|found| found.as_str().to_owned()),
         fills: Vec::new(),
@@ -416,6 +436,16 @@ const fn matches_holding(key: &AssetInstrument) -> UiPrincipleStatus {
     }
 }
 
+fn valuation_fx(before: &Allocation) -> Option<UiValuationFx> {
+    let rate = domain::valuation_fx_rate(before.valuation())?;
+    Some(UiValuationFx {
+        pair: String::from("USD/KRW"),
+        rate: ui_money(&rate.quote_per_base().as_money())?,
+        basis: String::from("portfolio-valuation"),
+        as_of: super::briefing::kst_iso(rate.as_of())?,
+    })
+}
+
 pub(crate) fn simulated_view(
     before: &Allocation,
     trades: &[SimulatedTrade],
@@ -443,6 +473,8 @@ pub(crate) fn simulated_view(
     .into_parts()
     .0;
     UiTradeSimulation {
+        limits_source: UiLimitSource::AppDefault,
+        valuation_fx: valuation_fx(before),
         outcome: UiSimulationOutcome::Simulated,
         problem_symbol: None,
         fills: fill_rows(result.fills()),
@@ -470,21 +502,29 @@ pub async fn simulate_trades<R: Runtime>(
     else {
         return Ok(failure(UiSimulationOutcome::InvalidTrade, None));
     };
-    let profile = screen
+    let saved = screen
         .backend()
         .load_settings()
         .await
         .ok()
-        .and_then(|loaded| loaded.profile)
-        .unwrap_or_else(InvestorProfile::default);
+        .and_then(|loaded| loaded.profile);
+    let limits_source = match saved {
+        Some(_) => UiLimitSource::UserSetting,
+        None => UiLimitSource::AppDefault,
+    };
+    let profile = saved.unwrap_or_else(InvestorProfile::default);
     let principles = match app.try_state::<SystemDataIpcState>() {
         Some(state) => load_principles(state.inner()).await.ok(),
         None => None,
     };
-    Ok(simulated_view(
+    let view = simulated_view(
         allocation,
         &trades,
         &directory,
         (&profile, principles.as_ref()),
-    ))
+    );
+    Ok(UiTradeSimulation {
+        limits_source,
+        ..view
+    })
 }

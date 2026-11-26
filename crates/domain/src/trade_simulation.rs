@@ -210,7 +210,7 @@ fn market_currency(instrument: &ResolvedOrderInstrument) -> Option<Currency> {
     }
 }
 
-fn fx_rate(valuation: &PortfolioValuation) -> Option<FxRate> {
+pub fn valuation_fx_rate(valuation: &PortfolioValuation) -> Option<FxRate> {
     let rates = match valuation.assets() {
         Total::Complete(value) => value.value().clone(),
         Total::Incomplete(value) => value.subtotal().clone(),
@@ -284,7 +284,7 @@ pub fn simulate_trades(
     )
     .map_err(|_invalid| TradeSimulationError::InvalidPortfolio)?;
     Ok(TradeSimulation {
-        valuation: portfolio.evaluate(fx_rate(valuation)),
+        valuation: portfolio.evaluate(valuation_fx_rate(valuation)),
         fills,
     })
 }

@@ -281,13 +281,13 @@ const thesisFor = (symbol, spec) => ({
   pending_review_sequences: [],
 });
 
-const marketResponse = (spec) => ({
+const marketResponse = (spec, fx) => ({
   collected_at: AS_OF,
   indicators: Object.entries(
     spec ?? {
       kospi: { value: 2650.3, change: 0.002 },
       kosdaq: { value: 812.4, change: -0.004 },
-      usd_krw: { value: 1385.2, change: 0.001 },
+      usd_krw: { value: fx ?? 1385, change: 0.001 },
     },
   ).map(([name, value]) => ({
     name,
@@ -559,6 +559,10 @@ export const appSimulate = (scenario, args) => {
   const cashPercent = (cashKrw / total) * 100;
   const holdingsAfter = instruments.length;
   return {
+    limits_source: scenario.profile === "default" ? "app-default" : "user-setting",
+    valuation_fx: account.fx === null
+      ? null
+      : { pair: "USD/KRW", rate: money(fx, "KRW"), basis: "portfolio-valuation", as_of: AS_OF },
     outcome: "simulated",
     problem_symbol: null,
     principles: {
@@ -621,7 +625,7 @@ export const buildResponses = (scenario) => {
     get_allocation: allocationResponse(account),
     get_profile: profileOf(scenario),
     get_performance: performanceResponse(scenario.performance),
-    get_market_overview: marketResponse(scenario.market),
+    get_market_overview: marketResponse(scenario.market, account.fx),
     search_news: newsResponse(scenario.news),
     get_disclosures: { collected_at: AS_OF, items: [], next_cursor: null },
     get_transactions: {
