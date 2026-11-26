@@ -864,6 +864,28 @@ impl application::CollectedUrlCatalog for SqliteRepositories {
     }
 }
 
+impl application::CollectedPresenceCheck for SqliteRepositories {
+    async fn presence(
+        &self,
+        url: &domain::NormalizedUrl,
+    ) -> Result<application::CollectedPresence, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedPresenceCheck::presence(&InformationStore::new(database), url).await
+    }
+}
+
+impl application::CollectedRetention for SqliteRepositories {
+    async fn prune_news(
+        &self,
+        cutoffs: &[application::RetentionCutoff],
+    ) -> Result<application::CollectedCount, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CollectedRetention::prune_news(&InformationStore::new(database), cutoffs).await
+    }
+}
+
 impl application::CollectedItemReads for SqliteRepositories {
     async fn collected_since(
         &self,

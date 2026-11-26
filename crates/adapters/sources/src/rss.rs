@@ -561,6 +561,28 @@ fn handle_empty_tag(
     Ok(())
 }
 
+#[must_use]
+pub fn feed_body_shape(bytes: &[u8]) -> &'static str {
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return "not-utf8";
+    };
+    let trimmed = text.trim_start_matches('\u{feff}').trim_start();
+    let head = trimmed
+        .chars()
+        .take(32_usize)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if trimmed.is_empty() {
+        "empty"
+    } else if head.starts_with("<!doctype html") || head.starts_with("<html") {
+        "html"
+    } else if head.starts_with('<') {
+        "xml"
+    } else {
+        "text"
+    }
+}
+
 pub fn parse_feed(bytes: &[u8]) -> Result<Vec<ParsedFeedItem>, InformationError> {
     if bytes.is_empty() {
         return Err(schema_error());

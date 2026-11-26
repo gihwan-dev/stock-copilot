@@ -1,13 +1,18 @@
 use crate::holdings_link::InstrumentDirectory;
 use crate::ipc::instruments::{InstrumentsIpcState, tracked_instruments};
 use crate::ipc::state::ScreenState;
-use application::{StockAlias, TrackedInstrument};
+use crate::ports::{PortTypes, Ports};
+use application::{
+    NewsDataSettingsRepository, SecretKey, SecretStore, StockAlias, TrackedInstrument,
+};
 use domain::{InstrumentId, KnownMarket};
-use sources::TrackedTargets;
+use sources::{ContactFuture, DartKeySource, SecContactSource, SecretFuture, TrackedTargets};
 use std::fmt;
 use std::future::Future;
+use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
+use store_sqlite::SqliteRepositories;
 use tauri::{AppHandle, Manager, Runtime};
 
 #[cfg(test)]
@@ -18,24 +23,61 @@ const MIN_TICKER_CHARS: usize = 3;
 
 type TrackedList<'a> = Pin<Box<dyn Future<Output = Vec<TrackedInstrument>> + Send + 'a>>;
 
-pub struct AppTrackedTargets<R: Runtime> {
+pub trait NewsInputs: TrackedTargets + DartKeySource + SecContactSource {}
+
+impl<T: TrackedTargets + DartKeySource + SecContactSource> NewsInputs for T {}
+
+pub struct AppNewsInputs<R: Runtime, P: PortTypes> {
     app: AppHandle<R>,
+    ports: PhantomData<fn() -> P>,
 }
 
-impl<R: Runtime> fmt::Debug for AppTrackedTargets<R> {
+impl<R: Runtime, P: PortTypes> fmt::Debug for AppNewsInputs<R, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("AppTrackedTargets")
+        f.write_str("AppNewsInputs")
     }
 }
 
-impl<R: Runtime> AppTrackedTargets<R> {
+impl<R: Runtime, P: PortTypes> AppNewsInputs<R, P> {
     #[must_use]
     pub const fn new(app: AppHandle<R>) -> Self {
-        Self { app }
+        Self {
+            app,
+            ports: PhantomData,
+        }
     }
 }
 
-impl<R: Runtime> TrackedTargets for AppTrackedTargets<R> {
+impl<R: Runtime, P: PortTypes> DartKeySource for AppNewsInputs<R, P> {
+    fn dart_key(&self) -> SecretFuture<'_> {
+        Box::pin(async move {
+            let ports = self.app.try_state::<Ports<P>>()?;
+            ports
+                .secrets
+                .load(SecretKey::DartApiKey)
+                .await
+                .ok()
+                .flatten()
+        })
+    }
+}
+
+impl<R: Runtime, P: PortTypes> SecContactSource for AppNewsInputs<R, P> {
+    fn sec_contact(&self) -> ContactFuture<'_> {
+        Box::pin(async move {
+            let store = self.app.try_state::<Arc<SqliteRepositories>>()?;
+            let settings = NewsDataSettingsRepository::load(store.inner().as_ref())
+                .await
+                .ok()
+                .flatten()?;
+            settings
+                .sec_contact()
+                .map(|contact| contact.as_str().to_owned())
+        })
+    }
+}
+
+impl<R: Runtime, P: PortTypes> TrackedTargets for AppNewsInputs<R, P> {
     fn tracked(&self) -> TrackedList<'_> {
         Box::pin(async move {
             let Some(state) = self.app.try_state::<InstrumentsIpcState>() else {
@@ -69,29 +111,51 @@ impl<R: Runtime> TrackedTargets for AppTrackedTargets<R> {
 
 #[derive(Clone, Default)]
 pub struct NewsTracking {
-    targets: Arc<OnceLock<Arc<dyn TrackedTargets>>>,
+    inputs: Arc<OnceLock<Arc<dyn NewsInputs>>>,
 }
 
 impl fmt::Debug for NewsTracking {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NewsTracking")
-            .field("bound", &self.targets.get().is_some())
+            .field("bound", &self.inputs.get().is_some())
             .finish()
     }
 }
 
 impl NewsTracking {
-    pub fn bind(&self, targets: Arc<dyn TrackedTargets>) {
-        let _bound = self.targets.set(targets);
+    pub fn bind(&self, inputs: Arc<dyn NewsInputs>) {
+        let _bound = self.inputs.set(inputs);
     }
 }
 
 impl TrackedTargets for NewsTracking {
     fn tracked(&self) -> TrackedList<'_> {
         Box::pin(async move {
-            match self.targets.get() {
-                Some(targets) => targets.tracked().await,
+            match self.inputs.get() {
+                Some(inputs) => inputs.tracked().await,
                 None => Vec::new(),
+            }
+        })
+    }
+}
+
+impl DartKeySource for NewsTracking {
+    fn dart_key(&self) -> SecretFuture<'_> {
+        Box::pin(async move {
+            match self.inputs.get() {
+                Some(inputs) => inputs.dart_key().await,
+                None => None,
+            }
+        })
+    }
+}
+
+impl SecContactSource for NewsTracking {
+    fn sec_contact(&self) -> ContactFuture<'_> {
+        Box::pin(async move {
+            match self.inputs.get() {
+                Some(inputs) => inputs.sec_contact().await,
+                None => None,
             }
         })
     }

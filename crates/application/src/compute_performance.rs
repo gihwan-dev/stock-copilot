@@ -92,19 +92,20 @@ where
         Ok(days)
     }
 
-    pub async fn execute(
+    pub async fn recompute_day(
         &self,
         account: &AccountId,
-        span: PerformanceSpan,
-    ) -> Result<PerformanceSummary, PerformanceRunError> {
+        date: CalendarDate,
+    ) -> Result<ValuationSnapshot, PerformanceRunError> {
         let now = self.clock.now();
-        let requested = performance_window(now, span).map_err(PerformanceRunError::Window)?;
-        let days = self.valued_days(requested).await?;
-        let (Some((first, _)), Some((last, _))) = (days.first(), days.last()) else {
-            return Err(PerformanceRunError::NoValuedDays);
-        };
-        let window = SettlementWindow::try_new(*first, *last)
+        let window = SettlementWindow::try_new(date, date)
             .map_err(|_error| PerformanceRunError::Window(SnapshotError::WrongPeriod))?;
+        let day = self
+            .source
+            .window_day(date)
+            .await
+            .map_err(PerformanceRunError::Source)?
+            .ok_or(PerformanceRunError::NoValuedDays)?;
         let rows = self
             .rows
             .settled_rows(account)
@@ -115,39 +116,118 @@ where
             .complete_transactions(account)
             .await
             .map_err(PerformanceRunError::Source)?;
+        let histories = self
+            .source
+            .histories(&rows, window)
+            .await
+            .map_err(PerformanceRunError::Source)?;
         let ledger = |currency| -> Result<WindowLedger, PerformanceRunError> {
             let evidence = LedgerEvidence::from_complete_response(complete.clone())
                 .map_err(|reason| PerformanceRunError::Cash(currency, reason))?;
             derived_window_ledger(&rows, window, currency, evidence, now)
                 .map_err(|reason| PerformanceRunError::Cash(currency, reason))
         };
-        let kr = ledger(Currency::Krw)?;
-        let us = ledger(Currency::Usd)?;
-        let histories = self
+        let (kr, us) = (ledger(Currency::Krw)?, ledger(Currency::Usd)?);
+        recompute_window_day(&day, &rows, &histories, (&kr, &us), now)
+            .map_err(|reason| PerformanceRunError::EdgeDay(date, reason))
+    }
+
+    pub async fn execute(
+        &self,
+        account: &AccountId,
+        span: PerformanceSpan,
+    ) -> Result<PerformanceSummary, PerformanceRunError> {
+        let now = self.clock.now();
+        let requested = performance_window(now, span).map_err(PerformanceRunError::Window)?;
+        let mut days = self.valued_days(requested).await?;
+        if days.is_empty() {
+            return Err(PerformanceRunError::NoValuedDays);
+        }
+        let rows = self
+            .rows
+            .settled_rows(account)
+            .await
+            .map_err(PerformanceRunError::Repository)?;
+        let complete = self
             .source
-            .histories(&rows, window)
+            .complete_transactions(account)
             .await
             .map_err(PerformanceRunError::Source)?;
-        let Recomputed {
-            snapshots,
-            rates,
-            skipped,
-        } = recompute_days(&days, &rows, &histories, (&kr, &us), now)?;
-        let performance = Performance::calculate(
-            &snapshots,
-            (&kr.flow_period(), &us.flow_period()),
-            &rates,
-            PerformanceCurrency::ConvertedKrw,
-        )
-        .map_err(PerformanceRunError::Performance)?;
-        Ok(PerformanceSummary {
-            span,
-            volatility: performance_volatility(&performance),
-            drawdown: performance_max_drawdown(&performance),
-            performance,
-            skipped,
-        })
+        let histories = self
+            .source
+            .histories(&rows, requested)
+            .await
+            .map_err(PerformanceRunError::Source)?;
+        let inputs = WindowInputs {
+            rows: &rows,
+            complete: &complete,
+            histories: &histories,
+            now,
+        };
+        let mut dropped = Vec::new();
+        let mut last_edge = PerformanceRunError::NoValuedDays;
+        for _attempt in 0_u8..16_u8 {
+            match calculate(&inputs, &days) {
+                Ok((performance, skipped)) => {
+                    dropped.extend(skipped);
+                    dropped.sort_by_key(|entry: &(CalendarDate, SnapshotError)| entry.0);
+                    return Ok(PerformanceSummary {
+                        span,
+                        volatility: performance_volatility(&performance),
+                        drawdown: performance_max_drawdown(&performance),
+                        performance,
+                        skipped: dropped,
+                    });
+                }
+                Err(PerformanceRunError::EdgeDay(date, reason)) => {
+                    days.retain(|entry| entry.0 != date);
+                    dropped.push((date, reason));
+                    last_edge = PerformanceRunError::EdgeDay(date, reason);
+                }
+                Err(other) => return Err(other),
+            }
+        }
+        Err(last_edge)
     }
+}
+
+struct WindowInputs<'a> {
+    rows: &'a SettledRowSet,
+    complete: &'a CompleteTransactionResponse,
+    histories: &'a [SnapshotInstrumentHistory],
+    now: domain::Timestamp,
+}
+
+fn calculate(
+    inputs: &WindowInputs<'_>,
+    days: &[(CalendarDate, WindowDay)],
+) -> Result<(Performance, Vec<(CalendarDate, SnapshotError)>), PerformanceRunError> {
+    let (Some((first, _)), Some((last, _))) = (days.first(), days.last()) else {
+        return Err(PerformanceRunError::NoValuedDays);
+    };
+    let window = SettlementWindow::try_new(*first, *last)
+        .map_err(|_error| PerformanceRunError::Window(SnapshotError::WrongPeriod))?;
+    let ledger = |currency| -> Result<WindowLedger, PerformanceRunError> {
+        let evidence = LedgerEvidence::from_complete_response(inputs.complete.clone())
+            .map_err(|reason| PerformanceRunError::Cash(currency, reason))?;
+        derived_window_ledger(inputs.rows, window, currency, evidence, inputs.now)
+            .map_err(|reason| PerformanceRunError::Cash(currency, reason))
+    };
+    let kr = ledger(Currency::Krw)?;
+    let us = ledger(Currency::Usd)?;
+    let Recomputed {
+        snapshots,
+        rates,
+        skipped,
+    } = recompute_days(days, inputs.rows, inputs.histories, (&kr, &us), inputs.now)?;
+    let performance = Performance::calculate(
+        &snapshots,
+        (&kr.flow_period(), &us.flow_period()),
+        &rates,
+        PerformanceCurrency::ConvertedKrw,
+    )
+    .map_err(PerformanceRunError::Performance)?;
+    Ok((performance, skipped))
 }
 
 struct Recomputed {

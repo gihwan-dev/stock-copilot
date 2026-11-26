@@ -76,6 +76,7 @@ pub const fn data_job(id: ScheduledJobId) -> Option<UiDataJob> {
         | ScheduledJobId::CandidateDiscovery
         | ScheduledJobId::WeeklyReview
         | ScheduledJobId::IntradayCompaction
+        | ScheduledJobId::NewsRetention
         | ScheduledJobId::TossSpecWatch
         | ScheduledJobId::IntradayWatch => None,
     }

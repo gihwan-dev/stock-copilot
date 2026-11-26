@@ -2,7 +2,7 @@ use super::{MatchName, MatchNameClarity, MatchNameRole, NewsTracking, match_name
 use crate::holdings_link::InstrumentDirectory;
 use application::TrackedInstrument;
 use domain::{DisplayInstrumentName, InstrumentId, KnownMarket, Symbol};
-use sources::TrackedTargets;
+use sources::{ContactFuture, DartKeySource, SecContactSource, SecretFuture, TrackedTargets};
 use std::future::{Future, ready};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -60,6 +60,18 @@ impl TrackedTargets for Fixed {
     }
 }
 
+impl DartKeySource for Fixed {
+    fn dart_key(&self) -> SecretFuture<'_> {
+        Box::pin(ready(None))
+    }
+}
+
+impl SecContactSource for Fixed {
+    fn sec_contact(&self) -> ContactFuture<'_> {
+        Box::pin(ready(Some(String::from("Tester tester@example.com"))))
+    }
+}
+
 #[test]
 fn the_tracking_slot_is_empty_until_the_app_binds_its_instruments() {
     let slot = NewsTracking::default();
@@ -79,4 +91,9 @@ fn the_tracking_slot_is_empty_until_the_app_binds_its_instruments() {
         1,
         "처음 묶은 것만 쓴다"
     );
+    assert_eq!(
+        tauri::async_runtime::block_on(slot.sec_contact()).as_deref(),
+        Some("Tester tester@example.com")
+    );
+    assert!(tauri::async_runtime::block_on(slot.dart_key()).is_none());
 }

@@ -498,6 +498,21 @@ impl DartDisclosureClient {
     }
 }
 
+pub(crate) fn dart_feed_metadata() -> NewsMetadata {
+    let spec = SourceRegistry::spec(HttpDataSource::DartDisclosureApi);
+    let retention = TimeSpan::try_new(
+        SpanSeconds::new(DEFAULT_RETENTION_SECONDS),
+        Nanosecond::new(0_u32),
+    )
+    .map_or(Retention::NotStored, Retention::For);
+    NewsMetadata::new(
+        retention,
+        AiReadPolicy::TitleAndSummary,
+        spec.conditional_get(),
+        spec.user_agent(),
+    )
+}
+
 #[derive(Debug)]
 pub struct DartDisclosureFeed {
     dart: DartDisclosureClient,
@@ -517,18 +532,7 @@ impl NewsFeed for DartDisclosureFeed {
     }
 
     fn metadata(&self) -> NewsMetadata {
-        let spec = SourceRegistry::spec(HttpDataSource::DartDisclosureApi);
-        let retention = TimeSpan::try_new(
-            SpanSeconds::new(DEFAULT_RETENTION_SECONDS),
-            Nanosecond::new(0_u32),
-        )
-        .map_or(Retention::NotStored, Retention::For);
-        NewsMetadata::new(
-            retention,
-            AiReadPolicy::TitleAndSummary,
-            spec.conditional_get(),
-            spec.user_agent(),
-        )
+        dart_feed_metadata()
     }
 
     async fn new_items(

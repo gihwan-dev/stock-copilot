@@ -4,11 +4,13 @@ import {
   parseSecretText,
   type NewsSettings,
   type OptionalKey,
+  type RouteState,
 } from "../../../shared/ipc";
 import { emptyInputValue, type InputValue } from "../../../shared/lib";
 import { newsText } from "../messages";
 import { useKeySaver } from "../model";
 import { useNewsClient } from "./client";
+import { RouteLine } from "./RouteLine";
 
 const KeyInput = (props: {
   readonly name: OptionalKey;
@@ -36,6 +38,7 @@ const KeyInput = (props: {
 const KeyRow = (props: {
   readonly name: OptionalKey;
   readonly presence: "set" | "unset";
+  readonly route?: RouteState;
 }): ReactElement => {
   const saver = useKeySaver(useNewsClient());
   const [value, setValue] = useState<InputValue>(emptyInputValue);
@@ -58,6 +61,16 @@ const KeyRow = (props: {
           "ko",
         )}
       </Text>
+      {props.presence === "unset"
+        ? [
+            <Text key="benefit" variant="body-sm" tone="ink-muted">
+              {newsText(`news.keyBenefit.${props.name}`, "ko")}
+            </Text>,
+          ]
+        : []}
+      {props.route === undefined
+        ? []
+        : [<RouteLine key="route" route="dart" state={props.route} />]}
       <KeyInput
         name={props.name}
         value={value}
@@ -84,10 +97,19 @@ const KeyRow = (props: {
 
 export const KeysCard = (props: {
   readonly keys: NewsSettings["keys"];
+  readonly routes: NewsSettings["routes"];
 }): ReactElement => (
   <Card title={newsText("news.keysTitle", "ko")}>
     <Stack gap="space-4">
-      <KeyRow name="dart" presence={props.keys.dart} />
+      {props.routes === undefined ? (
+        <KeyRow name="dart" presence={props.keys.dart} />
+      ) : (
+        <KeyRow
+          name="dart"
+          presence={props.keys.dart}
+          route={props.routes.dart}
+        />
+      )}
       <KeyRow name="fred" presence={props.keys.fred} />
     </Stack>
   </Card>

@@ -60,6 +60,12 @@ const aliasRowSchema = z
   .readonly();
 export type AliasRow = z.infer<typeof aliasRowSchema>;
 const presenceSchema = z.enum(["set", "unset"]);
+const routeStateSchema = z.enum(["unset", "waiting", "connected", "failing"]);
+export type RouteState = z.infer<typeof routeStateSchema>;
+const routesSchema = z
+  .object({ dart: routeStateSchema, sec: routeStateSchema })
+  .strict()
+  .readonly();
 const wakeSchema = z
   .object({
     daily_move_percent: z.enum(dailyMovePercents),
@@ -78,6 +84,7 @@ export const newsSettingsSchema = z
     sec_contact: contactSchema.nullable(),
     wake: wakeSchema,
     aliases: z.array(aliasRowSchema).readonly(),
+    routes: routesSchema.optional(),
   })
   .strict()
   .readonly();

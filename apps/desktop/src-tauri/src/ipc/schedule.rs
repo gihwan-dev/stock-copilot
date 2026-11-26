@@ -138,6 +138,7 @@ const fn ui_job(id: ScheduledJobId) -> Option<UiScheduledJob> {
         | ScheduledJobId::DailyValuationSnapshot
         | ScheduledJobId::EstimateResolution
         | ScheduledJobId::IntradayCompaction
+        | ScheduledJobId::NewsRetention
         | ScheduledJobId::TossSpecWatch
         | ScheduledJobId::DailyBackup
         | ScheduledJobId::UsEstimateResolution => None,

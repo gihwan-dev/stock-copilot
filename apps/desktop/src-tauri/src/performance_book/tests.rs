@@ -170,3 +170,104 @@ fn an_unreachable_feed_leaves_every_period_without_a_number() {
     );
     assert_eq!(book.summary(PerformanceSpan::OneYear), None);
 }
+
+fn feb(day: u8) -> CalendarDate {
+    CalendarDate::from_parts(
+        domain::CalendarYear::new(1970),
+        domain::MonthNumber::new(2),
+        domain::DayNumber::new(day),
+    )
+    .expect("날짜")
+}
+
+fn trading_session(day: u8, market: KnownMarket) -> domain::MarketSession {
+    let start = i64::from(day)
+        .checked_add(30)
+        .and_then(|days| days.checked_mul(86_400))
+        .expect("초");
+    let regular = Some(
+        domain::SessionData::try_new(
+            TimeInterval::try_new(at(start), at(start.checked_add(3_600).expect("끝")))
+                .expect("구간"),
+            None,
+        )
+        .expect("세션"),
+    );
+    domain::MarketSession::try_new(
+        feb(day),
+        match market {
+            KnownMarket::Kr => domain::SessionInformation::Kr {
+                pre_market: None,
+                regular_market: regular,
+                after_market: None,
+            },
+            KnownMarket::Us => domain::SessionInformation::Us {
+                day_market: None,
+                pre_market: None,
+                regular_market: regular,
+                after_market: None,
+            },
+        },
+    )
+    .expect("세션")
+}
+
+#[derive(Default)]
+struct WeekFeed {
+    calendars: AtomicUsize,
+}
+
+impl PerformanceFeed for WeekFeed {
+    fn transactions<'a>(
+        &'a self,
+        _account: &'a AccountId,
+        _window: SettlementWindow,
+    ) -> BoxFuture<'a, Result<TransactionRead, PortError>> {
+        Box::pin(ready(Err(denied(ReadEndpoint::Transactions))))
+    }
+
+    fn calendar_on(
+        &self,
+        market: KnownMarket,
+        _date: CalendarDate,
+    ) -> BoxFuture<'_, Result<MarketCalendar, PortError>> {
+        let _seen = self.calendars.fetch_add(1, Ordering::SeqCst);
+        Box::pin(ready(Ok(MarketCalendar::try_new(
+            trading_session(5, market),
+            trading_session(6, market),
+            trading_session(9, market),
+        )
+        .expect("달력"))))
+    }
+
+    fn fx_at(&self, _at: Timestamp) -> BoxFuture<'_, Result<FxRate, PortError>> {
+        Box::pin(ready(Err(denied(ReadEndpoint::FxRate))))
+    }
+
+    fn daily_candles<'a>(
+        &'a self,
+        _instrument: &'a QuoteInstrument,
+        _window: TimeInterval,
+    ) -> BoxFuture<'a, Result<Vec<Candle>, PortError>> {
+        Box::pin(ready(Err(denied(ReadEndpoint::Candles))))
+    }
+}
+
+#[test]
+fn the_weekend_after_a_fetched_friday_is_known_without_more_calendar_calls() {
+    use application::PerformanceHistorySource as _;
+    let feed = Arc::new(WeekFeed::default());
+    let shared: Arc<dyn PerformanceFeed> = Arc::<WeekFeed>::clone(&feed);
+    let history = FeedHistory::new(shared, Arc::new(Fixed));
+    let friday = tauri::async_runtime::block_on(history.window_day(feb(6))).expect("금요일");
+    assert!(friday.is_some(), "영업일은 평가일이다");
+    for weekend in [7, 8] {
+        let day = tauri::async_runtime::block_on(history.window_day(feb(weekend))).expect("주말");
+        assert_eq!(day, None, "두 시장이 모두 쉬면 평가하지 않는다");
+    }
+    assert_eq!(
+        feed.calendars.load(Ordering::SeqCst),
+        2,
+        "시장마다 한 번만 묻는다"
+    );
+}
