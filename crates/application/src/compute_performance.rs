@@ -165,10 +165,9 @@ where
             now,
         };
         let mut dropped = Vec::new();
-        let mut last_edge = PerformanceRunError::NoValuedDays;
-        for _attempt in 0_u8..16_u8 {
-            match calculate(&inputs, &days) {
-                Ok((performance, skipped)) => {
+        for _attempt in 0_u8..4_u8 {
+            match calculate(&inputs, &days)? {
+                Calculated::Done(performance, skipped) => {
                     dropped.extend(skipped);
                     dropped.sort_by_key(|entry: &(CalendarDate, SnapshotError)| entry.0);
                     return Ok(PerformanceSummary {
@@ -179,15 +178,17 @@ where
                         skipped: dropped,
                     });
                 }
-                Err(PerformanceRunError::EdgeDay(date, reason)) => {
-                    days.retain(|entry| entry.0 != date);
-                    dropped.push((date, reason));
-                    last_edge = PerformanceRunError::EdgeDay(date, reason);
+                Calculated::Trim(edges) => {
+                    days.retain(|entry| edges.iter().all(|edge| edge.0 != entry.0));
+                    dropped.extend(edges);
                 }
-                Err(other) => return Err(other),
             }
         }
-        Err(last_edge)
+        Err(dropped
+            .first()
+            .map_or(PerformanceRunError::NoValuedDays, |(date, reason)| {
+                PerformanceRunError::EdgeDay(*date, *reason)
+            }))
     }
 }
 
@@ -201,7 +202,7 @@ struct WindowInputs<'a> {
 fn calculate(
     inputs: &WindowInputs<'_>,
     days: &[(CalendarDate, WindowDay)],
-) -> Result<(Performance, Vec<(CalendarDate, SnapshotError)>), PerformanceRunError> {
+) -> Result<Calculated, PerformanceRunError> {
     let (Some((first, _)), Some((last, _))) = (days.first(), days.last()) else {
         return Err(PerformanceRunError::NoValuedDays);
     };
@@ -219,7 +220,22 @@ fn calculate(
         snapshots,
         rates,
         skipped,
-    } = recompute_days(days, inputs.rows, inputs.histories, (&kr, &us), inputs.now)?;
+    } = recompute_days(days, inputs.rows, inputs.histories, (&kr, &us), inputs.now);
+    let valued: Vec<CalendarDate> = snapshots
+        .iter()
+        .map(ValuationSnapshot::settlement_date)
+        .collect();
+    let edges: Vec<(CalendarDate, SnapshotError)> = skipped
+        .iter()
+        .filter(|(date, _reason)| {
+            valued.first().is_none_or(|start| date < start)
+                || valued.last().is_none_or(|end| date > end)
+        })
+        .copied()
+        .collect();
+    if !edges.is_empty() {
+        return Ok(Calculated::Trim(edges));
+    }
     let performance = Performance::calculate(
         &snapshots,
         (&kr.flow_period(), &us.flow_period()),
@@ -227,7 +243,12 @@ fn calculate(
         PerformanceCurrency::ConvertedKrw,
     )
     .map_err(PerformanceRunError::Performance)?;
-    Ok((performance, skipped))
+    Ok(Calculated::Done(performance, skipped))
+}
+
+enum Calculated {
+    Done(Performance, Vec<(CalendarDate, SnapshotError)>),
+    Trim(Vec<(CalendarDate, SnapshotError)>),
 }
 
 struct Recomputed {
@@ -242,31 +263,24 @@ fn recompute_days(
     histories: &[SnapshotInstrumentHistory],
     ledgers: (&WindowLedger, &WindowLedger),
     now: domain::Timestamp,
-) -> Result<Recomputed, PerformanceRunError> {
+) -> Recomputed {
     let mut snapshots = Vec::new();
     let mut rates = Vec::new();
     let mut skipped = Vec::new();
-    let edges = (
-        days.first().map(|entry| entry.0),
-        days.last().map(|entry| entry.0),
-    );
     for (date, day) in days {
         match recompute_window_day(day, rows, histories, ledgers, now) {
             Ok(snapshot) => {
                 snapshots.push(snapshot);
                 rates.extend(day.fx);
             }
-            Err(reason) if edges.0 == Some(*date) || edges.1 == Some(*date) => {
-                return Err(PerformanceRunError::EdgeDay(*date, reason));
-            }
             Err(reason) => skipped.push((*date, reason)),
         }
     }
-    Ok(Recomputed {
+    Recomputed {
         snapshots,
         rates,
         skipped,
-    })
+    }
 }
 
 #[cfg(test)]
