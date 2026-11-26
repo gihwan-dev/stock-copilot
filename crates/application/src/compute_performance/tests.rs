@@ -298,3 +298,19 @@ fn a_failed_first_day_narrows_the_window_and_is_listed_as_skipped() {
     );
     assert_eq!(summary.performance.twr().to_string(), "0.000000");
 }
+
+#[test]
+fn one_day_is_recomputed_from_closes_and_cash_for_the_daily_record() {
+    let compute = ComputePerformance {
+        rows: &Rows,
+        source: &Source(Days::Weekdays),
+        clock: &Fixed,
+    };
+    let snapshot = run(compute.recompute_day(&account(), date(16))).expect("하루");
+    assert_eq!(snapshot.settlement_date(), date(16));
+    assert_eq!(
+        run(compute.recompute_day(&account(), date(14))).map(|found| found.settlement_date()),
+        Err(PerformanceRunError::NoValuedDays),
+        "평가하지 않는 날은 기록하지 않는다"
+    );
+}

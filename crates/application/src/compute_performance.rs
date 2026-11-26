@@ -92,6 +92,46 @@ where
         Ok(days)
     }
 
+    pub async fn recompute_day(
+        &self,
+        account: &AccountId,
+        date: CalendarDate,
+    ) -> Result<ValuationSnapshot, PerformanceRunError> {
+        let now = self.clock.now();
+        let window = SettlementWindow::try_new(date, date)
+            .map_err(|_error| PerformanceRunError::Window(SnapshotError::WrongPeriod))?;
+        let day = self
+            .source
+            .window_day(date)
+            .await
+            .map_err(PerformanceRunError::Source)?
+            .ok_or(PerformanceRunError::NoValuedDays)?;
+        let rows = self
+            .rows
+            .settled_rows(account)
+            .await
+            .map_err(PerformanceRunError::Repository)?;
+        let complete = self
+            .source
+            .complete_transactions(account)
+            .await
+            .map_err(PerformanceRunError::Source)?;
+        let histories = self
+            .source
+            .histories(&rows, window)
+            .await
+            .map_err(PerformanceRunError::Source)?;
+        let ledger = |currency| -> Result<WindowLedger, PerformanceRunError> {
+            let evidence = LedgerEvidence::from_complete_response(complete.clone())
+                .map_err(|reason| PerformanceRunError::Cash(currency, reason))?;
+            derived_window_ledger(&rows, window, currency, evidence, now)
+                .map_err(|reason| PerformanceRunError::Cash(currency, reason))
+        };
+        let (kr, us) = (ledger(Currency::Krw)?, ledger(Currency::Usd)?);
+        recompute_window_day(&day, &rows, &histories, (&kr, &us), now)
+            .map_err(|reason| PerformanceRunError::EdgeDay(date, reason))
+    }
+
     pub async fn execute(
         &self,
         account: &AccountId,
@@ -126,7 +166,7 @@ where
         };
         let mut dropped = Vec::new();
         let mut last_edge = PerformanceRunError::NoValuedDays;
-        for _attempt in 0..EDGE_RETRIES {
+        for _attempt in 0_u8..16_u8 {
             match calculate(&inputs, &days) {
                 Ok((performance, skipped)) => {
                     dropped.extend(skipped);
@@ -150,8 +190,6 @@ where
         Err(last_edge)
     }
 }
-
-const EDGE_RETRIES: usize = 16;
 
 struct WindowInputs<'a> {
     rows: &'a SettledRowSet,

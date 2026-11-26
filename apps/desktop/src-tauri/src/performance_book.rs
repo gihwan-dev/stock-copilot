@@ -344,6 +344,21 @@ impl PerformanceBook {
         }
     }
 
+    pub async fn recompute_day<Rows: SettledRowsSource>(
+        &self,
+        rows: &Rows,
+        account: &AccountId,
+        date: CalendarDate,
+    ) -> Result<domain::ValuationSnapshot, PerformanceRunError> {
+        ComputePerformance {
+            rows,
+            source: self.history.as_ref(),
+            clock: &SharedClock(Arc::clone(&self.clock)),
+        }
+        .recompute_day(account, date)
+        .await
+    }
+
     pub async fn refresh<Rows: SettledRowsSource>(&self, rows: &Rows, account: &AccountId) {
         let Ok(_running) = self.running.try_lock() else {
             return;
