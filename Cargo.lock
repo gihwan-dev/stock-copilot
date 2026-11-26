@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "ai-claude-code"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -38,7 +38,7 @@ dependencies = [
 
 [[package]]
 name = "ai-codex"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -64,7 +64,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "application"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "domain",
  "proptest",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "approval-command"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "broker-toss"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "broker-toss-schema",
@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "broker-toss-schema"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "regress",
  "serde",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "broker-toss-trade"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "broker-toss",
@@ -1005,7 +1005,7 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "proptest",
  "rust_decimal",
@@ -1051,7 +1051,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "e2e-app"
-version = "0.5.3"
+version = "0.5.4"
 
 [[package]]
 name = "embed-resource"
@@ -2191,10 +2191,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "libappindicator"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03589b9607c868cc7ae54c0b2a22c8dc03dd41692d48f2d7df73615c6a95dc0a"
+dependencies = [
+ "glib",
+ "gtk",
+ "gtk-sys",
+ "libappindicator-sys",
+ "log",
+]
+
+[[package]]
+name = "libappindicator-sys"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e9ec52138abedcc58dc17a7c6c0c00a2bdb4f3427c7f63fa97fd0d859155caf"
+dependencies = [
+ "gtk-sys",
+ "libloading",
+ "once_cell",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
+name = "libloading"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b67380fd3b2fbe7527a606e18729d21c6f3951633d0500574c4dc22d2d638b9f"
+dependencies = [
+ "cfg-if",
+ "winapi",
+]
 
 [[package]]
 name = "libredox"
@@ -2288,14 +2322,14 @@ dependencies = [
 
 [[package]]
 name = "mcp-bridge"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "zeroize",
 ]
 
 [[package]]
 name = "mcp-server"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -2740,7 +2774,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "order-execution"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -2975,7 +3009,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "platform-macos"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "block2",
@@ -3648,7 +3682,7 @@ dependencies = [
 
 [[package]]
 name = "scheduler"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -3739,7 +3773,7 @@ dependencies = [
 
 [[package]]
 name = "secrets-keychain"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "security-framework",
@@ -4132,7 +4166,7 @@ dependencies = [
 
 [[package]]
 name = "sources"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -4226,7 +4260,7 @@ dependencies = [
 
 [[package]]
 name = "src-tauri"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "ai-claude-code",
  "application",
@@ -4269,7 +4303,7 @@ checksum = "ff7589a1859b09232522bb9edf076ca7fcf14ded96685d3fa629db73023ffbb7"
 
 [[package]]
 name = "store-sqlite"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -4526,6 +4560,7 @@ dependencies = [
  "tauri-utils",
  "thiserror 2.0.21",
  "tokio",
+ "tray-icon",
  "url",
  "webkit2gtk",
  "webview2-com",
@@ -4830,7 +4865,7 @@ dependencies = [
 
 [[package]]
 name = "testkit"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -4838,7 +4873,7 @@ dependencies = [
 
 [[package]]
 name = "testkit-ports"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
@@ -5078,7 +5113,7 @@ checksum = "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a"
 
 [[package]]
 name = "toss-smoke"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "broker-toss",
@@ -5168,11 +5203,33 @@ dependencies = [
 
 [[package]]
 name = "trade-fakes"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "application",
  "domain",
  "order-execution",
+]
+
+[[package]]
+name = "tray-icon"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2b9c52859a94554803ccd4a24b98f74148ebc73b90676d783f3490b1bff9d72"
+dependencies = [
+ "crossbeam-channel",
+ "dirs",
+ "libappindicator",
+ "muda",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation",
+ "once_cell",
+ "png",
+ "serde",
+ "thiserror 2.0.21",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6073,7 +6130,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "cargo_metadata 0.23.1",
  "proc-macro2",
