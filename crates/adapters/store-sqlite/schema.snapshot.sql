@@ -433,8 +433,8 @@ CREATE TABLE snapshot_holdings (
     UNIQUE (snapshot, symbol, currency),
     CHECK ((valuation IS NULL AND profit IS NULL AND return_rate IS NULL AND daily_profit IS NULL AND daily_rate IS NULL) OR (valuation IS NOT NULL AND profit IS NOT NULL AND return_rate IS NOT NULL AND ((daily_profit IS NULL AND daily_rate IS NULL) OR (daily_profit IS NOT NULL AND daily_rate IS NOT NULL))))
 ) STRICT;
-CREATE TABLE source_statuses (
-    source TEXT PRIMARY KEY CHECK (source IN ('kind_disclosure', 'dart_disclosure_api', 'dart_disclosure_rss', 'dart_fundamentals', 'kind_corp_list', 'hankyung', 'maekyung', 'yonhap', 'edaily', 'google_news', 'web_search', 'yahoo_finance', 'sec_edgar', 'bank_of_korea', 'federal_reserve', 'us_treasury', 'fred')),
+CREATE TABLE "source_statuses" (
+    source TEXT PRIMARY KEY CHECK (source IN ('kind_disclosure', 'dart_disclosure_api', 'dart_disclosure_rss', 'dart_fundamentals', 'kind_corp_list', 'hankyung', 'maekyung', 'yonhap', 'edaily', 'segye_finance', 'google_news', 'web_search', 'yahoo_finance', 'sec_edgar', 'bank_of_korea', 'federal_reserve', 'us_treasury', 'fred')),
     payload TEXT NOT NULL
 ) STRICT;
 CREATE TABLE spec_status_records (
