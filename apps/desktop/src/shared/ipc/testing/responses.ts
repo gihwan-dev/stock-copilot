@@ -1071,6 +1071,7 @@ export const responses = {
         weight_before: "72.00",
       },
     ],
+    issues: [{ kind: "holdings-below-minimum", symbol: null }],
     limits_source: "user-setting",
     outcome: "simulated",
     principles: {

@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildResponses } from "./portfolio-model.mjs";
+import { appSimulate, buildResponses } from "./portfolio-model.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..");
@@ -818,6 +818,15 @@ const selfTest = async () => {
     "접힌 부분만 보인다",
   );
   const idle = scenarios.find((scenario) => scenario.id === "no-action-needed");
+  expectThat(
+    JSON.stringify(appSimulate(idle, { trades: [] }).issues) === "[]",
+    `할 일 없음 시나리오는 문제 목록이 비어야 한다 ${JSON.stringify(appSimulate(idle, { trades: [] }).issues)}`,
+  );
+  const crowded = scenarios.find((scenario) => scenario.id === "single-stock-over-cap");
+  expectThat(
+    appSimulate(crowded, { trades: [] }).issues.some((issue) => issue.kind === "over-limit" && issue.symbol === "005930"),
+    "한도 초과는 문제 목록에 오른다",
+  );
   expectThat(
     deterministicChecks(idle, "오늘은 그대로 두셔도 됩니다. KODEX 200 약 30주를 사세요.", ["get_portfolio"]).failures.includes("no_made_up_trades"),
     "할 일 없음에 매매 지어내기 검출",

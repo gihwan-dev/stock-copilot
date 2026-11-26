@@ -1,4 +1,10 @@
 {
+  "issues": [
+    {
+      "kind": "holdings-below-minimum",
+      "symbol": null
+    }
+  ],
   "limits_source": "user-setting",
   "valuation_fx": null,
   "outcome": "simulated",
