@@ -257,6 +257,25 @@ impl MarketSession {
             }
         }
     }
+    pub(crate) fn holiday(date: CalendarDate, market: &Market) -> Self {
+        Self {
+            date,
+            information: match market {
+                Market::Kr => SessionInformation::Kr {
+                    pre_market: None,
+                    regular_market: None,
+                    after_market: None,
+                },
+                Market::Us | Market::Unknown(_) => SessionInformation::Us {
+                    day_market: None,
+                    pre_market: None,
+                    regular_market: None,
+                    after_market: None,
+                },
+            },
+            sessions: Vec::new(),
+        }
+    }
     #[must_use]
     pub const fn market(&self) -> Market {
         self.information.market()
@@ -344,6 +363,36 @@ impl MarketCalendar {
     #[must_use]
     pub fn sessions(&self) -> &[MarketSegment] {
         &self.sessions
+    }
+    #[must_use]
+    pub fn implied_holidays(&self) -> Vec<Self> {
+        let [previous, _today, next] = &self.rows;
+        let mut implied = Vec::new();
+        let mut day = previous.date.inspection_successor();
+        while day < next.date && implied.len() < 31 {
+            if let Some(calendar) = self.implied_holiday(day) {
+                implied.push(calendar);
+            }
+            day = day.inspection_successor();
+        }
+        implied
+    }
+    fn implied_holiday(&self, day: CalendarDate) -> Option<Self> {
+        let [previous, today, next] = &self.rows;
+        if day == today.date {
+            return None;
+        }
+        let (before, after) = match (!today.sessions.is_empty(), day < today.date) {
+            (true, true) => (previous, today),
+            (true, false) => (today, next),
+            (false, _) => (previous, next),
+        };
+        Self::try_new(
+            before.clone(),
+            MarketSession::holiday(day, &today.market()),
+            after.clone(),
+        )
+        .ok()
     }
     #[must_use]
     pub fn state_at(&self, instant: Timestamp) -> MarketState {
@@ -1146,5 +1195,39 @@ mod tests {
         ] {
             assert_eq!(open.trading_status(), super::MarketTradingStatus::Open);
         }
+    }
+
+    #[test]
+    fn a_fetched_calendar_implies_the_holidays_between_its_business_days() {
+        let friday_to_monday = MarketCalendar::try_new(
+            us_row(3, 19, 20, 22, 5),
+            us_row(3, 20, 21, 22, 5),
+            us_row(3, 23, 24, 22, 5),
+        )
+        .expect("금요일");
+        let implied = friday_to_monday.implied_holidays();
+        let dates: Vec<_> = implied
+            .iter()
+            .map(|calendar| calendar.today().date())
+            .collect();
+        assert_eq!(dates, vec![date(3, 21), date(3, 22)]);
+        for calendar in &implied {
+            assert_eq!(calendar.today().sessions().len(), 0);
+            assert_eq!(calendar.previous_business_day().date(), date(3, 20));
+            assert_eq!(calendar.next_business_day().date(), date(3, 23));
+        }
+        let fetched_holiday = MarketCalendar::try_new(
+            us_row(3, 20, 21, 22, 5),
+            holiday(3, 22),
+            us_row(3, 23, 24, 22, 5),
+        )
+        .expect("휴장일");
+        let around: Vec<_> = fetched_holiday
+            .implied_holidays()
+            .iter()
+            .map(|calendar| calendar.today().date())
+            .collect();
+        assert_eq!(around, vec![date(3, 21)]);
+        assert_eq!(calendar().implied_holidays().len(), 0);
     }
 }

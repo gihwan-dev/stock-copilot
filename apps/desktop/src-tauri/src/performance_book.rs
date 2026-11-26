@@ -155,12 +155,14 @@ impl FeedHistory {
             return Ok(found.clone());
         }
         let fetched = self.feed.calendar_on(market, date).await?;
-        let _previous = self
-            .caches
-            .lock()
-            .await
-            .calendars
-            .insert((market, date), fetched.clone());
+        let mut caches = self.caches.lock().await;
+        for implied in fetched.implied_holidays() {
+            let _kept = caches
+                .calendars
+                .entry((market, implied.today().date()))
+                .or_insert(implied);
+        }
+        let _previous = caches.calendars.insert((market, date), fetched.clone());
         Ok(fetched)
     }
 
@@ -283,7 +285,13 @@ fn record_outcome(
     outcome: &Result<PerformanceSummary, PerformanceRunError>,
 ) {
     let detail = match outcome {
-        Ok(summary) => format!("result=complete skipped_days={}", summary.skipped.len()),
+        Ok(summary) => match summary.skipped.first() {
+            Some((_date, reason)) => format!(
+                "result=complete skipped_days={} first_skip={reason:?}",
+                summary.skipped.len()
+            ),
+            None => String::from("result=complete skipped_days=0"),
+        },
         Err(error) => format!("result=failed reason={error:?}"),
     };
     crate::diagnostics_log::record(&application::DiagnosticEvent::Job(
