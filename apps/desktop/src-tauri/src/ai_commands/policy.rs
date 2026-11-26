@@ -83,6 +83,7 @@ pub const COMMAND_POLICIES: [CommandPolicy; 53] = [
     write("set_budget_percent"),
     confirm("request_order_approval"),
     never("set_order_permission"),
+    never("set_auto_start"),
     never("send_chat_message"),
     never("resubscribe_chat_turn"),
     never("cancel_chat_turn"),

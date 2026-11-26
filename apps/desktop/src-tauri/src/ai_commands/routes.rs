@@ -184,7 +184,7 @@ fn status_routes<R: Runtime>() -> Vec<Route<R>> {
         ),
         ipc(
             "get_data_status",
-            "Read per-job data collection status: last success, next run and latest result. No side effects.",
+            "Read when each data job (holdings, transactions, valuations, estimates, scoring, briefings, backup) last succeeded and runs next. No side effects.",
             fixed(&[("scope", "current")]),
             data_status::get_data_status::<R>,
         ),
