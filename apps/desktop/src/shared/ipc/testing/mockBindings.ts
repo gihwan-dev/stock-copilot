@@ -18,6 +18,10 @@ export const commands = {
     typedError<UiOrderSwitchOutcome, IpcError>(
       __TAURI_INVOKE("set_order_permission", { request }),
     ),
+  setAutoStart: (request: SetAutoStartRequest) =>
+    typedError<UiAutoStartView, IpcError>(
+      __TAURI_INVOKE("set_auto_start", { request }),
+    ),
   sendChatMessage: (
     request: SendChatMessageRequest_Deserialize,
     onChunk: Channel<ChatChunkEvent_Deserialize>,
@@ -111,6 +115,10 @@ export const commands = {
   getStatus: (request: GetStatusRequest) =>
     typedError<UiStatusView_Serialize, IpcError>(
       __TAURI_INVOKE("get_status", { request }),
+    ),
+  getDataStatus: (request: GetDataStatusRequest) =>
+    typedError<UiDataStatusView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_data_status", { request }),
     ),
   getScorecard: (request: GetScorecardRequest) =>
     typedError<UiScorecardView_Serialize, IpcError>(
@@ -651,6 +659,8 @@ export type CopyTextRequest = {
   text: string;
 };
 
+export type DataStatusScope = "current";
+
 export type GetBriefingsRequest = {
   scope: BriefingsScope;
 };
@@ -672,6 +682,10 @@ export type GetChatHistoryResponse_Serialize = {
   session_id: string;
   entries: StoredChatEntryDto_Serialize[];
   active_turn: ActiveChatTurnDto | null;
+};
+
+export type GetDataStatusRequest = {
+  scope: DataStatusScope;
 };
 
 export type GetInstrumentsRequest = {
@@ -898,6 +912,10 @@ export type SetAliasesRequest = {
   aliases: UiAliasInput[];
 };
 
+export type SetAutoStartRequest = {
+  state: UiAutoStartChoice;
+};
+
 export type SetBudgetPercentRequest = {
   percent: UiBudgetPercent;
 };
@@ -1081,6 +1099,12 @@ export type UiAllocationView = {
   concentration: UiConcentration;
 };
 
+export type UiAutoStartChoice = "on" | "off";
+
+export type UiAutoStartView = {
+  auto_start_at_login: UiToggleState;
+};
+
 export type UiBackupResult = {
   status: UiBackupStatus;
 };
@@ -1197,6 +1221,35 @@ export type UiDailyChange = {
 
 export type UiDailyMove = "3" | "5" | "7" | "10";
 
+export type UiDataJob =
+  | "holdings"
+  | "transactions"
+  | "daily-valuation"
+  | "estimates"
+  | "kr-scoring"
+  | "us-scoring"
+  | "morning-briefing"
+  | "closing-review"
+  | "pre-us-market-check"
+  | "backup";
+
+export type UiDataJobStatus =
+  UiDataJobStatus_Serialize | UiDataJobStatus_Deserialize;
+
+export type UiDataJobStatus_Deserialize = {
+  job: UiDataJob;
+  last_success?: string | null;
+  last_run?: UiJobRun | null;
+  next_run?: string | null;
+};
+
+export type UiDataJobStatus_Serialize = {
+  job: UiDataJob;
+  last_success: string | null;
+  last_run: UiJobRun | null;
+  next_run: string | null;
+};
+
 export type UiDataSource =
   | "KindDisclosure"
   | "DartDisclosureApi"
@@ -1215,6 +1268,17 @@ export type UiDataSource =
   | "FederalReserve"
   | "UsTreasury"
   | "Fred";
+
+export type UiDataStatusView =
+  UiDataStatusView_Serialize | UiDataStatusView_Deserialize;
+
+export type UiDataStatusView_Deserialize = {
+  jobs: UiDataJobStatus_Deserialize[];
+};
+
+export type UiDataStatusView_Serialize = {
+  jobs: UiDataJobStatus_Serialize[];
+};
 
 export type UiDeleteResult = {
   status: UiDeleteStatus;
@@ -2867,6 +2931,9 @@ export type MockCommandHandlers = {
   setOrderPermission: (args: {
     request: SetOrderPermissionRequest;
   }) => UiOrderSwitchOutcome | Promise<UiOrderSwitchOutcome>;
+  setAutoStart: (args: {
+    request: SetAutoStartRequest;
+  }) => UiAutoStartView | Promise<UiAutoStartView>;
   sendChatMessage: (args: {
     request: SendChatMessageRequest_Deserialize;
     onChunk: Channel<ChatChunkEvent_Deserialize>;
@@ -2939,6 +3006,9 @@ export type MockCommandHandlers = {
   getStatus: (args: {
     request: GetStatusRequest;
   }) => UiStatusView_Serialize | Promise<UiStatusView_Serialize>;
+  getDataStatus: (args: {
+    request: GetDataStatusRequest;
+  }) => UiDataStatusView_Serialize | Promise<UiDataStatusView_Serialize>;
   getScorecard: (args: {
     request: GetScorecardRequest;
   }) => UiScorecardView_Serialize | Promise<UiScorecardView_Serialize>;
@@ -3062,6 +3132,12 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.setOrderPermission,
             "set_order_permission",
+            args,
+          );
+        case "set_auto_start":
+          return mockCommandHandler(
+            mockHandlers.setAutoStart,
+            "set_auto_start",
             args,
           );
         case "send_chat_message":
@@ -3188,6 +3264,12 @@ export function mockCommands(
           );
         case "get_status":
           return mockCommandHandler(mockHandlers.getStatus, "get_status", args);
+        case "get_data_status":
+          return mockCommandHandler(
+            mockHandlers.getDataStatus,
+            "get_data_status",
+            args,
+          );
         case "get_scorecard":
           return mockCommandHandler(
             mockHandlers.getScorecard,

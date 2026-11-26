@@ -64,6 +64,12 @@ const catalog = {
   concentrationRuleLabel: { ko: "쏠림 경고 기준(유효 종목 수 미만)" as UiText },
   advancedSystemTitle: { ko: "시스템" as UiText },
   autoStartLabel: { ko: "로그인 시 자동 시작" as UiText },
+  autoStartHint: {
+    ko: "Mac에 로그인하면 창 없이 켜져서 수집과 예약 작업을 이어 가요. 창은 Dock 아이콘으로 열어요." as UiText,
+  },
+  autoStartFailed: {
+    ko: "자동 시작 설정을 바꾸지 못했어요. 잠시 뒤 다시 시도해 주세요." as UiText,
+  },
   accountSelectionLabel: { ko: "연결 계좌 수" as UiText },
   accountSelectionHint: {
     ko: "종합매매 계좌 중 첫 계좌를 자동으로 고르며, 계좌가 여럿이면 여기에서 바꿀 수 있어요." as UiText,

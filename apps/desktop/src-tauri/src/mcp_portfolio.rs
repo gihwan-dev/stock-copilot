@@ -10,14 +10,15 @@ use application::{
 };
 use domain::{
     AccountId, AllocationCurrency, AllocationDisplay, AllocationDisplayRange, AllocationEntry,
-    AllocationSector, AssetCountry, AssetWeight, Currency, DisplayInstrumentName, Market,
-    MaskedAccountNumber, NumericInput, PortfolioValuation, Ratio, Symbol, SyncOutcome, Total,
-    TransactionKind, ValuedHolding,
+    AllocationSector, AssetCountry, AssetWeight, Currency, DisplayInstrumentName, KnownMarket,
+    Market, MaskedAccountNumber, MasterInstrument, NumericInput, PortfolioValuation, Ratio,
+    SectorAssignments, Symbol, SyncOutcome, Total, TransactionKind, ValuedHolding,
 };
 
 use crate::broker_link::AccountSlot;
 use crate::holdings_link::InstrumentDirectory;
 use crate::ipc::state::BoxFuture;
+use crate::sector_classes::SectorClasses;
 
 #[cfg(test)]
 mod tests;
@@ -28,6 +29,7 @@ pub struct StoredPortfolioTools<P, S, T = S> {
     transactions: Arc<T>,
     accounts: AccountSlot,
     directory: InstrumentDirectory,
+    sectors: Option<Arc<SectorClasses>>,
 }
 
 impl<P, S, T> std::fmt::Debug for StoredPortfolioTools<P, S, T> {
@@ -50,6 +52,15 @@ impl<P, S, T> StoredPortfolioTools<P, S, T> {
             transactions,
             accounts,
             directory,
+            sectors: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_sectors(self, sectors: Arc<SectorClasses>) -> Self {
+        Self {
+            sectors: Some(sectors),
+            ..self
         }
     }
 }
@@ -270,12 +281,12 @@ where
         let Some((account, masked)) = self.account() else {
             return Ok(None);
         };
-        let Some(view) = recorded(
-            GetAllocationView::new(self.portfolios.as_ref(), self.store.as_ref())
-                .execute(&account)
-                .await?,
-        )?
-        else {
+        let plain = GetAllocationView::new(self.portfolios.as_ref(), self.store.as_ref());
+        let query = match self.assignments(&account).await {
+            Some(assignments) => plain.with_assignments(assignments),
+            None => plain,
+        };
+        let Some(view) = recorded(query.execute(&account).await?)? else {
             return Ok(None);
         };
         let allocation = outcome_value(&view).ok_or_else(unavailable)?;
@@ -313,6 +324,29 @@ where
                 herfindahl_index: None,
             },
         }))
+    }
+
+    async fn assignments(&self, account: &AccountId) -> Option<SectorAssignments> {
+        let sectors = self.sectors.as_ref()?;
+        let masters: Vec<MasterInstrument> = match self.portfolios.latest(account).await {
+            Ok(Some(record)) => match record.outcome() {
+                SyncOutcome::Complete(portfolio) | SyncOutcome::Partial(portfolio) => portfolio
+                    .holdings()
+                    .iter()
+                    .filter_map(|holding| {
+                        let market =
+                            KnownMarket::try_from_market(&holding.instrument().market()).ok()?;
+                        let id = self
+                            .directory
+                            .instrument_of(market, holding.instrument().symbol())?;
+                        self.directory.master(&id)
+                    })
+                    .collect(),
+                SyncOutcome::Failed | SyncOutcome::AccessBlocked => Vec::new(),
+            },
+            Ok(None) | Err(_) => Vec::new(),
+        };
+        sectors.assignments(&masters).await
     }
 
     async fn read_transactions(&self) -> Result<Option<TransactionsToolView>, SystemPortError> {

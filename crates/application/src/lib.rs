@@ -263,8 +263,8 @@ pub use clock::Clock;
 mod diagnostics;
 pub use diagnostics::{
     BrokerCall, CallMethod, CallResult, DiagnosticEvent, DiagnosticText, DiagnosticsSink,
-    HttpStatusCode, SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult, TokenIssue,
-    TransportFailure, failure_reason, sync_failure_reason,
+    HttpStatusCode, JobDiagnosis, JobRunNote, SyncDiagnosis, SyncFailureReason, SyncJob,
+    SyncResult, TokenIssue, TransportFailure, failure_reason, sync_failure_reason,
 };
 mod notifier;
 pub use notifier::{Notification, Notifier};

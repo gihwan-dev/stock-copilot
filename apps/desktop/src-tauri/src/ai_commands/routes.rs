@@ -12,9 +12,9 @@ use crate::ipc::event::UiEvent;
 use crate::ipc::event_bridge::UiEventBridge;
 use crate::ipc::order_approval::OrderApprovalRequest;
 use crate::ipc::{
-    ai_settings, app_version, briefing, chat, instruments, news_settings, portfolio, public_ip,
-    risk_editor, schedule, scorecard, self_check, settings, signals, system_data, thesis, toss,
-    transactions, updates,
+    ai_settings, app_version, briefing, chat, data_status, instruments, news_settings, portfolio,
+    public_ip, risk_editor, schedule, scorecard, self_check, settings, signals, system_data,
+    thesis, toss, transactions, updates,
 };
 
 type Fixed = &'static [(&'static str, &'static str)];
@@ -181,6 +181,12 @@ fn status_routes<R: Runtime>() -> Vec<Route<R>> {
             "Read the app status screen (data sources, AI jobs, connection). No side effects.",
             fixed(&[("scope", "current")]),
             self_check::get_status::<R>,
+        ),
+        ipc(
+            "get_data_status",
+            "Read when each data job (holdings, transactions, valuations, estimates, scoring, briefings, backup) last succeeded and runs next. No side effects.",
+            fixed(&[("scope", "current")]),
+            data_status::get_data_status::<R>,
         ),
         ipc(
             "get_chat_history",
