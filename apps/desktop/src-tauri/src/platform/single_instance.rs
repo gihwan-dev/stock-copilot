@@ -82,6 +82,43 @@ impl Drop for SingleInstanceGuard {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstanceRelease {
+    Released,
+    NotHeld,
+}
+
+#[derive(Debug, Default)]
+pub struct InstanceSlot {
+    guard: std::sync::RwLock<Option<SingleInstanceGuard>>,
+}
+
+impl InstanceSlot {
+    #[must_use]
+    pub fn holding(guard: SingleInstanceGuard) -> Self {
+        Self {
+            guard: std::sync::RwLock::new(Some(guard)),
+        }
+    }
+
+    pub fn release(&self) -> InstanceRelease {
+        let taken = match self.guard.write() {
+            Ok(mut held) => held.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
+        };
+        match taken {
+            Some(_guard) => InstanceRelease::Released,
+            None => InstanceRelease::NotHeld,
+        }
+    }
+}
+
+pub fn release_for_exit<R: Runtime>(app: &AppHandle<R>) -> InstanceRelease {
+    use tauri::Manager as _;
+    app.try_state::<InstanceSlot>()
+        .map_or(InstanceRelease::NotHeld, |slot| slot.release())
+}
+
 pub fn acquire<Activate>(
     socket_path: SocketPath,
     on_activate: Activate,

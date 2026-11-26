@@ -1,5 +1,5 @@
 use crate::lifecycle::{Lifecycle, LifecyclePhase};
-use crate::platform::tray::TrayMenuAction;
+use crate::platform::tray::{TrayController, TrayIconState, TrayMenuAction, default_tray_menu};
 use std::sync::RwLock;
 use tauri::{ActivationPolicy, App, AppHandle, Manager, Runtime};
 
@@ -174,9 +174,37 @@ pub fn show_and_focus_main<R: Runtime>(app: &AppHandle<R>) -> Result<(), tauri::
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResidencyPresence {
+    DockIcon,
+    MenuBarOnly,
+}
+
 #[must_use]
-pub fn apply_accessory_policy<R: Runtime>(app: &mut App<R>) -> ActivationPolicyOutcome {
-    app.set_activation_policy(ActivationPolicy::Accessory);
+pub const fn residency_presence(tray: TrayIconState) -> ResidencyPresence {
+    match tray {
+        TrayIconState::Visible => ResidencyPresence::MenuBarOnly,
+        TrayIconState::Hidden => ResidencyPresence::DockIcon,
+    }
+}
+
+#[must_use]
+pub fn install_tray(controller: &dyn TrayController) -> TrayIconState {
+    match controller.install(&default_tray_menu()) {
+        Ok(state) => state,
+        Err(_unavailable) => TrayIconState::Hidden,
+    }
+}
+
+#[must_use]
+pub fn apply_residency_policy<R: Runtime>(
+    app: &mut App<R>,
+    tray: TrayIconState,
+) -> ActivationPolicyOutcome {
+    app.set_activation_policy(match residency_presence(tray) {
+        ResidencyPresence::DockIcon => ActivationPolicy::Regular,
+        ResidencyPresence::MenuBarOnly => ActivationPolicy::Accessory,
+    });
     ActivationPolicyOutcome::Applied
 }
 

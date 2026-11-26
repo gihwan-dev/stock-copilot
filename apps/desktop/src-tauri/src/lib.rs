@@ -47,7 +47,9 @@ pub fn build_app<R: Runtime, P: PortTypes>(
         .setup(move |app| {
             ipc::registry::specta_builder::<R>().mount_events(app);
             security::create_windows(app)?;
-            let _policy = platform::residency::apply_accessory_policy(app);
+            let tray =
+                platform::residency::install_tray(&platform::tray::UnavailableTrayController);
+            let _policy = platform::residency::apply_residency_policy(app, tray);
             app.manage(platform::residency::ResidencyState::new());
             let opened = open_product_database(app, &ports);
             let status = opened.status();
@@ -239,8 +241,10 @@ where
             };
             if let Err(_error) = platform::residency::handle_reopen(handle, visibility) {}
         }
-        tauri::RunEvent::Exit
-        | tauri::RunEvent::WindowEvent { .. }
+        tauri::RunEvent::Exit => {
+            let _released = platform::single_instance::release_for_exit(handle);
+        }
+        tauri::RunEvent::WindowEvent { .. }
         | tauri::RunEvent::WebviewEvent { .. }
         | tauri::RunEvent::Ready
         | tauri::RunEvent::Resumed

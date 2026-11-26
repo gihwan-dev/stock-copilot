@@ -5,8 +5,9 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, OnceLock, RwLock};
 
 use application::{
-    BrokerCall, CallMethod, CallResult, Clock, DiagnosticEvent, DiagnosticsSink, SyncDiagnosis,
-    SyncFailureReason, SyncJob, SyncResult, TokenIssue, TransportFailure, sync_failure_reason,
+    BrokerCall, CallMethod, CallResult, Clock, DiagnosticEvent, DiagnosticsSink, JobDiagnosis,
+    JobRunNote, SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult, TokenIssue,
+    TransportFailure, sync_failure_reason,
 };
 use domain::{TimeSpan, Timestamp};
 
@@ -71,7 +72,12 @@ impl DiagnosticsLog {
             (SyncJob::Portfolio, SyncResult::AccessBlocked) => {
                 Some(SyncFailureReason::AccessDenied)
             }
-            (SyncJob::Transactions | SyncJob::InstrumentMaster, _) => return,
+            (
+                SyncJob::Transactions
+                | SyncJob::TransactionsFullInspection
+                | SyncJob::InstrumentMaster,
+                _,
+            ) => return,
         };
         match self.portfolio.write() {
             Ok(mut guard) => *guard = reason,
@@ -129,6 +135,23 @@ fn describe(event: &DiagnosticEvent) -> String {
         ),
         DiagnosticEvent::TokenIssue(issue) => describe_token(issue),
         DiagnosticEvent::Sync(diagnosis) => describe_sync(diagnosis),
+        DiagnosticEvent::Job(diagnosis) => describe_job(diagnosis),
+    }
+}
+
+fn describe_job(diagnosis: &JobDiagnosis) -> String {
+    let job = diagnosis.job.as_str();
+    match &diagnosis.note {
+        JobRunNote::Executed { summary, processed } => format!(
+            "job id={job} result=executed summary={} processed={}",
+            summary.as_str(),
+            processed.as_u32()
+        ),
+        JobRunNote::SkippedMissedWindow => format!("job id={job} result=skipped-missed-window"),
+        JobRunNote::Deferred => format!("job id={job} result=deferred"),
+        JobRunNote::Failed(reason) => {
+            format!("job id={job} result=failed reason={}", reason.as_str())
+        }
     }
 }
 
@@ -191,6 +214,7 @@ fn describe_sync(diagnosis: &SyncDiagnosis) -> String {
     let job = match diagnosis.job {
         SyncJob::Portfolio => "portfolio",
         SyncJob::Transactions => "transactions",
+        SyncJob::TransactionsFullInspection => "transactions-full-inspection",
         SyncJob::InstrumentMaster => "instrument-master",
     };
     let result = match diagnosis.result {

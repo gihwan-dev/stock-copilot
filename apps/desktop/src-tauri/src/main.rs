@@ -42,7 +42,9 @@ use src_tauri::platform::notifier::{
 use src_tauri::platform::peer_process::PsPeerInspector;
 use src_tauri::platform::resolution::{ResolutionData, ResolutionDataSlot, ResolutionSource};
 use src_tauri::platform::scheduling::SpecWatchInputs;
-use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
+use src_tauri::platform::single_instance::{
+    InstanceAcquisition, InstanceSlot, SocketPath, attach_to_app,
+};
 use src_tauri::platform::system_notification::{
     NotificationHandleSlot, SystemNotificationDelivery,
 };
@@ -958,7 +960,8 @@ fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Er
     let single_instance = attach_to_app(app.handle(), socket_path)
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     match single_instance {
-        InstanceAcquisition::Primary(_guard) => {
+        InstanceAcquisition::Primary(guard) => {
+            let _managed = tauri::Manager::manage(&app, InstanceSlot::holding(guard));
             start_updates(app.handle());
             start_toss_check(app.handle());
             run_app(app, |handle, code| handle.exit(code.as_i32()));
