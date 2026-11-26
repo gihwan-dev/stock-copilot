@@ -240,9 +240,6 @@ advisory-db-fetch:
 gen-bindings:
     node harness/generated-files/check.mjs --write
 
-chat-eval *args:
-    node fixtures/chat-eval/run.mjs "$@"
-
 lint-file path:
     cargo run --locked --quiet --package xtask -- lint-file "$1"
 
