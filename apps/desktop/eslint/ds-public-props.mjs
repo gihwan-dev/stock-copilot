@@ -715,7 +715,7 @@ export const publicProps = {
                 .fileName.replaceAll(String.fromCharCode(92), "/"),
             ),
           ) &&
-          node.name.name === "components" &&
+          ["components", "remarkPlugins"].includes(node.name.name) &&
           ctx.filename
             .replaceAll(String.fromCharCode(92), "/")
             .endsWith("/src/shared/ds/Markdown.tsx")

@@ -77,6 +77,10 @@
         "react-error-boundary": {
           "target": "react-error-boundary",
           "reason": "U-04 클래스 없는 오류 경계 (architecture 5.2)"
+        },
+        "remark-gfm": {
+          "target": "remark-gfm",
+          "reason": "채팅 답의 GFM 표·취소선 표시 (ADR 0183, 사용자 요청)"
         }
       },
       "devDependencies": {
