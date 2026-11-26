@@ -62,9 +62,33 @@ impl<R: Runtime, P: PortTypes> AppStoredJobs<R, P> {
             .try_state::<Arc<crate::performance_book::PerformanceBook>>()
             .map(|state| Arc::clone(state.inner()))
             .ok_or_else(|| JobError::PortUnavailable(String::from("valuation-closes")))?;
-        book.record_day_from_closes(&self.repositories, account, now)
+        let recorded = book
+            .record_day_from_closes(&self.repositories, account, now)
             .await
-            .map_err(JobError::ExecutionFailed)
+            .map_err(JobError::ExecutionFailed)?;
+        if recorded == crate::performance_book::DayRecord::Deferred {
+            self.retry_daily_valuation_later();
+        }
+        Ok(())
+    }
+
+    fn retry_daily_valuation_later(&self) {
+        let Some(triggers) = self
+            .app
+            .try_state::<Arc<scheduler::JobTriggers>>()
+            .map(|state| Arc::clone(state.inner()))
+        else {
+            return;
+        };
+        let _task = tauri::async_runtime::spawn(async move {
+            let mut waited = 0_u64;
+            for minutes in crate::performance_book::DEFERRED_RETRY_MINUTES {
+                let pause = minutes.saturating_sub(waited);
+                waited = minutes;
+                tokio::time::sleep(std::time::Duration::from_secs(pause.saturating_mul(60))).await;
+                triggers.trigger(scheduler::ScheduledJobId::DailyValuationSnapshot);
+            }
+        });
     }
 
     fn refresh_performance(&self) {

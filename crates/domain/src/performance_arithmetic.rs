@@ -1292,3 +1292,28 @@ mod review_precision_tests {
         );
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ShareSize {
+    Tiny,
+    Material,
+}
+
+pub(crate) fn converted_share(foreign: Number, rate: Number, whole: Number) -> ShareSize {
+    if whole.0 <= Decimal::ZERO {
+        return ShareSize::Material;
+    }
+    let tiny = Decimal::new(1, 3);
+    foreign
+        .0
+        .abs()
+        .checked_mul(rate.0)
+        .and_then(|converted| converted.checked_div(whole.0))
+        .map_or(ShareSize::Material, |share| {
+            if share < tiny {
+                ShareSize::Tiny
+            } else {
+                ShareSize::Material
+            }
+        })
+}

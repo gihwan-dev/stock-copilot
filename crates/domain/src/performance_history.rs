@@ -294,13 +294,10 @@ pub enum DayFx {
     StaleWithSmallDollarShare,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DollarShare {
-    Small,
-    Material,
-}
-
-fn dollar_share(snapshot: &ValuationSnapshot, rate: FxRate) -> Result<DollarShare, SnapshotError> {
+fn dollar_share(
+    snapshot: &ValuationSnapshot,
+    rate: FxRate,
+) -> Result<crate::performance_arithmetic::ShareSize, SnapshotError> {
     let dollars = snapshot.account_value(Currency::Usd)?.amount().as_decimal();
     let total = snapshot
         .account_krw_value()?
@@ -309,22 +306,11 @@ fn dollar_share(snapshot: &ValuationSnapshot, rate: FxRate) -> Result<DollarShar
         .0
         .amount()
         .as_decimal();
-    if total <= Decimal::ZERO {
-        return Ok(DollarShare::Material);
-    }
-    let converted = dollars
-        .abs()
-        .checked_mul(rate.quote_per_base().as_money().amount().as_decimal())
-        .ok_or(SnapshotError::MissingFx)?;
-    let share = converted
-        .checked_div(total)
-        .ok_or(SnapshotError::MissingFx)?;
-    let small = Decimal::new(1, 3);
-    Ok(if share < small {
-        DollarShare::Small
-    } else {
-        DollarShare::Material
-    })
+    Ok(crate::performance_arithmetic::converted_share(
+        Number::new(dollars),
+        Number::new(rate.quote_per_base().as_money().amount().as_decimal()),
+        Number::new(total),
+    ))
 }
 
 pub fn recompute_window_day_with_fallback(
@@ -353,8 +339,10 @@ pub fn recompute_window_day_with_fallback(
     };
     let snapshot = recompute_window_day(&retried, rows, histories, ledgers, recorded_at)?;
     match dollar_share(&snapshot, rate)? {
-        DollarShare::Small => Ok((snapshot, DayFx::StaleWithSmallDollarShare)),
-        DollarShare::Material => Err(original),
+        crate::performance_arithmetic::ShareSize::Tiny => {
+            Ok((snapshot, DayFx::StaleWithSmallDollarShare))
+        }
+        crate::performance_arithmetic::ShareSize::Material => Err(original),
     }
 }
 

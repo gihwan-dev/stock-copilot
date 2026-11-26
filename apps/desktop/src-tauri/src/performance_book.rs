@@ -333,6 +333,14 @@ impl Clock for SharedClock {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DayRecord {
+    Recorded,
+    Deferred,
+}
+
+pub const DEFERRED_RETRY_MINUTES: [u64; 2] = [60, 180];
+
 pub struct PerformanceBook {
     history: Arc<FeedHistory>,
     clock: Arc<dyn Clock>,
@@ -451,7 +459,7 @@ impl PerformanceBook {
         store: &Store,
         account: &AccountId,
         now: Timestamp,
-    ) -> Result<(), String>
+    ) -> Result<DayRecord, String>
     where
         Store: SettledRowsSource + application::ValuationRepository,
     {
@@ -462,7 +470,7 @@ impl PerformanceBook {
                 if day == date =>
             {
                 record_daily_note("deferred-until-session-close-candle");
-                return Ok(());
+                return Ok(DayRecord::Deferred);
             }
             Err(error) => return Err(format!("closes:{error:?}")),
         };
@@ -471,7 +479,7 @@ impl PerformanceBook {
             .await
             .map_err(|error| format!("storage:{error:?}"))?;
         record_daily_note("recorded-from-session-closes");
-        Ok(())
+        Ok(DayRecord::Recorded)
     }
 
     pub async fn refresh<Rows: SettledRowsSource>(&self, rows: &Rows, account: &AccountId) {
