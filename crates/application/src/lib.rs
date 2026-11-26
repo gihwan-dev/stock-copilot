@@ -260,6 +260,12 @@ pub use system_port_error::{
 };
 mod clock;
 pub use clock::Clock;
+mod diagnostics;
+pub use diagnostics::{
+    BrokerCall, CallMethod, CallResult, DiagnosticEvent, DiagnosticText, DiagnosticsSink,
+    HttpStatusCode, SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult, TokenIssue,
+    TransportFailure, failure_reason, sync_failure_reason,
+};
 mod notifier;
 pub use notifier::{Notification, Notifier};
 mod secret_store;

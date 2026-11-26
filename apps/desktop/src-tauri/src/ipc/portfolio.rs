@@ -9,9 +9,11 @@ use specta::Type;
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::briefing::kst_iso;
-use super::error::{IpcError, IpcErrorKind};
+use super::error::{IpcError, IpcErrorKind, IpcSyncError};
 use super::state::ScreenState;
+use crate::diagnostics_log::DiagnosticsLog;
 use crate::holdings_link::InstrumentDirectory;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -483,12 +485,23 @@ fn managed<R: Runtime>(
 pub async fn get_portfolio<R: Runtime>(
     app: AppHandle<R>,
     request: GetPortfolioRequest,
-) -> Result<UiPortfolioView, IpcError> {
+) -> Result<UiPortfolioView, IpcSyncError> {
     let GetPortfolioRequest {
         scope: PortfolioScope::Current,
     } = request;
-    let (screen, directory) = managed(&app)?;
-    load_portfolio(screen, &directory).await
+    let reason = app
+        .try_state::<Option<Arc<DiagnosticsLog>>>()
+        .and_then(|state| {
+            state
+                .inner()
+                .as_ref()
+                .and_then(|log| log.portfolio_failure())
+        });
+    let loaded = match managed(&app) {
+        Ok((screen, directory)) => load_portfolio(screen, &directory).await,
+        Err(error) => Err(error),
+    };
+    loaded.map_err(|error| IpcSyncError::explained(error, reason))
 }
 
 #[tauri::command]

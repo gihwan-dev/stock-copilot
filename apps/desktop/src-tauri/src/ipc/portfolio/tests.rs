@@ -320,3 +320,60 @@ fn portfolio_request_refuses_unknown_fields() {
         );
     }
 }
+
+struct FixedClock;
+impl application::Clock for FixedClock {
+    fn now(&self) -> Timestamp {
+        at(RECORDED_AT)
+    }
+}
+
+#[test]
+fn a_failed_portfolio_carries_the_last_sync_failure_reason() {
+    use application::DiagnosticsSink;
+    let log = crate::diagnostics_log::DiagnosticsLog::start(
+        testkit::canonical_temp_dir()
+            .expect("임시 폴더")
+            .join(format!("sc-diag-portfolio-{}", std::process::id())),
+        Arc::new(FixedClock),
+    );
+    log.record(&application::DiagnosticEvent::Sync(
+        application::SyncDiagnosis {
+            job: application::SyncJob::Portfolio,
+            result: application::SyncResult::Failed,
+            errors: vec![application::PortError::new(
+                application::ReadEndpoint::Holdings,
+                application::HttpStatus::Success,
+                application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Schema),
+            )],
+        },
+    ));
+    let cases = [
+        (
+            Some(SyncOutcome::Failed),
+            IpcErrorKind::Retryable,
+            Some(crate::ipc::error::IpcFailureReason::ResponseMismatch),
+        ),
+        (
+            Some(SyncOutcome::AccessBlocked),
+            IpcErrorKind::UserFixable,
+            None,
+        ),
+        (None, IpcErrorKind::NoData, None),
+    ];
+    for (outcome, kind, reason) in cases {
+        let app = app_with(backend(outcome.as_ref()));
+        let _log = tauri::Manager::manage(&app, Some(Arc::clone(&log)));
+        let error = tauri::async_runtime::block_on(get_portfolio(app.handle().clone(), request()))
+            .expect_err("오류");
+        assert_eq!((error.kind, error.reason), (kind, reason));
+    }
+    let app = app_with(backend(Some(&SyncOutcome::Failed)));
+    let error = tauri::async_runtime::block_on(get_portfolio(app.handle().clone(), request()))
+        .expect_err("기록 없음");
+    assert_eq!((error.kind, error.reason), (IpcErrorKind::Retryable, None));
+    assert_eq!(
+        serde_json::to_string(&error).expect("직렬화"),
+        r#"{"kind":"retryable","reason":null}"#
+    );
+}

@@ -57,6 +57,43 @@ pub enum ReadRoute {
     CalendarUs,
 }
 impl ReadRoute {
+    const fn template(&self) -> &'static str {
+        match self {
+            Self::Accounts => "/api/v1/accounts",
+            Self::Holdings => "/api/v1/holdings",
+            Self::Transactions => "/api/v1/transactions",
+            Self::Quotes => "/api/v1/prices",
+            Self::Candles => "/api/v1/candles",
+            Self::BuyingPower => "/api/v1/buying-power",
+            Self::SellableQuantity => "/api/v1/sellable-quantity",
+            Self::Orders => "/api/v1/orders",
+            Self::FxRate => "/api/v1/exchange-rate",
+            Self::Orderbook => "/api/v1/orderbook",
+            Self::PriceLimits => "/api/v1/price-limits",
+            Self::CommissionRate => "/api/v1/commissions",
+            Self::Instruments => "/api/v1/stocks/all",
+            Self::Stocks => "/api/v1/stocks",
+            Self::Rankings => "/api/v1/rankings",
+            Self::InvestorRankings => "/api/v1/rankings/investor-trading",
+            Self::IndicatorQuotes => "/api/v1/market-indicators/prices",
+            Self::Sectors => "/api/v1/sectors",
+            Self::SectorRankings => "/api/v1/sectors/rankings",
+            Self::Order(_) => "/api/v1/orders/{orderId}",
+            Self::StockWarnings(_) => "/api/v1/stocks/{symbol}/warnings",
+            Self::StockInvestorFlow(_) => "/api/v1/stocks/{symbol}/investor-trading",
+            Self::ProgramTrades(_) => "/api/v1/stocks/{symbol}/program-trades",
+            Self::ShortSelling(_) => "/api/v1/stocks/{symbol}/short-selling",
+            Self::CreditTrades(_) => "/api/v1/stocks/{symbol}/credit-trades",
+            Self::SecuritiesLending(_) => "/api/v1/stocks/{symbol}/securities-lending",
+            Self::IndicatorCandles(_) => "/api/v1/market-indicators/{symbol}/candles",
+            Self::IndicatorInvestorFlow(_) => "/api/v1/market-indicators/{symbol}/investor-trading",
+            Self::Sector(_) => "/api/v1/sectors/{sectorId}",
+            Self::SectorStocks(_) => "/api/v1/sectors/{sectorId}/stocks",
+            Self::SectorEtfs(_) => "/api/v1/sectors/{sectorId}/etfs",
+            Self::CalendarKr => "/api/v1/market-calendar/KR",
+            Self::CalendarUs => "/api/v1/market-calendar/US",
+        }
+    }
     fn path(&self) -> String {
         match self {
             Self::Accounts => "/api/v1/accounts".to_owned(),
@@ -189,6 +226,9 @@ impl ReadRequest {
     pub fn with_account(mut self, account: SecretValue) -> Self {
         self.account = Some(account);
         self
+    }
+    pub(crate) const fn path_template(&self) -> &'static str {
+        self.route.template()
     }
     pub(crate) const fn account(&self) -> Option<&SecretValue> {
         self.account.as_ref()

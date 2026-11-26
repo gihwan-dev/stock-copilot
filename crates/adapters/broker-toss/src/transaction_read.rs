@@ -91,7 +91,10 @@ impl Pages {
         }) {
             return Err(PageFault::RepeatedCursor);
         }
-        let envelope: Envelope = serde_json::from_slice(body).map_err(|_error| invalid())?;
+        let envelope: Envelope = serde_json::from_slice(body).map_err(|error| {
+            crate::diagnostics::decode_failed(ReadEndpoint::Transactions, &error);
+            invalid()
+        })?;
         if envelope.error.is_some_and(|error| !error.is_null()) {
             return Err(invalid().into());
         }
@@ -134,7 +137,10 @@ impl Pages {
         }
         scope?;
         let _decoded: broker_toss_schema::types::Transaction =
-            serde_json::from_value(value.clone()).map_err(|_error| invalid())?;
+            serde_json::from_value(value.clone()).map_err(|error| {
+                crate::diagnostics::decode_failed(ReadEndpoint::Transactions, &error);
+                invalid()
+            })?;
         let transaction = row::convert(&value)?;
         self.rows.push(row::ParsedTransaction {
             transaction,

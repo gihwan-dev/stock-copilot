@@ -92,6 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let clock = platform_macos::SystemClock::new()
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let shared_clock = Arc::new(clock);
+    let diagnostics = product_diagnostics(&context.config().identifier, &shared_clock);
     let repositories = Arc::new(SqliteRepositories::new(SharedDatabase::new()));
     let notification_handle = Arc::new(NotificationHandleSlot::<tauri::Wry>::default());
     let notifier = product_notifier(&notification_handle);
@@ -134,6 +135,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             estimates,
         )
         .manage(notification_handle)
+        .manage(diagnostics)
         .manage(directory)
         .manage(intraday)
         .manage(turns)
@@ -145,6 +147,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         context,
     )?;
     run_primary(app)
+}
+
+fn product_diagnostics(
+    identifier: &str,
+    clock: &Arc<platform_macos::SystemClock>,
+) -> Option<Arc<src_tauri::diagnostics_log::DiagnosticsLog>> {
+    let directory = PathBuf::from(std::env::var_os("HOME")?)
+        .join("Library")
+        .join("Application Support")
+        .join(identifier);
+    let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
+    let log = src_tauri::diagnostics_log::DiagnosticsLog::start(directory, shared);
+    let sink: Arc<dyn application::DiagnosticsSink> =
+        Arc::<src_tauri::diagnostics_log::DiagnosticsLog>::clone(&log);
+    let _installed = broker_toss::install_diagnostics(sink);
+    src_tauri::diagnostics_log::install(&log);
+    Some(log)
 }
 
 fn product_notifier(handle: &Arc<NotificationHandleSlot<tauri::Wry>>) -> Arc<ProductNotifier> {

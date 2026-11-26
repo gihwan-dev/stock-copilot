@@ -12,7 +12,20 @@ fn failure() -> application::PortError {
     invalid(ReadEndpoint::Holdings, ResponseMismatch::Validation)
 }
 fn numeric(value: &Value) -> Conversion<NumericInput> {
-    NumericInput::try_new(value.as_str().ok_or_else(failure)?).map_err(|_error| failure())
+    let text = value.as_str().ok_or_else(|| {
+        crate::diagnostics::validation_failed(
+            ReadEndpoint::Holdings,
+            "a numeric value is not a string",
+        );
+        failure()
+    })?;
+    NumericInput::try_new(text).map_err(|_error| {
+        crate::diagnostics::validation_failed(
+            ReadEndpoint::Holdings,
+            "a numeric string is not a decimal",
+        );
+        failure()
+    })
 }
 fn money(value: &Value, currency: Currency) -> Conversion<Money> {
     Money::parse(&numeric(value)?, currency).map_err(|_error| failure())
@@ -133,24 +146,55 @@ pub(crate) fn holdings(
     observed: Timestamp,
     master_errors: crate::account_read::MasterErrorMode,
 ) -> Conversion<HoldingsObservation> {
+    use crate::diagnostics::staged;
+    const ENDPOINT: ReadEndpoint = ReadEndpoint::Holdings;
     let decoded: broker_toss_schema::types::HoldingsOverview =
-        serde_json::from_value(value.clone())
-            .map_err(|_error| invalid(ReadEndpoint::Holdings, ResponseMismatch::Schema))?;
+        serde_json::from_value(value.clone()).map_err(|error| {
+            crate::diagnostics::decode_failed(ENDPOINT, &error);
+            invalid(ENDPOINT, ResponseMismatch::Schema)
+        })?;
     let modeled = serde_json::to_value(decoded).map_err(|_error| failure())?;
-    validate_numbers(&modeled)?;
-    let rows = field(value, "/items")?.as_array().ok_or_else(failure)?;
+    staged(
+        ENDPOINT,
+        "a numeric field is not a decimal string",
+        validate_numbers(&modeled),
+    )?;
+    let rows = staged(
+        ENDPOINT,
+        "items is missing or not a list",
+        field(value, "/items").and_then(|items| items.as_array().ok_or_else(failure)),
+    )?;
     let mut seen = std::collections::BTreeSet::new();
     let parsed = rows
         .iter()
         .map(|row| {
-            let parsed = parse_holding(row)?;
+            let parsed = staged(ENDPOINT, "holding row rejected", parse_holding(row))?;
             if !seen.insert((parsed.market, parsed.symbol.clone())) {
-                return Err(failure());
+                return staged(ENDPOINT, "duplicate holding row", Err(failure()));
             }
             Ok(parsed)
         })
         .collect::<Conversion<Vec<_>>>()?;
-    let reported = ReportedPortfolio::new(
+    let reported = staged(
+        ENDPOINT,
+        "portfolio summary rejected",
+        summary(value, observed),
+    )?;
+    let holdings = parsed
+        .iter()
+        .map(|row| {
+            staged(
+                ENDPOINT,
+                "holding not matched to the instrument master",
+                holding(row, master, observed, master_errors),
+            )
+        })
+        .collect::<Conversion<Vec<_>>>()?;
+    Ok(HoldingsObservation::from_broker_result(holdings, reported))
+}
+
+fn summary(value: &Value, observed: Timestamp) -> Conversion<ReportedPortfolio> {
+    Ok(ReportedPortfolio::new(
         amounts(field(value, "/marketValue/amount")?)?,
         amounts(field(value, "/totalPurchaseAmount")?)?,
         amounts(field(value, "/profitLoss/amount")?)?,
@@ -160,14 +204,15 @@ pub(crate) fn holdings(
         amounts(field(value, "/dailyProfitLoss/amount")?)?,
         ratio(field(value, "/dailyProfitLoss/rate")?)?,
     ))
-    .with_return_rate(ratio(field(value, "/profitLoss/rate")?)?);
-    let holdings = parsed
-        .iter()
-        .map(|row| holding(row, master, observed, master_errors))
-        .collect::<Conversion<Vec<_>>>()?;
-    Ok(HoldingsObservation::from_broker_result(holdings, reported))
+    .with_return_rate(ratio(field(value, "/profitLoss/rate")?)?))
 }
 
 fn field<'a>(value: &'a Value, pointer: &str) -> Conversion<&'a Value> {
-    value.pointer(pointer).ok_or_else(failure)
+    value.pointer(pointer).ok_or_else(|| {
+        crate::diagnostics::validation_failed(
+            ReadEndpoint::Holdings,
+            &format!("missing {pointer}"),
+        );
+        failure()
+    })
 }

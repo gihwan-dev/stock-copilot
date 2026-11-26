@@ -57,7 +57,22 @@ pub(crate) async fn buying_power<S: SecretStore, T: Clock, R: TokenRenewal>(
         .with_query(QueryKey::Currency, currency_code(currency).to_owned());
     let body = reader.market_read(query, ReadEndpoint::BuyingPower).await?;
     let decoded: broker_toss_schema::types::BuyingPowerResponse = serde_json::from_value(body)
-        .map_err(|_error| invalid(ReadEndpoint::BuyingPower, ResponseMismatch::Schema))?;
+        .map_err(|error| {
+            crate::diagnostics::decode_failed(ReadEndpoint::BuyingPower, &error);
+            invalid(ReadEndpoint::BuyingPower, ResponseMismatch::Schema)
+        })?;
+    crate::diagnostics::staged(
+        ReadEndpoint::BuyingPower,
+        "buying power rejected",
+        buying_power_money(&decoded, currency),
+    )
+    .map(|money| BuyingPower::new(money, reader.market_now()))
+}
+
+fn buying_power_money(
+    decoded: &broker_toss_schema::types::BuyingPowerResponse,
+    currency: Currency,
+) -> Result<Money, PortError> {
     let response_currency = match decoded.currency {
         broker_toss_schema::types::Currency::Krw => Currency::Krw,
         broker_toss_schema::types::Currency::Usd => Currency::Usd,
@@ -84,7 +99,7 @@ pub(crate) async fn buying_power<S: SecretStore, T: Clock, R: TokenRenewal>(
             ResponseMismatch::Validation,
         ));
     }
-    Ok(BuyingPower::new(money, reader.market_now()))
+    Ok(money)
 }
 
 pub(crate) async fn sellable_quantity<S: SecretStore, T: Clock, R: TokenRenewal>(

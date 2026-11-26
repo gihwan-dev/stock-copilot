@@ -89,16 +89,22 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
                 .read_error(endpoint, retry_delay(response.headers().retry_after()))
                 .port_error());
         }
-        let body: serde_json::Value =
-            serde_json::from_slice(response.body().as_exposed_secret())
-                .map_err(|_error| invalid(endpoint, ResponseMismatch::Schema))?;
+        let body: serde_json::Value = serde_json::from_slice(response.body().as_exposed_secret())
+            .map_err(|error| {
+            crate::diagnostics::decode_failed(endpoint, &error);
+            invalid(endpoint, ResponseMismatch::Schema)
+        })?;
         if body.get("error").is_some_and(|error| !error.is_null()) {
+            crate::diagnostics::schema_failed(endpoint, "envelope error field is set");
             return Err(invalid(endpoint, ResponseMismatch::Schema));
         }
         body.get("result")
             .cloned()
             .filter(|value| !value.is_null())
-            .ok_or_else(|| invalid(endpoint, ResponseMismatch::Schema))
+            .ok_or_else(|| {
+                crate::diagnostics::schema_failed(endpoint, "envelope result is missing");
+                invalid(endpoint, ResponseMismatch::Schema)
+            })
     }
     pub(crate) async fn fetch_accounts(&self) -> Result<BrokerAccountRows, PortError> {
         let value = self
@@ -310,9 +316,15 @@ fn store_error(error: application::SystemPortError) -> PortErrorKind {
     }
 }
 fn accounts(value: serde_json::Value, observed: Timestamp) -> Result<BrokerAccountRows, PortError> {
-    let failure = || invalid(ReadEndpoint::Accounts, ResponseMismatch::Validation);
-    let decoded: Vec<broker_toss_schema::types::Account> = serde_json::from_value(value)
-        .map_err(|_error| invalid(ReadEndpoint::Accounts, ResponseMismatch::Schema))?;
+    let failure = || {
+        crate::diagnostics::validation_failed(ReadEndpoint::Accounts, "account row rejected");
+        invalid(ReadEndpoint::Accounts, ResponseMismatch::Validation)
+    };
+    let decoded: Vec<broker_toss_schema::types::Account> =
+        serde_json::from_value(value).map_err(|error| {
+            crate::diagnostics::decode_failed(ReadEndpoint::Accounts, &error);
+            invalid(ReadEndpoint::Accounts, ResponseMismatch::Schema)
+        })?;
     let rows = decoded
         .into_iter()
         .map(|row| {

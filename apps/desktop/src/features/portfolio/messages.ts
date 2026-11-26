@@ -55,6 +55,24 @@ const catalog = {
   },
   loadingTitle: { ko: "현황을 불러오는 중이에요" as UiText },
   errorTitle: { ko: "현황을 불러오지 못했어요" as UiText },
+  errorNetworkBody: {
+    ko: "토스증권 서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요. 자세한 기록은 ~/Library/Application Support/dev.stockcopilot.desktop/diagnostics.log에 있어요." as UiText,
+  },
+  errorServerBusyBody: {
+    ko: "토스증권 서버가 잠시 응답하지 않아요. 잠시 뒤 다시 시도해 주세요. 자세한 기록은 ~/Library/Application Support/dev.stockcopilot.desktop/diagnostics.log에 있어요." as UiText,
+  },
+  errorResponseMismatchBody: {
+    ko: "토스증권 응답 형식이 예상과 달라요. 앱 업데이트가 필요해요. 자세한 기록은 ~/Library/Application Support/dev.stockcopilot.desktop/diagnostics.log에 있어요." as UiText,
+  },
+  errorRejectedBody: {
+    ko: "토스증권이 요청을 거절했어요. 자세한 기록은 ~/Library/Application Support/dev.stockcopilot.desktop/diagnostics.log에 있어요." as UiText,
+  },
+  errorInstrumentsBody: {
+    ko: "종목 정보를 아직 받지 못했어요. 잠시 뒤 다시 시도해 주세요. 자세한 기록은 ~/Library/Application Support/dev.stockcopilot.desktop/diagnostics.log에 있어요." as UiText,
+  },
+  errorUnknownBody: {
+    ko: "토스증권 자료를 받는 중에 문제가 생겼어요. 자세한 기록은 ~/Library/Application Support/dev.stockcopilot.desktop/diagnostics.log에 있어요." as UiText,
+  },
   allocationErrorTitle: { ko: "자산배분을 불러오지 못했어요" as UiText },
   retry: { ko: "다시 시도" as UiText },
   openTransactions: { ko: "거래내역" as UiText },

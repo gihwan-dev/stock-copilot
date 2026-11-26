@@ -70,8 +70,10 @@ async fn listed<S: SecretStore, T: Clock, R: TokenRenewal>(
                 ReadEndpoint::Instruments,
             )
             .await?;
-        let rows: Vec<ListedStock> =
-            serde_json::from_value(response).map_err(|_error| invalid())?;
+        let rows: Vec<ListedStock> = serde_json::from_value(response).map_err(|error| {
+            crate::diagnostics::decode_failed(ReadEndpoint::Instruments, &error);
+            invalid()
+        })?;
         if rows.len() > 8192 {
             return Err(invalid());
         }
@@ -203,7 +205,10 @@ async fn details<S: SecretStore, T: Clock, R: TokenRenewal>(
                 ReadEndpoint::Instruments,
             )
             .await?;
-        let rows: Vec<StockInfo> = serde_json::from_value(response).map_err(|_error| invalid())?;
+        let rows: Vec<StockInfo> = serde_json::from_value(response).map_err(|error| {
+            crate::diagnostics::decode_failed(ReadEndpoint::Instruments, &error);
+            invalid()
+        })?;
         if rows.len() != batch.len() {
             return Err(invalid());
         }

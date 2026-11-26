@@ -1,3 +1,5 @@
+mod diagnostics;
+pub use diagnostics::{DiagnosticsInstall, install_diagnostics, record_diagnostic};
 mod error_codes;
 mod error_mapping;
 mod time;

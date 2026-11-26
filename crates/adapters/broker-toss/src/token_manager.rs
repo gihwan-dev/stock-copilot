@@ -167,6 +167,27 @@ impl Drop for Attempt<'_> {
         }
     }
 }
+fn token_invalid(detail: &str) -> TokenError {
+    crate::record_diagnostic(&application::DiagnosticEvent::TokenIssue(
+        application::TokenIssue::InvalidResponse(application::DiagnosticText::new(detail)),
+    ));
+    TokenError::InvalidResponse
+}
+fn record_issue(result: &Result<TokenLease, TokenError>) {
+    use application::TokenIssue;
+    let issue = match result {
+        Ok(_token) => TokenIssue::Issued,
+        Err(TokenError::MissingCredentials) => TokenIssue::MissingCredentials,
+        Err(TokenError::Store(_failure)) => TokenIssue::Keychain,
+        Err(TokenError::Rejected(kind)) => TokenIssue::Rejected(*kind),
+        Err(TokenError::Http(_failure)) => TokenIssue::Transport,
+        Err(TokenError::Renewal | TokenError::RevokedRepeated | TokenError::Superseded) => {
+            TokenIssue::Renewal
+        }
+        Err(TokenError::InvalidResponse) => return,
+    };
+    crate::record_diagnostic(&application::DiagnosticEvent::TokenIssue(issue));
+}
 fn parse_token(response: &RawResponse, started: Timestamp) -> Result<TokenLease, TokenError> {
     if response.status() != 200 {
         return Err(TokenError::Rejected(
@@ -177,7 +198,7 @@ fn parse_token(response: &RawResponse, started: Timestamp) -> Result<TokenLease,
         ));
     }
     let parsed: TokenResponse = serde_json::from_slice(response.body().as_exposed_secret())
-        .map_err(|_error| TokenError::InvalidResponse)?;
+        .map_err(|error| token_invalid(&crate::diagnostics::serde_detail(&error)))?;
     let TokenType::Bearer = parsed.token_type;
     if parsed.access_token.as_exposed_secret().is_empty()
         || parsed.expires_in < 2
@@ -187,21 +208,21 @@ fn parse_token(response: &RawResponse, started: Timestamp) -> Result<TokenLease,
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || b"-._~+/=".contains(byte))
     {
-        return Err(TokenError::InvalidResponse);
+        return Err(token_invalid("token value or lifetime out of range"));
     }
     let lifetime = TimeSpan::try_new(SpanSeconds::new(parsed.expires_in), Nanosecond::new(0))
-        .map_err(|_error| TokenError::InvalidResponse)?;
+        .map_err(|_error| token_invalid("token lifetime out of range"))?;
     let margin = TimeSpan::try_new(
         SpanSeconds::new(std::cmp::min(60, parsed.expires_in.saturating_sub(1))),
         Nanosecond::new(0),
     )
-    .map_err(|_error| TokenError::InvalidResponse)?;
+    .map_err(|_error| token_invalid("token lifetime out of range"))?;
     let expires_at = started
         .checked_add(lifetime)
-        .map_err(|_error| TokenError::InvalidResponse)?;
+        .map_err(|_error| token_invalid("token lifetime out of range"))?;
     let refresh_at = expires_at
         .checked_sub(margin)
-        .map_err(|_error| TokenError::InvalidResponse)?;
+        .map_err(|_error| token_invalid("token lifetime out of range"))?;
     Ok(TokenLease(Arc::new(Token {
         secret: parsed.access_token,
         refresh_at,
@@ -259,14 +280,14 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
             .map_err(TokenError::Http)?;
         let token = parse_token(&response, started)?;
         if self.clock.now() >= token.0.expires_at {
-            return Err(TokenError::InvalidResponse);
+            return Err(token_invalid("token expired before use"));
         }
         self.renewal.close().await?;
         self.renewal.reconnect(token.secret()).await?;
         self.renewal.resubscribe().await?;
         self.renewal.reconcile_orders(token.secret()).await?;
         if self.clock.now() >= token.0.expires_at {
-            return Err(TokenError::InvalidResponse);
+            return Err(token_invalid("token expired during renewal"));
         }
         Ok(token)
     }
@@ -304,6 +325,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
             completion: AttemptCompletion::Pending,
         };
         let result = self.issue().await;
+        record_issue(&result);
         attempt.complete(&result);
         result.map(Acquisition::Issued)
     }

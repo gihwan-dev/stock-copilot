@@ -18,6 +18,7 @@ export {
 export type {
   AppVersion,
   CommandError,
+  CommandFailureReason,
   CoreUiEvent,
   OpenExternalResult,
 } from "./schema";

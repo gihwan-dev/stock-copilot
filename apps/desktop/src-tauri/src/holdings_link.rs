@@ -204,7 +204,18 @@ impl MasterRefresh {
             if self.is_fresh(loaded.get(&market)) {
                 continue;
             }
-            match self.feed.fetch(market).await {
+            let fetched = self.feed.fetch(market).await;
+            crate::diagnostics_log::record(&application::DiagnosticEvent::Sync(
+                application::SyncDiagnosis {
+                    job: application::SyncJob::InstrumentMaster,
+                    result: match &fetched {
+                        Ok(_master) => application::SyncResult::Complete,
+                        Err(_error) => application::SyncResult::Failed,
+                    },
+                    errors: fetched.as_ref().err().copied().into_iter().collect(),
+                },
+            ));
+            match fetched {
                 Ok(master) => {
                     let at = self.clock.now();
                     let instruments = available(&master);
@@ -296,6 +307,13 @@ where
     let report = SyncPortfolio::new(parts.broker, parts.portfolios, parts.clock, parts.events)
         .execute(account)
         .await?;
+    crate::diagnostics_log::record(&application::DiagnosticEvent::Sync(
+        application::SyncDiagnosis {
+            job: application::SyncJob::Portfolio,
+            result: application::SyncResult::of(report.record.outcome()),
+            errors: report.failures.clone(),
+        },
+    ));
     let refreshed = application::RefreshFxRate::new(parts.market, parts.market_data, parts.events)
         .execute(
             domain::FxPair::UsdKrw,

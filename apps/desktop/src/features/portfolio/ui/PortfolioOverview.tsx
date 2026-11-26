@@ -6,13 +6,50 @@ import {
   Stack,
   StatusBar,
 } from "../../../shared/ds";
-import type { PortfolioView, ScreenSources } from "../../../shared/ipc";
+import type {
+  CommandFailureReason,
+  IpcFailure,
+  PortfolioView,
+  ScreenSources,
+} from "../../../shared/ipc";
 import { text } from "../../../shared/lib";
-import { portfolioText } from "../messages";
+import { portfolioText, type PortfolioMessageKey } from "../messages";
 import { usePortfolio } from "../model/portfolio";
 import { AllocationSection } from "./AllocationSection";
 import { HoldingsCard } from "./HoldingsCard";
 import { SummaryCards } from "./SummaryCards";
+
+const reasonBodies = {
+  network: "errorNetworkBody",
+  "server-busy": "errorServerBusyBody",
+  "response-mismatch": "errorResponseMismatchBody",
+  rejected: "errorRejectedBody",
+  "instruments-not-ready": "errorInstrumentsBody",
+  "access-denied": "errorAccessBody",
+  unknown: "errorUnknownBody",
+} as const satisfies Readonly<
+  Record<CommandFailureReason, PortfolioMessageKey>
+>;
+
+const reasonBody = (
+  reason: CommandFailureReason | null | undefined,
+): PortfolioMessageKey =>
+  reason === null || reason === undefined
+    ? "errorUnknownBody"
+    : reasonBodies[reason];
+
+const failureBody = (failure: IpcFailure): PortfolioMessageKey => {
+  switch (failure.kind) {
+    case "command":
+      return failure.error.kind === "user-fixable"
+        ? "errorAccessBody"
+        : reasonBody(failure.error.reason);
+    case "framework":
+    case "invalid-response":
+    case "timeout":
+      return "errorUnknownBody";
+  }
+};
 
 type Props = {
   readonly sources: Pick<ScreenSources, "portfolio" | "allocation">;
@@ -70,13 +107,10 @@ export const PortfolioOverview = (props: Props): ReactElement => {
         label: portfolioText("retry", "ko"),
         onPress: portfolio.retry,
       };
-      return portfolio.view.failure.kind === "command" &&
-        portfolio.view.failure.error.kind === "user-fixable" ? (
+      return (
         <EmptyState title={portfolioText("errorTitle", "ko")} action={action}>
-          {portfolioText("errorAccessBody", "ko")}
+          {portfolioText(failureBody(portfolio.view.failure), "ko")}
         </EmptyState>
-      ) : (
-        <EmptyState title={portfolioText("errorTitle", "ko")} action={action} />
       );
     }
     case "ready":

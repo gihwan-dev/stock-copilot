@@ -3,11 +3,12 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use application::{Clock, HttpStatus, ReadEndpoint, RetryDelay, SecretValue};
+use application::{CallMethod, Clock, HttpStatus, ReadEndpoint, RetryDelay, SecretValue};
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use reqwest::header::{AUTHORIZATION, CONNECTION, HeaderMap, HeaderValue, UPGRADE};
 use reqwest::{Client, Url};
 
+use crate::diagnostics::{observed_receive, observed_send};
 use crate::endpoint::EndpointMode;
 use crate::{
     ReadRequest, TossEndpoint, TossErrorBody, TossMappedError, TossWsEndpoint, map_toss_read_error,
@@ -48,6 +49,7 @@ pub struct TossHttpClient {
     client: Client,
     origin: Url,
     limiter: crate::rate_limiter::RateLimiter,
+    clock: Arc<dyn Clock>,
 }
 
 impl fmt::Debug for TossHttpClient {
@@ -166,7 +168,7 @@ impl RawResponse {
             retry,
         )
     }
-    fn error_body(&self) -> TossErrorBody {
+    pub(crate) fn error_body(&self) -> TossErrorBody {
         match std::str::from_utf8(self.body.as_exposed_secret()) {
             Ok(body) => TossErrorBody::parse(body),
             Err(_error) => TossErrorBody::parse("invalid-json"),
@@ -356,21 +358,29 @@ impl TossHttpClient {
         Ok(Self {
             client,
             origin,
-            limiter: crate::rate_limiter::RateLimiter::new(clock, wait),
+            limiter: crate::rate_limiter::RateLimiter::new(Arc::clone(&clock), wait),
+            clock,
         })
     }
 
     pub(crate) async fn send_token(&self, body: SecretValue) -> Result<RawResponse, TossHttpError> {
         let mut url = self.origin.clone();
         url.set_path("/oauth2/token");
-        receive(
+        let started = self.clock.now();
+        let transport = observed_send(
+            self.clock.as_ref(),
+            (CallMethod::Post, "/oauth2/token", started),
             self.client
                 .post(url)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .body(body.as_exposed_secret().to_vec())
-                .send()
-                .await
-                .map_err(|_error| TossHttpError::Transport)?,
+                .send(),
+        )
+        .await?;
+        observed_receive(
+            self.clock.as_ref(),
+            (CallMethod::Post, "/oauth2/token", started),
+            transport,
         )
         .await
     }
@@ -396,10 +406,14 @@ impl TossHttpClient {
                 }
                 None => builder,
             };
-            let transport = authenticated
-                .send()
-                .await
-                .map_err(|_error| TossHttpError::Transport)?;
+            let path = request.path_template();
+            let started = self.clock.now();
+            let transport = observed_send(
+                self.clock.as_ref(),
+                (CallMethod::Get, path, started),
+                authenticated.send(),
+            )
+            .await?;
             budget.observe(header(transport.headers(), "X-RateLimit-Limit").as_deref());
             if transport.status().as_u16() == 429 {
                 self.limiter.defer(
@@ -408,7 +422,12 @@ impl TossHttpClient {
                     attempt,
                 );
             }
-            let response = receive(transport).await?;
+            let response = observed_receive(
+                self.clock.as_ref(),
+                (CallMethod::Get, path, started),
+                transport,
+            )
+            .await?;
             if response.status() != 429
                 || attempt == 3
                 || budget.cooldown() == crate::rate_limiter::Cooldown::Unavailable
@@ -424,12 +443,17 @@ impl TossHttpClient {
     ) -> Result<RawResponse, TossHttpError> {
         let mut url = self.origin.clone();
         url.set_path(route.path());
-        receive(
-            self.client
-                .get(url)
-                .send()
-                .await
-                .map_err(|_error| TossHttpError::Transport)?,
+        let started = self.clock.now();
+        let transport = observed_send(
+            self.clock.as_ref(),
+            (CallMethod::Get, route.path(), started),
+            self.client.get(url).send(),
+        )
+        .await?;
+        observed_receive(
+            self.clock.as_ref(),
+            (CallMethod::Get, route.path(), started),
+            transport,
         )
         .await
     }

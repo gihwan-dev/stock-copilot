@@ -135,7 +135,18 @@ impl<R: Runtime, P: PortTypes> TransactionSyncPort for AppStoredJobs<R, P> {
         let mut tally = TransactionSyncTally::default();
         let mut first_failure = None;
         for account in &ports.saved_accounts.current() {
-            match recent.sync_recent(account).await {
+            let synced = recent.sync_recent(account).await;
+            crate::diagnostics_log::record(&application::DiagnosticEvent::Sync(
+                application::SyncDiagnosis {
+                    job: application::SyncJob::Transactions,
+                    result: match &synced {
+                        Ok(_delivery) => application::SyncResult::Complete,
+                        Err(_error) => application::SyncResult::Failed,
+                    },
+                    errors: Vec::new(),
+                },
+            ));
+            match synced {
                 Ok(_delivery) => tally.recent_synced = tally.recent_synced.saturating_add(1),
                 Err(error) => first_failure = first_failure.or_else(|| Some(storage(error))),
             }

@@ -52,7 +52,7 @@ export const commands = {
       __TAURI_INVOKE("get_briefings", { request }),
     ),
   getPortfolio: (request: GetPortfolioRequest) =>
-    typedError<UiPortfolioView_Serialize, IpcError>(
+    typedError<UiPortfolioView_Serialize, IpcSyncError_Serialize>(
       __TAURI_INVOKE("get_portfolio", { request }),
     ),
   getAllocation: (request: GetPortfolioRequest) =>
@@ -732,6 +732,27 @@ export type IpcError = {
 };
 
 export type IpcErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
+
+export type IpcFailureReason =
+  | "network"
+  | "server-busy"
+  | "response-mismatch"
+  | "rejected"
+  | "instruments-not-ready"
+  | "access-denied"
+  | "unknown";
+
+export type IpcSyncError = IpcSyncError_Serialize | IpcSyncError_Deserialize;
+
+export type IpcSyncError_Deserialize = {
+  kind: IpcErrorKind;
+  reason?: IpcFailureReason | null;
+};
+
+export type IpcSyncError_Serialize = {
+  kind: IpcErrorKind;
+  reason: IpcFailureReason | null;
+};
 
 export type JobSchedulesScope = "ai";
 

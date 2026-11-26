@@ -29,3 +29,54 @@ impl From<application::ErrorClass> for IpcError {
         Self { kind }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum IpcFailureReason {
+    #[serde(rename = "network")]
+    Network,
+    #[serde(rename = "server-busy")]
+    ServerBusy,
+    #[serde(rename = "response-mismatch")]
+    ResponseMismatch,
+    #[serde(rename = "rejected")]
+    Rejected,
+    #[serde(rename = "instruments-not-ready")]
+    InstrumentsNotReady,
+    #[serde(rename = "access-denied")]
+    AccessDenied,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+impl From<application::SyncFailureReason> for IpcFailureReason {
+    fn from(reason: application::SyncFailureReason) -> Self {
+        match reason {
+            application::SyncFailureReason::Network => Self::Network,
+            application::SyncFailureReason::ServerBusy => Self::ServerBusy,
+            application::SyncFailureReason::ResponseMismatch => Self::ResponseMismatch,
+            application::SyncFailureReason::Rejected => Self::Rejected,
+            application::SyncFailureReason::InstrumentsNotReady => Self::InstrumentsNotReady,
+            application::SyncFailureReason::AccessDenied => Self::AccessDenied,
+            application::SyncFailureReason::Unknown => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub struct IpcSyncError {
+    pub kind: IpcErrorKind,
+    pub reason: Option<IpcFailureReason>,
+}
+
+impl IpcSyncError {
+    #[must_use]
+    pub fn explained(error: IpcError, reason: Option<application::SyncFailureReason>) -> Self {
+        Self {
+            kind: error.kind,
+            reason: match error.kind {
+                IpcErrorKind::Retryable => reason.map(IpcFailureReason::from),
+                IpcErrorKind::UserFixable | IpcErrorKind::Bug | IpcErrorKind::NoData => None,
+            },
+        }
+    }
+}

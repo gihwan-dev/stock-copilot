@@ -10,7 +10,19 @@ export type AppVersion = { readonly version: AppVersionText };
 
 type CommandErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
 
-export type CommandError = { readonly kind: CommandErrorKind };
+export type CommandFailureReason =
+  | "network"
+  | "server-busy"
+  | "response-mismatch"
+  | "rejected"
+  | "instruments-not-ready"
+  | "access-denied"
+  | "unknown";
+
+export type CommandError = {
+  readonly kind: CommandErrorKind;
+  readonly reason?: CommandFailureReason | null | undefined;
+};
 export type IpcFailure =
   | { readonly kind: "command"; readonly error: CommandError }
   | { readonly kind: "framework" }
@@ -35,7 +47,21 @@ const appVersionSchema = z
   .readonly();
 
 const commandErrorSchema = z
-  .object({ kind: z.enum(["user-fixable", "retryable", "bug", "no-data"]) })
+  .object({
+    kind: z.enum(["user-fixable", "retryable", "bug", "no-data"]),
+    reason: z
+      .enum([
+        "network",
+        "server-busy",
+        "response-mismatch",
+        "rejected",
+        "instruments-not-ready",
+        "access-denied",
+        "unknown",
+      ])
+      .nullable()
+      .optional(),
+  })
   .strict()
   .readonly();
 
