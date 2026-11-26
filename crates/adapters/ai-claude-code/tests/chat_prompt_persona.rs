@@ -133,6 +133,14 @@ mod tests {
     }
 
     #[test]
+    fn advisor_prompt_ties_market_answers_to_the_account() {
+        assert_pins(&[
+            "시장·수급 질문이어도 그 자료가 보유 종목의 한도 초과나 할 일과 닿으면 한 문장으로 계좌에 잇는다",
+            "무엇을 사라고 하기 전에 이것으로 그 상품이 이미 주의·초과인지 먼저 본다",
+        ]);
+    }
+
+    #[test]
     fn advisor_prompt_handles_tool_failures_in_one_line_without_guessing() {
         assert_pins(&[
             "원인이나 복구 시점을 추측하지 않는다",
@@ -224,7 +232,7 @@ mod tests {
             "room_to_limit",
             "app_으로 시작하는 이름",
             "\"앱 규칙\"",
-            "한 줄로만 알리고, 받은 자료로 판단과 다음 행동을 이어 간다",
+            "답에 필요한 자료일 때만 한 줄로 알리고",
         ]);
     }
 
