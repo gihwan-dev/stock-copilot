@@ -17,7 +17,7 @@ impl RouteLookup for Statuses {
     fn source_status(&self, source: DataSource) -> BoxFuture<'_, Option<SourceStatus>> {
         let failed =
             SourceAttemptOutcome::Failed(InformationError::Unavailable(ResetTime::NotProvided));
-        let status = if source == DataSource::SegyeFinance {
+        let status = if source == DataSource::Maekyung {
             Some(SourceStatus::initial(source).apply_attempt(at(10), failed))
         } else if source == DataSource::Hankyung {
             Some(
@@ -36,7 +36,7 @@ impl RouteLookup for Statuses {
 fn only_sources_that_never_connected_on_this_device_are_marked_unreachable() {
     assert_eq!(
         tauri::async_runtime::block_on(unreachable_sources(Some(&Statuses))),
-        vec![UiFeedSource::SegyeFinance],
+        vec![UiFeedSource::Maekyung],
         "한 번이라도 성공한 소스는 일시 실패로 본다"
     );
     assert_eq!(

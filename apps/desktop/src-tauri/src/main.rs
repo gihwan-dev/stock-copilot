@@ -1383,6 +1383,17 @@ impl application::DiagnosticsSink for LoggedSourceCalls {
     }
 }
 
+const fn matches_unreachable_press(source: sources::PressMacroSource) -> bool {
+    match source {
+        sources::PressMacroSource::Edaily | sources::PressMacroSource::SegyeFinance => true,
+        sources::PressMacroSource::Hankyung
+        | sources::PressMacroSource::Maekyung
+        | sources::PressMacroSource::Yonhap
+        | sources::PressMacroSource::BankOfKorea
+        | sources::PressMacroSource::FederalReserve => false,
+    }
+}
+
 fn disclosure_feeds(
     client: &Arc<sources::SourceHttpClient>,
     clock: &Arc<platform_macos::SystemClock>,
@@ -1435,7 +1446,7 @@ fn collector_feeds(
     let disclosure_feeds = disclosure_feeds(&client, clock, tracking, hints);
     let mut feeds: Vec<CollectorFeed> = sources::PressMacroSource::ALL
         .into_iter()
-        .filter(|source| *source != sources::PressMacroSource::Edaily)
+        .filter(|source| !matches_unreachable_press(*source))
         .map(|source| CollectorFeed {
             target: press_target(source),
             startup: None,
@@ -2435,7 +2446,7 @@ mod tests {
             .iter()
             .map(|feed| (feed.target, feed.regular.source()))
             .collect();
-        assert_eq!(sources.len(), 11);
+        assert_eq!(sources.len(), 10);
         assert!(sources.contains(&(
             CollectionTarget::HankyungRss,
             FeedSource::News(domain::NewsSource::Hankyung)

@@ -230,12 +230,6 @@ export const responses = {
       },
       {
         body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
         state: "on",
@@ -546,12 +540,6 @@ export const responses = {
       },
       {
         body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
         state: "on",
@@ -680,12 +668,6 @@ export const responses = {
       },
       {
         body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
         state: "on",
@@ -775,12 +757,6 @@ export const responses = {
         body_reading: "locked",
         interval_minutes: "10",
         source: "Yonhap",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
         state: "on",
       },
       {
@@ -879,12 +855,6 @@ export const responses = {
         body_reading: "locked",
         interval_minutes: "10",
         source: "Yonhap",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
         state: "on",
       },
       {
@@ -990,12 +960,6 @@ export const responses = {
         body_reading: "locked",
         interval_minutes: "10",
         source: "Yonhap",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
         state: "on",
       },
       {
