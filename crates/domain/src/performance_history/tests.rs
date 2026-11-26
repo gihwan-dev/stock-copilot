@@ -315,3 +315,14 @@ fn reported_cash_anchors_the_ledger_when_transactions_miss_some_flows() {
         anchored_window_ledger(&set, span, Currency::Krw, evidence(&set, span), won).expect("원화");
     assert_eq!(won_anchor, CashAnchor::ReportedMatches);
 }
+
+#[test]
+fn a_rate_is_carried_forward_only_to_later_times() {
+    let friday = fx(at(5, 7), "1300");
+    let monday = crate::TimeInterval::try_new(at(8, 7), at(8, 8)).expect("구간");
+    let carried = friday.carried_to(monday).expect("다음 영업일");
+    assert_eq!(carried.quote_per_base(), friday.quote_per_base());
+    assert_eq!(carried.validity_at(at(8, 7)), crate::FxValidity::Valid);
+    let earlier = crate::TimeInterval::try_new(at(4, 7), at(4, 8)).expect("구간");
+    assert_eq!(friday.carried_to(earlier), None);
+}

@@ -287,3 +287,82 @@ fn the_weekend_after_a_fetched_friday_is_known_without_more_calendar_calls() {
         "시장마다 한 번만 묻는다"
     );
 }
+
+struct GappedFx {
+    fetched: AtomicUsize,
+}
+
+impl PerformanceFeed for GappedFx {
+    fn transactions<'a>(
+        &'a self,
+        _account: &'a AccountId,
+        _window: SettlementWindow,
+    ) -> BoxFuture<'a, Result<TransactionRead, PortError>> {
+        Box::pin(ready(Err(denied(ReadEndpoint::Transactions))))
+    }
+
+    fn calendar_on(
+        &self,
+        market: KnownMarket,
+        _date: CalendarDate,
+    ) -> BoxFuture<'_, Result<MarketCalendar, PortError>> {
+        Box::pin(ready(Ok(MarketCalendar::try_new(
+            trading_session(5, market),
+            trading_session(6, market),
+            trading_session(9, market),
+        )
+        .expect("달력"))))
+    }
+
+    fn fx_at(&self, at: Timestamp) -> BoxFuture<'_, Result<FxRate, PortError>> {
+        let first = self.fetched.fetch_add(1, Ordering::SeqCst) == 0;
+        let rate = first.then(|| {
+            FxRate::parse(
+                &NumericInput::try_new("1300").expect("입력"),
+                domain::FxPair::UsdKrw,
+                domain::FxRateKind::Mid,
+                TimeInterval::try_new(at, at.checked_add(domain::TimeSpan::DAY).expect("끝"))
+                    .expect("구간"),
+                domain::FxSource::TossOpenApi,
+            )
+            .expect("환율")
+        });
+        Box::pin(ready(rate.ok_or_else(|| denied(ReadEndpoint::FxRate))))
+    }
+
+    fn buying_power<'a>(
+        &'a self,
+        _account: &'a AccountId,
+        _currency: Currency,
+    ) -> BoxFuture<'a, Result<domain::BuyingPower, PortError>> {
+        Box::pin(ready(Err(denied(ReadEndpoint::BuyingPower))))
+    }
+
+    fn daily_candles<'a>(
+        &'a self,
+        _instrument: &'a QuoteInstrument,
+        _window: TimeInterval,
+    ) -> BoxFuture<'a, Result<Vec<Candle>, PortError>> {
+        Box::pin(ready(Err(denied(ReadEndpoint::Candles))))
+    }
+}
+
+#[test]
+fn a_fetched_rate_is_cached_and_not_counted_as_a_gap() {
+    use application::PerformanceHistorySource as _;
+    let feed: Arc<dyn PerformanceFeed> = Arc::new(GappedFx {
+        fetched: AtomicUsize::new(0),
+    });
+    let history = FeedHistory::new(feed, Arc::new(Fixed));
+    let friday = tauri::async_runtime::block_on(history.window_day(feb(6)))
+        .expect("금요일")
+        .expect("평가일");
+    let friday_rate = friday.fx.expect("받은 환율");
+    let later = tauri::async_runtime::block_on(history.window_day(feb(6)));
+    assert_eq!(
+        later.expect("다시").map(|day| day.fx),
+        Some(Some(friday_rate))
+    );
+    let (carried, missing) = tauri::async_runtime::block_on(history.take_rate_gaps());
+    assert_eq!((carried, missing), (0, 0), "받은 날은 캐시에서 다시 쓴다");
+}

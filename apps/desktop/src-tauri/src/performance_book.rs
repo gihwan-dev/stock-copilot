@@ -52,7 +52,9 @@ type Stock = (KnownMarket, Symbol);
 #[derive(Default)]
 struct Caches {
     calendars: BTreeMap<(KnownMarket, CalendarDate), MarketCalendar>,
-    rates: BTreeMap<CalendarDate, Option<FxRate>>,
+    rates: BTreeMap<CalendarDate, FxRate>,
+    carried_rates: usize,
+    missing_rates: usize,
     candles: BTreeMap<(Stock, CalendarDate), Vec<Candle>>,
 }
 
@@ -116,6 +118,7 @@ pub fn traded_stocks(rows: &SettledRowSet) -> Vec<Stock> {
     found
 }
 
+const CARRY_DAYS: i64 = 7;
 const LOOKBACK_SECONDS: u64 = 14 * 86_400;
 
 fn candle_window(window: SettlementWindow, now: Timestamp) -> Result<TimeInterval, PortError> {
@@ -173,11 +176,40 @@ impl FeedHistory {
 
     async fn rate(&self, date: CalendarDate) -> Option<FxRate> {
         if let Some(found) = self.caches.lock().await.rates.get(&date) {
-            return *found;
+            return Some(*found);
         }
-        let fetched = self.feed.fx_at(valuation_time(date)).await.ok();
-        let _previous = self.caches.lock().await.rates.insert(date, fetched);
-        fetched
+        let at = valuation_time(date);
+        if let Ok(fetched) = self.feed.fx_at(at).await {
+            let _previous = self.caches.lock().await.rates.insert(date, fetched);
+            return Some(fetched);
+        }
+        let mut caches = self.caches.lock().await;
+        let carried = caches
+            .rates
+            .range(..date)
+            .next_back()
+            .filter(|(earlier, _rate)| {
+                earlier
+                    .days_until(date)
+                    .is_ok_and(|gap| *gap.as_i64() <= CARRY_DAYS)
+            })
+            .and_then(|(_earlier, rate)| {
+                let until = at.checked_add(domain::TimeSpan::DAY).ok()?;
+                rate.carried_to(TimeInterval::try_new(at, until).ok()?)
+            });
+        match carried {
+            Some(_) => caches.carried_rates = caches.carried_rates.saturating_add(1),
+            None => caches.missing_rates = caches.missing_rates.saturating_add(1),
+        }
+        carried
+    }
+
+    pub async fn take_rate_gaps(&self) -> (usize, usize) {
+        let mut caches = self.caches.lock().await;
+        let counts = (caches.carried_rates, caches.missing_rates);
+        caches.carried_rates = 0;
+        caches.missing_rates = 0;
+        counts
     }
 
     async fn candles_of(
@@ -202,6 +234,18 @@ impl FeedHistory {
             .insert(key, fetched.clone());
         Ok(fetched)
     }
+}
+
+fn record_daily_note(summary: &str) {
+    crate::diagnostics_log::record(&application::DiagnosticEvent::Job(
+        application::JobDiagnosis {
+            job: application::DiagnosticText::new("daily_valuation_snapshot"),
+            note: application::JobRunNote::Executed {
+                summary: application::DiagnosticText::new(summary),
+                processed: application::JobItemCount::new(0),
+            },
+        },
+    ));
 }
 
 fn record_missing_candles(error: &PortError) {
@@ -408,23 +452,21 @@ impl PerformanceBook {
         Store: SettledRowsSource + application::ValuationRepository,
     {
         let date = domain::last_valuation_date(now).map_err(|error| format!("{error:?}"))?;
-        let snapshot = self
-            .recompute_day(store, account, date)
-            .await
-            .map_err(|error| format!("closes:{error:?}"))?;
+        let snapshot = match self.recompute_day(store, account, date).await {
+            Ok(found) => found,
+            Err(PerformanceRunError::EdgeDay(day, domain::SnapshotError::MissingPrice))
+                if day == date =>
+            {
+                record_daily_note("deferred-until-session-close-candle");
+                return Ok(());
+            }
+            Err(error) => return Err(format!("closes:{error:?}")),
+        };
         let _recorded = store
             .append(account, &snapshot)
             .await
             .map_err(|error| format!("storage:{error:?}"))?;
-        crate::diagnostics_log::record(&application::DiagnosticEvent::Job(
-            application::JobDiagnosis {
-                job: application::DiagnosticText::new("daily_valuation_snapshot"),
-                note: application::JobRunNote::Executed {
-                    summary: application::DiagnosticText::new("recorded-from-session-closes"),
-                    processed: application::JobItemCount::new(1),
-                },
-            },
-        ));
+        record_daily_note("recorded-from-session-closes");
         Ok(())
     }
 
@@ -442,6 +484,20 @@ impl PerformanceBook {
             .await;
             record_outcome(span, &outcome);
             self.store(span, outcome.ok());
+        }
+        let (carried, missing) = self.history.take_rate_gaps().await;
+        if carried > 0 || missing > 0 {
+            crate::diagnostics_log::record(&application::DiagnosticEvent::Job(
+                application::JobDiagnosis {
+                    job: application::DiagnosticText::new("performance_fx"),
+                    note: application::JobRunNote::Executed {
+                        summary: application::DiagnosticText::new(&format!(
+                            "carried-from-previous-day={carried} unavailable={missing}"
+                        )),
+                        processed: application::JobItemCount::new(0),
+                    },
+                },
+            ));
         }
     }
 }
