@@ -605,7 +605,8 @@ export type ChatModelSelectionDto =
       };
     };
 
-export type ChatNumberCheckDto = "NoNumbers" | "Verified" | "Unverified";
+export type ChatNumberCheckDto =
+  "NoNumbers" | "Verified" | "Computed" | "Unverified";
 
 export type ChatReasoningEffortDto =
   "Default" | "Low" | "Medium" | "High" | "XHigh" | "Max";
@@ -2189,6 +2190,7 @@ export type UiInstrumentDetail_Deserialize = {
   quoted_at: string;
   candles: UiInstrumentCandle[];
   holding?: UiInstrumentHolding | null;
+  news: UiInstrumentNews[];
 };
 
 export type UiInstrumentDetail_Serialize = {
@@ -2199,6 +2201,7 @@ export type UiInstrumentDetail_Serialize = {
   quoted_at: string;
   candles: UiInstrumentCandle[];
   holding: UiInstrumentHolding | null;
+  news: UiInstrumentNews[];
 };
 
 export type UiInstrumentHolding = {
@@ -2206,6 +2209,13 @@ export type UiInstrumentHolding = {
   value: UiMoney;
   profit: UiMoney;
   profit_rate: string;
+};
+
+export type UiInstrumentNews = {
+  title: string;
+  source: UiNewsSource;
+  published_at: string;
+  url: string;
 };
 
 export type UiInstrumentOrigin = "holding" | "watchlist";

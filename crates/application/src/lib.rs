@@ -268,8 +268,9 @@ pub use compute_performance::{
 mod diagnostics;
 pub use diagnostics::{
     BrokerCall, CallMethod, CallResult, DiagnosticEvent, DiagnosticText, DiagnosticsSink,
-    HttpStatusCode, JobDiagnosis, JobRunNote, SyncDiagnosis, SyncFailureReason, SyncJob,
-    SyncResult, TokenIssue, TransportFailure, failure_reason, sync_failure_reason,
+    FeedDiagnosis, FeedFailure, FeedRunResult, HttpStatusCode, JobDiagnosis, JobRunNote,
+    SourceCall, SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult, TokenIssue,
+    TransportFailure, failure_reason, sync_failure_reason,
 };
 mod notifier;
 pub use notifier::{Notification, Notifier};
@@ -723,6 +724,15 @@ pub use collect_feed::{
 
 mod briefing_context;
 pub use briefing_context::HoldingsBriefingContext;
+
+mod headline_grouping;
+pub use headline_grouping::{
+    HeadlineAdmission, HeadlineKey, RecentHeadlines, StoryGroup, StorySimilarity, group_same_story,
+    same_story_window,
+};
+
+mod tracked_news;
+pub use tracked_news::TrackedInstrument;
 
 mod intraday_review;
 pub use intraday_review::{IntradayReviewOutcome, IntradayReviewSubject, RunIntradayReview};

@@ -206,6 +206,11 @@ fn collector_worker<R: Runtime, P: PortTypes>(
     app: &App<R>,
     clock: Arc<dyn application::Clock>,
 ) -> Arc<dyn CollectorWorker> {
+    if let Some(tracking) = app.try_state::<crate::news_tracking::NewsTracking>() {
+        tracking.bind(Arc::new(crate::news_tracking::AppTrackedTargets::new(
+            app.handle().clone(),
+        )));
+    }
     match (
         app.try_state::<Arc<SqliteRepositories>>(),
         app.try_state::<CollectorFeeds>(),

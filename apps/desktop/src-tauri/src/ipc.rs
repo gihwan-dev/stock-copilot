@@ -9,6 +9,7 @@ pub mod data_status;
 pub mod error;
 pub mod event;
 pub mod event_bridge;
+pub mod instrument_news;
 pub mod instruments;
 pub mod news_settings;
 pub mod open_external;

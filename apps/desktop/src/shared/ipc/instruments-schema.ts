@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  externalUrlSchema,
   freeTextSchema,
   parseChartDecimal,
   parseEntityId,
@@ -15,6 +16,7 @@ import type {
   InstrumentDetailView,
   InstrumentListRow,
   InstrumentListView,
+  InstrumentNewsLine,
   WatchlistChange,
 } from "./estimate-views";
 import { settleWithSchema, type IpcFailure, type WireOutcome } from "./schema";
@@ -110,6 +112,53 @@ const holdingSchema = z
     profitRate: raw.profit_rate,
   }));
 
+const newsSourceKeys = {
+  Hankyung: "source.hankyung",
+  Maekyung: "source.maekyung",
+  Yonhap: "source.yonhap",
+  Edaily: "source.edaily",
+  BankOfKorea: "source.bank-of-korea",
+  FederalReserve: "source.federal-reserve",
+  GoogleNews: "source.google-news",
+  YahooFinance: "source.yahoo-finance",
+} as const;
+
+const newsLinkSchema = z.union([
+  externalUrlSchema,
+  z.unknown().transform((): undefined => undefined),
+]);
+
+const newsSchema = z
+  .strictObject({
+    title: freeTextSchema,
+    source: z.enum([
+      "Hankyung",
+      "Maekyung",
+      "Yonhap",
+      "Edaily",
+      "BankOfKorea",
+      "FederalReserve",
+      "GoogleNews",
+      "YahooFinance",
+    ]),
+    published_at: wireTimestamp,
+    url: newsLinkSchema,
+  })
+  .transform((raw, context): InstrumentNewsLine => {
+    const id = parseEntityId(`${raw.published_at}|${raw.title}`);
+    if (id.kind === "err") {
+      context.addIssue({ code: "custom", message: "news" });
+      return z.NEVER;
+    }
+    return {
+      id: id.value,
+      title: raw.title,
+      source: uiFreeText(text(newsSourceKeys[raw.source], "ko")),
+      publishedAt: raw.published_at,
+      url: raw.url,
+    };
+  });
+
 const detailSchema = z
   .strictObject({
     symbol: symbolSchema,
@@ -119,6 +168,7 @@ const detailSchema = z
     quoted_at: wireTimestamp,
     candles: z.array(candleSchema),
     holding: z.union([holdingSchema, z.null()]),
+    news: z.array(newsSchema),
   })
   .transform((raw): InstrumentDetailView => ({
     id: raw.symbol.id,
@@ -130,6 +180,7 @@ const detailSchema = z
     quotedAt: raw.quoted_at,
     candles: raw.candles,
     holding: raw.holding ?? undefined,
+    news: raw.news,
   }));
 
 const rejectionKeys = {

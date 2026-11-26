@@ -20,6 +20,7 @@ import type { EntityId, UiText } from "../../../shared/lib";
 import { useCanvasChartTheme, useColorScheme } from "../../../shared/platform";
 import { instrumentsText } from "../messages";
 import { useInstrumentDetail, useWatchlistActions } from "../model/instruments";
+import { RecentNews } from "./RecentNews";
 import { ThesisNotes } from "./ThesisNotes";
 
 type DetailSources = Pick<
@@ -143,6 +144,7 @@ const Ready = (props: {
       </Card>
       <Chart view={props.view} />
       <Holding view={props.view} />
+      <RecentNews news={props.view.news ?? []} />
       <ThesisNotes load={props.sources.thesis} instrument={props.view.id} />
       <Button
         variant="ghost"

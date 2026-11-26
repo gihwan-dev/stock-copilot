@@ -252,6 +252,7 @@ impl ClaudeCodeConfig {
             work_dir,
             mcp_config_path,
             kind: spec.kind(),
+            purpose: spec.purpose(),
             model: &model,
             effort: spec.effort(),
             expected_mcp_server: &self.expected_mcp_server,

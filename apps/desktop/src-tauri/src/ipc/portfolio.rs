@@ -332,11 +332,16 @@ pub fn to_portfolio_view(
     })
 }
 
-fn level(weight: &domain::AssetWeight, profile: &InvestorProfile) -> UiWeightLevel {
-    let caps = profile.weight_caps();
-    if weight.cmp_profile_weight(&caps.instrument_cap()) == std::cmp::Ordering::Greater {
+fn level(
+    weight: &domain::AssetWeight,
+    profile: &InvestorProfile,
+    kind: domain::FundKind,
+) -> UiWeightLevel {
+    let limits = profile.weight_caps().limits_for(kind);
+    if weight.cmp_profile_weight(&limits.instrument_cap()) == std::cmp::Ordering::Greater {
         UiWeightLevel::OverCap
-    } else if weight.cmp_profile_weight(&caps.instrument_warning()) == std::cmp::Ordering::Greater {
+    } else if weight.cmp_profile_weight(&limits.instrument_warning()) == std::cmp::Ordering::Greater
+    {
         UiWeightLevel::Warning
     } else {
         UiWeightLevel::Normal
@@ -409,7 +414,15 @@ fn allocation_row(
         value: ui_money(&value)?,
         weight: weight_text(entry.display()),
         level: match entry.key() {
-            AssetInstrument::Holding(_) => level(entry.weight(), profile),
+            AssetInstrument::Holding(instrument) => level(
+                entry.weight(),
+                profile,
+                directory
+                    .entry(instrument.symbol())
+                    .map_or(domain::FundKind::SingleSecurity, |found| {
+                        found.master.fund_kind()
+                    }),
+            ),
             AssetInstrument::Cash(_) => UiWeightLevel::Normal,
         },
     })

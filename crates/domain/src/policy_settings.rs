@@ -51,7 +51,10 @@ impl PolicyHoldingCount {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PolicySecurityFacts(BTreeMap<AllocationInstrument, ExcludedSecurityType>);
+pub struct PolicySecurityFacts {
+    types: BTreeMap<AllocationInstrument, ExcludedSecurityType>,
+    kinds: BTreeMap<AllocationInstrument, crate::FundKind>,
+}
 impl Default for PolicySecurityFacts {
     fn default() -> Self {
         Self::from_master_lookup_results(BTreeMap::new())
@@ -59,16 +62,32 @@ impl Default for PolicySecurityFacts {
 }
 impl PolicySecurityFacts {
     pub fn entries(&self) -> impl Iterator<Item = (&AllocationInstrument, &ExcludedSecurityType)> {
-        self.0.iter()
+        self.types.iter()
     }
     pub(crate) fn from_master_lookup_results(
         values: BTreeMap<AllocationInstrument, ExcludedSecurityType>,
     ) -> Self {
-        Self(values)
+        Self {
+            types: values,
+            kinds: BTreeMap::new(),
+        }
+    }
+    pub(crate) fn with_fund_kinds(
+        mut self,
+        kinds: BTreeMap<AllocationInstrument, crate::FundKind>,
+    ) -> Self {
+        self.kinds = kinds;
+        self
     }
     #[must_use]
     pub fn security_type(&self, instrument: &AllocationInstrument) -> Option<ExcludedSecurityType> {
-        self.0.get(instrument).copied()
+        self.types.get(instrument).copied()
+    }
+    #[must_use]
+    pub fn fund_kind(&self, instrument: &AllocationInstrument) -> crate::FundKind {
+        self.kinds.get(instrument).copied().unwrap_or_else(|| {
+            crate::FundKind::classify(self.security_type(instrument), None, None)
+        })
     }
 }
 

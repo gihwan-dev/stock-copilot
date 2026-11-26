@@ -1,0 +1,134 @@
+use super::{
+    CollectionPlanner, FeedCollectorWorker, FeedRoundFuture, FeedRunner, OffHoursPlanner,
+    PlanFuture, ReadyFuture, RunnerReadiness, ScheduledFeed, SwitchFuture, off_hours_plan,
+};
+use application::{CollectedCount, CollectionTarget, FeedCursor, FeedRound, FeedRoundOutcome};
+use domain::{
+    DataSource, Nanosecond, OffsetSeconds, SpanSeconds, TimeSpan, Timestamp, UnixSeconds,
+};
+use std::collections::BTreeSet;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
+use testkit_ports::SteppedClock;
+use tokio::sync::RwLock;
+
+fn at(seconds: i64) -> Timestamp {
+    Timestamp::from_parts(
+        UnixSeconds::new(seconds),
+        Nanosecond::new(0),
+        OffsetSeconds::new(0),
+    )
+    .expect("시각")
+}
+
+fn seconds(count: u64) -> TimeSpan {
+    TimeSpan::try_new(SpanSeconds::new(count), Nanosecond::new(0)).expect("간격")
+}
+
+struct CountingRunner {
+    calls: AtomicU32,
+    ready: RwLock<RunnerReadiness>,
+}
+
+impl CountingRunner {
+    fn new(ready: RunnerReadiness) -> Arc<Self> {
+        Arc::new(Self {
+            calls: AtomicU32::new(0),
+            ready: RwLock::new(ready),
+        })
+    }
+
+    fn calls(&self) -> u32 {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+impl FeedRunner for CountingRunner {
+    fn collect(&self, cursor: FeedCursor) -> FeedRoundFuture<'_> {
+        let _previous = self.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(std::future::ready(Ok(FeedRound {
+            source: DataSource::Yonhap,
+            outcome: FeedRoundOutcome::NoData,
+            cursor,
+            news: CollectedCount::default(),
+            disclosures: CollectedCount::default(),
+        })))
+    }
+
+    fn readiness(&self) -> ReadyFuture<'_> {
+        Box::pin(async move { *self.ready.read().await })
+    }
+}
+
+struct SwitchedOff(BTreeSet<DataSource>);
+
+impl CollectionPlanner for SwitchedOff {
+    fn plan(&self) -> PlanFuture<'_> {
+        Box::pin(std::future::ready(off_hours_plan()))
+    }
+
+    fn disabled(&self) -> SwitchFuture<'_> {
+        Box::pin(std::future::ready(self.0.clone()))
+    }
+}
+
+fn worker(
+    feeds: Vec<ScheduledFeed>,
+    clock: &Arc<SteppedClock>,
+    planner: Arc<dyn CollectionPlanner>,
+) -> FeedCollectorWorker {
+    let shared: Arc<dyn application::Clock> = Arc::<SteppedClock>::clone(clock);
+    FeedCollectorWorker::new(feeds, planner, shared, Duration::from_millis(10))
+}
+
+fn runner(counting: &Arc<CountingRunner>) -> Arc<dyn FeedRunner> {
+    Arc::<CountingRunner>::clone(counting)
+}
+
+#[test]
+fn a_source_switched_off_in_settings_is_never_fetched() {
+    let clock = Arc::new(SteppedClock::new(at(1_000_000)));
+    let yonhap = CountingRunner::new(RunnerReadiness::Ready);
+    let google = CountingRunner::new(RunnerReadiness::Ready);
+    let collector = worker(
+        vec![
+            ScheduledFeed::new(CollectionTarget::PressRss, runner(&yonhap))
+                .with_source(DataSource::Yonhap),
+            ScheduledFeed::new(CollectionTarget::GoogleNews, runner(&google))
+                .with_source(DataSource::GoogleNews),
+        ],
+        &clock,
+        Arc::new(SwitchedOff(BTreeSet::from([DataSource::GoogleNews]))),
+    );
+    let report = tauri::async_runtime::block_on(collector.collect_due());
+    assert_eq!(report.attempted, 1);
+    assert_eq!((yonhap.calls(), google.calls()), (1, 0));
+}
+
+#[test]
+fn a_round_before_the_database_opens_is_retried_on_the_next_tick_not_a_cadence_later() {
+    let clock = Arc::new(SteppedClock::new(at(1_000_000)));
+    let press = CountingRunner::new(RunnerReadiness::Waiting);
+    let collector = worker(
+        vec![ScheduledFeed::new(
+            CollectionTarget::PressRss,
+            runner(&press),
+        )],
+        &clock,
+        Arc::new(OffHoursPlanner),
+    );
+    assert_eq!(
+        tauri::async_runtime::block_on(collector.collect_due()).attempted,
+        0
+    );
+    tauri::async_runtime::block_on(async {
+        *press.ready.write().await = RunnerReadiness::Ready;
+    });
+    clock.advance_by(seconds(30)).expect("30초");
+    assert_eq!(
+        tauri::async_runtime::block_on(collector.collect_due()).attempted,
+        1
+    );
+    assert_eq!(press.calls(), 1);
+}

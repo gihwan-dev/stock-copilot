@@ -1,6 +1,7 @@
 pub mod autostart;
 pub mod background;
 pub mod collector;
+pub mod feed_watch;
 pub mod intraday;
 pub mod job_settings;
 pub mod notifier;

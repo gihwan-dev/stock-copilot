@@ -203,7 +203,7 @@ trait AiProvider {
 | 찾기 | 알려진 설치 위치와 로그인 셸의 PATH에서 `claude`를 찾는다. 사용자가 이미 로그인한 기본 설정 위치를 그대로 쓴다 (P-2). 앱 전용 `CLAUDE_CONFIG_DIR`은 별도 로그인이 필요하므로 쓰지 않는다 |
 | 환경 변수 | 비운 뒤 허용 목록만 넘긴다: `HOME`, `PATH`, `USER`, `LOGNAME`, `TMPDIR`, MCP 토큰, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. `USER`가 없으면 키체인의 구독 로그인을 읽지 못한다(실측). `ANTHROPIC_API_KEY`는 넘기지 않는다 (구독 사용) |
 | 작업 폴더 | 실행마다 0700 빈 임시 폴더 |
-| 명령 | `claude -p --verbose --input-format stream-json --output-format stream-json --include-partial-messages --restricted --disable-slash-commands --tools <프로필별> --allowedTools <프로필별> --permission-mode dontAsk --permission-prompts none --mcp-config <실행별 파일> --strict-mcp-config --model <설정> --effort <설정>` |
+| 명령 | `claude -p --verbose --input-format stream-json --output-format stream-json --include-partial-messages --restricted --disable-slash-commands --tools <프로필별> --allowedTools <프로필별> --permission-mode dontAsk --permission-prompts none --mcp-config <실행별 파일> --strict-mcp-config --model <설정> --effort <설정>`. 채팅 실행에만 `--append-system-prompt <자문가 지침>`을 더한다 (ADR 0186) |
 | 프로필별 도구 | 수집 실행: `--tools WebSearch`, 빈 MCP 설정(앱 MCP 없음), 결과는 `--json-schema` 구조화 출력. 웹 읽기는 S-07. 분석 실행: `--tools ""`(내장 도구 없음)와 분석용 MCP 도구 (4.4) |
 | MCP 설정 | stdio 서버의 `command`는 앱에 들어 있는 브리지, 토큰은 `env`의 `${변수}` 참조로만 넘긴다. argv와 설정 파일에 토큰 값을 쓰지 않는다 ([R-04](research/R-04-rust-mcp-server.md)) |
 | 기록 | 예약 작업과 채팅 모두 `--no-session-persistence`. 채팅은 대화 동안 프로세스 하나를 유지한다. 앱을 다시 켜거나 프로세스가 끝나면 앱이 저장한 대화를 새 프로세스에 다시 넣는다. `--resume`은 쓰지 않는다. 대화 원본은 앱 SQLite에 둔다. CLI가 앱 작업 폴더 이름으로 만든 폴더가 남으면 앱이 지운다 (I-04) |
@@ -381,6 +381,7 @@ init 이벤트는 첫 사용자 메시지를 받은 뒤에야 나온다. 그래�
   - 그룹명 접두(SK, LG 등) 뒤에 다른 글자가 붙으면 지주사로 매칭하지 않는다. 긴 상장 계열사명을 우선한다.
   - 애매한 것만 빠른 모델에 넘긴다.
 - 사건 묶음: 정규화한 URL이 같으면 같은 항목이다. 같은 종목, 48시간 안에서 제목 2-gram Jaccard 0.45 이상을 대표 기사와 비교해 묶는다. 단일 연결 군집은 다른 회사 기사를 섞으므로 쓰지 않는다.
+- 보유·관심 종목의 정식명·코드로 사전을 수집 회차마다 만들고, 연결 값은 티커다. Google·Yahoo 중계 기사는 이미 본 제목이면 저장하지 않는다. 종목 상세의 "최근 뉴스"는 위 묶음 규칙으로 7일치를 보여 준다 ([ADR 0187](adr/0187-holding-news-collection.md)).
 - 공시 키는 (소스, 접수 번호)다. KIND와 DART 번호의 대응 규칙은 하루치 표본에서 나온 것이라 별도로 관리한다.
 
 ## 6. 확률 신호와 주문 (D1)

@@ -1,0 +1,1353 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Add a symbol to the watchlist.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "symbol": {
+          "maxLength": 20,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "type": "object"
+    },
+    "name": "app_add_watchlist"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the installed app version. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_app_version"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Write an encrypted backup into the app's backup folder now.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_backup_now"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Check whether the brokerage connection works, like the connection screen. Calls the broker with the stored keys; returns only the connection state.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_check_toss_connection"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Export app data. Opens the save panel so the user picks where the file goes; returns cancelled if they close it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "app_export_data"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the brokerage accounts (masked numbers) and which one is selected. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_account_selection"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read per-task AI model and effort settings and the AI budget. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_ai_settings"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the allocation screen for the selected account. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_allocation"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read recent briefings as the briefing screen shows them. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_briefings"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read a stored chat session by its id. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "session_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "name": "app_get_chat_history"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read when each data job (holdings, transactions, valuations, estimates, scoring, briefings, backup) last succeeded and runs next. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_data_status"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one instrument's detail screen by symbol. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "symbol": {
+          "maxLength": 20,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "type": "object"
+    },
+    "name": "app_get_instrument_detail"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the tracked instruments list (holdings and watchlist). No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_instruments"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the AI job schedules (briefings, estimates, collection). No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_job_schedules"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read news and data source settings, wake criteria and aliases. Shows only whether optional keys are set, never their values. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_news_settings"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the portfolio screen for the selected account. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_portfolio"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the investment principles (note, cash floor, concentration floor). No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_principles"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read this computer's public IP as the app shows it. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_public_ip"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the investor profile and order settings editors. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_risk_settings"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the estimate scorecard screen. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_scorecard"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the self-check results shown in the status bar. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_self_check"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the settings overview: saved profile, order switch state and which keys are configured (never key values). No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_settings"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read current buy and sell signals with their order proposals. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_signals"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the app status screen (data sources, AI jobs, connection). No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_status"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the thesis note screen for one symbol. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "symbol": {
+          "maxLength": 20,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "type": "object"
+    },
+    "name": "app_get_thesis"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read recent settled transactions as the transactions screen shows them. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_transactions"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the app update status. query=check-now also asks the update server for a newer version; it never installs.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "query": {
+          "enum": [
+            "current",
+            "check-now"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "app_get_update_status"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Remove a symbol from the watchlist.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "symbol": {
+          "maxLength": 20,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "type": "object"
+    },
+    "name": "app_remove_watchlist"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Ask the user to approve an order proposal from get_signals. Only shows the user an approval prompt; the order is sent only after the user confirms in the app's dialog with Touch ID. Never sends an order by itself.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "proposal_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id"
+      ],
+      "type": "object"
+    },
+    "name": "app_request_order_approval"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Save the investor profile, same as the profile editor. Overwrites horizon, risk appetite, caps and excluded types. Raising risk asks the user for Touch ID.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "draft": {
+          "additionalProperties": false,
+          "properties": {
+            "excluded_types": {
+              "items": {
+                "enum": [
+                  "etf",
+                  "etn",
+                  "preferred",
+                  "spac",
+                  "reit"
+                ],
+                "type": "string"
+              },
+              "maxItems": 5,
+              "type": "array"
+            },
+            "horizon": {
+              "enum": [
+                "hours",
+                "few-days",
+                "weeks-to-months",
+                "half-year-or-more"
+              ],
+              "type": "string"
+            },
+            "instrument_cap": {
+              "enum": [
+                "10",
+                "15",
+                "20",
+                "25",
+                "30"
+              ],
+              "type": "string"
+            },
+            "risk_appetite": {
+              "enum": [
+                "conservative",
+                "neutral",
+                "aggressive"
+              ],
+              "type": "string"
+            },
+            "sector_cap": {
+              "enum": [
+                "30",
+                "40",
+                "50"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "horizon",
+            "risk_appetite",
+            "instrument_cap",
+            "sector_cap",
+            "excluded_types"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "draft"
+      ],
+      "type": "object"
+    },
+    "name": "app_save_investor_profile"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Save order settings, same as the order settings editor. Cannot turn ordering on or off. Relaxing a setting asks the user for Touch ID.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "draft": {
+          "additionalProperties": false,
+          "properties": {
+            "card_expiry": {
+              "enum": [
+                "5",
+                "10",
+                "15",
+                "30"
+              ],
+              "type": "string"
+            },
+            "hours_horizon": {
+              "enum": [
+                "off",
+                "on"
+              ],
+              "type": "string"
+            },
+            "market_orders": {
+              "enum": [
+                "off",
+                "on"
+              ],
+              "type": "string"
+            },
+            "order_count_limit": {
+              "enum": [
+                "off",
+                "3",
+                "5",
+                "10"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "market_orders",
+            "hours_horizon",
+            "card_expiry",
+            "order_count_limit"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "draft"
+      ],
+      "type": "object"
+    },
+    "name": "app_save_order_settings"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Switch the selected brokerage account by its list position from get_account_selection (\"1\", \"2\", ...).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "maxLength": 4,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "account"
+      ],
+      "type": "object"
+    },
+    "name": "app_select_account"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Replace the whole news alias list (alias text to ticker). Send every alias to keep.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "alias": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ticker": {
+                "maxLength": 20,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "alias",
+              "ticker"
+            ],
+            "type": "object"
+          },
+          "maxItems": 200,
+          "type": "array"
+        }
+      },
+      "required": [
+        "aliases"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_aliases"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Change the share of the AI subscription budget the app may use.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "percent": {
+          "enum": [
+            "50",
+            "60",
+            "70",
+            "80",
+            "90"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "percent"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_budget_percent"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Turn an AI job on or off and optionally set its KST time, same as the schedule editor.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "enum": [
+            "on",
+            "off"
+          ],
+          "type": "string"
+        },
+        "job": {
+          "enum": [
+            "morning-briefing",
+            "closing-review",
+            "pre-us-market-check",
+            "estimate-cycle",
+            "candidate-discovery",
+            "weekly-review",
+            "intraday-watch",
+            "news-collection"
+          ],
+          "type": "string"
+        },
+        "time": {
+          "additionalProperties": false,
+          "properties": {
+            "hour": {
+              "maximum": 23,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "minute": {
+              "maximum": 59,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "hour",
+            "minute"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "job",
+        "enabled"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_job_schedule"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Change one news or data source: on/off, article body reading and collection interval.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "setting": {
+          "additionalProperties": false,
+          "properties": {
+            "body_reading": {
+              "enum": [
+                "on",
+                "off",
+                "locked"
+              ],
+              "type": "string"
+            },
+            "interval_minutes": {
+              "enum": [
+                "1",
+                "2",
+                "5",
+                "10",
+                "15",
+                "30",
+                "60"
+              ],
+              "type": "string"
+            },
+            "source": {
+              "enum": [
+                "KindDisclosure",
+                "DartDisclosureApi",
+                "DartDisclosureRss",
+                "DartFundamentals",
+                "Hankyung",
+                "Maekyung",
+                "Yonhap",
+                "Edaily",
+                "GoogleNews",
+                "YahooFinance",
+                "SecEdgar",
+                "BankOfKorea",
+                "FederalReserve",
+                "UsTreasury",
+                "Fred"
+              ],
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "on",
+                "off"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "state",
+            "body_reading",
+            "interval_minutes"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "setting"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_news_source"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Replace the investment principles note and floors, same as the principles editor.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "principles": {
+          "additionalProperties": false,
+          "properties": {
+            "cash_min_percent": {
+              "enum": [
+                "0",
+                "5",
+                "10",
+                "20",
+                "30"
+              ],
+              "type": "string"
+            },
+            "concentration_min_count": {
+              "enum": [
+                "3",
+                "4",
+                "5",
+                "6",
+                "8",
+                "10"
+              ],
+              "type": "string"
+            },
+            "text": {
+              "maxLength": 2000,
+              "minLength": 0,
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "cash_min_percent",
+            "concentration_min_count"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "principles"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_principles"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Set or clear (omit contact) the contact the app sends to SEC EDGAR.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "contact": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_set_sec_contact"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Change the AI model and effort for one task, same as the AI settings screen.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "setting": {
+          "additionalProperties": false,
+          "properties": {
+            "effort": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "type": "string"
+            },
+            "model": {
+              "enum": [
+                "opus",
+                "sonnet",
+                "haiku"
+              ],
+              "type": "string"
+            },
+            "task": {
+              "enum": [
+                "chat",
+                "estimate",
+                "deep-research",
+                "briefing",
+                "news-summary",
+                "collection"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "task",
+            "model",
+            "effort"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "setting"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_task_model"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Change when the app wakes the AI: daily price move percent and news per hour.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "wake": {
+          "additionalProperties": false,
+          "properties": {
+            "daily_move_percent": {
+              "enum": [
+                "3",
+                "5",
+                "7",
+                "10"
+              ],
+              "type": "string"
+            },
+            "news_per_hour": {
+              "enum": [
+                "3",
+                "5",
+                "10",
+                "20"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "daily_move_percent",
+            "news_per_hour"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "wake"
+      ],
+      "type": "object"
+    },
+    "name": "app_set_wake_criteria"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Skip the current signal for a symbol with a short reason, same as the skip button. Does not place or cancel orders.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "maxLength": 200,
+          "minLength": 0,
+          "type": "string"
+        },
+        "symbol": {
+          "maxLength": 20,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "name": "app_skip_signal"
+  }
+]

@@ -211,10 +211,14 @@ pub use portfolio::{CurrencyAmounts, PortfolioDailyProfitLoss, ReportedPortfolio
 pub use portfolio_valuation::{CurrencyEvaluation, HoldingCount, MetricTotal};
 
 mod exclusions;
+mod fund_kind;
 mod horizon;
 mod investor_profile;
+#[cfg(test)]
+mod policy_fund_kind_tests;
 mod weight_caps;
 pub use exclusions::{ExcludedSecurityType, Exclusions, ExclusionsError, SectorId, SectorIdError};
+pub use fund_kind::FundKind;
 pub use horizon::{
     AdvancedHoursConfirmation, Horizon, HorizonSelection, HoursPermission, HoursPermissionState,
 };

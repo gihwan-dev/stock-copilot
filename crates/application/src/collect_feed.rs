@@ -44,6 +44,11 @@ pub struct CollectedCount(u32);
 
 impl CollectedCount {
     #[must_use]
+    pub const fn new(count: u32) -> Self {
+        Self(count)
+    }
+
+    #[must_use]
     pub const fn as_u32(&self) -> &u32 {
         &self.0
     }

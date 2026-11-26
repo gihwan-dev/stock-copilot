@@ -1,16 +1,24 @@
+use crate::news_tracking::MatchName;
 use application::{
-    CollectedEntry, CollectedTimes, InformationKey, InformationLinks, NewsDataSettingsRepository,
-    PublicationTime, StockAlias, SystemPortError, WriteCompleted,
+    CollectedEntry, CollectedTimes, InformationKey, InformationLinks, NewsDataSettings,
+    NewsDataSettingsRepository, PublicationTime, StockAlias, SystemPortError, WriteCompleted,
 };
-use domain::{InformationSource, InstrumentId, Timestamp, UntrustedText};
+use domain::{InformationSource, InstrumentId, NormalizedUrl, Timestamp, UntrustedText};
+use sources::NewsLinkHints;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(test)]
 mod tests;
 
 pub trait TitleLinker: Send + Sync {
     fn instruments_in(&self, title: &UntrustedText, aliases: &[StockAlias]) -> Vec<InstrumentId>;
+
+    fn instruments_named(&self, _title: &UntrustedText, _names: &[MatchName]) -> Vec<InstrumentId> {
+        Vec::new()
+    }
 }
 
 #[derive(Clone)]
@@ -25,6 +33,9 @@ impl fmt::Debug for CollectedLinker {
 pub struct LinkingTimes<'a, S> {
     store: &'a S,
     linker: Option<&'a dyn TitleLinker>,
+    names: Option<&'a [MatchName]>,
+    hints: Option<&'a NewsLinkHints>,
+    linked: AtomicU32,
 }
 
 impl<S> fmt::Debug for LinkingTimes<'_, S> {
@@ -38,7 +49,36 @@ impl<S> fmt::Debug for LinkingTimes<'_, S> {
 impl<'a, S> LinkingTimes<'a, S> {
     #[must_use]
     pub const fn new(store: &'a S, linker: Option<&'a dyn TitleLinker>) -> Self {
-        Self { store, linker }
+        Self {
+            store,
+            linker,
+            names: None,
+            hints: None,
+            linked: AtomicU32::new(0),
+        }
+    }
+
+    #[must_use]
+    pub const fn with_names(
+        mut self,
+        names: &'a [MatchName],
+        hints: Option<&'a NewsLinkHints>,
+    ) -> Self {
+        self.names = Some(names);
+        self.hints = hints;
+        self
+    }
+
+    #[must_use]
+    pub fn linked(&self) -> u32 {
+        self.linked.load(Ordering::Relaxed)
+    }
+}
+
+const fn url_of(entry: &CollectedEntry) -> &NormalizedUrl {
+    match entry {
+        CollectedEntry::News(item) => item.collected().url(),
+        CollectedEntry::Disclosure(item) => item.collected().url(),
     }
 }
 
@@ -62,6 +102,22 @@ const fn title_of(entry: &CollectedEntry) -> &UntrustedText {
     }
 }
 
+fn named(
+    linker: &dyn TitleLinker,
+    entry: &CollectedEntry,
+    names: &[MatchName],
+    hints: Option<&NewsLinkHints>,
+) -> Vec<InstrumentId> {
+    let mut found: BTreeSet<InstrumentId> = linker
+        .instruments_named(title_of(entry), names)
+        .into_iter()
+        .collect();
+    if let Some(known) = hints {
+        found.extend(known.take(url_of(entry)));
+    }
+    found.into_iter().collect()
+}
+
 impl<S> LinkingTimes<'_, S>
 where
     S: InformationLinks + NewsDataSettingsRepository,
@@ -70,14 +126,21 @@ where
         let (Some(linker), Some(key)) = (self.linker, key_of(entry)) else {
             return Ok(());
         };
-        let Some(settings) = self.store.load().await? else {
-            return Ok(());
+        let instruments = if let Some(names) = self.names {
+            named(linker, entry, names, self.hints)
+        } else {
+            let settings = self
+                .store
+                .load()
+                .await?
+                .unwrap_or_else(NewsDataSettings::initial);
+            linker.instruments_in(title_of(entry), settings.aliases())
         };
-        let instruments = linker.instruments_in(title_of(entry), settings.aliases());
         if instruments.is_empty() {
             return Ok(());
         }
         let WriteCompleted = self.store.set_instruments(&key, &instruments).await?;
+        let _previous = self.linked.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 }
