@@ -192,11 +192,7 @@ fn impossible_or_malformed_plans_say_why_without_numbers() {
     let before = allocation();
     let lookup = directory();
     let parse = |trade: &UiTradeInput| parse_trade(trade, before.valuation(), &lookup);
-    let oversell = [input("035720", UiTradeSide::Sell, "41", None)]
-        .iter()
-        .map(parse)
-        .collect::<Option<Vec<_>>>()
-        .expect("매매");
+    let oversell = vec![parse(&input("035720", UiTradeSide::Sell, "41", None)).expect("매매")];
     let view = simulated_view(
         &before,
         &oversell,
@@ -205,7 +201,7 @@ fn impossible_or_malformed_plans_say_why_without_numbers() {
     );
     assert_eq!(view.outcome, UiSimulationOutcome::SellExceedsHolding);
     assert_eq!(view.problem_symbol.as_deref(), Some("035720"));
-    assert!(view.instruments.is_empty());
+    assert_eq!(view.instruments, Vec::new());
     assert_eq!(parse(&input("005930", UiTradeSide::Buy, "1.5", None)), None);
     assert_eq!(
         parse(&input("005930", UiTradeSide::Buy, "1", Some("0"))),

@@ -38,7 +38,7 @@ pub struct SimulatedFill {
     amount: Money,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TradeSimulation {
     valuation: PortfolioValuation,
     fills: Vec<SimulatedFill>,
@@ -111,11 +111,11 @@ impl Book {
     }
 
     fn apply(&mut self, trade: &SimulatedTrade) -> Result<SimulatedFill, TradeSimulationError> {
-        let index = self
+        let held = self
             .holdings
             .iter()
-            .position(|holding| holding.instrument() == &trade.instrument);
-        let held = index.and_then(|found| self.holdings.get(found)).cloned();
+            .find(|holding| holding.instrument() == &trade.instrument)
+            .cloned();
         let price = trade
             .price
             .or_else(|| held.as_ref().and_then(Holding::current_price))
@@ -129,13 +129,12 @@ impl Book {
         let amount = price
             .checked_mul(&trade.quantity.quantity())
             .map_err(|_overflow| TradeSimulationError::Arithmetic)?;
-        let held_quantity = held
-            .as_ref()
-            .map_or(Quantity::try_new(rust_decimal::Decimal::ZERO), |holding| {
-                Ok(holding.quantity())
-            })
-            .map_err(|_negative| TradeSimulationError::Arithmetic)?;
-        let next_quantity = match trade.side {
+        let held_quantity = match held.as_ref() {
+            Some(holding) => holding.quantity(),
+            None => Quantity::try_new(rust_decimal::Decimal::ZERO)
+                .map_err(|_negative| TradeSimulationError::Arithmetic)?,
+        };
+        let next_decimal = match trade.side {
             TradeSide::Buy => held_quantity
                 .as_decimal()
                 .checked_add(trade.quantity.quantity().as_decimal()),
@@ -144,7 +143,7 @@ impl Book {
                 .checked_sub(trade.quantity.quantity().as_decimal()),
         }
         .ok_or(TradeSimulationError::Arithmetic)?;
-        let next_quantity = Quantity::try_new(next_quantity).map_err(|_negative| {
+        let next_quantity = Quantity::try_new(next_decimal).map_err(|_negative| {
             TradeSimulationError::SellExceedsHolding(trade.instrument.clone())
         })?;
         let cash = self.cash_mut(currency);
@@ -157,10 +156,9 @@ impl Book {
             return Err(TradeSimulationError::InsufficientCash(currency));
         }
         *cash = next_cash;
-        if let Some(found) = index {
-            self.holdings.remove(found);
-        }
-        self.replace(held, trade, price, next_quantity)?;
+        self.holdings
+            .retain(|holding| holding.instrument() != &trade.instrument);
+        self.replace(held.as_ref(), trade, price, next_quantity)?;
         Ok(SimulatedFill {
             instrument: trade.instrument.clone(),
             side: trade.side,
@@ -172,7 +170,7 @@ impl Book {
 
     fn replace(
         &mut self,
-        held: Option<Holding>,
+        held: Option<&Holding>,
         trade: &SimulatedTrade,
         price: Price,
         quantity: Quantity,
@@ -180,12 +178,12 @@ impl Book {
         if quantity.as_decimal().is_zero() {
             return Ok(());
         }
-        let acquisition = match &held {
+        let acquisition = match held {
             Some(holding) => holding.acquisition_price(),
             None => AcquisitionPrice::try_new(price.as_money())
                 .map_err(|_invalid| TradeSimulationError::Arithmetic)?,
         };
-        let observed_at = held.as_ref().map_or(self.observed_at, Holding::observed_at);
+        let observed_at = held.map_or(self.observed_at, Holding::observed_at);
         let rebuilt = Holding::new(
             trade.instrument.clone(),
             quantity,
@@ -195,7 +193,7 @@ impl Book {
         .map_err(|_mismatch| {
             TradeSimulationError::PriceCurrencyMismatch(trade.instrument.clone())
         })?;
-        let named = match held.as_ref().and_then(Holding::reported_name) {
+        let named = match held.and_then(Holding::reported_name) {
             Some(name) => rebuilt.with_reported_name(name.clone()),
             None => rebuilt,
         };
@@ -248,9 +246,8 @@ pub fn room_to_cap(
     value_krw: Money,
     cap: crate::ProfileWeight,
 ) -> Result<Money, crate::MoneyError> {
-    asset_total(valuation)
-        .checked_mul(&cap.as_ratio())
-        .and_then(|limit| limit.checked_sub(&value_krw))
+    let limit = asset_total(valuation).checked_mul(&cap.as_ratio())?;
+    limit.checked_sub(&value_krw)
 }
 
 pub fn simulate_trades(
@@ -378,7 +375,10 @@ mod tests {
     #[test]
     fn selling_and_buying_moves_cash_and_weights_like_the_screen() {
         let before = valuation();
-        assert!(matches!(weight_units(&before, "AAA"), Some(3333 | 3334)));
+        match weight_units(&before, "AAA") {
+            Some(3333 | 3334) => {}
+            other => panic!("셋으로 나눈 비중 {other:?}"),
+        }
         let result = simulate_trades(
             &before,
             &[

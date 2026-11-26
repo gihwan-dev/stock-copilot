@@ -138,22 +138,20 @@ const fn currency_of(market: UiTradeMarket) -> (Market, KnownMarket, Currency) {
 
 fn resolve(
     symbol: &Symbol,
-    market: (Market, KnownMarket),
+    market: &(Market, KnownMarket),
     valuation: &PortfolioValuation,
     directory: &InstrumentDirectory,
 ) -> Option<ResolvedOrderInstrument> {
-    valuation
+    if let Some(held) = valuation
         .holdings()
         .iter()
         .map(domain::ValuedHolding::instrument)
         .find(|held| held.symbol() == symbol && held.market() == market.0)
-        .cloned()
-        .or_else(|| {
-            directory
-                .instrument_of(market.1, symbol)
-                .and_then(|id| directory.master(&id))
-                .and_then(|master| master.order_instrument().ok())
-        })
+    {
+        return Some(held.clone());
+    }
+    let id = directory.instrument_of(market.1, symbol)?;
+    directory.master(&id)?.order_instrument().ok()
 }
 
 fn parse_trade(
@@ -163,7 +161,7 @@ fn parse_trade(
 ) -> Option<SimulatedTrade> {
     let (market, known, currency) = currency_of(input.market);
     let symbol = Symbol::try_new(&input.symbol.to_uppercase()).ok()?;
-    let instrument = resolve(&symbol, (market, known), valuation, directory)?;
+    let instrument = resolve(&symbol, &(market, known), valuation, directory)?;
     let quantity = NumericInput::try_new(&input.quantity)
         .ok()
         .and_then(|text| Quantity::parse(&text).ok())
@@ -222,24 +220,112 @@ fn kind_of(instrument: &AllocationInstrument, directory: &InstrumentDirectory) -
         .map_or(FundKind::SingleSecurity, |found| found.master.fund_kind())
 }
 
+fn entries_of(
+    allocation: &Allocation,
+) -> &[domain::AllocationEntry<AssetInstrument, domain::AssetWeight>] {
+    match allocation.assets().instruments() {
+        Ok(weights) => weights.entries(),
+        Err(_unavailable) => &[],
+    }
+}
+
 fn weight_of(allocation: &Allocation, symbol: &Symbol) -> String {
-    allocation
-        .assets()
-        .instruments()
-        .as_ref()
-        .ok()
-        .and_then(|weights| {
-            weights
-                .entries()
-                .iter()
-                .find_map(|entry| match entry.key() {
-                    AssetInstrument::Holding(held) if held.symbol() == symbol => {
-                        Some(weight_text(entry.display()))
-                    }
-                    AssetInstrument::Holding(_) | AssetInstrument::Cash(_) => None,
-                })
+    entries_of(allocation)
+        .iter()
+        .find_map(|entry| match entry.key() {
+            AssetInstrument::Holding(held) if held.symbol() == symbol => {
+                Some(weight_text(entry.display()))
+            }
+            AssetInstrument::Holding(_) | AssetInstrument::Cash(_) => None,
         })
         .unwrap_or_else(|| String::from("0"))
+}
+
+struct ViewInputs<'a> {
+    before: &'a Allocation,
+    after: &'a Allocation,
+    valuation: &'a PortfolioValuation,
+    exposures: Option<&'a [(AllocationInstrument, domain::Money)]>,
+    directory: &'a InstrumentDirectory,
+    profile: &'a InvestorProfile,
+}
+
+fn instrument_row(
+    inputs: &ViewInputs<'_>,
+    held: &AllocationInstrument,
+    entry: &domain::AllocationEntry<AssetInstrument, domain::AssetWeight>,
+) -> Option<UiSimulatedInstrument> {
+    let kind = kind_of(held, inputs.directory);
+    let limits = inputs.profile.weight_caps().limits_for(kind);
+    let room = inputs
+        .exposures
+        .and_then(|values| values.iter().find(|(instrument, _)| instrument == held))
+        .and_then(|(_, value)| {
+            domain::room_to_cap(inputs.valuation, *value, limits.instrument_cap()).ok()
+        })
+        .and_then(|money| ui_money(&money));
+    Some(UiSimulatedInstrument {
+        symbol: held.symbol().as_str().to_owned(),
+        name: display_name(held.symbol(), inputs.directory),
+        fund_kind: ui_kind(kind),
+        weight_before: weight_of(inputs.before, held.symbol()),
+        weight_after: weight_text(entry.display()),
+        limit_percent: percent(&limits.instrument_cap().as_ratio())?,
+        warning_percent: percent(&limits.instrument_warning().as_ratio())?,
+        level_after: level(entry.weight(), inputs.profile, kind),
+        room_to_limit: room,
+    })
+}
+
+fn instrument_rows(inputs: &ViewInputs<'_>) -> Vec<UiSimulatedInstrument> {
+    entries_of(inputs.after)
+        .iter()
+        .filter(|entry| entry.display().range() != AllocationDisplayRange::Zero)
+        .filter_map(|entry| match entry.key() {
+            AssetInstrument::Holding(held) => instrument_row(inputs, held, entry),
+            AssetInstrument::Cash(_) => None,
+        })
+        .collect()
+}
+
+fn cash_rows(after: &Allocation, valuation: &PortfolioValuation) -> Vec<UiCashAfter> {
+    entries_of(after)
+        .iter()
+        .filter(|entry| entry.display().range() != AllocationDisplayRange::Zero)
+        .filter_map(|entry| match entry.key() {
+            AssetInstrument::Cash(currency) => {
+                let unit = currency.as_currency();
+                let amount = valuation.buying_power(unit).money().ok()?;
+                Some(UiCashAfter {
+                    currency: String::from(match unit {
+                        Currency::Krw => "KRW",
+                        Currency::Usd => "USD",
+                    }),
+                    amount: ui_money(&amount)?,
+                    weight: weight_text(entry.display()),
+                })
+            }
+            AssetInstrument::Holding(_) => None,
+        })
+        .collect()
+}
+
+fn fill_rows(fills: &[domain::SimulatedFill]) -> Vec<UiSimulatedFill> {
+    fills
+        .iter()
+        .filter_map(|fill| {
+            Some(UiSimulatedFill {
+                symbol: fill.instrument().symbol().as_str().to_owned(),
+                side: match fill.side() {
+                    TradeSide::Buy => UiTradeSide::Buy,
+                    TradeSide::Sell => UiTradeSide::Sell,
+                },
+                quantity: fill.quantity().quantity().as_decimal().to_string(),
+                price: ui_money(&fill.price().as_money())?,
+                amount: ui_money(&fill.amount())?,
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn simulated_view(
@@ -253,76 +339,15 @@ pub(crate) fn simulated_view(
         Err(error) => return failure_of(&error),
     };
     let after = Allocation::new(result.valuation(), &SectorAssignments::default());
-    let exposures = domain::krw_exposures(result.valuation()).unwrap_or_default();
-    let caps = profile.weight_caps();
-    let instruments = after
-        .assets()
-        .instruments()
-        .as_ref()
-        .map(|weights| {
-            weights
-                .entries()
-                .iter()
-                .filter(|entry| entry.display().range() != AllocationDisplayRange::Zero)
-                .filter_map(|entry| match entry.key() {
-                    AssetInstrument::Holding(held) => Some((held, entry)),
-                    AssetInstrument::Cash(_) => None,
-                })
-                .map(|(held, entry)| {
-                    let kind = kind_of(held, directory);
-                    let limits = caps.limits_for(kind);
-                    let room = exposures
-                        .iter()
-                        .find(|(instrument, _)| instrument == held)
-                        .and_then(|(_, value)| {
-                            domain::room_to_cap(result.valuation(), *value, limits.instrument_cap())
-                                .ok()
-                        })
-                        .and_then(|money| ui_money(&money));
-                    UiSimulatedInstrument {
-                        symbol: held.symbol().as_str().to_owned(),
-                        name: display_name(held.symbol(), directory),
-                        fund_kind: ui_kind(kind),
-                        weight_before: weight_of(before, held.symbol()),
-                        weight_after: weight_text(entry.display()),
-                        limit_percent: percent(&limits.instrument_cap().as_ratio())
-                            .unwrap_or_default(),
-                        warning_percent: percent(&limits.instrument_warning().as_ratio())
-                            .unwrap_or_default(),
-                        level_after: level(entry.weight(), profile, kind),
-                        room_to_limit: room,
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let cash_after = after
-        .assets()
-        .instruments()
-        .as_ref()
-        .map(|weights| {
-            weights
-                .entries()
-                .iter()
-                .filter(|entry| entry.display().range() != AllocationDisplayRange::Zero)
-                .filter_map(|entry| match entry.key() {
-                    AssetInstrument::Cash(currency) => {
-                        let unit = currency.as_currency();
-                        let amount = result.valuation().buying_power(unit).money().ok()?;
-                        Some(UiCashAfter {
-                            currency: String::from(match unit {
-                                Currency::Krw => "KRW",
-                                Currency::Usd => "USD",
-                            }),
-                            amount: ui_money(&amount)?,
-                            weight: weight_text(entry.display()),
-                        })
-                    }
-                    AssetInstrument::Holding(_) => None,
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let exposures = domain::krw_exposures(result.valuation()).ok();
+    let inputs = ViewInputs {
+        before,
+        after: &after,
+        valuation: result.valuation(),
+        exposures: exposures.as_deref(),
+        directory,
+        profile,
+    };
     let total_after = match result.valuation().assets() {
         domain::Total::Complete(value) => value.value().clone(),
         domain::Total::Incomplete(value) => value.subtotal().clone(),
@@ -332,25 +357,10 @@ pub(crate) fn simulated_view(
     UiTradeSimulation {
         outcome: UiSimulationOutcome::Simulated,
         problem_symbol: None,
-        fills: result
-            .fills()
-            .iter()
-            .filter_map(|fill| {
-                Some(UiSimulatedFill {
-                    symbol: fill.instrument().symbol().as_str().to_owned(),
-                    side: match fill.side() {
-                        TradeSide::Buy => UiTradeSide::Buy,
-                        TradeSide::Sell => UiTradeSide::Sell,
-                    },
-                    quantity: fill.quantity().quantity().as_decimal().to_string(),
-                    price: ui_money(&fill.price().as_money())?,
-                    amount: ui_money(&fill.amount())?,
-                })
-            })
-            .collect(),
+        fills: fill_rows(result.fills()),
         total_after: ui_money(&total_after),
-        cash_after,
-        instruments,
+        cash_after: cash_rows(&after, result.valuation()),
+        instruments: instrument_rows(&inputs),
     }
 }
 
