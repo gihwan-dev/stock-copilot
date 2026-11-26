@@ -317,7 +317,7 @@ mod tests {
         );
         assert_eq!(
             kind_url(
-                "https://kind.krx.co.kr/disclosure/view.do?acptNo=20261126000123&docNm=주요 사항"
+                "https://kind.krx.co.kr/disclosure/view.do?acptNo=20261126000123&amp;docNm=주요 사항"
             ),
             "https://kind.krx.co.kr/disclosure/view.do?acptNo=20261126000123&docNm=%EC%A3%BC%EC%9A%94%20%EC%82%AC%ED%95%AD"
         );

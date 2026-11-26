@@ -127,6 +127,15 @@ impl<'a, F: NewsFeed, K: CollectedPresenceCheck> WatchedFeed<'a, F, K> {
         }
     }
 
+    fn inspect_all(&self, observations: &[CollectedObservation]) {
+        let Some(probe) = self.probe else {
+            return;
+        };
+        for observation in observations {
+            probe.inspect(observation.entry());
+        }
+    }
+
     #[must_use]
     pub const fn probing(mut self, probe: &'a dyn crate::collected_links::TitleProbe) -> Self {
         self.probe = Some(probe);
@@ -223,11 +232,7 @@ impl<F: NewsFeed, K: CollectedPresenceCheck> NewsFeed for WatchedFeed<'_, F, K> 
         match self.feed.new_items(since).await {
             Ok(DataAvailability::Available((observations, next))) => {
                 self.fetched.store(count(&observations), Ordering::Relaxed);
-                if let Some(probe) = self.probe {
-                    for observation in &observations {
-                        probe.inspect(observation.entry());
-                    }
-                }
+                self.inspect_all(&observations);
                 let batch = self.headlines.admit(observations).await;
                 self.duplicates.store(batch.duplicates, Ordering::Relaxed);
                 Ok(DataAvailability::Available((

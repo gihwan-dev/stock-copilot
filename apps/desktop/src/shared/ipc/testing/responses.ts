@@ -229,12 +229,6 @@ export const responses = {
         state: "on",
       },
       {
-        body_reading: "off",
-        interval_minutes: "10",
-        source: "Edaily",
-        state: "on",
-      },
-      {
         body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
@@ -544,12 +538,6 @@ export const responses = {
         state: "on",
       },
       {
-        body_reading: "off",
-        interval_minutes: "10",
-        source: "Edaily",
-        state: "on",
-      },
-      {
         body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
@@ -678,12 +666,6 @@ export const responses = {
         state: "on",
       },
       {
-        body_reading: "off",
-        interval_minutes: "10",
-        source: "Edaily",
-        state: "on",
-      },
-      {
         body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
@@ -773,12 +755,6 @@ export const responses = {
         body_reading: "locked",
         interval_minutes: "10",
         source: "Yonhap",
-        state: "on",
-      },
-      {
-        body_reading: "off",
-        interval_minutes: "10",
-        source: "Edaily",
         state: "on",
       },
       {
@@ -877,12 +853,6 @@ export const responses = {
         body_reading: "locked",
         interval_minutes: "10",
         source: "Yonhap",
-        state: "on",
-      },
-      {
-        body_reading: "off",
-        interval_minutes: "10",
-        source: "Edaily",
         state: "on",
       },
       {
@@ -988,12 +958,6 @@ export const responses = {
         body_reading: "locked",
         interval_minutes: "10",
         source: "Yonhap",
-        state: "on",
-      },
-      {
-        body_reading: "off",
-        interval_minutes: "10",
-        source: "Edaily",
         state: "on",
       },
       {

@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use application::{
@@ -398,7 +399,7 @@ impl KindSkip {
 
 const KIND_VIEWER_URL: &str = "https://kind.krx.co.kr/common/disclsviewer.do?method=search&acptno=";
 
-const fn url_safe(byte: u8) -> bool {
+fn url_safe(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || b":/?#[]@!$&'()*+,;=%-._~".contains(&byte)
 }
 
@@ -409,7 +410,7 @@ pub fn escape_url(raw: &str) -> String {
         if url_safe(byte) {
             escaped.push(char::from(byte));
         } else {
-            escaped.push_str(&format!("%{byte:02X}"));
+            let _written = write!(escaped, "%{byte:02X}");
         }
     }
     escaped
