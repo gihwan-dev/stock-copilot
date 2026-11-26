@@ -131,7 +131,32 @@ pub struct QueuedJobRecords {
 
 impl JobRecordSink for QueuedJobRecords {
     fn record(&self, record: &JobExecutionRecord) {
+        crate::diagnostics_log::record(&application::DiagnosticEvent::Job(job_diagnosis(record)));
         let _queued = self.sender.send(record.clone());
+    }
+}
+
+#[must_use]
+pub fn job_diagnosis(record: &JobExecutionRecord) -> application::JobDiagnosis {
+    let note = match &record.outcome {
+        JobRunOutcome::Executed(detail) => application::JobRunNote::Executed {
+            summary: application::DiagnosticText::new(&detail.summary_code),
+            processed: JobItemCount::new(detail.processed_items),
+        },
+        JobRunOutcome::SkippedMissedWindow => application::JobRunNote::SkippedMissedWindow,
+        JobRunOutcome::DeferredByAiQueue { .. } => application::JobRunNote::Deferred,
+        JobRunOutcome::Failed(error) => {
+            application::JobRunNote::Failed(application::DiagnosticText::new(&match error {
+                JobError::PortUnavailable(port) => format!("port-unavailable:{port}"),
+                JobError::StorageFailure(detail) => format!("storage-failure:{detail}"),
+                JobError::CalendarUnavailable => String::from("calendar-unavailable"),
+                JobError::ExecutionFailed(detail) => format!("execution-failed:{detail}"),
+            }))
+        }
+    };
+    application::JobDiagnosis {
+        job: application::DiagnosticText::new(record.id.as_code()),
+        note,
     }
 }
 
@@ -152,6 +177,9 @@ pub fn job_record_queue<S: JobScheduleStore + 'static>(
 
 pub trait ScheduleControl: Send + Sync {
     fn configurable_jobs(&self) -> BoxFuture<'_, Vec<JobStatusSnapshot>>;
+    fn all_jobs(&self) -> BoxFuture<'_, Vec<JobStatusSnapshot>> {
+        self.configurable_jobs()
+    }
     fn change(
         &self,
         change: JobScheduleChange,
@@ -192,6 +220,10 @@ where
 {
     fn configurable_jobs(&self) -> BoxFuture<'_, Vec<JobStatusSnapshot>> {
         Box::pin(self.settings.configurable_jobs())
+    }
+
+    fn all_jobs(&self) -> BoxFuture<'_, Vec<JobStatusSnapshot>> {
+        Box::pin(self.settings.job_status())
     }
 
     fn change(

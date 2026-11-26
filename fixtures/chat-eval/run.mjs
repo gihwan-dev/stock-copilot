@@ -788,7 +788,7 @@ const selfTest = async () => {
     await done;
     server.kill();
     const byId = Object.fromEntries(replies.map((reply) => [reply.id, reply]));
-    expectThat(byId[2]?.result?.tools?.length === 62, `도구 목록 ${byId[2]?.result?.tools?.length}`);
+    expectThat(byId[2]?.result?.tools?.length === CHAT_TOOLS.length, `도구 목록 ${byId[2]?.result?.tools?.length}`);
     expectThat(
       byId[3]?.result?.structuredContent?.holdings?.length === 3 && byId[3].result.isError === false,
       "포트폴리오 응답",

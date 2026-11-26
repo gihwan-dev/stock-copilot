@@ -10,10 +10,19 @@ import {
   Text,
   TimestampText,
 } from "../../../shared/ds";
-import type { ScreenSources, StatusView } from "../../../shared/ipc";
+import type {
+  DataStatusView,
+  IpcFailure,
+  ScreenSources,
+  StatusView,
+} from "../../../shared/ipc";
+import type { Result } from "../../../shared/lib";
 import { statusText } from "../messages";
 import { useStatus } from "../model/status";
+import { DataStatusCard } from "./DataStatusCard";
 import { RecordsCard, SourcesCard, UsageCard } from "./StatusTables";
+
+type LoadData = () => Promise<Result<DataStatusView, IpcFailure>>;
 
 const RuntimeLine = (props: { readonly view: StatusView }): ReactElement =>
   props.view.aiRuntime.kind === "ready" ? (
@@ -54,11 +63,15 @@ const AiCard = (props: { readonly view: StatusView }): ReactElement => (
   </Card>
 );
 
-const StatusReady = (props: { readonly view: StatusView }): ReactElement => (
+const StatusReady = (props: {
+  readonly view: StatusView;
+  readonly loadData: LoadData;
+}): ReactElement => (
   <Stack gap="space-4">
     <Text variant="body-sm" tone="ink-muted">
       {statusText("intro", "ko")}
     </Text>
+    <DataStatusCard load={props.loadData} />
     <AiCard view={props.view} />
     <UsageCard usage={props.view.aiUsage} />
     <SourcesCard sources={props.view.sources} />
@@ -68,6 +81,7 @@ const StatusReady = (props: { readonly view: StatusView }): ReactElement => (
 
 const StatusBody = (props: {
   readonly load: ScreenSources["status"];
+  readonly loadData: LoadData;
 }): ReactElement => {
   const status = useStatus(props.load);
   switch (status.view.status) {
@@ -91,12 +105,13 @@ const StatusBody = (props: {
         />
       );
     case "ready":
-      return <StatusReady view={status.view.data} />;
+      return <StatusReady view={status.view.data} loadData={props.loadData} />;
   }
 };
 
 export const StatusScreen = (props: {
   readonly load: ScreenSources["status"];
+  readonly loadData: LoadData;
   readonly onBack: () => void;
 }): ReactElement => (
   <Page
@@ -106,6 +121,6 @@ export const StatusScreen = (props: {
       onPress: props.onBack,
     }}
   >
-    <StatusBody load={props.load} />
+    <StatusBody load={props.load} loadData={props.loadData} />
   </Page>
 );

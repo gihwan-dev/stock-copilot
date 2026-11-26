@@ -347,3 +347,6 @@ check-lite: check-node check-pnpm
     "{{just_executable()}}" capability-check
     node harness/generated-files/check.mjs
     env -u STOCK_COPILOT_PROPTEST_CASES cargo nextest run --workspace --locked
+
+chat-eval *args:
+    node fixtures/chat-eval/run.mjs {{args}}

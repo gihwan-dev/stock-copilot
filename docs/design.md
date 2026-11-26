@@ -203,7 +203,7 @@ trait AiProvider {
 | 찾기 | 알려진 설치 위치와 로그인 셸의 PATH에서 `claude`를 찾는다. 사용자가 이미 로그인한 기본 설정 위치를 그대로 쓴다 (P-2). 앱 전용 `CLAUDE_CONFIG_DIR`은 별도 로그인이 필요하므로 쓰지 않는다 |
 | 환경 변수 | 비운 뒤 허용 목록만 넘긴다: `HOME`, `PATH`, `USER`, `LOGNAME`, `TMPDIR`, MCP 토큰, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. `USER`가 없으면 키체인의 구독 로그인을 읽지 못한다(실측). `ANTHROPIC_API_KEY`는 넘기지 않는다 (구독 사용) |
 | 작업 폴더 | 실행마다 0700 빈 임시 폴더 |
-| 명령 | `claude -p --verbose --input-format stream-json --output-format stream-json --include-partial-messages --restricted --disable-slash-commands --tools <프로필별> --allowedTools <프로필별> --permission-mode dontAsk --permission-prompts none --mcp-config <실행별 파일> --strict-mcp-config --model <설정> --effort <설정>`. 채팅 실행에만 `--append-system-prompt <자문가 지침>`을 더한다 (ADR 0185) |
+| 명령 | `claude -p --verbose --input-format stream-json --output-format stream-json --include-partial-messages --restricted --disable-slash-commands --tools <프로필별> --allowedTools <프로필별> --permission-mode dontAsk --permission-prompts none --mcp-config <실행별 파일> --strict-mcp-config --model <설정> --effort <설정>`. 채팅 실행에만 `--append-system-prompt <자문가 지침>`을 더한다 (ADR 0186) |
 | 프로필별 도구 | 수집 실행: `--tools WebSearch`, 빈 MCP 설정(앱 MCP 없음), 결과는 `--json-schema` 구조화 출력. 웹 읽기는 S-07. 분석 실행: `--tools ""`(내장 도구 없음)와 분석용 MCP 도구 (4.4) |
 | MCP 설정 | stdio 서버의 `command`는 앱에 들어 있는 브리지, 토큰은 `env`의 `${변수}` 참조로만 넘긴다. argv와 설정 파일에 토큰 값을 쓰지 않는다 ([R-04](research/R-04-rust-mcp-server.md)) |
 | 기록 | 예약 작업과 채팅 모두 `--no-session-persistence`. 채팅은 대화 동안 프로세스 하나를 유지한다. 앱을 다시 켜거나 프로세스가 끝나면 앱이 저장한 대화를 새 프로세스에 다시 넣는다. `--resume`은 쓰지 않는다. 대화 원본은 앱 SQLite에 둔다. CLI가 앱 작업 폴더 이름으로 만든 폴더가 남으면 앱이 지운다 (I-04) |
