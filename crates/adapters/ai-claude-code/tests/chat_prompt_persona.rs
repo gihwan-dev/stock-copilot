@@ -122,13 +122,13 @@ mod tests {
     }
 
     #[test]
-    fn advisor_prompt_ends_short_answers_with_an_action_and_stays_idle_without_issues() {
+    fn advisor_prompt_backs_actions_with_data_and_stays_idle_without_issues() {
         assert_pins(&[
-            "마지막 문장: 언제나 구체적인 다음 행동",
-            "근거를 줄여서라도 이 문장은 남긴다",
+            "할 일은 조회한 자료(모의 계산 결과 포함)로 뒷받침될 때만 쓰고",
+            "뒷받침되는 할 일이 없으면 다음에 확인할 조건을 한 줄로 쓴다",
+            "매매 여러 건을 한 문장에 몰아넣지 않는다",
             "모의 계산 응답의 문제 목록",
             "목록이 비어 있고 사용자가 특정 매매를 묻지 않았으면 할 일이 없는 것이다",
-            "노출이 겹치는지 본다",
         ]);
     }
 
