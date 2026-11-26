@@ -282,7 +282,7 @@ mod tests {
         assert_eq!(requests.matches("cursor=first_1").count(), 2);
         assert_eq!(
             requests
-                .matches("GET /api/v1/transactions?limit=100 HTTP")
+                .matches("GET /api/v1/transactions?limit=100&from=2026-09-01 HTTP")
                 .count(),
             2
         );
@@ -1117,5 +1117,24 @@ mod tests {
             panic!("incomplete")
         };
         assert_overflow_tail(&actual, &tail);
+    }
+    #[test]
+    fn the_window_start_is_sent_and_pending_rows_beyond_the_window_end_still_arrive() {
+        let mut pending = row();
+        pending["settled"] = json!(false);
+        pending["settlementDate"] = json!("2026-10-02");
+        let (outcome, requests) =
+            read_responses(vec![ok(page(json!([row(), pending]), Value::Null))]);
+        let application::TransactionRead::Complete(completed) = outcome.expect("조회") else {
+            panic!("incomplete")
+        };
+        assert_eq!(completed.rows().as_slice().len(), 2);
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/transactions?limit=100&from=2026-09-01 HTTP")
+                .count(),
+            1
+        );
+        assert_eq!(requests.matches("&to=").count(), 0);
     }
 }

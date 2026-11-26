@@ -54,12 +54,17 @@ impl From<PortError> for PageFault {
 }
 fn transactions_request(
     account: &AccountId,
+    window: SettlementWindow,
     filter: &TransactionFilter,
     cursor: Option<&str>,
 ) -> ReadRequest {
     let mut request = ReadRequest::new(ReadRoute::Transactions)
         .with_account(SecretValue::new(account.as_i64().to_string().into_bytes()))
-        .with_query(QueryKey::Limit, "100".to_owned());
+        .with_query(QueryKey::Limit, "100".to_owned())
+        .with_query(
+            QueryKey::From,
+            crate::market_calendar::date_text(window.from()),
+        );
     if let Some(kinds) = filter.selected_kinds() {
         request = request.with_query(
             QueryKey::TransactionTypes,
@@ -227,6 +232,7 @@ pub(crate) async fn fetch<Store: SecretStore, Time: Clock, Renewal: TokenRenewal
         let response = match tokens
             .get(&transactions_request(
                 account,
+                window,
                 filter,
                 pages.cursor.as_deref(),
             ))
