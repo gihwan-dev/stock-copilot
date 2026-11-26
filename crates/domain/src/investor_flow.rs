@@ -1,6 +1,6 @@
 use crate::{
-    Amount, CalendarDate, IndicatorCode, KnownMarket, MarketDataError, MarketObservation,
-    MasterCode, NumericInput, Symbol, Timestamp,
+    Amount, CalendarDate, Currency, IndicatorCode, KnownMarket, MarketDataError, MarketObservation,
+    MasterCode, Money, NumericInput, Price, Symbol, Timestamp,
 };
 use rust_decimal::Decimal;
 use std::{collections::BTreeSet, fmt};
@@ -162,6 +162,18 @@ impl FlowItem {
     #[must_use]
     pub const fn unit(&self) -> FlowUnit {
         self.unit
+    }
+    #[must_use]
+    pub fn net_krw_at(&self, close: Option<Price>) -> Option<Money> {
+        match self.net {
+            FlowNet::Krw(value) => Some(Money::new(value.0, Currency::Krw)),
+            FlowNet::Shares(value) => {
+                let price = close.filter(|price| price.as_money().currency() == Currency::Krw)?;
+                crate::exact_arithmetic::multiply(value.0, price.as_money().amount())
+                    .ok()
+                    .map(|amount| Money::new(amount, Currency::Krw))
+            }
+        }
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

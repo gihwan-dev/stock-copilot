@@ -165,6 +165,11 @@ impl IndicatorValue {
     }
 
     #[must_use]
+    pub fn as_ratio(self) -> Ratio {
+        self.number()
+    }
+
+    #[must_use]
     pub fn display(self) -> IndicatorDisplay {
         let text = IndicatorDisplayText(self.number().as_decimal().to_string());
         match self {

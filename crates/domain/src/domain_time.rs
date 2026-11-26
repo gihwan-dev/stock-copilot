@@ -115,6 +115,15 @@ impl CalendarDate {
             .map(Self)
             .map_err(|_error| TimeError::InvalidComponent)
     }
+    pub fn start_at_offset(self, offset: OffsetSeconds) -> Result<Timestamp, TimeError> {
+        let zone = UtcOffset::from_whole_seconds(offset.0)
+            .map_err(|_error| TimeError::InvalidComponent)?;
+        Timestamp::from_parts(
+            UnixSeconds(self.0.midnight().assume_offset(zone).unix_timestamp()),
+            Nanosecond(0),
+            offset,
+        )
+    }
     #[must_use]
     pub const fn year(self) -> CalendarYear {
         CalendarYear(self.0.year())
