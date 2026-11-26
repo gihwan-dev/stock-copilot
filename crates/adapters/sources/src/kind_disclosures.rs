@@ -396,13 +396,80 @@ impl KindSkip {
     }
 }
 
+const KIND_VIEWER_URL: &str = "https://kind.krx.co.kr/common/disclsviewer.do?method=search&acptno=";
+
+const fn url_safe(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b":/?#[]@!$&'()*+,;=%-._~".contains(&byte)
+}
+
+#[must_use]
+pub fn escape_url(raw: &str) -> String {
+    let mut escaped = String::with_capacity(raw.len());
+    for byte in raw.trim().bytes() {
+        if url_safe(byte) {
+            escaped.push(char::from(byte));
+        } else {
+            escaped.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    escaped
+}
+
+fn kind_url(link: &str, receipt: &KindReceiptNo) -> Option<NormalizedUrl> {
+    NormalizedUrl::try_new(link.trim())
+        .or_else(|_raw| NormalizedUrl::try_new(&escape_url(link)))
+        .or_else(|_escaped| {
+            NormalizedUrl::try_new(&format!("{KIND_VIEWER_URL}{}", receipt.as_str()))
+        })
+        .ok()
+}
+
+#[must_use]
+pub fn link_shape(link: &str) -> String {
+    let trimmed = link.trim();
+    let (scheme, rest) = trimmed.split_once("://").unwrap_or(("-", trimmed));
+    let host_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let host = rest.get(..host_end).unwrap_or("-");
+    let after = rest.get(host_end..).unwrap_or("");
+    let (path, query) = after.split_once('?').unwrap_or((after, ""));
+    let keys = query
+        .split('&')
+        .filter_map(|pair| pair.split_once('=').map(|(key, _value)| key))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut bad = Vec::new();
+    if link.len() != trimmed.len() {
+        bad.push("edge-space");
+    }
+    if trimmed.bytes().any(|byte| byte == b' ') {
+        bad.push("space");
+    }
+    if trimmed.bytes().any(|byte| !byte.is_ascii()) {
+        bad.push("non-ascii");
+    }
+    if trimmed
+        .bytes()
+        .any(|byte| byte.is_ascii() && byte != b' ' && !url_safe(byte))
+    {
+        bad.push("symbol");
+    }
+    format!(
+        "scheme={scheme} host={host} path={path} keys={keys} bad={}",
+        if bad.is_empty() {
+            "-".to_owned()
+        } else {
+            bad.join("/")
+        }
+    )
+}
+
 fn parse_kind_item(item: &ParsedFeedItem) -> Result<KindDisclosureEntry, KindSkip> {
     if item.title.is_empty() || item.link.is_empty() {
         return Err(KindSkip::MissingField);
     }
     let acpt_no = extract_query_param(&item.link, "acptNo").ok_or(KindSkip::NoReceipt)?;
     let receipt_no = KindReceiptNo::try_new(&acpt_no).map_err(|_bad| KindSkip::BadReceipt)?;
-    let url = NormalizedUrl::try_new(&item.link).map_err(|_bad| KindSkip::BadUrl)?;
+    let url = kind_url(&item.link, &receipt_no).ok_or(KindSkip::BadUrl)?;
     let title = UntrustedText::try_new(&item.title).map_err(|_bad| KindSkip::BadTitle)?;
     let (market, inferred_corp) = parse_kind_title(&item.title);
     let raw_corp = item
@@ -469,6 +536,9 @@ pub fn explain_kind_rss(bytes: &[u8]) -> KindParseReport {
             }
         }
     }
+    let sample = items
+        .first()
+        .map_or_else(|| String::from("-"), |item| link_shape(&item.link));
     let reasons = skipped
         .iter()
         .map(|(reason, count)| format!("{}:{count}", reason.name()))
@@ -481,7 +551,7 @@ pub fn explain_kind_rss(bytes: &[u8]) -> KindParseReport {
     };
     KindParseReport {
         detail: format!(
-            "stage=items shape={shape} items={} kept={} skipped={reasons}",
+            "stage=items shape={shape} items={} kept={} skipped={reasons} link=({sample})",
             items.len(),
             entries.len()
         ),

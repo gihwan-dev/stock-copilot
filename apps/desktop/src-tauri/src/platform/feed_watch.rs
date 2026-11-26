@@ -91,6 +91,7 @@ pub struct WatchedFeed<'a, F, K> {
     feed: &'a F,
     headlines: &'a SharedHeadlines,
     known: &'a K,
+    probe: Option<&'a dyn crate::collected_links::TitleProbe>,
     fetched: AtomicU32,
     duplicates: AtomicU32,
     already: AtomicU32,
@@ -118,11 +119,18 @@ impl<'a, F: NewsFeed, K: CollectedPresenceCheck> WatchedFeed<'a, F, K> {
             feed,
             headlines,
             known,
+            probe: None,
             fetched: AtomicU32::new(0),
             duplicates: AtomicU32::new(0),
             already: AtomicU32::new(0),
             failure: Mutex::const_new(None),
         }
+    }
+
+    #[must_use]
+    pub const fn probing(mut self, probe: &'a dyn crate::collected_links::TitleProbe) -> Self {
+        self.probe = Some(probe);
+        self
     }
 
     pub async fn diagnosis(
@@ -215,6 +223,11 @@ impl<F: NewsFeed, K: CollectedPresenceCheck> NewsFeed for WatchedFeed<'_, F, K> 
         match self.feed.new_items(since).await {
             Ok(DataAvailability::Available((observations, next))) => {
                 self.fetched.store(count(&observations), Ordering::Relaxed);
+                if let Some(probe) = self.probe {
+                    for observation in &observations {
+                        probe.inspect(observation.entry());
+                    }
+                }
                 let batch = self.headlines.admit(observations).await;
                 self.duplicates.store(batch.duplicates, Ordering::Relaxed);
                 Ok(DataAvailability::Available((

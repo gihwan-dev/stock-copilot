@@ -289,6 +289,55 @@ mod tests {
         assert!(!odd.detail.contains("삼성전자"), "{}", odd.detail);
     }
 
+    fn kind_item(link: &str) -> String {
+        format!(
+            "<?xml version=\"1.0\"?><rss><channel><item><title>[유]삼성전자 주요사항보고서</title><link>{link}</link><author>삼성전자</author><pubDate>Thu, 26 Nov 2026 20:10:00 +0900</pubDate></item></channel></rss>"
+        )
+    }
+
+    fn kind_url(link: &str) -> String {
+        let report = sources::explain_kind_rss(kind_item(link).as_bytes());
+        assert_eq!(
+            report.rejected,
+            sources::KindRejection::Accepted,
+            "{}",
+            report.detail
+        );
+        let entry = report.entries.first().expect("공시");
+        entry.disclosure().collected().url().as_str().to_owned()
+    }
+
+    #[test]
+    fn kind_links_with_spaces_or_korean_are_escaped_instead_of_dropped() {
+        assert_eq!(
+            kind_url(
+                "\n  https://kind.krx.co.kr/common/disclsviewer.do?method=search&amp;acptno=20261126000123  \n"
+            ),
+            "https://kind.krx.co.kr/common/disclsviewer.do?method=search&acptno=20261126000123"
+        );
+        assert_eq!(
+            kind_url(
+                "https://kind.krx.co.kr/disclosure/view.do?acptNo=20261126000123&docNm=주요 사항"
+            ),
+            "https://kind.krx.co.kr/disclosure/view.do?acptNo=20261126000123&docNm=%EC%A3%BC%EC%9A%94%20%EC%82%AC%ED%95%AD"
+        );
+        assert_eq!(
+            kind_url("javascript:openDisclsViewer('x')?acptNo=20261126000123"),
+            "https://kind.krx.co.kr/common/disclsviewer.do?method=search&acptno=20261126000123",
+            "주소로 쓸 수 없으면 접수 번호로 공시 뷰어 주소를 만든다"
+        );
+    }
+
+    #[test]
+    fn link_shape_names_parts_but_never_values() {
+        let shape =
+            sources::link_shape(" https://kind.krx.co.kr/a/b.do?acptNo=2026&docNm=주요 사항");
+        assert_eq!(
+            shape,
+            "scheme=https host=kind.krx.co.kr path=/a/b.do keys=acptNo,docNm bad=edge-space/space/non-ascii"
+        );
+    }
+
     #[test]
     fn a_bare_email_gets_an_app_name_so_sec_accepts_the_header() {
         assert!(sec_contact_header("tester@example.com").is_some());

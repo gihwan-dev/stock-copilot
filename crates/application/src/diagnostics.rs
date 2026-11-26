@@ -155,6 +155,7 @@ pub struct FeedDiagnosis {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LinkProbe {
     pub name_seen: CollectedCount,
+    pub matched: CollectedCount,
     pub needs_context: CollectedCount,
     pub group_only: CollectedCount,
 }

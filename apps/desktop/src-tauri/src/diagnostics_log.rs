@@ -180,7 +180,7 @@ const fn feed_result_name(result: FeedRunResult) -> &'static str {
 
 fn describe_feed(diagnosis: &FeedDiagnosis) -> String {
     format!(
-        "news-feed source={:?} result={} fetched={} duplicates={} known={} stored={} linked={} name_seen={} needs_context={} group_only={}",
+        "news-feed source={:?} result={} fetched={} duplicates={} known={} stored={} linked={} name_seen={} matched={} needs_context={} group_only={}",
         diagnosis.source,
         feed_result_name(diagnosis.result),
         diagnosis.fetched.as_u32(),
@@ -189,6 +189,7 @@ fn describe_feed(diagnosis: &FeedDiagnosis) -> String {
         diagnosis.stored.as_u32(),
         diagnosis.linked.as_u32(),
         diagnosis.probe.name_seen.as_u32(),
+        diagnosis.probe.matched.as_u32(),
         diagnosis.probe.needs_context.as_u32(),
         diagnosis.probe.group_only.as_u32()
     )
