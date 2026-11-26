@@ -54,6 +54,8 @@ fn check_app_command_tool(tool: &UntrustedText) -> AnalysisToolAllowance {
         | "app_get_briefings"
         | "app_get_portfolio"
         | "app_get_allocation"
+        | "app_simulate_trades"
+        | "app_search_instruments"
         | "app_get_job_schedules"
         | "app_get_public_ip"
         | "app_check_toss_connection"

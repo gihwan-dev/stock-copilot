@@ -880,6 +880,46 @@
   {
     "annotations": {
       "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Search listed instruments in the app's instrument master by name or exact symbol, optionally filtered by fund kind (single-security, broad-index-fund, leveraged-or-inverse, sector-or-theme-fund). Returns up to 20 matches with symbol, market, name and fund kind. Use it to name concrete products before suggesting a purchase. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "fund_kind": {
+          "enum": [
+            "broad-index-fund",
+            "single-security",
+            "leveraged-or-inverse",
+            "sector-or-theme-fund"
+          ],
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "query": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_search_instruments"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
       "idempotentHint": false,
       "openWorldHint": false,
       "readOnlyHint": false
@@ -1293,6 +1333,80 @@
       "type": "object"
     },
     "name": "app_set_wake_criteria"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Simulate buy and sell trades on the current portfolio without placing any order. Returns fills (price × quantity), cash after, total after and, per instrument, the fund kind, weight before and after, the app's limit and warning line for that kind, the level after (normal, warning, over-cap) and the KRW room left to the limit (negative means excess). An empty trades list returns the current state. Price defaults to the holding's current price; give price for instruments not held. Quantities are whole shares. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "trades": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "market": {
+                "enum": [
+                  "KR",
+                  "US"
+                ],
+                "type": "string"
+              },
+              "price": {
+                "maxLength": 24,
+                "minLength": 1,
+                "type": "string"
+              },
+              "quantity": {
+                "maxLength": 12,
+                "minLength": 1,
+                "type": "string"
+              },
+              "side": {
+                "enum": [
+                  "buy",
+                  "sell"
+                ],
+                "type": "string"
+              },
+              "symbol": {
+                "maxLength": 20,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "symbol",
+              "market",
+              "side",
+              "quantity"
+            ],
+            "type": "object"
+          },
+          "maxItems": 20,
+          "type": "array"
+        }
+      },
+      "required": [
+        "trades"
+      ],
+      "type": "object"
+    },
+    "name": "app_simulate_trades"
   },
   {
     "annotations": {

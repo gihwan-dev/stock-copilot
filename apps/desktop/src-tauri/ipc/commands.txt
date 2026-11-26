@@ -34,6 +34,7 @@ restart_to_update
 resubscribe_chat_turn
 save_investor_profile
 save_order_settings
+search_instruments
 select_account
 send_chat_message
 set_aliases
@@ -47,5 +48,6 @@ set_principles
 set_sec_contact
 set_task_model
 set_wake_criteria
+simulate_trades
 skip_signal
 submit_toss_keys

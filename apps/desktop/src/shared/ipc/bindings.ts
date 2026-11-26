@@ -59,6 +59,14 @@ export const commands = {
     typedError<UiAllocationView, IpcError>(
       __TAURI_INVOKE("get_allocation", { request }),
     ),
+  simulateTrades: (request: SimulateTradesRequest_Deserialize) =>
+    typedError<UiTradeSimulation_Serialize, IpcError>(
+      __TAURI_INVOKE("simulate_trades", { request }),
+    ),
+  searchInstruments: (request: SearchInstrumentsRequest_Deserialize) =>
+    typedError<UiInstrumentSearch, IpcError>(
+      __TAURI_INVOKE("search_instruments", { request }),
+    ),
   getJobSchedules: (request: GetJobSchedulesRequest) =>
     typedError<UiJobSchedulesView_Serialize, IpcError>(
       __TAURI_INVOKE("get_job_schedules", { request }),
@@ -836,6 +844,19 @@ export type SaveOrderSettingsRequest = {
 
 export type ScorecardScope = "all";
 
+export type SearchInstrumentsRequest =
+  SearchInstrumentsRequest_Serialize | SearchInstrumentsRequest_Deserialize;
+
+export type SearchInstrumentsRequest_Deserialize = {
+  query?: string | null;
+  fund_kind?: UiFundKindFilter | null;
+};
+
+export type SearchInstrumentsRequest_Serialize = {
+  query: string | null;
+  fund_kind: UiFundKindFilter | null;
+};
+
 export type SelectAccountRequest = {
   account: string;
 };
@@ -967,6 +988,17 @@ export type SetWakeCriteriaRequest = {
 export type SettingsQueryScope = "all";
 
 export type SignalsScope = "current";
+
+export type SimulateTradesRequest =
+  SimulateTradesRequest_Serialize | SimulateTradesRequest_Deserialize;
+
+export type SimulateTradesRequest_Deserialize = {
+  trades: UiTradeInput_Deserialize[];
+};
+
+export type SimulateTradesRequest_Serialize = {
+  trades: UiTradeInput_Serialize[];
+};
 
 export type SkipSignalRequest = {
   symbol: string;
@@ -1154,6 +1186,12 @@ export type UiBriefingsView_Serialize = {
 export type UiBudgetPercent = "50" | "60" | "70" | "80" | "90";
 
 export type UiCardExpiry = "5" | "10" | "15" | "30";
+
+export type UiCashAfter = {
+  currency: string;
+  amount: UiMoney;
+  weight: string;
+};
 
 export type UiCashMinPercent = "0" | "5" | "10" | "20" | "30";
 
@@ -2085,6 +2123,18 @@ export type UiFeedSource =
   | "UsTreasury"
   | "Fred";
 
+export type UiFundKind =
+  | "single-security"
+  | "broad-index-fund"
+  | "leveraged-or-inverse"
+  | "sector-or-theme-fund";
+
+export type UiFundKindFilter =
+  | "single-security"
+  | "broad-index-fund"
+  | "leveraged-or-inverse"
+  | "sector-or-theme-fund";
+
 export type UiFxPair = "UsdKrw" | "KrwUsd";
 
 export type UiHolding = {
@@ -2144,6 +2194,13 @@ export type UiInstrumentHolding = {
   profit_rate: string;
 };
 
+export type UiInstrumentMatch = {
+  symbol: string;
+  market: string;
+  name: string;
+  fund_kind: UiFundKind;
+};
+
 export type UiInstrumentOrigin = "holding" | "watchlist";
 
 export type UiInstrumentRow =
@@ -2161,6 +2218,10 @@ export type UiInstrumentRow_Serialize = {
   name: string;
   origin: UiInstrumentOrigin;
   today: UiDailyChange | null;
+};
+
+export type UiInstrumentSearch = {
+  matches: UiInstrumentMatch[];
 };
 
 export type UiInstrumentsView =
@@ -2537,6 +2598,49 @@ export type UiSignedAmount = {
   direction: UiDirection;
 };
 
+export type UiSimulatedFill = {
+  symbol: string;
+  side: UiTradeSide;
+  quantity: string;
+  price: UiMoney;
+  amount: UiMoney;
+};
+
+export type UiSimulatedInstrument =
+  UiSimulatedInstrument_Serialize | UiSimulatedInstrument_Deserialize;
+
+export type UiSimulatedInstrument_Deserialize = {
+  symbol: string;
+  name: string;
+  fund_kind: UiFundKind;
+  weight_before: string;
+  weight_after: string;
+  limit_percent: string;
+  warning_percent: string;
+  level_after: UiWeightLevel;
+  room_to_limit?: UiMoney | null;
+};
+
+export type UiSimulatedInstrument_Serialize = {
+  symbol: string;
+  name: string;
+  fund_kind: UiFundKind;
+  weight_before: string;
+  weight_after: string;
+  limit_percent: string;
+  warning_percent: string;
+  level_after: UiWeightLevel;
+  room_to_limit: UiMoney | null;
+};
+
+export type UiSimulationOutcome =
+  | "simulated"
+  | "invalid-trade"
+  | "missing-price"
+  | "sell-exceeds-holding"
+  | "insufficient-cash"
+  | "cash-unknown";
+
 export type UiSkipOutcome = "recorded";
 
 export type UiSkipResult = {
@@ -2663,6 +2767,49 @@ export type UiTossConnectionState =
   | "key-in-use";
 
 export type UiTotalCoverage = "complete" | "partial";
+
+export type UiTradeInput = UiTradeInput_Serialize | UiTradeInput_Deserialize;
+
+export type UiTradeInput_Deserialize = {
+  symbol: string;
+  market: UiTradeMarket;
+  side: UiTradeSide;
+  quantity: string;
+  price?: string | null;
+};
+
+export type UiTradeInput_Serialize = {
+  symbol: string;
+  market: UiTradeMarket;
+  side: UiTradeSide;
+  quantity: string;
+  price: string | null;
+};
+
+export type UiTradeMarket = "KR" | "US";
+
+export type UiTradeSide = "buy" | "sell";
+
+export type UiTradeSimulation =
+  UiTradeSimulation_Serialize | UiTradeSimulation_Deserialize;
+
+export type UiTradeSimulation_Deserialize = {
+  outcome: UiSimulationOutcome;
+  problem_symbol?: string | null;
+  fills: UiSimulatedFill[];
+  total_after?: UiMoney | null;
+  cash_after: UiCashAfter[];
+  instruments: UiSimulatedInstrument_Deserialize[];
+};
+
+export type UiTradeSimulation_Serialize = {
+  outcome: UiSimulationOutcome;
+  problem_symbol: string | null;
+  fills: UiSimulatedFill[];
+  total_after: UiMoney | null;
+  cash_after: UiCashAfter[];
+  instruments: UiSimulatedInstrument_Serialize[];
+};
 
 export type UiTrading = "trading" | "suspended";
 

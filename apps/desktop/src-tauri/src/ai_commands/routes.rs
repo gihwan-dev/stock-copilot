@@ -12,9 +12,9 @@ use crate::ipc::event::UiEvent;
 use crate::ipc::event_bridge::UiEventBridge;
 use crate::ipc::order_approval::OrderApprovalRequest;
 use crate::ipc::{
-    ai_settings, app_version, briefing, chat, instruments, news_settings, portfolio, public_ip,
-    risk_editor, schedule, scorecard, self_check, settings, signals, system_data, thesis, toss,
-    transactions, updates,
+    ai_settings, app_version, briefing, chat, instrument_search, instruments, news_settings,
+    portfolio, public_ip, risk_editor, schedule, scorecard, self_check, settings, signals,
+    simulation, system_data, thesis, toss, transactions, updates,
 };
 
 type Fixed = &'static [(&'static str, &'static str)];
@@ -210,6 +210,50 @@ fn portfolio_routes<R: Runtime>() -> Vec<Route<R>> {
             "Read the allocation screen for the selected account. No side effects.",
             fixed(&[("scope", "current")]),
             portfolio::get_allocation::<R>,
+        ),
+        ipc(
+            "simulate_trades",
+            "Simulate buy and sell trades on the current portfolio without placing any order. Returns fills (price × quantity), cash after, total after and, per instrument, the fund kind, weight before and after, the app's limit and warning line for that kind, the level after (normal, warning, over-cap) and the KRW room left to the limit (negative means excess). An empty trades list returns the current state. Price defaults to the holding's current price; give price for instruments not held. Quantities are whole shares. No side effects.",
+            fields(
+                vec![(
+                    "trades",
+                    list(
+                        object(
+                            vec![
+                                ("symbol", symbol()),
+                                ("market", one_of(&["KR", "US"])),
+                                ("side", one_of(&["buy", "sell"])),
+                                ("quantity", text(1_u64, 12_u64)),
+                                ("price", text(1_u64, 24_u64)),
+                            ],
+                            &["symbol", "market", "side", "quantity"],
+                        ),
+                        20_u64,
+                    ),
+                )],
+                &["trades"],
+            ),
+            simulation::simulate_trades::<R>,
+        ),
+        ipc(
+            "search_instruments",
+            "Search listed instruments in the app's instrument master by name or exact symbol, optionally filtered by fund kind (single-security, broad-index-fund, leveraged-or-inverse, sector-or-theme-fund). Returns up to 20 matches with symbol, market, name and fund kind. Use it to name concrete products before suggesting a purchase. No side effects.",
+            fields(
+                vec![
+                    ("query", text(1_u64, 64_u64)),
+                    (
+                        "fund_kind",
+                        one_of(&[
+                            "broad-index-fund",
+                            "single-security",
+                            "leveraged-or-inverse",
+                            "sector-or-theme-fund",
+                        ]),
+                    ),
+                ],
+                &[],
+            ),
+            instrument_search::search_instruments::<R>,
         ),
         ipc(
             "get_transactions",

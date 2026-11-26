@@ -40,8 +40,10 @@ const fn never(ipc: &'static str) -> CommandPolicy {
     }
 }
 
-pub const COMMAND_POLICIES: [CommandPolicy; 51] = [
+pub const COMMAND_POLICIES: [CommandPolicy; 53] = [
     read("app_version"),
+    read("simulate_trades"),
+    read("search_instruments"),
     read("get_settings"),
     read("get_chat_history"),
     read("get_briefings"),

@@ -1,0 +1,382 @@
+use domain::{
+    Allocation, AllocationDisplayRange, AllocationInstrument, AssetInstrument, Currency, FundKind,
+    InvestorProfile, KnownMarket, Market, NumericInput, PortfolioValuation, Price, Quantity,
+    ResolvedOrderInstrument, SectorAssignments, SimulatedTrade, Symbol, TradeSide,
+    TradeSimulationError, WholeOrderQuantity,
+};
+use serde::{Deserialize, Serialize};
+use specta::Type;
+use tauri::{AppHandle, Runtime};
+
+use super::error::IpcError;
+use super::portfolio::{
+    UiMoney, UiWeightLevel, display_name, level, managed, percent, stored, ui_money, view_outcome,
+    weight_text,
+};
+use crate::holdings_link::InstrumentDirectory;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+#[specta(skip_attr = "serde")]
+pub struct SimulateTradesRequest {
+    pub trades: Vec<UiTradeInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+#[specta(skip_attr = "serde")]
+pub struct UiTradeInput {
+    pub symbol: String,
+    pub market: UiTradeMarket,
+    pub side: UiTradeSide,
+    pub quantity: String,
+    #[serde(default)]
+    pub price: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Type)]
+pub enum UiTradeMarket {
+    #[serde(rename = "KR")]
+    Kr,
+    #[serde(rename = "US")]
+    Us,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub enum UiTradeSide {
+    #[serde(rename = "buy")]
+    Buy,
+    #[serde(rename = "sell")]
+    Sell,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum UiSimulationOutcome {
+    #[serde(rename = "simulated")]
+    Simulated,
+    #[serde(rename = "invalid-trade")]
+    InvalidTrade,
+    #[serde(rename = "missing-price")]
+    MissingPrice,
+    #[serde(rename = "sell-exceeds-holding")]
+    SellExceedsHolding,
+    #[serde(rename = "insufficient-cash")]
+    InsufficientCash,
+    #[serde(rename = "cash-unknown")]
+    CashUnknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum UiFundKind {
+    #[serde(rename = "single-security")]
+    SingleSecurity,
+    #[serde(rename = "broad-index-fund")]
+    BroadIndexFund,
+    #[serde(rename = "leveraged-or-inverse")]
+    LeveragedOrInverse,
+    #[serde(rename = "sector-or-theme-fund")]
+    SectorOrThemeFund,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiSimulatedFill {
+    pub symbol: String,
+    pub side: UiTradeSide,
+    pub quantity: String,
+    pub price: UiMoney,
+    pub amount: UiMoney,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiSimulatedInstrument {
+    pub symbol: String,
+    pub name: String,
+    pub fund_kind: UiFundKind,
+    pub weight_before: String,
+    pub weight_after: String,
+    pub limit_percent: String,
+    pub warning_percent: String,
+    pub level_after: UiWeightLevel,
+    pub room_to_limit: Option<UiMoney>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiCashAfter {
+    pub currency: String,
+    pub amount: UiMoney,
+    pub weight: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiTradeSimulation {
+    pub outcome: UiSimulationOutcome,
+    pub problem_symbol: Option<String>,
+    pub fills: Vec<UiSimulatedFill>,
+    pub total_after: Option<UiMoney>,
+    pub cash_after: Vec<UiCashAfter>,
+    pub instruments: Vec<UiSimulatedInstrument>,
+}
+
+pub(crate) const fn ui_kind(kind: FundKind) -> UiFundKind {
+    match kind {
+        FundKind::SingleSecurity => UiFundKind::SingleSecurity,
+        FundKind::BroadIndexFund => UiFundKind::BroadIndexFund,
+        FundKind::LeveragedOrInverse => UiFundKind::LeveragedOrInverse,
+        FundKind::SectorOrThemeFund => UiFundKind::SectorOrThemeFund,
+    }
+}
+
+const fn currency_of(market: UiTradeMarket) -> (Market, KnownMarket, Currency) {
+    match market {
+        UiTradeMarket::Kr => (Market::Kr, KnownMarket::Kr, Currency::Krw),
+        UiTradeMarket::Us => (Market::Us, KnownMarket::Us, Currency::Usd),
+    }
+}
+
+fn resolve(
+    symbol: &Symbol,
+    market: (Market, KnownMarket),
+    valuation: &PortfolioValuation,
+    directory: &InstrumentDirectory,
+) -> Option<ResolvedOrderInstrument> {
+    valuation
+        .holdings()
+        .iter()
+        .map(domain::ValuedHolding::instrument)
+        .find(|held| held.symbol() == symbol && held.market() == market.0)
+        .cloned()
+        .or_else(|| {
+            directory
+                .instrument_of(market.1, symbol)
+                .and_then(|id| directory.master(&id))
+                .and_then(|master| master.order_instrument().ok())
+        })
+}
+
+fn parse_trade(
+    input: &UiTradeInput,
+    valuation: &PortfolioValuation,
+    directory: &InstrumentDirectory,
+) -> Option<SimulatedTrade> {
+    let (market, known, currency) = currency_of(input.market);
+    let symbol = Symbol::try_new(&input.symbol.to_uppercase()).ok()?;
+    let instrument = resolve(&symbol, (market, known), valuation, directory)?;
+    let quantity = NumericInput::try_new(&input.quantity)
+        .ok()
+        .and_then(|text| Quantity::parse(&text).ok())
+        .and_then(|value| WholeOrderQuantity::try_new(value).ok())?;
+    let price = match &input.price {
+        None => None,
+        Some(text) => Some(
+            NumericInput::try_new(text)
+                .ok()
+                .and_then(|value| Price::parse(&value, currency).ok())?,
+        ),
+    };
+    let side = match input.side {
+        UiTradeSide::Buy => TradeSide::Buy,
+        UiTradeSide::Sell => TradeSide::Sell,
+    };
+    Some(SimulatedTrade::new(instrument, side, quantity, price))
+}
+
+fn failure(outcome: UiSimulationOutcome, symbol: Option<&Symbol>) -> UiTradeSimulation {
+    UiTradeSimulation {
+        outcome,
+        problem_symbol: symbol.map(|found| found.as_str().to_owned()),
+        fills: Vec::new(),
+        total_after: None,
+        cash_after: Vec::new(),
+        instruments: Vec::new(),
+    }
+}
+
+fn failure_of(error: &TradeSimulationError) -> UiTradeSimulation {
+    match error {
+        TradeSimulationError::MissingPrice(found) => {
+            failure(UiSimulationOutcome::MissingPrice, Some(found.symbol()))
+        }
+        TradeSimulationError::PriceCurrencyMismatch(found) => {
+            failure(UiSimulationOutcome::InvalidTrade, Some(found.symbol()))
+        }
+        TradeSimulationError::SellExceedsHolding(found) => failure(
+            UiSimulationOutcome::SellExceedsHolding,
+            Some(found.symbol()),
+        ),
+        TradeSimulationError::InsufficientCash(_) => {
+            failure(UiSimulationOutcome::InsufficientCash, None)
+        }
+        TradeSimulationError::CashUnavailable(_) => failure(UiSimulationOutcome::CashUnknown, None),
+        TradeSimulationError::Arithmetic
+        | TradeSimulationError::InvalidPortfolio
+        | TradeSimulationError::TooManyTrades => failure(UiSimulationOutcome::InvalidTrade, None),
+    }
+}
+
+fn kind_of(instrument: &AllocationInstrument, directory: &InstrumentDirectory) -> FundKind {
+    directory
+        .entry(instrument.symbol())
+        .map_or(FundKind::SingleSecurity, |found| found.master.fund_kind())
+}
+
+fn weight_of(allocation: &Allocation, symbol: &Symbol) -> String {
+    allocation
+        .assets()
+        .instruments()
+        .as_ref()
+        .ok()
+        .and_then(|weights| {
+            weights
+                .entries()
+                .iter()
+                .find_map(|entry| match entry.key() {
+                    AssetInstrument::Holding(held) if held.symbol() == symbol => {
+                        Some(weight_text(entry.display()))
+                    }
+                    AssetInstrument::Holding(_) | AssetInstrument::Cash(_) => None,
+                })
+        })
+        .unwrap_or_else(|| String::from("0"))
+}
+
+pub(crate) fn simulated_view(
+    before: &Allocation,
+    trades: &[SimulatedTrade],
+    directory: &InstrumentDirectory,
+    profile: &InvestorProfile,
+) -> UiTradeSimulation {
+    let result = match domain::simulate_trades(before.valuation(), trades) {
+        Ok(result) => result,
+        Err(error) => return failure_of(&error),
+    };
+    let after = Allocation::new(result.valuation(), &SectorAssignments::default());
+    let exposures = domain::krw_exposures(result.valuation()).unwrap_or_default();
+    let caps = profile.weight_caps();
+    let instruments = after
+        .assets()
+        .instruments()
+        .as_ref()
+        .map(|weights| {
+            weights
+                .entries()
+                .iter()
+                .filter(|entry| entry.display().range() != AllocationDisplayRange::Zero)
+                .filter_map(|entry| match entry.key() {
+                    AssetInstrument::Holding(held) => Some((held, entry)),
+                    AssetInstrument::Cash(_) => None,
+                })
+                .map(|(held, entry)| {
+                    let kind = kind_of(held, directory);
+                    let limits = caps.limits_for(kind);
+                    let room = exposures
+                        .iter()
+                        .find(|(instrument, _)| instrument == held)
+                        .and_then(|(_, value)| {
+                            domain::room_to_cap(result.valuation(), *value, limits.instrument_cap())
+                                .ok()
+                        })
+                        .and_then(|money| ui_money(&money));
+                    UiSimulatedInstrument {
+                        symbol: held.symbol().as_str().to_owned(),
+                        name: display_name(held.symbol(), directory),
+                        fund_kind: ui_kind(kind),
+                        weight_before: weight_of(before, held.symbol()),
+                        weight_after: weight_text(entry.display()),
+                        limit_percent: percent(&limits.instrument_cap().as_ratio())
+                            .unwrap_or_default(),
+                        warning_percent: percent(&limits.instrument_warning().as_ratio())
+                            .unwrap_or_default(),
+                        level_after: level(entry.weight(), profile, kind),
+                        room_to_limit: room,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let cash_after = after
+        .assets()
+        .instruments()
+        .as_ref()
+        .map(|weights| {
+            weights
+                .entries()
+                .iter()
+                .filter(|entry| entry.display().range() != AllocationDisplayRange::Zero)
+                .filter_map(|entry| match entry.key() {
+                    AssetInstrument::Cash(currency) => {
+                        let unit = currency.as_currency();
+                        let amount = result.valuation().buying_power(unit).money().ok()?;
+                        Some(UiCashAfter {
+                            currency: String::from(match unit {
+                                Currency::Krw => "KRW",
+                                Currency::Usd => "USD",
+                            }),
+                            amount: ui_money(&amount)?,
+                            weight: weight_text(entry.display()),
+                        })
+                    }
+                    AssetInstrument::Holding(_) => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let total_after = match result.valuation().assets() {
+        domain::Total::Complete(value) => value.value().clone(),
+        domain::Total::Incomplete(value) => value.subtotal().clone(),
+    }
+    .into_parts()
+    .0;
+    UiTradeSimulation {
+        outcome: UiSimulationOutcome::Simulated,
+        problem_symbol: None,
+        fills: result
+            .fills()
+            .iter()
+            .filter_map(|fill| {
+                Some(UiSimulatedFill {
+                    symbol: fill.instrument().symbol().as_str().to_owned(),
+                    side: match fill.side() {
+                        TradeSide::Buy => UiTradeSide::Buy,
+                        TradeSide::Sell => UiTradeSide::Sell,
+                    },
+                    quantity: fill.quantity().quantity().as_decimal().to_string(),
+                    price: ui_money(&fill.price().as_money())?,
+                    amount: ui_money(&fill.amount())?,
+                })
+            })
+            .collect(),
+        total_after: ui_money(&total_after),
+        cash_after,
+        instruments,
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn simulate_trades<R: Runtime>(
+    app: AppHandle<R>,
+    request: SimulateTradesRequest,
+) -> Result<UiTradeSimulation, IpcError> {
+    let (screen, directory) = managed(&app)?;
+    let view = stored(screen.backend().load_allocation_view().await)?;
+    let allocation = view_outcome(&view)?;
+    let Some(trades) = request
+        .trades
+        .iter()
+        .map(|trade| parse_trade(trade, allocation.valuation(), &directory))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Ok(failure(UiSimulationOutcome::InvalidTrade, None));
+    };
+    let profile = screen
+        .backend()
+        .load_settings()
+        .await
+        .ok()
+        .and_then(|loaded| loaded.profile)
+        .unwrap_or_else(InvestorProfile::default);
+    Ok(simulated_view(allocation, &trades, &directory, &profile))
+}
