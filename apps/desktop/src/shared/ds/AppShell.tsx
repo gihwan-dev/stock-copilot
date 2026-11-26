@@ -9,12 +9,15 @@ import { Text } from "./Text";
 
 export type PanelState = "open" | "closed";
 
+type MainLayout = "scroll" | "fill";
+
 type Props = {
   readonly list?: ReactElement | null;
   readonly rail?: ReactElement | null;
   readonly chat?: ReactElement | null;
   readonly status?: ReactElement | null;
   readonly children: ReactElement;
+  readonly main?: MainLayout;
   readonly chatOpen?: PanelState;
   readonly defaultChatOpen?: PanelState;
   readonly onChatOpenChange?: (next: PanelState) => void;
@@ -228,7 +231,13 @@ export const AppShell = (props: Props): ReactElement => {
             state={chatState}
             onChange={updateChat}
           />
-          <ScrollArea direction="vertical">{props.children}</ScrollArea>
+          {props.main === "fill" ? (
+            <div className="flex-1 flex flex-col scroll-flex">
+              {props.children}
+            </div>
+          ) : (
+            <ScrollArea direction="vertical">{props.children}</ScrollArea>
+          )}
         </main>
         <ShellChat chat={chatSlot} state={chatState} onChange={updateChat} />
       </div>

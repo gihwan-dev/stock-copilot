@@ -10,53 +10,61 @@ import {
 import type { ScreenSources } from "../../../shared/ipc";
 import { briefingText } from "../messages";
 import { useBriefings, useOpenSource } from "../model/briefings";
-import { BriefingView } from "./BriefingView";
+import { BriefingView, type BriefingLayout } from "./BriefingView";
 
 type Load = ScreenSources["briefings"];
 
-const Loading = (): ReactElement => (
-  <Card title={briefingText("loadingTitle", "ko")}>
+const Loading = (props: { readonly layout?: BriefingLayout }): ReactElement => (
+  <Card
+    title={briefingText("loadingTitle", "ko")}
+    layout={props.layout ?? "flow"}
+  >
     <Skeleton variant="text" lines={3} />
   </Card>
 );
 
-const Failed = (props: { readonly retry: () => void }): ReactElement => (
+const Failed = (props: {
+  readonly retry: () => void;
+  readonly layout?: BriefingLayout;
+}): ReactElement => (
   <Card
     title={briefingText("errorTitle", "ko")}
+    layout={props.layout ?? "flow"}
     actions={{ label: briefingText("retry", "ko"), onPress: props.retry }}
   >
     <Stack gap="space-1">{[]}</Stack>
   </Card>
 );
 
+const Empty = (props: { readonly layout: BriefingLayout }): ReactElement => (
+  <Card title={briefingText("emptyTitle", "ko")} layout={props.layout}>
+    <Text variant="body-sm" tone="ink-muted">
+      {briefingText("emptyBody", "ko")}
+    </Text>
+  </Card>
+);
+
 export const BriefingCard = (props: {
   readonly load: Load;
   readonly onOpenHistory: () => void;
+  readonly layout?: BriefingLayout;
 }): ReactElement => {
   const briefings = useBriefings(props.load, "latest");
   const openSource = useOpenSource();
+  const layout = props.layout ?? "flow";
   switch (briefings.view.status) {
     case "loading":
-      return <Loading />;
+      return <Loading layout={layout} />;
     case "empty":
-      return (
-        <Card title={briefingText("emptyTitle", "ko")}>
-          <Text variant="body-sm" tone="ink-muted">
-            {briefingText("emptyBody", "ko")}
-          </Text>
-        </Card>
-      );
+      return <Empty layout={layout} />;
     case "error":
-      return <Failed retry={briefings.retry} />;
+      return <Failed retry={briefings.retry} layout={layout} />;
     case "ready":
       return briefings.view.data.latest === undefined ? (
-        <Card title={briefingText("emptyTitle", "ko")}>
-          <Text variant="body-sm" tone="ink-muted">
-            {briefingText("emptyBody", "ko")}
-          </Text>
-        </Card>
+        <Empty layout={layout} />
       ) : (
         <BriefingView
+          layout={layout}
           briefing={briefings.view.data.latest}
           onOpenSource={openSource}
           onOpenHistory={

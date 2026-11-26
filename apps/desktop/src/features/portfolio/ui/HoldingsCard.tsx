@@ -57,6 +57,7 @@ export const HoldingsCard = (props: {
 }): ReactElement => (
   <Card
     title={portfolioText("holdingsTitle", "ko")}
+    layout="fill"
     actions={{
       label: portfolioText("openTransactions", "ko"),
       onPress: props.onOpenTransactions,

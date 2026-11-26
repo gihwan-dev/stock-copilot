@@ -4,6 +4,8 @@ import {
   Card,
   DataText,
   EmptyState,
+  Grid,
+  GridItem,
   Inline,
   Money,
   Page,
@@ -71,6 +73,18 @@ const Row = (props: { readonly row: TransactionRow }): ReactElement => (
 );
 
 const TransactionsTable = (props: {
+  readonly view: TransactionsView;
+}): ReactElement => (
+  <Grid layout="fill-row">
+    <GridItem span={12}>
+      <Card layout="fill">
+        <TransactionsContent view={props.view} />
+      </Card>
+    </GridItem>
+  </Grid>
+);
+
+const TransactionsContent = (props: {
   readonly view: TransactionsView;
 }): ReactElement => (
   <Stack gap="space-3">
@@ -145,6 +159,7 @@ export const TransactionsScreen = (props: {
 }): ReactElement => (
   <Page
     title={transactionsText("title", "ko")}
+    layout="fill"
     actions={{
       label: transactionsText("backToHome", "ko"),
       onPress: props.onBack,

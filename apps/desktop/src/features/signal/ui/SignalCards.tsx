@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   DataText,
+  Divider,
   Inline,
   Skeleton,
   Stack,
@@ -93,13 +94,12 @@ const SignalCard = (props: {
   readonly card: SignalCardView;
   readonly handlers: SignalHandlers;
 }): ReactElement => (
-  <Card
-    title={
-      props.card.market === "closed"
+  <Stack gap="space-3">
+    <Text variant="label">
+      {props.card.market === "closed"
         ? signalText("marketClosed", "ko")
-        : signalText(props.card.direction, "ko")
-    }
-  >
+        : signalText(props.card.direction, "ko")}
+    </Text>
     <Stack gap="space-3">
       <Inline gap="space-2" align="center" wrap="wrap">
         <DataText value={props.card.name} />
@@ -118,7 +118,7 @@ const SignalCard = (props: {
       <OutcomeNotice outcome={props.handlers.outcomeOf(props.card.id)} />
       <Facts card={props.card} />
     </Stack>
-  </Card>
+  </Stack>
 );
 
 type SignalActions = Pick<
@@ -166,10 +166,28 @@ const useHandlers = (sources: SignalActions): SignalHandlers => {
 
 export const SignalCards = (props: {
   readonly sources: SignalActions;
+  readonly footer: ReactElement;
 }): ReactElement => {
   const handlers = useHandlers(props.sources);
-  return <SignalList load={props.sources.signals} handlers={handlers} />;
+  return (
+    <Card title={signalText("title", "ko")} layout="fill">
+      <SignalList load={props.sources.signals} handlers={handlers} />
+      {props.footer}
+    </Card>
+  );
 };
+
+const SignalItems = (props: {
+  readonly cards: readonly SignalCardView[];
+  readonly handlers: SignalHandlers;
+}): ReactElement => (
+  <Stack gap="space-4">
+    {props.cards.flatMap((card, index): readonly ReactElement[] => [
+      ...(index === 0 ? [] : [<Divider key={`${card.id}-divider`} />]),
+      <SignalCard key={card.id} card={card} handlers={props.handlers} />,
+    ])}
+  </Stack>
+);
 
 const SignalList = (props: {
   readonly load: ScreenSources["signals"];
@@ -179,34 +197,39 @@ const SignalList = (props: {
   switch (signals.view.status) {
     case "loading":
       return (
-        <Card title={signalText("loading", "ko")}>
+        <Stack gap="space-2">
+          <Text variant="body-sm" tone="ink-muted">
+            {signalText("loading", "ko")}
+          </Text>
           <Skeleton variant="text" lines={3} />
-        </Card>
+        </Stack>
       );
     case "empty":
       return (
-        <Card title={signalText("emptyTitle", "ko")}>
+        <Stack gap="space-1">
+          <Text variant="body-sm">{signalText("emptyTitle", "ko")}</Text>
           <Text variant="body-sm" tone="ink-muted">
             {signalText("emptyBody", "ko")}
           </Text>
-        </Card>
+        </Stack>
       );
     case "error":
       return (
-        <Card
-          title={signalText("errorTitle", "ko")}
-          actions={{ label: signalText("retry", "ko"), onPress: signals.retry }}
-        >
-          <Stack gap="space-1">{[]}</Stack>
-        </Card>
+        <Stack gap="space-2">
+          <Text variant="body-sm">{signalText("errorTitle", "ko")}</Text>
+          <Inline gap="space-2" align="center">
+            <Button variant="ghost" onClick={signals.retry}>
+              {signalText("retry", "ko")}
+            </Button>
+          </Inline>
+        </Stack>
       );
     case "ready":
       return (
-        <Stack gap="space-4">
-          {signals.view.data.cards.map((card): ReactElement => (
-            <SignalCard key={card.id} card={card} handlers={props.handlers} />
-          ))}
-        </Stack>
+        <SignalItems
+          cards={signals.view.data.cards}
+          handlers={props.handlers}
+        />
       );
   }
 };

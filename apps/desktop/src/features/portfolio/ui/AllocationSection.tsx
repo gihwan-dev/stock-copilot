@@ -4,11 +4,8 @@ import {
   Card,
   DataText,
   EmptyState,
-  Grid,
-  GridItem,
   Money,
   Percent,
-  Section,
   Skeleton,
   Stack,
   StatusBar,
@@ -71,55 +68,61 @@ const Row = (props: { readonly row: AllocationRow }): ReactElement => (
 const WeightTable = (props: {
   readonly titleKey: PortfolioMessageKey;
   readonly rows: readonly AllocationRow[];
-}): ReactElement => (
-  <Card title={portfolioText(props.titleKey, "ko")}>
-    {props.rows.length === 0 ? (
-      <TableRoot dense="dense" empty={portfolioText("allocationEmpty", "ko")} />
-    ) : (
-      <TableRoot dense="dense">
-        <TableHead>
-          <TableRow>
-            <TableHeader>
-              {portfolioText("allocationNameColumn", "ko")}
-            </TableHeader>
-            <TableHeader align="end">
-              {portfolioText("valueColumn", "ko")}
-            </TableHeader>
-            <TableHeader align="end">
-              {portfolioText("weightColumn", "ko")}
-            </TableHeader>
-            <TableHeader align="end">
-              {portfolioText("levelColumn", "ko")}
-            </TableHeader>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {props.rows.map((row): ReactElement => (
-            <Row key={row.id} row={row} />
-          ))}
-        </TableBody>
-      </TableRoot>
-    )}
-  </Card>
-);
+}): ReactElement =>
+  props.rows.length === 0 ? (
+    <TableRoot
+      dense="dense"
+      caption={portfolioText(props.titleKey, "ko")}
+      empty={portfolioText("allocationEmpty", "ko")}
+    />
+  ) : (
+    <TableRoot dense="dense" caption={portfolioText(props.titleKey, "ko")}>
+      <TableHead>
+        <TableRow>
+          <TableHeader>
+            {portfolioText("allocationNameColumn", "ko")}
+          </TableHeader>
+          <TableHeader align="end">
+            {portfolioText("valueColumn", "ko")}
+          </TableHeader>
+          <TableHeader align="end">
+            {portfolioText("weightColumn", "ko")}
+          </TableHeader>
+          <TableHeader align="end">
+            {portfolioText("levelColumn", "ko")}
+          </TableHeader>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {props.rows.map((row): ReactElement => (
+          <Row key={row.id} row={row} />
+        ))}
+      </TableBody>
+    </TableRoot>
+  );
 
 const AllocationReady = (props: {
   readonly view: AllocationView;
 }): ReactElement => (
   <Stack gap="space-4">
-    <StatusBar
-      tone={props.view.concentration === "concentrated" ? "warning" : "info"}
-    >
-      {portfolioText(props.view.concentration, "ko")}
-    </StatusBar>
-    <Grid>
-      <GridItem span={{ narrow: 12, wide: 6 }}>
-        <WeightTable titleKey="instrumentTitle" rows={props.view.instruments} />
-      </GridItem>
-      <GridItem span={{ narrow: 12, wide: 6 }}>
-        <WeightTable titleKey="sectorTitle" rows={props.view.sectors} />
-      </GridItem>
-    </Grid>
+    {[
+      <StatusBar
+        key="concentration"
+        tone={props.view.concentration === "concentrated" ? "warning" : "info"}
+      >
+        {portfolioText(props.view.concentration, "ko")}
+      </StatusBar>,
+      <WeightTable
+        key="instruments"
+        titleKey="instrumentTitle"
+        rows={props.view.instruments}
+      />,
+      <WeightTable
+        key="sectors"
+        titleKey="sectorTitle"
+        rows={props.view.sectors}
+      />,
+    ]}
   </Stack>
 );
 
@@ -149,7 +152,7 @@ export const AllocationSection = (props: {
   readonly load: ScreenSources["allocation"];
   readonly retry: () => void;
 }): ReactElement => (
-  <Section title={portfolioText("allocationSection", "ko")}>
+  <Card title={portfolioText("allocationSection", "ko")} layout="fill">
     <AllocationBody load={props.load} retry={props.retry} />
-  </Section>
+  </Card>
 );

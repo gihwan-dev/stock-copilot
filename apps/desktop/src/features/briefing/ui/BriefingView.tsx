@@ -96,18 +96,25 @@ const Content = (props: {
   </Stack>
 );
 
+export type BriefingLayout = "flow" | "fill";
+
 export const BriefingView = (props: {
   readonly briefing: BriefingSummary;
   readonly onOpenSource: (url: ExternalUrl) => void;
   readonly onOpenHistory: (() => void) | undefined;
+  readonly layout?: BriefingLayout;
 }): ReactElement =>
   props.onOpenHistory === undefined ? (
-    <Card title={briefingText(props.briefing.kind, "ko")}>
+    <Card
+      title={briefingText(props.briefing.kind, "ko")}
+      layout={props.layout ?? "flow"}
+    >
       <Content briefing={props.briefing} onOpenSource={props.onOpenSource} />
     </Card>
   ) : (
     <Card
       title={briefingText(props.briefing.kind, "ko")}
+      layout={props.layout ?? "flow"}
       actions={{
         label: briefingText("openHistory", "ko"),
         onPress: props.onOpenHistory,
