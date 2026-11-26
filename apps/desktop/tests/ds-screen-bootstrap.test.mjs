@@ -167,6 +167,13 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "chatEventValue",
         "chatCommit",
         "shellDismiss",
+        "chatPanelLimits",
+        "useShellResize",
+        "initialChatShare",
+        "readChatShare",
+        "saveChatShare",
+        "clearChatShare",
+        "useFollowEnd",
       ],
     );
     const returns = inputExports.map((entry) =>
@@ -184,6 +191,13 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       ["Result<FreeText, BrandError>"],
       ['"commit" | "ignore"'],
       ['"ignore" | "dismiss"'],
+      [],
+      ['"resizable" | "static"'],
+      ["PanelShare"],
+      ["PanelShare"],
+      ["void"],
+      ["void"],
+      ["void"],
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),

@@ -614,7 +614,7 @@ export const publicProps = {
         signatures.some(
           (signature) =>
             signature.declaration !== undefined &&
-            /\/node_modules\/@base-ui\/react\//u.test(
+            /\/node_modules\/(?:@base-ui\/react|react-resizable-panels)\//u.test(
               signature.declaration.getSourceFile().fileName,
             ),
         )
@@ -723,7 +723,7 @@ export const publicProps = {
           return;
         const internalLibrary = from(
           resolved,
-          /\/node_modules\/@base-ui\/react\//u,
+          /\/node_modules\/(?:@base-ui\/react|react-resizable-panels)\//u,
         );
         if (internalLibrary && type.getCallSignatures().length !== 0) {
           for (const callback of callbackValues(expression))
