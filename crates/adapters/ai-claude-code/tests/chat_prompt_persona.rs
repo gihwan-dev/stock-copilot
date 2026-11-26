@@ -133,6 +133,24 @@ mod tests {
     }
 
     #[test]
+    fn advisor_prompt_ties_market_answers_to_the_account() {
+        assert_pins(&[
+            "시장·수급 질문이어도 그 자료가 보유 종목의 한도 초과나 할 일과 닿으면 한 문장으로 계좌에 잇는다",
+            "무엇을 사라고 하기 전에 이것으로 그 상품이 이미 주의·초과인지 먼저 본다",
+        ]);
+    }
+
+    #[test]
+    fn advisor_prompt_handles_tool_failures_in_one_line_without_guessing() {
+        assert_pins(&[
+            "원인이나 복구 시점을 추측하지 않는다",
+            "\"장애가 풀리면\"",
+            "\"지금은 ~를 불러오지 못했습니다\"",
+            "\"앱이 아직 ~ 자료를 제공하지 않습니다\"",
+        ]);
+    }
+
+    #[test]
     fn advisor_prompt_names_the_source_of_limits_and_exchange_rates() {
         assert_pins(&[
             "한도 출처를 보고 말한다",
@@ -214,7 +232,7 @@ mod tests {
             "room_to_limit",
             "app_으로 시작하는 이름",
             "\"앱 규칙\"",
-            "답의 중심으로 삼지 않는다",
+            "답에 필요한 자료일 때만 한 줄로 알리고",
         ]);
     }
 
@@ -235,7 +253,7 @@ mod tests {
             "먼저 현재 값을 조회하고 부탁한 항목만 바꿔 저장한다",
             "먼저 현재 신호와 주문 제안을 조회한다",
             "주문 승인 요청 도구로 그 제안 ID를 넘기고",
-            "제안 ID를 만들어 내지 않는다",
+            "제안 ID를 만들어 내지 않고",
             "너는 주문을 직접 보내지 못한다",
         ]);
     }

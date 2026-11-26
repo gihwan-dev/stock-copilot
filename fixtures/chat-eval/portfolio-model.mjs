@@ -281,20 +281,38 @@ const thesisFor = (symbol, spec) => ({
   pending_review_sequences: [],
 });
 
-const marketResponse = (spec, fx) => ({
-  collected_at: AS_OF,
-  indicators: Object.entries(
-    spec ?? {
-      kospi: { value: 2650.3, change: 0.002 },
-      kosdaq: { value: 812.4, change: -0.004 },
-      usd_krw: { value: fx ?? 1385, change: 0.001 },
-    },
-  ).map(([name, value]) => ({
-    name,
-    value: String(value.value),
-    change_rate: ratio(value.change),
-  })),
-});
+const MARKET_ITEMS = {
+  kospi: { unit: "index_points", provenance: "official" },
+  kosdaq: { unit: "index_points", provenance: "official" },
+  usd_krw: { unit: "krw_per_usd", provenance: "official" },
+  sp500: { unit: "usd_price", provenance: "approximate" },
+  nasdaq100: { unit: "usd_price", provenance: "approximate" },
+};
+
+const marketResponse = (spec, fx) => {
+  const values = {
+    kospi: { value: 2650.3, change: 0.002 },
+    kosdaq: { value: 812.4, change: -0.004 },
+    usd_krw: { value: fx ?? 1385, change: 0.001 },
+    sp500: { value: 598.4, change: 0.003 },
+    nasdaq100: { value: 512.0, change: 0.005 },
+    ...(spec ?? {}),
+  };
+  return {
+    indicators: Object.entries(values).map(([item, entry]) => ({
+      item,
+      unit: MARKET_ITEMS[item]?.unit ?? "index_points",
+      value: String(entry.value),
+      change_rate: ratio(entry.change),
+      provenance: MARKET_ITEMS[item]?.provenance ?? "official",
+      collected_at: AS_OF,
+    })),
+    sessions: [
+      { market: "KR", status: "open", collected_at: AS_OF },
+      { market: "US", status: "closed", collected_at: AS_OF },
+    ],
+  };
+};
 
 const LEVERAGE = ["레버리지", "인버스", "곱버스", "2X", "3X", "-1X", "ULTRA", " BULL ", " BEAR ", "DAILY", "LEVERAGED", "INVERSE"];
 const BROAD = ["S&P500", "S&P 500", "나스닥100", "NASDAQ100", "NASDAQ-100", "NASDAQ 100", "QQQ", "코스피200", "KOSPI200", "KOSPI 200", "코스닥150", "KOSDAQ150", "MSCI WORLD", "MSCI ACWI", "MSCI EM", "ACWI", "전세계", "TOTAL STOCK", "TOTAL WORLD", "TOTAL MARKET", "다우존스", "DOW JONES", "니케이225", "NIKKEI", "유로스탁스50", "STOXX", "국고채", "TREASURY", "종합채권", "AGGREGATE"];
