@@ -116,6 +116,8 @@ const catalog = {
   "chat.approveUnavailable": {
     ko: "아직 이 화면에서는 승인할 수 없어요." as UiText,
   },
+  "chat.more": { ko: "자세히" as UiText },
+  "chat.less": { ko: "접기" as UiText },
   "chat.computed": { ko: "어림값 포함" as UiText },
   "chat.computedBody": {
     ko: "앱 자료로 계산한 어림값이 들어 있어요. 정확한 수량과 가격은 주문 승인 때 앱이 계산해요." as UiText,

@@ -2380,6 +2380,8 @@ export type UiKstTime = {
   minute: number;
 };
 
+export type UiLimitSource = "user-setting" | "app-default";
+
 export type UiMarket = "Kr" | "Us";
 
 export type UiMarketState = "open" | "closed";
@@ -2401,6 +2403,7 @@ export type UiNewsSettings_Deserialize = {
   wake: UiWake;
   aliases: UiAliasRow[];
   routes: UiDisclosureRoutes;
+  unreachable: UiFeedSource[];
 };
 
 export type UiNewsSettings_Serialize = {
@@ -2410,6 +2413,7 @@ export type UiNewsSettings_Serialize = {
   wake: UiWake;
   aliases: UiAliasRow[];
   routes: UiDisclosureRoutes;
+  unreachable: UiFeedSource[];
 };
 
 export type UiNewsSource =
@@ -2938,6 +2942,8 @@ export type UiTradeSimulation =
   UiTradeSimulation_Serialize | UiTradeSimulation_Deserialize;
 
 export type UiTradeSimulation_Deserialize = {
+  limits_source: UiLimitSource;
+  valuation_fx?: UiValuationFx | null;
   outcome: UiSimulationOutcome;
   problem_symbol?: string | null;
   fills: UiSimulatedFill[];
@@ -2948,6 +2954,8 @@ export type UiTradeSimulation_Deserialize = {
 };
 
 export type UiTradeSimulation_Serialize = {
+  limits_source: UiLimitSource;
+  valuation_fx: UiValuationFx | null;
   outcome: UiSimulationOutcome;
   problem_symbol: string | null;
   fills: UiSimulatedFill[];
@@ -3027,6 +3035,13 @@ export type UiUpdateState =
         failure: UiUpdateFailure;
       };
     } & { downloading?: never; ready?: never });
+
+export type UiValuationFx = {
+  pair: string;
+  rate: UiMoney;
+  basis: string;
+  as_of: string;
+};
 
 export type UiWake = {
   daily_move_percent: UiDailyMove;

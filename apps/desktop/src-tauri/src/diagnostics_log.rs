@@ -237,6 +237,11 @@ const fn transport_name(failure: TransportFailure) -> &'static str {
     match failure {
         TransportFailure::Timeout => "timeout",
         TransportFailure::Connect => "connect",
+        TransportFailure::Dns => "dns",
+        TransportFailure::Refused => "tcp-refused",
+        TransportFailure::Reset => "tcp-reset",
+        TransportFailure::Tls => "tls",
+        TransportFailure::Blocked => "blocked-locally",
         TransportFailure::Body => "body",
         TransportFailure::TooLarge => "too-large",
         TransportFailure::Other => "other",

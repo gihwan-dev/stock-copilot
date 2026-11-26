@@ -45,7 +45,8 @@ pub use headers::{
 };
 pub use http::{
     SourceCredential, SourceFetch, SourceFetchOutcome, SourceHttpClient, SourceHttpError,
-    SourcePayload, http_error_to_information, http_status_to_error, outcome_to_attempt,
+    SourcePayload, classify_transport, http_error_to_information, http_status_to_error,
+    outcome_to_attempt,
 };
 pub use kind_disclosures::{
     CorpCodeCandidate, CorpCodeResolution, CorpNameCodeResolver, DartFallbackCoverage,

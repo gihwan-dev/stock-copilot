@@ -230,12 +230,6 @@ export const responses = {
       },
       {
         body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
         state: "on",
@@ -277,6 +271,7 @@ export const responses = {
         state: "on",
       },
     ],
+    unreachable: [],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
   },
   getPerformance: {
@@ -577,12 +572,6 @@ export const responses = {
       },
       {
         body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
         state: "on",
@@ -711,12 +700,6 @@ export const responses = {
       },
       {
         body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
         state: "on",
@@ -758,6 +741,7 @@ export const responses = {
         state: "on",
       },
     ],
+    unreachable: [],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
   },
   setOptionalKey: {
@@ -805,12 +789,6 @@ export const responses = {
         body_reading: "locked",
         interval_minutes: "10",
         source: "Yonhap",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
         state: "on",
       },
       {
@@ -909,12 +887,6 @@ export const responses = {
         body_reading: "locked",
         interval_minutes: "10",
         source: "Yonhap",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
         state: "on",
       },
       {
@@ -1024,12 +996,6 @@ export const responses = {
       },
       {
         body_reading: "locked",
-        interval_minutes: "10",
-        source: "SegyeFinance",
-        state: "on",
-      },
-      {
-        body_reading: "locked",
         interval_minutes: "60",
         source: "GoogleNews",
         state: "on",
@@ -1103,9 +1069,19 @@ export const responses = {
         weight_before: "72.00",
       },
     ],
+    limits_source: "user-setting",
     outcome: "simulated",
+    principles: {
+      cash: "met",
+      cash_percent_after: "65.20",
+      holdings: "below",
+      holdings_after: "4",
+      minimum_cash_percent: "10.00",
+      minimum_holdings: "5",
+    },
     problem_symbol: null,
     total_after: { amount: "10000000", currency: "KRW" },
+    valuation_fx: null,
   },
   skipSignal: { outcome: "recorded" },
   submitTossKeys: { state: "ip-not-allowed" },

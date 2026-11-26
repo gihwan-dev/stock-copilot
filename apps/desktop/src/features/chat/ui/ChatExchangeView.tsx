@@ -1,6 +1,7 @@
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import {
   Badge,
+  Button,
   Inline,
   Markdown,
   Skeleton,
@@ -11,7 +12,7 @@ import type { ExternalUrl, UiText } from "../../../shared/lib";
 import { useOpenLink } from "../model/queries";
 import { chatText } from "../messages";
 import type { AssistantReply, ChatExchange } from "../model/transcript";
-import { linkVerdict } from "../model/view";
+import { linkVerdict, replyFold } from "../model/view";
 import { ChatCardView } from "./ChatCardView";
 import { ChatSources } from "./ChatSources";
 import { changeLabel, failureLabel, toolLabel } from "./labels";
@@ -80,6 +81,44 @@ const NumberMark = (props: {
   );
 };
 
+const ReplyText = (props: {
+  readonly reply: AssistantReply;
+  readonly openLink: (url: ExternalUrl) => void;
+}): ReactElement => {
+  const [open, setOpen] = useState<"open" | "closed">("closed");
+  const fold =
+    props.reply.phase === "streaming"
+      ? ({ kind: "whole" } as const)
+      : replyFold(props.reply.text);
+  const shown =
+    fold.kind === "folded" && open === "closed" ? fold.head : props.reply.text;
+  return (
+    <Stack gap="space-1">
+      <Markdown
+        flavor="gfm"
+        content={shown}
+        linkAllowed={(url) => linkVerdict(props.reply, url)}
+        onOpenLink={props.openLink}
+      />
+      {fold.kind === "folded" ? (
+        <Inline gap="space-1">
+          <Button
+            variant="ghost"
+            size="control-height-sm"
+            onClick={() => {
+              setOpen(open === "closed" ? "open" : "closed");
+            }}
+          >
+            {chatText(open === "closed" ? "chat.more" : "chat.less", "ko")}
+          </Button>
+        </Inline>
+      ) : (
+        <Stack gap="space-1">{[]}</Stack>
+      )}
+    </Stack>
+  );
+};
+
 const Reply = (props: {
   readonly reply: AssistantReply;
   readonly openLink: (url: ExternalUrl) => void;
@@ -105,12 +144,7 @@ const Reply = (props: {
     {props.reply.phase === "streaming" && props.reply.text === "" ? (
       <Skeleton variant="text" />
     ) : (
-      <Markdown
-        flavor="gfm"
-        content={props.reply.text}
-        linkAllowed={(url) => linkVerdict(props.reply, url)}
-        onOpenLink={props.openLink}
-      />
+      <ReplyText reply={props.reply} openLink={props.openLink} />
     )}
     <Stack gap="space-2">
       {props.reply.cards.map((card) => (

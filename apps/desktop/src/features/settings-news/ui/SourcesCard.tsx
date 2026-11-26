@@ -34,6 +34,7 @@ const BodySwitch = (props: {
 
 const SourceRow = (props: {
   readonly row: SourceSetting;
+  readonly reach: "reachable" | "unreachable";
   readonly save: Save;
 }): ReactElement | null => {
   const interval = inputOf(props.row.interval_minutes);
@@ -43,6 +44,13 @@ const SourceRow = (props: {
       <Text variant="label">
         {newsText(`news.source.${props.row.source}`, "ko")}
       </Text>
+      {props.reach === "unreachable"
+        ? [
+            <Text key="reach" variant="body-sm" tone="alert">
+              {newsText("news.unreachable", "ko")}
+            </Text>,
+          ]
+        : []}
       <Inline gap="space-4" align="center" wrap="wrap">
         <Switch
           label={newsText("news.sourceOn", "ko")}
@@ -72,12 +80,20 @@ const SourceRow = (props: {
 
 export const SourcesCard = (props: {
   readonly sources: readonly SourceSetting[];
+  readonly unreachable: readonly SourceSetting["source"][];
   readonly save: Save;
 }): ReactElement => (
   <Card title={newsText("news.sourcesTitle", "ko")}>
     <Stack gap="space-4">
       {props.sources.map((row) => (
-        <SourceRow key={row.source} row={row} save={props.save} />
+        <SourceRow
+          key={row.source}
+          row={row}
+          reach={
+            props.unreachable.includes(row.source) ? "unreachable" : "reachable"
+          }
+          save={props.save}
+        />
       ))}
     </Stack>
   </Card>

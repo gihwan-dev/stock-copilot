@@ -1,4 +1,10 @@
-import type { EntityId, ExternalUrl } from "../../../shared/lib";
+import {
+  foldFreeText,
+  type EntityId,
+  type ExternalUrl,
+  type FreeText,
+  type FreeTextFold,
+} from "../../../shared/lib";
 import type { AssistantReply, Transcript } from "./transcript";
 
 export type PanelState =
@@ -29,3 +35,6 @@ export const linkVerdict = (
   url: ExternalUrl,
 ): "allow" | "deny" =>
   reply.sources.some((source) => source.url === url) ? "allow" : "deny";
+
+export const replyFold = (text: FreeText): FreeTextFold =>
+  foldFreeText(text, 4);

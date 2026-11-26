@@ -120,6 +120,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       [
         "detach",
         "useCoreEvent",
+        "useNavigationEvent",
         "mountApp",
         "readCanvasTheme",
         "useCanvasChartTheme",
@@ -138,6 +139,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       [
         ["detach", ["void"]],
         ["useCoreEvent", ["void"]],
+        ["useNavigationEvent", ["void"]],
         ["mountApp", ["void"]],
         ["readCanvasTheme", ["CandleThemePalette | undefined"]],
         ["useCanvasChartTheme", ["CandleThemePalette | undefined"]],
