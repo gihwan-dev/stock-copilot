@@ -51,6 +51,35 @@ const Notice = (props: { readonly reply: AssistantReply }): ReactElement => {
   );
 };
 
+const numberMarks = {
+  computed: {
+    tone: "neutral",
+    label: chatText("chat.computed", "ko"),
+    body: chatText("chat.computedBody", "ko"),
+  },
+  unverified: {
+    tone: "alert",
+    label: chatText("chat.unverified", "ko"),
+    body: chatText("chat.unverifiedBody", "ko"),
+  },
+} as const;
+
+const NumberMark = (props: {
+  readonly numbers: AssistantReply["numbers"];
+}): ReactElement => {
+  if (props.numbers !== "computed" && props.numbers !== "unverified")
+    return <Stack gap="space-1">{[]}</Stack>;
+  const mark = numberMarks[props.numbers];
+  return (
+    <Inline gap="space-2" wrap="wrap">
+      <Badge tone={mark.tone}>{mark.label}</Badge>
+      <Text variant="caption" tone="ink-muted">
+        {mark.body}
+      </Text>
+    </Inline>
+  );
+};
+
 const Reply = (props: {
   readonly reply: AssistantReply;
   readonly openLink: (url: ExternalUrl) => void;
@@ -88,16 +117,7 @@ const Reply = (props: {
         <ChatCardView key={`${card.kind}-${card.id}`} card={card} />
       ))}
     </Stack>
-    {props.reply.numbers === "unverified" ? (
-      <Inline gap="space-2" wrap="wrap">
-        <Badge tone="alert">{chatText("chat.unverified", "ko")}</Badge>
-        <Text variant="caption" tone="ink-muted">
-          {chatText("chat.unverifiedBody", "ko")}
-        </Text>
-      </Inline>
-    ) : (
-      <Stack gap="space-1">{[]}</Stack>
-    )}
+    <NumberMark numbers={props.reply.numbers} />
     {props.reply.phase === "done" ? (
       <ChatSources sources={props.reply.sources} />
     ) : (

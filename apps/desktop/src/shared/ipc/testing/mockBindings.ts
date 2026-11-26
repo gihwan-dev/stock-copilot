@@ -597,7 +597,8 @@ export type ChatModelSelectionDto =
       };
     };
 
-export type ChatNumberCheckDto = "NoNumbers" | "Verified" | "Unverified";
+export type ChatNumberCheckDto =
+  "NoNumbers" | "Verified" | "Computed" | "Unverified";
 
 export type ChatReasoningEffortDto =
   "Default" | "Low" | "Medium" | "High" | "XHigh" | "Max";

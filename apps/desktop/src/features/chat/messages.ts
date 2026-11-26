@@ -66,20 +66,30 @@ const catalog = {
   "chat.tool.approval": { ko: "주문 승인을 요청하는 중이에요" as UiText },
   "chat.changed.changeSchedule": { ko: "AI가 작업 일정을 바꿨어요." as UiText },
   "chat.changed.changeProfile": { ko: "AI가 투자 성향을 바꿨어요." as UiText },
-  "chat.changed.changeOrderSettings": { ko: "AI가 주문 설정을 바꿨어요." as UiText },
+  "chat.changed.changeOrderSettings": {
+    ko: "AI가 주문 설정을 바꿨어요." as UiText,
+  },
   "chat.changed.addWatchlist": { ko: "AI가 관심 종목을 추가했어요." as UiText },
   "chat.changed.removeWatchlist": { ko: "AI가 관심 종목을 뺐어요." as UiText },
   "chat.changed.skipSignal": { ko: "AI가 신호를 건너뛰었어요." as UiText },
   "chat.changed.changeAccount": { ko: "AI가 계좌를 바꿨어요." as UiText },
-  "chat.changed.changePrinciples": { ko: "AI가 투자 원칙을 바꿨어요." as UiText },
+  "chat.changed.changePrinciples": {
+    ko: "AI가 투자 원칙을 바꿨어요." as UiText,
+  },
   "chat.changed.backup": { ko: "AI가 백업을 만들었어요." as UiText },
-  "chat.changed.export": { ko: "AI가 데이터 내보내기 창을 열었어요." as UiText },
-  "chat.changed.changeNews": { ko: "AI가 뉴스 출처 설정을 바꿨어요." as UiText },
+  "chat.changed.export": {
+    ko: "AI가 데이터 내보내기 창을 열었어요." as UiText,
+  },
+  "chat.changed.changeNews": {
+    ko: "AI가 뉴스 출처 설정을 바꿨어요." as UiText,
+  },
   "chat.changed.changeContact": { ko: "AI가 SEC 연락처를 바꿨어요." as UiText },
   "chat.changed.changeWake": { ko: "AI가 알림 기준을 바꿨어요." as UiText },
   "chat.changed.changeAliases": { ko: "AI가 종목 별칭을 바꿨어요." as UiText },
   "chat.changed.changeModel": { ko: "AI가 AI 모델 설정을 바꿨어요." as UiText },
-  "chat.changed.changeBudget": { ko: "AI가 AI 사용 한도를 바꿨어요." as UiText },
+  "chat.changed.changeBudget": {
+    ko: "AI가 AI 사용 한도를 바꿨어요." as UiText,
+  },
   "chat.changed.approvalRequest": {
     ko: "AI가 주문 승인을 요청했어요. 주문은 신호 카드의 승인 창에서 직접 확인해야 나가요." as UiText,
   },
@@ -105,6 +115,10 @@ const catalog = {
   "chat.approve": { ko: "주문 승인" as UiText },
   "chat.approveUnavailable": {
     ko: "아직 이 화면에서는 승인할 수 없어요." as UiText,
+  },
+  "chat.computed": { ko: "어림값 포함" as UiText },
+  "chat.computedBody": {
+    ko: "앱 자료로 계산한 어림값이 들어 있어요. 정확한 수량과 가격은 주문 승인 때 앱이 계산해요." as UiText,
   },
   "chat.unverified": { ko: "검증 안 됨" as UiText },
   "chat.unverifiedBody": {

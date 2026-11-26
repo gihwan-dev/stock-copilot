@@ -96,6 +96,7 @@ const tool = z.object({ server: z.string(), tool: topicSchema });
 const numberChecks = {
   NoNumbers: "no-numbers",
   Verified: "verified",
+  Computed: "computed",
   Unverified: "unverified",
 } as const;
 const chunk = (content: ChatContentChunk): ChatStreamChunk => ({
@@ -135,7 +136,7 @@ const chunkSchema = z.union([
   z
     .strictObject({
       NumberCheck: z.object({
-        status: z.enum(["NoNumbers", "Verified", "Unverified"]),
+        status: z.enum(["NoNumbers", "Verified", "Computed", "Unverified"]),
       }),
     })
     .transform((v) =>
