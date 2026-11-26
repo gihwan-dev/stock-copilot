@@ -206,9 +206,6 @@ impl ToolSpec {
         if description.is_empty() || description.chars().any(char::is_control) {
             return Err(ToolRegistryError::InvalidDescription);
         }
-        if is_forbidden_tool_name(name.as_str()) {
-            return Err(ToolRegistryError::ForbiddenToolName);
-        }
         validate_input_schema_object(&input_schema)?;
         if let Some(output) = &output_schema {
             validate_output_schema_object(output)?;
@@ -285,31 +282,6 @@ impl ToolSpec {
         }
         tool
     }
-}
-
-fn is_forbidden_tool_name(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    for forbidden_fragment in [
-        "order",
-        "trade",
-        "approve",
-        "approval",
-        "confirm_order",
-        "cancel_order",
-        "setting",
-        "secret",
-        "keychain",
-        "api_key",
-        "credential",
-        "token",
-        "execute_buy",
-        "execute_sell",
-    ] {
-        if lower.contains(forbidden_fragment) {
-            return true;
-        }
-    }
-    false
 }
 
 fn validate_schema_node(schema: &JsonObject, depth: usize) -> Result<(), ToolRegistryError> {
