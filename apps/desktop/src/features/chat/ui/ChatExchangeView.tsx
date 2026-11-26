@@ -1,5 +1,12 @@
 import type { ReactElement } from "react";
-import { Badge, Inline, Markdown, Stack, Text } from "../../../shared/ds";
+import {
+  Badge,
+  Inline,
+  Markdown,
+  Skeleton,
+  Stack,
+  Text,
+} from "../../../shared/ds";
 import type { ExternalUrl, UiText } from "../../../shared/lib";
 import { useOpenLink } from "../model/queries";
 import { chatText } from "../messages";
@@ -49,7 +56,7 @@ const Reply = (props: {
   readonly openLink: (url: ExternalUrl) => void;
 }): ReactElement => (
   <Stack gap="space-2">
-    <Text variant="label" tone="primary">
+    <Text variant="caption" tone="ink-subtle">
       {chatText("chat.assistant", "ko")}
     </Text>
     {props.reply.researched === "researched" ? (
@@ -59,11 +66,16 @@ const Reply = (props: {
     ) : (
       <Stack gap="space-1">{[]}</Stack>
     )}
-    <Markdown
-      content={props.reply.text}
-      linkAllowed={(url) => linkVerdict(props.reply, url)}
-      onOpenLink={props.openLink}
-    />
+    {props.reply.phase === "streaming" && props.reply.text === "" ? (
+      <Skeleton variant="text" />
+    ) : (
+      <Markdown
+        flavor="gfm"
+        content={props.reply.text}
+        linkAllowed={(url) => linkVerdict(props.reply, url)}
+        onOpenLink={props.openLink}
+      />
+    )}
     <Stack gap="space-2">
       {props.reply.cards.map((card) => (
         <ChatCardView key={`${card.kind}-${card.id}`} card={card} />
@@ -94,16 +106,14 @@ export const ChatExchangeView = (props: {
   const openLink = useOpenLink();
   return (
     <Stack gap="space-3">
-      <Stack gap="space-1">
-        <Text variant="label" tone="ink-muted">
-          {chatText("chat.you", "ko")}
-        </Text>
+      <Inline justify="end">
         <Markdown
+          appearance="question"
           content={props.exchange.question}
           linkAllowed={denyLinks}
           onOpenLink={openLink}
         />
-      </Stack>
+      </Inline>
       <Reply reply={props.exchange.reply} openLink={openLink} />
     </Stack>
   );

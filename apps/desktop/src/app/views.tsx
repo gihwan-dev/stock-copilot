@@ -3,7 +3,7 @@ import { Outlet } from "@tanstack/react-router";
 import { useState, type ReactElement } from "react";
 import { AboutSection } from "../features/about";
 import { BriefingCard, BriefingHistoryScreen } from "../features/briefing";
-import { ChatPanel } from "../features/chat";
+import { ChatSession } from "../features/chat";
 import { InstrumentDetail, InstrumentList } from "../features/instruments";
 import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
@@ -22,7 +22,6 @@ import {
   Page,
   Skeleton,
   Stack,
-  Text,
 } from "../shared/ds";
 import { coreUpdateClient } from "../shared/ipc";
 import { queryKeys, text, type EntityId } from "../shared/lib";
@@ -31,50 +30,55 @@ import { useNavigate, useSources, useSystemSettings } from "./context";
 import { SettingsSections } from "./settings";
 import { describeIpcFailure, useAppVersion } from "./query";
 
-const ChatSlot = (): ReactElement => (
-  <Stack gap="space-2">
-    <Text variant="label">{text("shell.chat", "ko")}</Text>
-    <Text variant="caption" tone="ink-subtle">
-      {text("notice.chatData", "ko")}
-    </Text>
-    <ChatPanel context={undefined} />
-  </Stack>
-);
+const chatNotice = {
+  summary: text("notice.chatDataShort", "ko"),
+  detail: text("notice.chatData", "ko"),
+};
 
 export const ShellLayout = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
   const [shown, setShown] = useState<EntityId | undefined>(undefined);
+  const list = <InstrumentList sources={sources} onSelect={setShown} />;
+  const status = (
+    <>
+      <UpdateBar client={coreUpdateClient} />
+      <SelfCheckBar
+        load={sources.selfCheck}
+        onOpenSettings={(): void => {
+          setShown(undefined);
+          go("/settings");
+        }}
+      />
+    </>
+  );
+  const page =
+    shown === undefined ? (
+      <Outlet />
+    ) : (
+      <InstrumentDetail
+        key={shown}
+        sources={sources}
+        instrument={shown}
+        onClose={(): void => {
+          setShown(undefined);
+        }}
+      />
+    );
   return (
-    <AppShell
-      list={<InstrumentList sources={sources} onSelect={setShown} />}
-      chat={<ChatSlot />}
-      status={
-        <>
-          <UpdateBar client={coreUpdateClient} />
-          <SelfCheckBar
-            load={sources.selfCheck}
-            onOpenSettings={(): void => {
-              setShown(undefined);
-              go("/settings");
-            }}
-          />
-        </>
-      }
-    >
-      {shown === undefined ? (
-        <Outlet />
-      ) : (
-        <InstrumentDetail
-          key={shown}
-          sources={sources}
-          instrument={shown}
-          onClose={(): void => {
-            setShown(undefined);
-          }}
-        />
+    <ChatSession context={undefined}>
+      {(parts): ReactElement => (
+        <AppShell
+          list={list}
+          chat={parts.messages}
+          chatComposer={parts.composer}
+          chatNotice={chatNotice}
+          status={status}
+        >
+          {page}
+        </AppShell>
       )}
-    </AppShell>
+    </ChatSession>
   );
 };
 

@@ -9,6 +9,8 @@ const catalog = {
   "chat.label": { ko: "메시지" as UiText },
   "chat.send": { ko: "보내기" as UiText },
   "chat.sending": { ko: "보내는 중" as UiText },
+  "chat.placeholder": { ko: "궁금한 것을 물어보세요" as UiText },
+  "chat.hint": { ko: "Enter 보내기 · Shift+Enter 줄바꿈" as UiText },
   "ds.chartMinimum": { ko: "최소" as UiText },
   "ds.chartMaximum": { ko: "최대" as UiText },
   "ds.chartExplore": { ko: "차트 항목 살펴보기" as UiText },
@@ -86,6 +88,8 @@ const catalog = {
   "shell.closeList": { ko: "종목 목록 닫기" as UiText },
   "shell.openChat": { ko: "채팅 열기" as UiText },
   "shell.closeChat": { ko: "채팅 닫기" as UiText },
+  "shell.showChatNotice": { ko: "전송 안내 자세히 보기" as UiText },
+  "shell.hideChatNotice": { ko: "전송 안내 접기" as UiText },
   "app.homeTitle": { ko: "내 현황" as UiText },
   "app.transactionsTitle": { ko: "거래내역" as UiText },
   "app.settingsTitle": { ko: "설정" as UiText },
@@ -179,6 +183,9 @@ const catalog = {
   },
   "notice.chatData": {
     ko: "AI를 쓰면 보유 주식·비중·손익·거래내역·투자 원칙·노트가 선택한 AI 제공자(Anthropic 또는 OpenAI)의 서버로 전송됩니다. 토스 키와 전체 계좌번호는 보내지 않습니다." as UiText,
+  },
+  "notice.chatDataShort": {
+    ko: "대화에 쓰는 내 투자 자료는 AI 제공자 서버로 보내져요." as UiText,
   },
   "notice.appInfo": {
     ko: "개인 본인용 도구입니다. 금융투자업자(투자자문·투자일임)가 아니며, 다른 사람에게 투자 조언을 제공하지 않습니다." as UiText,

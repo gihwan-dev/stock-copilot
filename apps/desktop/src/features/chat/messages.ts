@@ -7,12 +7,14 @@ const catalog = {
   "chat.emptyBody": {
     ko: "보고 있는 종목과 기간을 함께 보내요." as UiText,
   },
+  "chat.suggest.portfolio": { ko: "내 보유 종목 지금 어때?" as UiText },
+  "chat.suggest.news": { ko: "오늘 시장에서 눈여겨볼 소식 알려 줘" as UiText },
+  "chat.suggest.risk": { ko: "비중이 너무 쏠린 종목이 있어?" as UiText },
   "chat.loading": { ko: "지난 대화를 불러오는 중이에요" as UiText },
   "chat.historyFailed": {
     ko: "지난 대화를 불러오지 못했어요." as UiText,
   },
   "chat.retry": { ko: "다시 불러오기" as UiText },
-  "chat.you": { ko: "나" as UiText },
   "chat.assistant": { ko: "AI" as UiText },
   "chat.writing": { ko: "답을 쓰는 중이에요" as UiText },
   "chat.stop": { ko: "멈추기" as UiText },

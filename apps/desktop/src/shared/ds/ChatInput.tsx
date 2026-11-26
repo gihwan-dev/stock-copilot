@@ -5,19 +5,82 @@ import { Button } from "./Button";
 type Props = {
   readonly onSend: (value: FreeText) => void;
   readonly status?: "ready" | "sending";
+  readonly draft?: FreeText;
+  readonly onDraftChange?: (value: FreeText) => void;
+  readonly layout?: "stacked" | "compact";
 };
-type EditorProps = Props & { readonly initialDraft: FreeText };
-const ChatEditor = (props: EditorProps): ReactElement => {
-  const [value, setValue] = useState(props.initialDraft);
-  const [composition, setComposition] = useState<
-    "idle" | "composing" | "ending"
-  >("idle");
+type EditorProps = {
+  readonly onSend: (value: FreeText) => void;
+  readonly status?: "ready" | "sending";
+  readonly initialDraft: FreeText;
+  readonly draft?: FreeText | undefined;
+  readonly onDraftChange?: ((value: FreeText) => void) | undefined;
+  readonly layout?: "stacked" | "compact" | undefined;
+};
+const useDraft = (
+  props: EditorProps,
+): readonly [FreeText, (next: FreeText) => void] => {
+  const [inner, setInner] = useState(props.initialDraft);
+  const update = (next: FreeText): void => {
+    setInner(next);
+    if (props.onDraftChange !== undefined) props.onDraftChange(next);
+  };
+  return [props.draft ?? inner, update];
+};
+type Composition = "idle" | "composing" | "ending";
+const ChatField = (props: {
+  readonly value: FreeText;
+  readonly status: "ready" | "sending";
+  readonly compact: "compact" | "stacked";
+  readonly composition: Composition;
+  readonly onComposition: (next: Composition) => void;
+  readonly onValue: (next: FreeText) => void;
+  readonly onCommit: () => void;
+}): ReactElement => {
+  const composition = props.composition;
+  const setComposition = props.onComposition;
   const resetComposition = (): void => {
     setComposition("idle");
   };
+  return (
+    <textarea
+      value={props.value}
+      aria-label={
+        props.compact === "compact" ? text("chat.label", "ko") : undefined
+      }
+      placeholder={
+        props.compact === "compact" ? text("chat.placeholder", "ko") : undefined
+      }
+      readOnly={props.status === "sending"}
+      onChange={(event): void => {
+        const next = chatEventValue(event);
+        if (props.status !== "sending" && next.kind === "ok")
+          props.onValue(next.value);
+      }}
+      onCompositionStart={(): void => {
+        setComposition("composing");
+      }}
+      onCompositionEnd={(): void => {
+        setComposition("ending");
+      }}
+      onBlur={resetComposition}
+      onFocus={resetComposition}
+      onKeyDown={(event): void => {
+        if (chatCommit(event, composition) === "commit") props.onCommit();
+        if (composition === "ending") setComposition("idle");
+      }}
+      className="status-sentence w-full chat-content chat-input rounded-md border-hairline border-solid border-line-strong bg-surface-sunken px-space-3 py-space-2 text-body focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus disabled:opacity-disabled"
+    />
+  );
+};
+const ChatEditor = (props: EditorProps): ReactElement => {
+  const [value, setValue] = useDraft(props);
+  const status = props.status ?? "ready";
+  const compact = props.layout === "compact" ? "compact" : "stacked";
+  const [composition, setComposition] = useState<Composition>("idle");
   const send = (): void => {
     if (
-      props.status === "sending" ||
+      status === "sending" ||
       value.trim() === "" ||
       composition === "composing"
     )
@@ -26,44 +89,45 @@ const ChatEditor = (props: EditorProps): ReactElement => {
     setValue(emptyFreeText);
     props.onSend(value);
   };
-  return (
+  const field = (
+    <ChatField
+      value={value}
+      status={status}
+      compact={compact}
+      composition={composition}
+      onComposition={setComposition}
+      onValue={setValue}
+      onCommit={send}
+    />
+  );
+  const button = (
+    <Button
+      size={compact === "compact" ? "control-height-sm" : "control-height"}
+      disabled={
+        status === "sending" || value.trim() === "" ? "disabled" : "enabled"
+      }
+      onClick={send}
+    >
+      {text(status === "sending" ? "chat.sending" : "chat.send", "ko")}
+    </Button>
+  );
+  return compact === "compact" ? (
+    <div className="flex status-sentence flex-col gap-space-2 text-ink">
+      {field}
+      <div className="flex items-center justify-between gap-space-2">
+        <p className="status-sentence text-caption text-ink-subtle">
+          {text("chat.hint", "ko")}
+        </p>
+        {button}
+      </div>
+    </div>
+  ) : (
     <div className="flex status-sentence flex-col gap-space-2 text-ink">
       <label className="flex status-sentence flex-col gap-space-1 text-label">
         {text("chat.label", "ko")}
-        <textarea
-          value={value}
-          readOnly={props.status === "sending"}
-          onChange={(event): void => {
-            const next = chatEventValue(event);
-            if (props.status !== "sending" && next.kind === "ok") {
-              setValue(next.value);
-            }
-          }}
-          onCompositionStart={(): void => {
-            setComposition("composing");
-          }}
-          onCompositionEnd={(): void => {
-            setComposition("ending");
-          }}
-          onBlur={resetComposition}
-          onFocus={resetComposition}
-          onKeyDown={(event): void => {
-            if (chatCommit(event, composition) === "commit") send();
-            if (composition === "ending") setComposition("idle");
-          }}
-          className="status-sentence w-full chat-content chat-input rounded-md border-hairline border-solid border-line-strong bg-surface-sunken px-space-3 py-space-2 text-body focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus disabled:opacity-disabled"
-        />
+        {field}
       </label>
-      <Button
-        disabled={
-          props.status === "sending" || value.trim() === ""
-            ? "disabled"
-            : "enabled"
-        }
-        onClick={send}
-      >
-        {text(props.status === "sending" ? "chat.sending" : "chat.send", "ko")}
-      </Button>
+      {button}
     </div>
   );
 };
@@ -73,6 +137,9 @@ export const ChatInput = (props: Props): ReactElement => (
     onSend={props.onSend}
     status={props.status ?? "ready"}
     initialDraft={emptyFreeText}
+    draft={props.draft}
+    onDraftChange={props.onDraftChange}
+    layout={props.layout}
   />
 );
 const longDraft = parseFreeText((text("chat.label", "ko") + "\n").repeat(1000));
