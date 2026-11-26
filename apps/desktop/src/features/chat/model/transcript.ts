@@ -1,4 +1,5 @@
 import type {
+  ChatChangeTopic,
   ChatCardRef,
   ChatContentChunk,
   ChatEndChunk,
@@ -20,6 +21,7 @@ import {
   type EntityId,
   type FreeText,
 } from "../../../shared/lib";
+import { withChange } from "./changes";
 
 export type ReplyPhase =
   | "streaming"
@@ -38,6 +40,7 @@ export type AssistantReply = {
   readonly sources: readonly ChatSource[];
   readonly seen: Count | undefined;
   readonly researched: "researched" | "none";
+  readonly changes: readonly ChatChangeTopic[];
   readonly numbers: ChatNumberCheck | "unchecked";
 };
 
@@ -63,6 +66,7 @@ const freshReply: AssistantReply = {
   sources: [],
   seen: undefined,
   researched: "none",
+  changes: [],
   numbers: "unchecked",
 };
 
@@ -150,6 +154,7 @@ const finishTool = (
     topic === "web-research" && status === "succeeded"
       ? "researched"
       : reply.researched,
+  changes: withChange(reply.changes, topic, status),
 });
 
 const applyContent = (

@@ -1,3 +1,4 @@
+pub mod ai_commands;
 pub mod ai_runtime;
 pub mod audit_queue;
 pub mod bindings;
@@ -169,6 +170,9 @@ fn prepare_process_shutdown_hook<R: Runtime>(
 fn ensure_default_runtimes<R: Runtime>(app: &App<R>) {
     if let Some(slot) = app.try_state::<Arc<product_events::UiEventSlot<R>>>() {
         let _binding = slot.bind(ipc::event_bridge::UiEventBridge::new(app.handle().clone()));
+    }
+    if let Some(slot) = app.try_state::<Arc<ai_commands::AppCommandSlot<R>>>() {
+        let _binding = slot.bind(app.handle().clone());
     }
     if let Some(slot) =
         app.try_state::<Arc<platform::system_notification::NotificationHandleSlot<R>>>()
