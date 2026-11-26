@@ -57,6 +57,11 @@ pub enum CallMethod {
 pub enum TransportFailure {
     Timeout,
     Connect,
+    Dns,
+    Refused,
+    Reset,
+    Tls,
+    Blocked,
     Body,
     TooLarge,
     Other,

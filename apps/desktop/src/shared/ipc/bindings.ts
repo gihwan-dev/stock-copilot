@@ -2393,6 +2393,7 @@ export type UiNewsSettings_Deserialize = {
   wake: UiWake;
   aliases: UiAliasRow[];
   routes: UiDisclosureRoutes;
+  unreachable: UiFeedSource[];
 };
 
 export type UiNewsSettings_Serialize = {
@@ -2402,6 +2403,7 @@ export type UiNewsSettings_Serialize = {
   wake: UiWake;
   aliases: UiAliasRow[];
   routes: UiDisclosureRoutes;
+  unreachable: UiFeedSource[];
 };
 
 export type UiNewsSource =

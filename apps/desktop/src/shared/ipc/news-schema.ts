@@ -87,6 +87,7 @@ export const newsSettingsSchema = z
     wake: wakeSchema,
     aliases: z.array(aliasRowSchema).readonly(),
     routes: routesSchema.optional(),
+    unreachable: z.array(z.enum(newsSources)).readonly().optional(),
   })
   .strict()
   .readonly();
