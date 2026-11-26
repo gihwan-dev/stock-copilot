@@ -110,6 +110,14 @@ impl InstrumentDirectory {
     }
 
     #[must_use]
+    pub fn entries(&self) -> Vec<DirectoryEntry> {
+        match self.entries.read() {
+            Ok(guard) => guard.values().cloned().collect(),
+            Err(poisoned) => poisoned.into_inner().values().cloned().collect(),
+        }
+    }
+
+    #[must_use]
     pub fn name(&self, symbol: &Symbol) -> Option<DisplayInstrumentName> {
         self.entry(symbol).map(|entry| entry.name)
     }

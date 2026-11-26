@@ -467,6 +467,16 @@ export const responses = {
   },
   saveInvestorProfile: { kind: "declined", rejection: "none" },
   saveOrderSettings: { kind: "unavailable", rejection: "none" },
+  searchInstruments: {
+    matches: [
+      {
+        fund_kind: "broad-index-fund",
+        market: "KR",
+        name: "TIGER 미국S&P500",
+        symbol: "360750",
+      },
+    ],
+  },
   selectAccount: {
     accounts: [
       { id: "1", number: "0731" },
@@ -1028,6 +1038,40 @@ export const responses = {
       },
     ],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
+  },
+  simulateTrades: {
+    cash_after: [
+      {
+        amount: { amount: "6520000", currency: "KRW" },
+        currency: "KRW",
+        weight: "65.20",
+      },
+    ],
+    fills: [
+      {
+        amount: { amount: "5400000", currency: "KRW" },
+        price: { amount: "72000", currency: "KRW" },
+        quantity: "75",
+        side: "sell",
+        symbol: "005930",
+      },
+    ],
+    instruments: [
+      {
+        fund_kind: "single-security",
+        level_after: "warning",
+        limit_percent: "20.00",
+        name: "삼성전자",
+        room_to_limit: { amount: "200000", currency: "KRW" },
+        symbol: "005930",
+        warning_percent: "10.00",
+        weight_after: "18.00",
+        weight_before: "72.00",
+      },
+    ],
+    outcome: "simulated",
+    problem_symbol: null,
+    total_after: { amount: "10000000", currency: "KRW" },
   },
   skipSignal: { outcome: "recorded" },
   submitTossKeys: { state: "ip-not-allowed" },
