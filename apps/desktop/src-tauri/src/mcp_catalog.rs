@@ -2,127 +2,23 @@ use crate::ai_runtime::RunMetadataBook;
 use crate::mcp_research::AppWebResearch;
 use crate::mcp_sources::{ArticleBodies, StoredArticles, StoredNews, StoredThesis};
 use application::{
-    Clock, EstimateAssignmentRepository, EstimateSubmissionRepository, EventBus, MarketToolReads,
-    PortfolioToolReads, ProfileSource, RetryDelay, ScorecardObservationRepository,
-    SettingsRepository, SystemFailure, SystemPort, SystemPortError, ThesisRepository,
+    Clock, EstimateAssignmentRepository, EstimateSubmissionRepository, EventBus, ProfileSource,
+    ScorecardObservationRepository, SettingsRepository, SystemPortError, ThesisRepository,
     ToolCallHistory,
 };
 use application::{CollectedItemReads, NewsDataSettingsRepository, WatchlistRepository};
-use domain::{KnownMarket, Symbol};
 use mcp_server::{
     AnalysisCatalogPorts, EstimateToolPorts, ToolRegistry, ToolRegistryError,
     build_analysis_catalog, make_cursor_store,
 };
 use std::collections::BTreeSet;
-use std::future::{Future, ready};
+use std::future::Future;
 use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
 
 pub const ANALYSIS_MCP_SERVER: &str = "stock";
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct UnconnectedToolData;
-
-fn unconnected() -> SystemPortError {
-    SystemPortError::new(
-        SystemPort::Repository,
-        SystemFailure::Unavailable(RetryDelay::Unknown),
-    )
-}
-
-fn fail<T>() -> impl Future<Output = Result<T, SystemPortError>> + Send
-where
-    T: Send,
-{
-    ready(Err(unconnected()))
-}
-
-impl PortfolioToolReads for UnconnectedToolData {
-    fn portfolio(
-        &self,
-    ) -> impl Future<Output = Result<Option<application::PortfolioToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn allocation(
-        &self,
-    ) -> impl Future<Output = Result<Option<application::AllocationToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn transactions(
-        &self,
-    ) -> impl Future<Output = Result<Option<application::TransactionsToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn performance(
-        &self,
-        _period: application::PerformancePeriod,
-    ) -> impl Future<Output = Result<Option<application::PerformanceToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-}
-
-impl MarketToolReads for UnconnectedToolData {
-    fn quote(
-        &self,
-        _symbol: &Symbol,
-        _market: KnownMarket,
-    ) -> impl Future<Output = Result<Option<application::QuoteToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn candles(
-        &self,
-        _symbol: &Symbol,
-        _market: KnownMarket,
-        _window: application::CandleWindow,
-    ) -> impl Future<Output = Result<Option<application::CandlesToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn market_overview(
-        &self,
-    ) -> impl Future<Output = Result<Option<application::MarketOverviewToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn rankings(
-        &self,
-        _kind: application::RankingToolKind,
-        _market: KnownMarket,
-    ) -> impl Future<Output = Result<Option<application::RankingsToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn sectors(
-        &self,
-        _market: KnownMarket,
-    ) -> impl Future<Output = Result<Option<application::SectorsToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-
-    fn investor_flow(
-        &self,
-        _symbol: &Symbol,
-        _market: KnownMarket,
-    ) -> impl Future<Output = Result<Option<application::InvestorFlowToolView>, SystemPortError>> + Send
-    {
-        fail()
-    }
-}
 
 #[derive(Debug)]
 pub struct StoredProfile<S>(pub Arc<S>);

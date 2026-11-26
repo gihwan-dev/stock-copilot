@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             bundled_bridge(),
             (turns.clone(), Arc::clone(&app_commands)),
         )
-        .with_market(market_tools(&toss, &shared_clock))
+        .with_market(market_tools(&toss, &shared_clock, &directory))
         .with_portfolio(catalog_portfolio(&toss, &repositories, &directory))
         .with_estimate_runs(estimate_runs.clone()),
         &shared_clock,
@@ -447,12 +447,34 @@ fn estimate_identity() -> Option<application::EstimateRunIdentity> {
     })
 }
 
-fn market_tools(toss: &ProductToss, clock: &Arc<platform_macos::SystemClock>) -> BrokerMarketTools {
-    BrokerMarketTools::connected(Arc::<ProductBroker>::clone(&toss.broker)).with_clock(Arc::<
-        platform_macos::SystemClock,
-    >::clone(
-        clock
-    ))
+struct ToolCandleFeed(Arc<ProductBroker>);
+
+impl src_tauri::broker_link::ToolQuoteSource for ToolCandleFeed {
+    fn quotes(
+        &self,
+        instruments: Vec<domain::QuoteInstrument>,
+    ) -> BoxFuture<'_, Result<Vec<application::QuoteObservation>, application::PortError>> {
+        Box::pin(async move { application::BrokerRead::quotes(&*self.0, &instruments).await })
+    }
+
+    fn daily_candles(
+        &self,
+        instrument: domain::QuoteInstrument,
+        window: domain::TimeInterval,
+    ) -> BoxFuture<'_, Result<Vec<domain::Candle>, application::PortError>> {
+        Box::pin(async move { self.0.history_daily_candles(&instrument, window).await })
+    }
+}
+
+fn market_tools(
+    toss: &ProductToss,
+    clock: &Arc<platform_macos::SystemClock>,
+    directory: &InstrumentDirectory,
+) -> BrokerMarketTools {
+    BrokerMarketTools::connected(Arc::new(ToolCandleFeed(Arc::clone(&toss.broker))))
+        .with_market(Arc::<ProductBroker>::clone(&toss.broker))
+        .with_names(directory.clone())
+        .with_clock(Arc::<platform_macos::SystemClock>::clone(clock))
 }
 
 type ProductCalendars = ResolutionData<TossResolutionSource>;
