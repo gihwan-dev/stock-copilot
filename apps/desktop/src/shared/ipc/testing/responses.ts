@@ -97,6 +97,23 @@ export const responses = {
     ],
     session_id: "session-ipc-1",
   },
+  getDataStatus: {
+    jobs: [
+      {
+        job: "holdings",
+        last_run: { at: "2026-11-24T08:30:00+09:00", outcome: "failed" },
+        last_success: "2026-11-24T08:25:00+09:00",
+        next_run: "2026-11-25T08:20:00+09:00",
+      },
+      {
+        job: "transactions",
+        last_run: null,
+        last_success: null,
+        next_run: "2026-11-25T08:20:00+09:00",
+      },
+      { job: "backup", last_run: null, last_success: null, next_run: null },
+    ],
+  },
   getInstrumentDetail: {
     candles: [
       {

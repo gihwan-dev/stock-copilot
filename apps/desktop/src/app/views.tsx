@@ -23,7 +23,7 @@ import {
   Skeleton,
   Stack,
 } from "../shared/ds";
-import { coreUpdateClient } from "../shared/ipc";
+import { coreUpdateClient, getDataStatus } from "../shared/ipc";
 import { queryKeys, text, type EntityId } from "../shared/lib";
 import { detach } from "../shared/platform";
 import { useNavigate, useSources, useSystemSettings } from "./context";
@@ -231,6 +231,7 @@ export const StatusView = (): ReactElement => {
     <AppShell>
       <StatusScreen
         load={sources.status}
+        loadData={getDataStatus}
         onBack={(): void => {
           go("/settings");
         }}

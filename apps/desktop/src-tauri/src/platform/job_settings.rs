@@ -177,6 +177,9 @@ pub fn job_record_queue<S: JobScheduleStore + 'static>(
 
 pub trait ScheduleControl: Send + Sync {
     fn configurable_jobs(&self) -> BoxFuture<'_, Vec<JobStatusSnapshot>>;
+    fn all_jobs(&self) -> BoxFuture<'_, Vec<JobStatusSnapshot>> {
+        self.configurable_jobs()
+    }
     fn change(
         &self,
         change: JobScheduleChange,
@@ -217,6 +220,10 @@ where
 {
     fn configurable_jobs(&self) -> BoxFuture<'_, Vec<JobStatusSnapshot>> {
         Box::pin(self.settings.configurable_jobs())
+    }
+
+    fn all_jobs(&self) -> BoxFuture<'_, Vec<JobStatusSnapshot>> {
+        Box::pin(self.settings.job_status())
     }
 
     fn change(

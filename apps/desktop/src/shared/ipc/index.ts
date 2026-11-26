@@ -200,6 +200,13 @@ export {
   saveOrderSettings,
 } from "./risk-call";
 export { getSelfCheck, getStatus } from "./status-call";
+export {
+  getDataStatus,
+  type DataJob,
+  type DataJobStatus,
+  type DataRunOutcome,
+  type DataStatusView,
+} from "./data-status-call";
 export { getScorecard } from "./scorecard-call";
 export { getTransactions } from "./transactions-call";
 export { getThesis } from "./thesis-call";

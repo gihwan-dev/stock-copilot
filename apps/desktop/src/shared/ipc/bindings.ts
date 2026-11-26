@@ -111,6 +111,10 @@ export const commands = {
     typedError<UiStatusView_Serialize, IpcError>(
       __TAURI_INVOKE("get_status", { request }),
     ),
+  getDataStatus: (request: GetDataStatusRequest) =>
+    typedError<UiDataStatusView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_data_status", { request }),
+    ),
   getScorecard: (request: GetScorecardRequest) =>
     typedError<UiScorecardView_Serialize, IpcError>(
       __TAURI_INVOKE("get_scorecard", { request }),
@@ -650,6 +654,8 @@ export type CopyTextRequest = {
   text: string;
 };
 
+export type DataStatusScope = "current";
+
 export type GetBriefingsRequest = {
   scope: BriefingsScope;
 };
@@ -671,6 +677,10 @@ export type GetChatHistoryResponse_Serialize = {
   session_id: string;
   entries: StoredChatEntryDto_Serialize[];
   active_turn: ActiveChatTurnDto | null;
+};
+
+export type GetDataStatusRequest = {
+  scope: DataStatusScope;
 };
 
 export type GetInstrumentsRequest = {
@@ -1196,6 +1206,35 @@ export type UiDailyChange = {
 
 export type UiDailyMove = "3" | "5" | "7" | "10";
 
+export type UiDataJob =
+  | "holdings"
+  | "transactions"
+  | "daily-valuation"
+  | "estimates"
+  | "kr-scoring"
+  | "us-scoring"
+  | "morning-briefing"
+  | "closing-review"
+  | "pre-us-market-check"
+  | "backup";
+
+export type UiDataJobStatus =
+  UiDataJobStatus_Serialize | UiDataJobStatus_Deserialize;
+
+export type UiDataJobStatus_Deserialize = {
+  job: UiDataJob;
+  last_success?: string | null;
+  last_run?: UiJobRun | null;
+  next_run?: string | null;
+};
+
+export type UiDataJobStatus_Serialize = {
+  job: UiDataJob;
+  last_success: string | null;
+  last_run: UiJobRun | null;
+  next_run: string | null;
+};
+
 export type UiDataSource =
   | "KindDisclosure"
   | "DartDisclosureApi"
@@ -1214,6 +1253,17 @@ export type UiDataSource =
   | "FederalReserve"
   | "UsTreasury"
   | "Fred";
+
+export type UiDataStatusView =
+  UiDataStatusView_Serialize | UiDataStatusView_Deserialize;
+
+export type UiDataStatusView_Deserialize = {
+  jobs: UiDataJobStatus_Deserialize[];
+};
+
+export type UiDataStatusView_Serialize = {
+  jobs: UiDataJobStatus_Serialize[];
+};
 
 export type UiDeleteResult = {
   status: UiDeleteStatus;
