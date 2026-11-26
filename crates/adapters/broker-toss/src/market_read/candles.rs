@@ -350,7 +350,14 @@ fn parse<S: SecretStore, T: Clock, R: TokenRenewal>(
             .map_err(|_error| rejected_at("candles:parse:2"))?,
     )
     .map_err(|_error| rejected_at("candles:parse:3"))?;
-    let time = CandleTime::try_new(at, period).map_err(|_error| rejected_at("candles:parse:4"))?;
+    let stamped = match period {
+        CandlePeriod::Daily => local_midnight(at)
+            .map(|(day, _shape)| day)
+            .ok_or_else(|| rejected_at("candles:parse:5"))?,
+        CandlePeriod::Minute => at,
+    };
+    let time =
+        CandleTime::try_new(stamped, period).map_err(|_error| rejected_at("candles:parse:4"))?;
     Ok(ParsedCandle {
         time,
         values,

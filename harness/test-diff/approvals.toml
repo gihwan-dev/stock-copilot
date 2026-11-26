@@ -68,3 +68,13 @@ finding = "test-diff:modified:store-sqlite migration_tests::fresh_open_records_c
 decision = "approved"
 reason = "migration 0026 (segye_finance source status) raises the fixed ledger count to 26; user-approved protected change, reviewed by the main agent"
 assertion_change = true
+
+[[approval]]
+task = "data-health"
+path = "crates/adapters/broker-toss/tests/quotes_candles.rs"
+before_sha256 = "3a7b35bcf18b10d97a18768459b451a4f596e806cb3cb3c5f00cb4d3a631d0e0"
+after_sha256 = "b4b70cbcf57232f42b456be75cbabc0ffa5a09a84cba7754f02f6d647fefd3a8"
+finding = "test-diff:modified:broker-toss quotes_candles::review2_outside_rows_keep_numeric_currency_time_and_order_validation"
+decision = "approved"
+reason = "real Toss daily candles are stamped at session time (KST 14:00); a non-midnight daily timestamp is now normalized to its local day, so the unreadable-time case uses a malformed timestamp instead; user-approved protected change, reviewed by the main agent"
+assertion_change = true

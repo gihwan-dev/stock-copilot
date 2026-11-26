@@ -1291,7 +1291,7 @@ mod tests {
             ("highPrice", "1"),
             ("volume", "-1"),
             ("currency", "USD"),
-            ("timestamp", "2026-03-23T00:00:01+09:00"),
+            ("timestamp", "2026-03-23"),
             ("timestamp", "2026-03-24T00:00:00+09:00"),
         ] {
             let mut body = fixture("daily")["body"].clone();
@@ -1413,6 +1413,37 @@ mod tests {
                 at("2026-03-24T00:00:00+09:00"),
                 at("2026-03-25T00:00:00+09:00")
             ]
+        );
+    }
+    #[test]
+    fn chart_daily_candles_read_session_stamped_rows_as_their_local_day() {
+        let mut body = fixture("daily")["body"].clone();
+        body["result"]["candles"][0]["timestamp"] = json!("2026-03-25T14:00:00+09:00");
+        body["result"]["candles"][1]["timestamp"] = json!("2026-03-24T14:00:00+09:00");
+        let server = serve(&[body]);
+        let reader = adapter(&server).with_candle_sessions(sessions());
+        let candles = run(reader.candles(
+            &instrument(),
+            window(),
+            CandlePeriod::Daily,
+            PriceAdjustment::Raw,
+        ))
+        .expect("candles");
+        let times: Vec<_> = candles
+            .iter()
+            .map(|candle| candle.time().timestamp())
+            .collect();
+        assert_eq!(
+            times,
+            vec![
+                at("2026-03-24T00:00:00+09:00"),
+                at("2026-03-25T00:00:00+09:00")
+            ]
+        );
+        assert!(
+            candles
+                .iter()
+                .all(|candle| candle.status() == CandleStatus::Finalized)
         );
     }
 }
