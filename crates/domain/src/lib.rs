@@ -212,6 +212,11 @@ pub use portfolio_valuation::{CurrencyEvaluation, HoldingCount, MetricTotal};
 
 mod exclusions;
 mod fund_kind;
+mod trade_simulation;
+pub use trade_simulation::{
+    SimulatedFill, SimulatedTrade, TradeSide, TradeSimulation, TradeSimulationError, krw_exposures,
+    room_to_cap, simulate_trades,
+};
 mod horizon;
 mod investor_profile;
 #[cfg(test)]

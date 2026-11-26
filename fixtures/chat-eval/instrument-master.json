@@ -1,0 +1,25 @@
+{
+  "note": "합성 종목 마스터. 이름과 코드는 eval용 예시이고 가격은 합성 값이다.",
+  "instruments": [
+    { "symbol": "360750", "name": "TIGER 미국S&P500", "market": "KR", "price": 23500, "fund": true },
+    { "symbol": "133690", "name": "TIGER 미국나스닥100", "market": "KR", "price": 112000, "fund": true },
+    { "symbol": "069500", "name": "KODEX 200", "market": "KR", "price": 35500, "fund": true },
+    { "symbol": "102110", "name": "TIGER 200", "market": "KR", "price": 35600, "fund": true },
+    { "symbol": "251350", "name": "KODEX 선진국MSCI World", "market": "KR", "price": 21800, "fund": true },
+    { "symbol": "148070", "name": "KOSEF 국고채10년", "market": "KR", "price": 114500, "fund": true },
+    { "symbol": "305080", "name": "TIGER 미국채10년선물", "market": "KR", "price": 11900, "fund": true },
+    { "symbol": "448290", "name": "TIGER 미국S&P500(H)", "market": "KR", "price": 12850, "fund": true },
+    { "symbol": "122630", "name": "KODEX 레버리지", "market": "KR", "price": 17800, "fund": true },
+    { "symbol": "091160", "name": "KODEX 반도체", "market": "KR", "price": 36000, "fund": true },
+    { "symbol": "091170", "name": "KODEX 은행", "market": "KR", "price": 9800, "fund": true },
+    { "symbol": "266360", "name": "KODEX 헬스케어", "market": "KR", "price": 15200, "fund": true },
+    { "symbol": "005930", "name": "삼성전자", "market": "KR", "price": 72000 },
+    { "symbol": "000660", "name": "SK하이닉스", "market": "KR", "price": 182000 },
+    { "symbol": "105560", "name": "KB금융", "market": "KR", "price": 98000 },
+    { "symbol": "035420", "name": "NAVER", "market": "KR", "price": 205000 },
+    { "symbol": "005380", "name": "현대차", "market": "KR", "price": 236000 },
+    { "symbol": "VOO", "name": "Vanguard S&P 500 ETF", "market": "US", "price": 560, "fund": true },
+    { "symbol": "QQQ", "name": "Invesco QQQ Trust", "market": "US", "price": 512, "fund": true },
+    { "symbol": "VT", "name": "Vanguard Total World Stock ETF", "market": "US", "price": 118, "fund": true }
+  ]
+}
