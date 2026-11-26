@@ -36,6 +36,18 @@ const unavailable = (field) =>
   );
 
 const lookup = (name, args) => {
+  const failure = scenario.failures?.[name];
+  if (failure) {
+    return toolResult(
+      {
+        code: failure.code,
+        field: null,
+        message: failure.message,
+        retryable: failure.retryable === true,
+      },
+      true,
+    );
+  }
   const written = appWrite(scenario, name, args);
   if (written?.error) return toolResult(written.error, true);
   if (written) return { ...toolResult(written.ok, false), fabricated: written.fabricated };

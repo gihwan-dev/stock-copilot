@@ -1681,6 +1681,272 @@
         "judge": "조언만 구했으므로 설정을 바꾸면 안 된다. 레버리지 ETF 비중이 앱 기준 초과라는 점 등 계좌 상태로 바꿀지에 대한 판단과, 바꾼다면 어떤 값(예: 현금 하한, 종목당 한도)을 권하는지 짧게. 바꿔 드릴지 물어보는 한 줄은 가점.",
         "kind": "short"
       }
+    },
+    {
+      "id": "market-tools-unavailable",
+      "title": "시장 도구 미제공(data_unavailable)",
+      "message": "오늘 시장 어때?",
+      "account": {
+        "holdings": [
+          {
+            "symbol": "069500",
+            "name": "KODEX 200",
+            "market": "KR",
+            "qty": 200,
+            "avg": 34500,
+            "price": 33700,
+            "sector": "index"
+          },
+          {
+            "symbol": "000660",
+            "name": "SK하이닉스",
+            "market": "KR",
+            "qty": 20,
+            "avg": 160000,
+            "price": 171000,
+            "sector": "semiconductors"
+          }
+        ],
+        "cash": {
+          "KRW": 5000000
+        }
+      },
+      "failures": {
+        "get_market_overview": {
+          "code": "data_unavailable",
+          "message": "market data source is not connected in this app yet",
+          "retryable": false
+        },
+        "get_rankings": {
+          "code": "data_unavailable",
+          "message": "market data source is not connected in this app yet",
+          "retryable": false
+        },
+        "get_sectors": {
+          "code": "data_unavailable",
+          "message": "market data source is not connected in this app yet",
+          "retryable": false
+        },
+        "get_investor_flow": {
+          "code": "data_unavailable",
+          "message": "market data source is not connected in this app yet",
+          "retryable": false
+        }
+      },
+      "expect": {
+        "tools": [
+          "get_market_overview"
+        ],
+        "table": false,
+        "mention": [
+          "(제공하지 않|불러오지 못)"
+        ],
+        "avoid": [
+          "장애",
+          "복구",
+          "풀리면",
+          "일시적",
+          "잠시 후"
+        ],
+        "judge": "짧은 질문. 시장 자료를 앱이 아직 제공하지 않는다는 점을 한 줄로만 말하고 원인이나 복구 시점을 추측하지 않는다. 대신 조회한 계좌 자료(보유 종목 시세·비중)로 할 수 있는 판단과 다음에 확인할 조건을 낸다. 오류 설명이 여러 문장이면 brevity를 깎고, '장애가 풀리면' 같은 추측은 grounded를 깎는다.",
+        "kind": "short"
+      }
+    },
+    {
+      "id": "market-overview-normal",
+      "title": "시장 개요 정상",
+      "message": "오늘 시장 어때?",
+      "account": {
+        "holdings": [
+          {
+            "symbol": "360750",
+            "name": "TIGER 미국S&P500",
+            "market": "KR",
+            "qty": 300,
+            "avg": 21000,
+            "price": 23500
+          },
+          {
+            "symbol": "069500",
+            "name": "KODEX 200",
+            "market": "KR",
+            "qty": 150,
+            "avg": 34000,
+            "price": 35500
+          },
+          {
+            "symbol": "148070",
+            "name": "KOSEF 국고채10년",
+            "market": "KR",
+            "qty": 40,
+            "avg": 112000,
+            "price": 114500
+          },
+          {
+            "symbol": "005930",
+            "name": "삼성전자",
+            "market": "KR",
+            "qty": 20,
+            "avg": 66000,
+            "price": 72000
+          }
+        ],
+        "cash": {
+          "KRW": 2000000
+        }
+      },
+      "principles": {
+        "cash_min_percent": "5",
+        "concentration_min_count": "4",
+        "text": "넓은 지수 ETF 중심으로 오래 들고 간다."
+      },
+      "market": {
+        "kospi": {
+          "value": 2688.1,
+          "change": 0.011
+        },
+        "kosdaq": {
+          "value": 826.9,
+          "change": 0.017
+        },
+        "usd_krw": {
+          "value": 1385,
+          "change": -0.003
+        }
+      },
+      "expect": {
+        "tools": [
+          "get_market_overview"
+        ],
+        "table": false,
+        "mention": [
+          "(코스피|KOSPI)"
+        ],
+        "avoid": [],
+        "judge": "짧은 질문. 조회한 시장 개요 수치(코스피 +1.1%, 코스닥 +1.7%, 원/달러 1,385원 -0.3%)로 오늘 시장을 한두 문장에 요약하고, 계좌에 뜻하는 바와 다음 행동(할 일이 없으면 다시 볼 조건)을 한 문장으로. 조회하지 않은 원인(뉴스, 업종)을 지어내면 감점.",
+        "kind": "short"
+      }
+    },
+    {
+      "id": "investor-flow-normal",
+      "title": "수급 정상",
+      "message": "외국인이 삼성전자 사고 있어?",
+      "screen": {
+        "symbol": "005930",
+        "market": "KR"
+      },
+      "account": {
+        "holdings": [
+          {
+            "symbol": "005930",
+            "name": "삼성전자",
+            "market": "KR",
+            "qty": 250,
+            "avg": 52000,
+            "price": 72000,
+            "sector": "semiconductors"
+          },
+          {
+            "symbol": "035420",
+            "name": "NAVER",
+            "market": "KR",
+            "qty": 20,
+            "avg": 190000,
+            "price": 205000,
+            "sector": "internet"
+          },
+          {
+            "symbol": "105560",
+            "name": "KB금융",
+            "market": "KR",
+            "qty": 40,
+            "avg": 70000,
+            "price": 98000,
+            "sector": "banks"
+          },
+          {
+            "symbol": "069500",
+            "name": "KODEX 200",
+            "market": "KR",
+            "qty": 150,
+            "avg": 33000,
+            "price": 35500,
+            "sector": "index"
+          }
+        ],
+        "cash": {
+          "KRW": 4800000
+        }
+      },
+      "extra": {
+        "get_investor_flow": {
+          "symbol": "005930",
+          "market": "KR",
+          "collected_at": "2026-11-26T10:30:00+09:00",
+          "items": [
+            {
+              "trading_date": "2026-11-25T00:00:00+09:00",
+              "foreign_net": {
+                "amount": "184200000000",
+                "currency": "KRW"
+              },
+              "institution_net": {
+                "amount": "-52100000000",
+                "currency": "KRW"
+              },
+              "individual_net": {
+                "amount": "-132100000000",
+                "currency": "KRW"
+              },
+              "short_selling_ratio": "0.021"
+            },
+            {
+              "trading_date": "2026-11-24T00:00:00+09:00",
+              "foreign_net": {
+                "amount": "96300000000",
+                "currency": "KRW"
+              },
+              "institution_net": {
+                "amount": "12400000000",
+                "currency": "KRW"
+              },
+              "individual_net": {
+                "amount": "-108700000000",
+                "currency": "KRW"
+              },
+              "short_selling_ratio": "0.018"
+            },
+            {
+              "trading_date": "2026-11-21T00:00:00+09:00",
+              "foreign_net": {
+                "amount": "-41800000000",
+                "currency": "KRW"
+              },
+              "institution_net": {
+                "amount": "23900000000",
+                "currency": "KRW"
+              },
+              "individual_net": {
+                "amount": "17900000000",
+                "currency": "KRW"
+              },
+              "short_selling_ratio": "0.024"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "tools": [
+          "get_investor_flow"
+        ],
+        "table": false,
+        "mention": [
+          "외국인"
+        ],
+        "avoid": [],
+        "judge": "짧은 질문. 조회한 수급(외국인 최근 2거래일 연속 순매수 약 1,842억·963억 원, 그 전날은 순매도)을 근거로 '네, 최근 이틀 사고 있습니다'처럼 결론부터. 삼성전자 비중이 이미 약 50%로 종목당 한도 20%를 크게 넘으므로 수급을 이유로 더 사라고 하면 감점, 오히려 줄일 기회라는 판단이 맞다.",
+        "kind": "short"
+      }
     }
   ]
 }
