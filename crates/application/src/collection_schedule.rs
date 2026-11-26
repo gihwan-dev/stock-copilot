@@ -153,6 +153,7 @@ const MIN_10: CollectionMinutes = CollectionMinutes(10);
 const MIN_15: CollectionMinutes = CollectionMinutes(15);
 const MIN_30: CollectionMinutes = CollectionMinutes(30);
 const MIN_60: CollectionMinutes = CollectionMinutes(60);
+const MIN_120: CollectionMinutes = CollectionMinutes(120);
 
 const fn by_phase(
     phase: CollectionPhase,
@@ -171,7 +172,7 @@ fn dart_cadence(conditions: &CollectionConditions) -> CollectionCadence {
     if conditions.dart_key == DartKeyState::Missing {
         return CollectionCadence::Off;
     }
-    let base = by_phase(conditions.phase, MIN_10, MIN_30, MIN_30);
+    let base = by_phase(conditions.phase, MIN_10, MIN_60, MIN_30);
     match (conditions.dart_usage.level(), base) {
         (DartQuotaLevel::Exhausted, _) => CollectionCadence::Off,
         (DartQuotaLevel::HalfOrMore, CollectionCadence::Every(minutes)) => {
@@ -191,13 +192,14 @@ pub fn collection_cadence(
 ) -> CollectionCadence {
     let phase = conditions.phase;
     match target {
-        CollectionTarget::KindDisclosure => by_phase(phase, MIN_2, MIN_30, MIN_30),
+        CollectionTarget::KindDisclosure => by_phase(phase, MIN_2, MIN_60, MIN_30),
         CollectionTarget::DartList => dart_cadence(conditions),
-        CollectionTarget::PressRss => by_phase(phase, MIN_10, MIN_30, MIN_30),
-        CollectionTarget::HankyungRss => by_phase(phase, MIN_30, MIN_30, MIN_30),
-        CollectionTarget::GoogleNews => by_phase(phase, MIN_60, MIN_60, MIN_60),
-        CollectionTarget::YahooFinance => by_phase(phase, MIN_60, MIN_30, MIN_60),
-        CollectionTarget::SecEdgar => by_phase(phase, MIN_60, MIN_15, MIN_60),
+        CollectionTarget::PressRss => by_phase(phase, MIN_10, MIN_60, MIN_30),
+        CollectionTarget::HankyungRss => by_phase(phase, MIN_30, MIN_60, MIN_30),
+        CollectionTarget::GoogleNews => by_phase(phase, MIN_60, MIN_120, MIN_60),
+        CollectionTarget::YahooFinance | CollectionTarget::SecEdgar => {
+            by_phase(phase, MIN_60, MIN_15, MIN_60)
+        }
         CollectionTarget::CentralBankRss => match conditions.fomc {
             FomcDay::Scheduled => by_phase(phase, MIN_60, MIN_10, MIN_60),
             FomcDay::Regular => by_phase(phase, MIN_60, MIN_60, MIN_60),

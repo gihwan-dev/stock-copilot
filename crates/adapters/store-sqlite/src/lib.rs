@@ -148,6 +148,9 @@ mod fts_schema;
 #[cfg(test)]
 mod information_tests;
 
+#[cfg(test)]
+mod retention_tests;
+
 mod information;
 pub use information::InformationStore;
 

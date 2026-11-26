@@ -13,6 +13,7 @@ mod rate_limiter;
 mod registry;
 mod rss;
 mod stock_matching;
+mod tracked_disclosures;
 mod tracked_news;
 mod us_macro;
 mod us_sources;
@@ -66,6 +67,10 @@ pub use rss::{
 };
 pub use stock_matching::{
     MatchDictionaryEntry, MatchNameAmbiguity, MatchNameKind, StockMatcher, TitleMatch,
+};
+pub use tracked_disclosures::{
+    ContactFuture, DartKeySource, DartLatestFeed, SecClientParts, SecContactSource, SecTrackedFeed,
+    SecretFuture, kst_date, sec_contact_header,
 };
 pub use tracked_news::{
     MAX_ITEMS_PER_TARGET, MAX_TRACKED_TARGETS, NewsLinkHints, TRACKED_RECENCY_SECONDS,

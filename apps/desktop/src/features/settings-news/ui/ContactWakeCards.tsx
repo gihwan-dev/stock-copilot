@@ -10,6 +10,7 @@ import {
 import {
   parseContact,
   type ContactText,
+  type RouteState,
   type WakeCriteria,
 } from "../../../shared/ipc";
 import {
@@ -18,6 +19,7 @@ import {
   type InputValue,
 } from "../../../shared/lib";
 import { newsText } from "../messages";
+import { RouteLine } from "./RouteLine";
 import type { NewsChange } from "../model";
 import {
   countChoices,
@@ -58,6 +60,7 @@ const ContactField = (props: {
 
 export const ContactCard = (props: {
   readonly contact: ContactText | null;
+  readonly route: RouteState | undefined;
   readonly save: Save;
 }): ReactElement => {
   const [value, setValue] = useState(() => initialContact(props.contact));
@@ -79,6 +82,9 @@ export const ContactCard = (props: {
   return (
     <Card title={newsText("news.secTitle", "ko")}>
       <Stack gap="space-3">
+        {props.route === undefined
+          ? []
+          : [<RouteLine key="route" route="sec" state={props.route} />]}
         <ContactField value={value} onChange={setValue} invalid={invalid} />
         <Button variant="secondary" onClick={submit}>
           {newsText("news.save", "ko")}

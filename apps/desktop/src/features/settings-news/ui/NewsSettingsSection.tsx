@@ -55,8 +55,12 @@ export const NewsSettingsSection = (): ReactElement => {
         <Section title={newsText("news.title", "ko")}>
           <Notice state={saver.state} />
           <SourcesCard sources={view.data.sources} save={saver.save} />
-          <KeysCard keys={view.data.keys} />
-          <ContactCard contact={view.data.sec_contact} save={saver.save} />
+          <KeysCard keys={view.data.keys} routes={view.data.routes} />
+          <ContactCard
+            contact={view.data.sec_contact}
+            route={view.data.routes?.sec}
+            save={saver.save}
+          />
           <WakeCard wake={view.data.wake} save={saver.save} />
           <AliasCard aliases={view.data.aliases} save={saver.save} />
         </Section>

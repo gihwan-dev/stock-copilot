@@ -218,11 +218,14 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
             )
             .with_proposals(Arc::new(StoredCurrentProposals(Arc::clone(repositories)))),
         )
-        .manage(NewsSettingsIpcState::new(
-            Arc::clone(repositories),
-            Arc::clone(&toss.secrets),
-            Arc::clone(events),
-        ))
+        .manage(
+            NewsSettingsIpcState::new(
+                Arc::clone(repositories),
+                Arc::clone(&toss.secrets),
+                Arc::clone(events),
+            )
+            .with_routes(Arc::new(StoredRoutes(Arc::clone(repositories)))),
+        )
         .manage(SystemDataIpcState::new(
             AccountSelector::new(
                 Arc::<ProductBroker>::clone(&toss.broker),
@@ -1250,6 +1253,40 @@ impl application::DiagnosticsSink for LoggedSourceCalls {
     }
 }
 
+fn disclosure_feeds(
+    client: &Arc<sources::SourceHttpClient>,
+    clock: &Arc<platform_macos::SystemClock>,
+    tracking: &src_tauri::news_tracking::NewsTracking,
+    hints: &sources::NewsLinkHints,
+) -> [CollectorFeed; 2] {
+    [
+        CollectorFeed {
+            target: application::CollectionTarget::DartList,
+            startup: None,
+            regular: SharedFeed::new(sources::DartLatestFeed::new(
+                Arc::clone(client),
+                Arc::new(tracking.clone()),
+                hints.clone(),
+            )),
+        },
+        CollectorFeed {
+            target: application::CollectionTarget::SecEdgar,
+            startup: None,
+            regular: SharedFeed::new(sources::SecTrackedFeed::new(
+                sources::SecClientParts {
+                    endpoint: sources::SourceEndpoint::live(),
+                    clock: Arc::<platform_macos::SystemClock>::clone(clock),
+                    wait: Arc::new(sources::TokioSourceWait),
+                    diagnostics: Some(Arc::new(LoggedSourceCalls)),
+                },
+                Arc::new(tracking.clone()),
+                Arc::new(tracking.clone()),
+                hints.clone(),
+            )),
+        },
+    ]
+}
+
 fn collector_feeds(
     clock: &Arc<platform_macos::SystemClock>,
     tracking: &src_tauri::news_tracking::NewsTracking,
@@ -1265,6 +1302,7 @@ fn collector_feeds(
         return CollectorFeeds::default();
     };
     let client = Arc::new(http.with_diagnostics(Arc::new(LoggedSourceCalls)));
+    let disclosure_feeds = disclosure_feeds(&client, clock, tracking, hints);
     let mut feeds: Vec<CollectorFeed> = sources::PressMacroSource::ALL
         .into_iter()
         .map(|source| CollectorFeed {
@@ -1305,6 +1343,7 @@ fn collector_feeds(
             )),
         });
     }
+    feeds.extend(disclosure_feeds);
     CollectorFeeds(feeds)
 }
 
@@ -1617,6 +1656,24 @@ fn assemble_ai(
         grants: tokio::sync::Mutex::new(BTreeMap::new()),
     });
     Ok(ProductAiParts { ai, queue, jobs })
+}
+
+#[derive(Debug)]
+struct StoredRoutes(Arc<SqliteRepositories>);
+
+impl src_tauri::ipc::news_settings::RouteLookup for StoredRoutes {
+    fn source_state(
+        &self,
+        source: domain::DataSource,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Option<application::SourceState>> + Send + '_>> {
+        Box::pin(async move {
+            application::SourceStatusRepository::find(self.0.as_ref(), source)
+                .await
+                .ok()
+                .flatten()
+                .map(|status| status.state())
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2230,7 +2287,7 @@ mod tests {
             .iter()
             .map(|feed| (feed.target, feed.regular.source()))
             .collect();
-        assert_eq!(sources.len(), 9);
+        assert_eq!(sources.len(), 11);
         assert!(sources.contains(&(
             CollectionTarget::HankyungRss,
             FeedSource::News(domain::NewsSource::Hankyung)

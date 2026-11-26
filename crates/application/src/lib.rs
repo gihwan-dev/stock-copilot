@@ -729,6 +729,11 @@ pub use headline_grouping::{
 mod tracked_news;
 pub use tracked_news::TrackedInstrument;
 
+mod news_retention;
+pub use news_retention::{
+    CollectedRetention, PruneCollectedNews, RetentionCutoff, RetentionDays, news_retention_cutoffs,
+};
+
 mod intraday_review;
 pub use intraday_review::{IntradayReviewOutcome, IntradayReviewSubject, RunIntradayReview};
 

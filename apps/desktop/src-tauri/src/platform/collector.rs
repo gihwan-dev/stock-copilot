@@ -12,6 +12,7 @@ use application::{
     NewsMetadata, PlanCollectionSchedule, SourceSwitch, SystemPortError, WriteCompleted,
     collection_due,
 };
+use application::{SecretStore, SourceState, SourceStatusRepository};
 use domain::{DataSource, Timestamp};
 use scheduler::LoopControl;
 use sources::{NewsLinkHints, TrackedTargets};
@@ -442,6 +443,33 @@ impl<R: Runtime, P: PortTypes> AppCollectionPlanner<R, P> {
         }
     }
 
+    async fn dart_working(&self) -> bool {
+        let Some(repositories) = self.app.try_state::<Arc<SqliteRepositories>>() else {
+            return false;
+        };
+        match SourceStatusRepository::find(repositories.as_ref(), DataSource::DartDisclosureApi)
+            .await
+        {
+            Ok(Some(status)) => match status.state() {
+                SourceState::Healthy | SourceState::NoData => true,
+                SourceState::NeverRun | SourceState::NotConfigured | SourceState::Failed(_) => {
+                    false
+                }
+            },
+            Ok(None) | Err(_) => false,
+        }
+    }
+
+    async fn dart_key(&self) -> DartKeyState {
+        let Some(ports) = self.app.try_state::<Ports<P>>() else {
+            return DartKeyState::Missing;
+        };
+        match ports.secrets.load(application::SecretKey::DartApiKey).await {
+            Ok(Some(_present)) => DartKeyState::Configured,
+            Ok(None) | Err(_) => DartKeyState::Missing,
+        }
+    }
+
     async fn settings(&self) -> Option<NewsDataSettings> {
         let repositories = self.app.try_state::<Arc<SqliteRepositories>>()?;
         NewsDataSettingsRepository::load(repositories.as_ref())
@@ -464,7 +492,7 @@ impl<R: Runtime, P: PortTypes> CollectionPlanner for AppCollectionPlanner<R, P> 
             }
             .run(CollectionInputs {
                 fomc: FomcDay::Regular,
-                dart_key: DartKeyState::Missing,
+                dart_key: self.dart_key().await,
                 dart_usage: DartDailyUsage::new(DartCallCount::new(0), DartCallCount::new(1)),
             })
             .await;
@@ -481,13 +509,20 @@ impl<R: Runtime, P: PortTypes> CollectionPlanner for AppCollectionPlanner<R, P> 
 
     fn disabled(&self) -> SwitchFuture<'_> {
         Box::pin(async move {
-            let Some(settings) = self.settings().await else {
-                return BTreeSet::new();
+            let mut off: BTreeSet<DataSource> = match self.settings().await {
+                Some(settings) => DataSource::all()
+                    .into_iter()
+                    .filter(|source| settings.source_switch(*source) == SourceSwitch::Off)
+                    .collect(),
+                None => BTreeSet::new(),
             };
-            DataSource::all()
-                .into_iter()
-                .filter(|source| settings.source_switch(*source) == SourceSwitch::Off)
-                .collect()
+            let dart_primary = self.dart_key().await == DartKeyState::Configured
+                && !off.contains(&DataSource::DartDisclosureApi)
+                && self.dart_working().await;
+            if dart_primary {
+                off.insert(DataSource::KindDisclosure);
+            }
+            off
         })
     }
 }

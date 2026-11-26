@@ -182,6 +182,7 @@ export type {
   NewsSettings,
   NewsSource,
   OptionalKey,
+  RouteState,
   SourceSetting,
   WakeCriteria,
 } from "./news-schema";

@@ -6,7 +6,8 @@ use application::{
     CollectionTarget, DartCallCount, DartDailyUsage, DartKeyState, EventBus, FomcDay,
     GetNewsDataSettings, NewsDataSettings, NewsDataSettingsChange, NewsDataSettingsError,
     NewsDataSettingsRepository, SecContactSetting, SecretKey, SecretStore, SecretValue,
-    SourceSwitch, StockAlias, SystemPortError, UpdateNewsDataSettings, collection_cadence,
+    SourceState, SourceSwitch, StockAlias, SystemPortError, UpdateNewsDataSettings,
+    collection_cadence,
 };
 use domain::{
     AiBodyReadToggle, DataSource, MovePercent, NewsBurstCount, NewsSource, Symbol, WakeThresholds,
@@ -96,8 +97,12 @@ impl<R: NewsDataSettingsRepository + 'static, S: SecretStore + 'static> NewsBook
     }
 }
 
+pub trait RouteLookup: Send + Sync {
+    fn source_state(&self, source: DataSource) -> BoxFuture<'_, Option<SourceState>>;
+}
+
 #[derive(Clone)]
-pub struct NewsSettingsIpcState(Arc<dyn NewsBook>);
+pub struct NewsSettingsIpcState(Arc<dyn NewsBook>, Option<Arc<dyn RouteLookup>>);
 
 impl fmt::Debug for NewsSettingsIpcState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -112,12 +117,69 @@ impl NewsSettingsIpcState {
         secrets: Arc<S>,
         events: Arc<EventBus>,
     ) -> Self {
-        Self(Arc::new(StoredNews {
-            repository,
-            secrets,
-            events,
-        }))
+        Self(
+            Arc::new(StoredNews {
+                repository,
+                secrets,
+                events,
+            }),
+            None,
+        )
     }
+
+    #[must_use]
+    pub fn with_routes(mut self, routes: Arc<dyn RouteLookup>) -> Self {
+        self.1 = Some(routes);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum UiRouteState {
+    #[serde(rename = "unset")]
+    Unset,
+    #[serde(rename = "waiting")]
+    Waiting,
+    #[serde(rename = "connected")]
+    Connected,
+    #[serde(rename = "failing")]
+    Failing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub struct UiDisclosureRoutes {
+    pub dart: UiRouteState,
+    pub sec: UiRouteState,
+}
+
+const fn route_of(state: Option<SourceState>) -> UiRouteState {
+    match state {
+        Some(SourceState::Healthy | SourceState::NoData) => UiRouteState::Connected,
+        Some(SourceState::Failed(_) | SourceState::NotConfigured) => UiRouteState::Failing,
+        Some(SourceState::NeverRun) | None => UiRouteState::Waiting,
+    }
+}
+
+async fn routes(
+    state: &NewsSettingsIpcState,
+    keys: UiKeys,
+    settings: &NewsDataSettings,
+) -> UiDisclosureRoutes {
+    let lookup = |source| async move {
+        match &state.1 {
+            Some(routes) => routes.source_state(source).await,
+            None => None,
+        }
+    };
+    let dart = match keys.dart {
+        UiKeyPresence::Unset => UiRouteState::Unset,
+        UiKeyPresence::Set => route_of(lookup(DataSource::DartDisclosureApi).await),
+    };
+    let sec = match settings.sec_contact() {
+        None => UiRouteState::Unset,
+        Some(_) => route_of(lookup(DataSource::SecEdgar).await),
+    };
+    UiDisclosureRoutes { dart, sec }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Type)]
@@ -293,6 +355,7 @@ pub struct UiNewsSettings {
     pub sec_contact: Option<String>,
     pub wake: UiWake,
     pub aliases: Vec<UiAliasRow>,
+    pub routes: UiDisclosureRoutes,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Type)]
@@ -485,6 +548,7 @@ const fn presence(present: SecretPresence) -> UiKeyPresence {
 fn to_view(
     settings: &NewsDataSettings,
     keys: UiKeys,
+    routes: UiDisclosureRoutes,
     directory: &InstrumentDirectory,
 ) -> UiNewsSettings {
     UiNewsSettings {
@@ -519,6 +583,7 @@ fn to_view(
                 })
             })
             .collect(),
+        routes,
     }
 }
 
@@ -563,7 +628,9 @@ async fn view(
     settings: &NewsDataSettings,
     directory: &InstrumentDirectory,
 ) -> Result<UiNewsSettings, IpcError> {
-    Ok(to_view(settings, keys(state).await?, directory))
+    let found = keys(state).await?;
+    let paths = routes(state, found, settings).await;
+    Ok(to_view(settings, found, paths, directory))
 }
 
 async fn apply(

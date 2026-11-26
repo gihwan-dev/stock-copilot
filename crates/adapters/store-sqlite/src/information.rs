@@ -1,9 +1,10 @@
 use crate::estimates::codec::{Decoder, Encoder, put_timestamp, take_timestamp};
 use crate::{Database, sql::information as sql};
 use application::{
-    CollectedEntry, CollectedItemHandle, CollectedItemReads, CollectedKind, CollectedTimes,
-    DisclosureRepository, InformationKey, InformationLinks, InformationSearch, NewsRepository,
-    ObservedCollectedItem, PublicationTime, SearchLimit, SystemPortError, WriteCompleted,
+    CollectedCount, CollectedEntry, CollectedItemHandle, CollectedItemReads, CollectedKind,
+    CollectedRetention, CollectedTimes, DisclosureRepository, InformationKey, InformationLinks,
+    InformationSearch, NewsRepository, ObservedCollectedItem, PublicationTime, RetentionCutoff,
+    SearchLimit, SystemPortError, WriteCompleted,
 };
 use domain::Timestamp;
 use domain::{
@@ -571,6 +572,72 @@ impl CollectedItemReads for InformationStore<'_> {
                 row.map(|found| observed(connection, kind, found))
                     .transpose()
             })
+            .await
+    }
+}
+
+struct TimedNews {
+    id: i64,
+    source: String,
+    external_id: String,
+    collected: String,
+}
+
+fn expired(row: &TimedNews, cutoffs: &[RetentionCutoff]) -> rusqlite::Result<bool> {
+    let source = decode_news_source(&row.source)?;
+    let collected = decode_moment(&row.collected)?;
+    Ok(cutoffs
+        .iter()
+        .any(|cutoff| cutoff.source == source && collected < cutoff.before))
+}
+
+fn delete_news(tx: &Transaction<'_>, row: &TimedNews) -> rusqlite::Result<()> {
+    let category = category_tag(CollectedKind::News);
+    tx.execute(
+        sql::DELETE_LINKS,
+        params![category, row.source, row.external_id],
+    )?;
+    tx.execute(sql::DELETE_INDEX, params![row.id])?;
+    tx.execute(sql::DELETE_TIMES, params![row.id])?;
+    tx.execute(sql::DELETE_ITEM, params![row.id])?;
+    Ok(())
+}
+
+fn timed_news(tx: &Transaction<'_>) -> rusqlite::Result<Vec<TimedNews>> {
+    tx.prepare(sql::NEWS_COLLECTED_TIMES)?
+        .query_map([category_tag(CollectedKind::News)], |row| {
+            Ok(TimedNews {
+                id: row.get(0)?,
+                source: row.get(1)?,
+                external_id: row.get(2)?,
+                collected: row.get(3)?,
+            })
+        })?
+        .collect()
+}
+
+fn prune_expired(
+    tx: &Transaction<'_>,
+    cutoffs: &[RetentionCutoff],
+) -> rusqlite::Result<CollectedCount> {
+    let mut removed = 0_u32;
+    for row in timed_news(tx)? {
+        if expired(&row, cutoffs)? {
+            delete_news(tx, &row)?;
+            removed = removed.saturating_add(1);
+        }
+    }
+    Ok(CollectedCount::new(removed))
+}
+
+impl CollectedRetention for InformationStore<'_> {
+    async fn prune_news(
+        &self,
+        cutoffs: &[RetentionCutoff],
+    ) -> Result<CollectedCount, SystemPortError> {
+        let owned = cutoffs.to_vec();
+        self.database
+            .write(move |tx| prune_expired(tx, &owned))
             .await
     }
 }
