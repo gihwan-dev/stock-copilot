@@ -210,6 +210,7 @@ fn market_currency(instrument: &ResolvedOrderInstrument) -> Option<Currency> {
     }
 }
 
+#[must_use]
 pub fn valuation_fx_rate(valuation: &PortfolioValuation) -> Option<FxRate> {
     let rates = match valuation.assets() {
         Total::Complete(value) => value.value().clone(),

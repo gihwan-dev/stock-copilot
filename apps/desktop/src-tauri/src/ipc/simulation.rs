@@ -517,7 +517,7 @@ pub async fn simulate_trades<R: Runtime>(
         Some(state) => load_principles(state.inner()).await.ok(),
         None => None,
     };
-    let view = simulated_view(
+    let simulated = simulated_view(
         allocation,
         &trades,
         &directory,
@@ -525,6 +525,6 @@ pub async fn simulate_trades<R: Runtime>(
     );
     Ok(UiTradeSimulation {
         limits_source,
-        ..view
+        ..simulated
     })
 }
