@@ -209,6 +209,7 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
             Arc::<platform_macos::SystemClock>::clone(clock),
             Arc::clone(events),
         ))
+        .manage(Arc::clone(&toss.performance))
         .manage(ThesisIpcState::from_repository(Arc::clone(repositories)))
         .manage(
             SignalsIpcState::new(
@@ -1022,6 +1023,7 @@ struct ProductToss {
     portfolios: Arc<store_sqlite::SqlitePortfolioStore>,
     accounts: src_tauri::broker_link::AccountSlot,
     sectors: Arc<src_tauri::sector_classes::SectorClasses>,
+    performance: Arc<src_tauri::performance_book::PerformanceBook>,
 }
 
 fn catalog_portfolio(
@@ -1037,10 +1039,75 @@ fn catalog_portfolio(
                 toss.accounts.clone(),
                 directory.clone(),
             )
-            .with_sectors(Arc::clone(&toss.sectors)),
+            .with_sectors(Arc::clone(&toss.sectors))
+            .with_performance(Arc::clone(&toss.performance)),
         ),
         directory.clone(),
     )
+}
+
+struct TossPerformanceFeed(Arc<ProductBroker>);
+
+impl src_tauri::performance_book::PerformanceFeed for TossPerformanceFeed {
+    fn transactions<'a>(
+        &'a self,
+        account: &'a domain::AccountId,
+        window: domain::SettlementWindow,
+    ) -> BoxFuture<'a, Result<application::TransactionRead, application::PortError>> {
+        use application::BrokerRead as _;
+        Box::pin(async move {
+            self.0
+                .transactions(account, window, &domain::TransactionFilter::all())
+                .await
+        })
+    }
+
+    fn calendar_on(
+        &self,
+        market: domain::KnownMarket,
+        date: domain::CalendarDate,
+    ) -> BoxFuture<'_, Result<domain::MarketCalendar, application::PortError>> {
+        Box::pin(self.0.calendar_on(market, date))
+    }
+
+    fn fx_at(
+        &self,
+        at: domain::Timestamp,
+    ) -> BoxFuture<'_, Result<domain::FxRate, application::PortError>> {
+        use application::MarketInfo as _;
+        Box::pin(
+            self.0
+                .fx_rate(domain::FxPair::UsdKrw, domain::FxRateKind::Mid, Some(at)),
+        )
+    }
+
+    fn daily_candles<'a>(
+        &'a self,
+        instrument: &'a domain::QuoteInstrument,
+        window: domain::TimeInterval,
+    ) -> BoxFuture<'a, Result<Vec<domain::Candle>, application::PortError>> {
+        use application::BrokerRead as _;
+        Box::pin(self.0.candles(
+            instrument,
+            window,
+            domain::CandlePeriod::Daily,
+            domain::PriceAdjustment::Raw,
+        ))
+    }
+}
+
+fn product_performance(
+    broker: &Arc<ProductBroker>,
+    clock: &Arc<platform_macos::SystemClock>,
+) -> Arc<src_tauri::performance_book::PerformanceBook> {
+    let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
+    Arc::new(src_tauri::performance_book::PerformanceBook::new(
+        Arc::new(src_tauri::performance_book::FeedHistory::new(
+            Arc::new(TossPerformanceFeed(Arc::clone(broker))),
+            Arc::clone(&shared),
+        )),
+        shared,
+    ))
 }
 
 fn product_toss(
@@ -1063,9 +1130,11 @@ fn product_toss(
         ))),
         Arc::<platform_macos::SystemClock>::clone(clock),
     ));
+    let performance = product_performance(&shared_broker, clock);
     Ok(ProductToss {
         secrets,
         sectors,
+        performance,
         broker: shared_broker,
         portfolios: Arc::new(store_sqlite::SqlitePortfolioStore::new(
             repositories.as_ref().clone(),

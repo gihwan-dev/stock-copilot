@@ -52,6 +52,26 @@ impl<R: Runtime, P: PortTypes> AppStoredJobs<R, P> {
             .map(|state| state.inner().clone())
     }
 
+    fn refresh_performance(&self) {
+        let Some(book) = self
+            .app
+            .try_state::<Arc<crate::performance_book::PerformanceBook>>()
+            .map(|state| Arc::clone(state.inner()))
+        else {
+            return;
+        };
+        let Ok(ports) = self.ports() else {
+            return;
+        };
+        let Some(account) = ports.saved_accounts.current().into_iter().next() else {
+            return;
+        };
+        let rows = self.repositories.clone();
+        let _task = tauri::async_runtime::spawn(async move {
+            book.refresh(&rows, &account).await;
+        });
+    }
+
     fn ports(&self) -> Result<tauri::State<'_, Ports<P>>, JobError> {
         self.app
             .try_state::<Ports<P>>()
@@ -299,6 +319,7 @@ impl<R: Runtime, P: PortTypes> DailyValuationPort for AppStoredJobs<R, P> {
         &self,
         _now: Timestamp,
     ) -> impl Future<Output = Result<Vec<CalendarDate>, JobError>> + Send {
+        self.refresh_performance();
         std::future::ready(Ok(Vec::new()))
     }
 
