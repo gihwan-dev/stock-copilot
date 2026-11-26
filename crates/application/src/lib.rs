@@ -268,7 +268,7 @@ pub use compute_performance::{
 mod diagnostics;
 pub use diagnostics::{
     BrokerCall, CallMethod, CallResult, DiagnosticEvent, DiagnosticText, DiagnosticsSink,
-    FeedDiagnosis, FeedFailure, FeedRunResult, HttpStatusCode, JobDiagnosis, JobRunNote,
+    FeedDiagnosis, FeedFailure, FeedRunResult, HttpStatusCode, JobDiagnosis, JobRunNote, LinkProbe,
     SourceCall, SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult, TokenIssue,
     TransportFailure, failure_reason, sync_failure_reason,
 };
@@ -732,7 +732,12 @@ pub use headline_grouping::{
 };
 
 mod tracked_news;
-pub use tracked_news::TrackedInstrument;
+pub use tracked_news::{CollectedPresence, CollectedPresenceCheck, TrackedInstrument};
+
+mod news_retention;
+pub use news_retention::{
+    CollectedRetention, PruneCollectedNews, RetentionCutoff, RetentionDays, news_retention_cutoffs,
+};
 
 mod intraday_review;
 pub use intraday_review::{IntradayReviewOutcome, IntradayReviewSubject, RunIntradayReview};

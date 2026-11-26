@@ -132,3 +132,49 @@ fn a_round_before_the_database_opens_is_retried_on_the_next_tick_not_a_cadence_l
     );
     assert_eq!(press.calls(), 1);
 }
+
+struct FailingRunner {
+    calls: AtomicU32,
+}
+
+impl FeedRunner for FailingRunner {
+    fn collect(&self, cursor: FeedCursor) -> FeedRoundFuture<'_> {
+        let _previous = self.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(std::future::ready(Ok(FeedRound {
+            source: DataSource::Edaily,
+            outcome: FeedRoundOutcome::SourceFailed,
+            cursor,
+            news: CollectedCount::default(),
+            disclosures: CollectedCount::default(),
+        })))
+    }
+}
+
+#[test]
+fn a_source_failing_three_times_in_a_row_backs_off_to_six_hours() {
+    let clock = Arc::new(SteppedClock::new(at(1_000_000)));
+    let edaily = Arc::new(FailingRunner {
+        calls: AtomicU32::new(0),
+    });
+    let shared_runner: Arc<dyn FeedRunner> = Arc::<FailingRunner>::clone(&edaily);
+    let collector = worker(
+        vec![ScheduledFeed::new(
+            CollectionTarget::PressRss,
+            shared_runner,
+        )],
+        &clock,
+        Arc::new(OffHoursPlanner),
+    );
+    for _round in 0_u8..3 {
+        tauri::async_runtime::block_on(collector.collect_due());
+        clock.advance_by(seconds(30 * 60)).expect("30분");
+    }
+    assert_eq!(edaily.calls.load(Ordering::SeqCst), 3);
+    for _wait in 0_u8..11 {
+        tauri::async_runtime::block_on(collector.collect_due());
+        clock.advance_by(seconds(30 * 60)).expect("30분");
+    }
+    assert_eq!(edaily.calls.load(Ordering::SeqCst), 3, "6시간 동안 쉰다");
+    tauri::async_runtime::block_on(collector.collect_due());
+    assert_eq!(edaily.calls.load(Ordering::SeqCst), 4);
+}

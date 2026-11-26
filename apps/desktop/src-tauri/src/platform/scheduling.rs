@@ -207,7 +207,7 @@ fn collector_worker<R: Runtime, P: PortTypes>(
     clock: Arc<dyn application::Clock>,
 ) -> Arc<dyn CollectorWorker> {
     if let Some(tracking) = app.try_state::<crate::news_tracking::NewsTracking>() {
-        tracking.bind(Arc::new(crate::news_tracking::AppTrackedTargets::new(
+        tracking.bind(Arc::new(crate::news_tracking::AppNewsInputs::<R, P>::new(
             app.handle().clone(),
         )));
     }
@@ -246,6 +246,7 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     };
     registry.register(IntradayCompactionJob::new(stored()))?;
     registry.register(DailyBackupJob::new(stored()))?;
+    registry.register(scheduler::NewsRetentionJob::new(stored()))?;
     registry.register(BriefingJob::morning(stored()))?;
     registry.register(BriefingJob::closing_review(stored()))?;
     registry.register(BriefingJob::pre_us_market(stored()))?;

@@ -146,8 +146,17 @@ pub struct FeedDiagnosis {
     pub result: FeedRunResult,
     pub fetched: CollectedCount,
     pub duplicates: CollectedCount,
+    pub known: CollectedCount,
     pub stored: CollectedCount,
     pub linked: CollectedCount,
+    pub probe: LinkProbe,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct LinkProbe {
+    pub name_seen: CollectedCount,
+    pub needs_context: CollectedCount,
+    pub group_only: CollectedCount,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -192,6 +201,10 @@ pub enum DiagnosticEvent {
     Job(JobDiagnosis),
     Feed(FeedDiagnosis),
     SourceCall(SourceCall),
+    SourceRejected {
+        source: DataSource,
+        detail: DiagnosticText,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
