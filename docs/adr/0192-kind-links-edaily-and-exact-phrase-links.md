@@ -1,4 +1,4 @@
-# ADR 0191: KIND 링크 복구, 이데일리 제외, Google 정확 구절 연결, 진단 범위
+# ADR 0192: KIND 링크 복구, 이데일리 제외, Google 정확 구절 연결, 진단 범위
 
 - 상태: 확정 (2026-11-26). v0.5.7 실설치 진단 기록을 보고 정한다. [ADR 0190](0190-news-retention-dart-sec-and-backoff.md)을 잇는다.
 
