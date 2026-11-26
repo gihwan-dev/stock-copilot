@@ -976,6 +976,7 @@ struct ProductToss {
     broker: Arc<ProductBroker>,
     portfolios: Arc<store_sqlite::SqlitePortfolioStore>,
     accounts: src_tauri::broker_link::AccountSlot,
+    sectors: Arc<src_tauri::sector_classes::SectorClasses>,
 }
 
 fn catalog_portfolio(
@@ -984,12 +985,15 @@ fn catalog_portfolio(
     directory: &InstrumentDirectory,
 ) -> CatalogPortfolio {
     CatalogPortfolio::connected(
-        Arc::new(StoredPortfolioTools::new(
-            Arc::clone(&toss.portfolios),
-            (Arc::clone(repositories), Arc::clone(repositories)),
-            toss.accounts.clone(),
-            directory.clone(),
-        )),
+        Arc::new(
+            StoredPortfolioTools::new(
+                Arc::clone(&toss.portfolios),
+                (Arc::clone(repositories), Arc::clone(repositories)),
+                toss.accounts.clone(),
+                directory.clone(),
+            )
+            .with_sectors(Arc::clone(&toss.sectors)),
+        ),
         directory.clone(),
     )
 }
@@ -1007,9 +1011,17 @@ fn product_toss(
         Arc::clone(events),
     )
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let shared_broker = Arc::new(broker);
+    let sectors = Arc::new(src_tauri::sector_classes::SectorClasses::new(
+        Arc::new(src_tauri::sector_classes::MarketSectorFeed(Arc::clone(
+            &shared_broker,
+        ))),
+        Arc::<platform_macos::SystemClock>::clone(clock),
+    ));
     Ok(ProductToss {
         secrets,
-        broker: Arc::new(broker),
+        sectors,
+        broker: shared_broker,
         portfolios: Arc::new(store_sqlite::SqlitePortfolioStore::new(
             repositories.as_ref().clone(),
         )),

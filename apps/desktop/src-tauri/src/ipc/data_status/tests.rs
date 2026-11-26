@@ -79,16 +79,17 @@ impl ScheduleControl for AllJobs {
         &self,
         job: ScheduledJobId,
     ) -> BoxFuture<'_, Result<Vec<JobRunEntry>, SystemPortError>> {
-        let runs = match job {
-            ScheduledJobId::PortfolioSync => vec![
+        let runs = if job == ScheduledJobId::PortfolioSync {
+            vec![
                 entry(
                     "portfolio_sync",
                     1_795_476_600,
                     JobRunResult::Failed(JobFailureKind::StorageFailure),
                 ),
                 entry("portfolio_sync", 1_795_476_300, executed()),
-            ],
-            _ => Vec::new(),
+            ]
+        } else {
+            Vec::new()
         };
         Box::pin(std::future::ready(Ok(runs)))
     }

@@ -90,14 +90,23 @@ impl<'a, Repository: PortfolioRepository, Market: MarketDataRepository>
 #[derive(Debug)]
 pub struct GetAllocationView<'a, Repository, Market> {
     portfolio: GetPortfolioView<'a, Repository, Market>,
+    assignments: SectorAssignments,
 }
 impl<'a, Repository: PortfolioRepository, Market: MarketDataRepository>
     GetAllocationView<'a, Repository, Market>
 {
     #[must_use]
-    pub const fn new(repository: &'a Repository, market: &'a Market) -> Self {
+    pub fn new(repository: &'a Repository, market: &'a Market) -> Self {
         Self {
             portfolio: GetPortfolioView::new(repository, market),
+            assignments: SectorAssignments::default(),
+        }
+    }
+    #[must_use]
+    pub fn with_assignments(self, assignments: SectorAssignments) -> Self {
+        Self {
+            portfolio: self.portfolio,
+            assignments,
         }
     }
     pub async fn execute(
@@ -108,13 +117,13 @@ impl<'a, Repository: PortfolioRepository, Market: MarketDataRepository>
             StoredView::Missing => return Ok(StoredView::Missing),
             StoredView::Recorded(value) => value,
         };
-        let assignments = SectorAssignments::default();
+        let assignments = &self.assignments;
         let outcome = match view.outcome {
             SyncOutcome::Complete(value) => {
-                SyncOutcome::Complete(Allocation::new(&value, &assignments))
+                SyncOutcome::Complete(Allocation::new(&value, assignments))
             }
             SyncOutcome::Partial(value) => {
-                SyncOutcome::Partial(Allocation::new(&value, &assignments))
+                SyncOutcome::Partial(Allocation::new(&value, assignments))
             }
             SyncOutcome::Failed => SyncOutcome::Failed,
             SyncOutcome::AccessBlocked => SyncOutcome::AccessBlocked,

@@ -19,6 +19,7 @@ pub mod platform;
 pub mod ports;
 pub mod product_events;
 pub mod product_ports;
+pub mod sector_classes;
 mod security;
 pub mod signal_flow;
 pub mod sqlite_ports;
