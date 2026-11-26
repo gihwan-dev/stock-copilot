@@ -147,6 +147,12 @@ impl CalendarDate {
             remaining.min(i64::from(*limit.as_u32()).saturating_sub(1)),
         )))
     }
+    pub(crate) fn days_before(self, count: u16) -> Self {
+        Self(
+            self.0
+                .saturating_sub(SignedDuration::days(i64::from(count))),
+        )
+    }
     pub(crate) fn inspection_predecessor(self) -> Self {
         Self(self.0.saturating_sub(SignedDuration::days(1)))
     }

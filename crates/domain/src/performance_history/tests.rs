@@ -270,3 +270,18 @@ fn dollar_cash_is_converted_at_each_days_rate() {
     assert_eq!(values, ["13000", "13000"]);
     assert_eq!(performance.twr().to_string(), "0.000000");
 }
+
+#[test]
+fn the_window_ends_on_the_last_valued_day_and_spans_the_requested_days() {
+    use super::{PerformanceSpan, last_valuation_date, performance_window, window_dates};
+    assert_eq!(last_valuation_date(at(40, 7)), Ok(date(40)));
+    assert_eq!(last_valuation_date(at(40, 6)), Ok(date(39)));
+    let month = performance_window(at(40, 8), PerformanceSpan::OneMonth).expect("기간");
+    assert_eq!((month.from(), month.to()), (date(10), date(40)));
+    let dates = window_dates(month);
+    assert_eq!(dates.len(), 31);
+    assert_eq!(dates.first(), Some(&date(10)));
+    assert_eq!(dates.last(), Some(&date(40)));
+    let year = performance_window(at(400, 8), PerformanceSpan::OneYear).expect("기간");
+    assert_eq!(year.from(), date(35));
+}

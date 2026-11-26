@@ -10,6 +10,53 @@ use crate::{
 };
 use rust_decimal::Decimal;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PerformanceSpan {
+    OneMonth,
+    ThreeMonths,
+    SixMonths,
+    OneYear,
+}
+impl PerformanceSpan {
+    const fn days(self) -> u16 {
+        match self {
+            Self::OneMonth => 30,
+            Self::ThreeMonths => 91,
+            Self::SixMonths => 182,
+            Self::OneYear => 365,
+        }
+    }
+}
+
+pub fn last_valuation_date(now: Timestamp) -> Result<CalendarDate, SnapshotError> {
+    let today = crate::valuation_snapshot_calendar::kst_date(now)?;
+    if valuation_time(today) <= now {
+        Ok(today)
+    } else {
+        Ok(today.inspection_predecessor())
+    }
+}
+
+pub fn performance_window(
+    now: Timestamp,
+    span: PerformanceSpan,
+) -> Result<SettlementWindow, SnapshotError> {
+    let end = last_valuation_date(now)?;
+    SettlementWindow::try_new(end.days_before(span.days()), end)
+        .map_err(|_error| SnapshotError::WrongPeriod)
+}
+
+#[must_use]
+pub fn window_dates(window: SettlementWindow) -> Vec<CalendarDate> {
+    let mut dates = Vec::new();
+    let mut day = window.from();
+    while day <= window.to() && dates.len() < 4096 {
+        dates.push(day);
+        day = day.inspection_successor();
+    }
+    dates
+}
+
 pub fn settled_cash_through(
     rows: &SettledRowSet,
     currency: Currency,

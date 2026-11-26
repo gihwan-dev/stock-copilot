@@ -422,8 +422,9 @@ pub use benchmark::{BenchmarkDividends, BenchmarkKind, BenchmarkObservation, Ben
 mod performance_contract;
 mod performance_history;
 pub use performance_history::{
-    WindowDay, WindowLedger, day_price_evidence, derived_window_ledger, performance_max_drawdown,
-    recompute_window_day, settled_cash_through,
+    PerformanceSpan, WindowDay, WindowLedger, day_price_evidence, derived_window_ledger,
+    last_valuation_date, performance_max_drawdown, performance_window, recompute_window_day,
+    settled_cash_through, window_dates,
 };
 mod performance_risk;
 pub use performance_risk::{
