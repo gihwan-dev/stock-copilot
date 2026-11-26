@@ -83,6 +83,10 @@ pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
         "0025_ai_preferences.sql",
         crate::sql::ai_preferences::CREATE,
     ),
+    (
+        "0026_segye_finance_source.sql",
+        crate::sql::status::MIGRATE_0026,
+    ),
 ];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {

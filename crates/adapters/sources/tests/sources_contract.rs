@@ -123,9 +123,9 @@ mod tests {
 
     #[test]
     fn registry_covers_every_http_source_hosts_and_intervals() {
-        assert_eq!(SourceRegistry::all().len(), 16);
-        assert_eq!(HttpDataSource::ALL.len(), 16);
-        assert_eq!(RateLimitBucket::ALL.len(), 14);
+        assert_eq!(SourceRegistry::all().len(), 17);
+        assert_eq!(HttpDataSource::ALL.len(), 17);
+        assert_eq!(RateLimitBucket::ALL.len(), 15);
         assert_eq!(
             HttpDataSource::try_from_data_source(DataSource::WebSearch),
             None
@@ -701,6 +701,7 @@ mod tests {
             "www.hankyung.com",
             "www.mk.co.kr",
             "www.sec.gov",
+            "www.segyefn.com",
             "www.yna.co.kr",
         ]);
         assert_eq!(allowed, expected);
@@ -934,7 +935,7 @@ mod tests {
             ))
             .expect("sec record");
 
-        assert_eq!(rt.block_on(reader.list()).expect("list").len(), 17);
+        assert_eq!(rt.block_on(reader.list()).expect("list").len(), 18);
         assert_eq!(
             rx.try_iter().collect::<Vec<_>>(),
             vec![

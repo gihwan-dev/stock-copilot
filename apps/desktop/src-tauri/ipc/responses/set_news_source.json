@@ -43,6 +43,12 @@
       "interval_minutes": "10"
     },
     {
+      "source": "SegyeFinance",
+      "state": "on",
+      "body_reading": "locked",
+      "interval_minutes": "10"
+    },
+    {
       "source": "GoogleNews",
       "state": "on",
       "body_reading": "locked",

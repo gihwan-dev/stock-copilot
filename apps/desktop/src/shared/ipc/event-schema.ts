@@ -68,6 +68,7 @@ const newsSourceSchema = z.enum([
   "Maekyung",
   "Yonhap",
   "Edaily",
+  "SegyeFinance",
   "BankOfKorea",
   "FederalReserve",
   "GoogleNews",

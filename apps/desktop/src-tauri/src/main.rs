@@ -1483,7 +1483,8 @@ const fn press_target(source: sources::PressMacroSource) -> application::Collect
         sources::PressMacroSource::Hankyung => application::CollectionTarget::HankyungRss,
         sources::PressMacroSource::Maekyung
         | sources::PressMacroSource::Yonhap
-        | sources::PressMacroSource::Edaily => application::CollectionTarget::PressRss,
+        | sources::PressMacroSource::Edaily
+        | sources::PressMacroSource::SegyeFinance => application::CollectionTarget::PressRss,
         sources::PressMacroSource::BankOfKorea | sources::PressMacroSource::FederalReserve => {
             application::CollectionTarget::CentralBankRss
         }
@@ -2434,7 +2435,7 @@ mod tests {
             .iter()
             .map(|feed| (feed.target, feed.regular.source()))
             .collect();
-        assert_eq!(sources.len(), 10);
+        assert_eq!(sources.len(), 11);
         assert!(sources.contains(&(
             CollectionTarget::HankyungRss,
             FeedSource::News(domain::NewsSource::Hankyung)

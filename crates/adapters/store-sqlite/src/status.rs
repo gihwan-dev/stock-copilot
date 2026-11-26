@@ -42,6 +42,7 @@ const fn source_name(source: DataSource) -> &'static str {
         DataSource::Maekyung => "maekyung",
         DataSource::Yonhap => "yonhap",
         DataSource::Edaily => "edaily",
+        DataSource::SegyeFinance => "segye_finance",
         DataSource::GoogleNews => "google_news",
         DataSource::WebSearch => "web_search",
         DataSource::YahooFinance => "yahoo_finance",

@@ -27,16 +27,18 @@ pub enum PressMacroSource {
     Maekyung,
     Yonhap,
     Edaily,
+    SegyeFinance,
     BankOfKorea,
     FederalReserve,
 }
 
 impl PressMacroSource {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Hankyung,
         Self::Maekyung,
         Self::Yonhap,
         Self::Edaily,
+        Self::SegyeFinance,
         Self::BankOfKorea,
         Self::FederalReserve,
     ];
@@ -48,6 +50,7 @@ impl PressMacroSource {
             Self::Maekyung => NewsSource::Maekyung,
             Self::Yonhap => NewsSource::Yonhap,
             Self::Edaily => NewsSource::Edaily,
+            Self::SegyeFinance => NewsSource::SegyeFinance,
             Self::BankOfKorea => NewsSource::BankOfKorea,
             Self::FederalReserve => NewsSource::FederalReserve,
         }
@@ -60,6 +63,7 @@ impl PressMacroSource {
             Self::Maekyung => HttpDataSource::Maekyung,
             Self::Yonhap => HttpDataSource::Yonhap,
             Self::Edaily => HttpDataSource::Edaily,
+            Self::SegyeFinance => HttpDataSource::SegyeFinance,
             Self::BankOfKorea => HttpDataSource::BankOfKorea,
             Self::FederalReserve => HttpDataSource::FederalReserve,
         }
@@ -75,6 +79,7 @@ impl PressMacroSource {
                 "https://www.yna.co.kr/rss/economy.xml",
             ],
             Self::Edaily => &["https://rss.edaily.co.kr/stock_news.xml"],
+            Self::SegyeFinance => &["https://www.segyefn.com/views/rss/stock.xml"],
             Self::BankOfKorea => {
                 &["https://www.bok.or.kr/portal/bbs/B0000552/news.rss?menuNo=200690"]
             }

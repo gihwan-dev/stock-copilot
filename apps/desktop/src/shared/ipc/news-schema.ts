@@ -11,6 +11,7 @@ const newsSources = [
   "Maekyung",
   "Yonhap",
   "Edaily",
+  "SegyeFinance",
   "GoogleNews",
   "YahooFinance",
   "SecEdgar",
@@ -28,6 +29,7 @@ export type NewsSource =
   | "Maekyung"
   | "Yonhap"
   | "Edaily"
+  | "SegyeFinance"
   | "GoogleNews"
   | "YahooFinance"
   | "SecEdgar"
