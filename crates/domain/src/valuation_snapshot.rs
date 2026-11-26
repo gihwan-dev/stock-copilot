@@ -63,6 +63,10 @@ impl SnapshotInstrumentHistory {
         Ok(self.identity.with_historical_symbol(symbol))
     }
     #[must_use]
+    pub(crate) fn candles(&self) -> &[Candle] {
+        &self.candles
+    }
+    #[must_use]
     pub const fn identity(&self) -> &LotIdentity {
         &self.identity
     }

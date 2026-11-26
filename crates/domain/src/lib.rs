@@ -420,6 +420,11 @@ pub use performance_arithmetic::PerformanceValue;
 mod benchmark;
 pub use benchmark::{BenchmarkDividends, BenchmarkKind, BenchmarkObservation, BenchmarkSeries};
 mod performance_contract;
+mod performance_history;
+pub use performance_history::{
+    WindowDay, WindowLedger, day_price_evidence, derived_window_ledger, performance_max_drawdown,
+    recompute_window_day, settled_cash_through,
+};
 mod performance_risk;
 pub use performance_risk::{
     BetaMetric, PerformanceBeta, PerformanceRisk, RiskMetric, performance_beta,
