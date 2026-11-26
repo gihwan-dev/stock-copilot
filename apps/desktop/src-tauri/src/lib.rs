@@ -63,6 +63,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
                 app.try_state::<ai_runtime::ChatTurnBook>()
                     .map(|book| book.inner().clone()),
             );
+            let _login_items = platform::autostart::install(app, &ports.events);
             app.manage(ports);
             let _scheduling = platform::scheduling::start_background::<R, P>(app);
             let shutdown_hook = database_shutdown_hook(app, shared_database);
@@ -205,9 +206,14 @@ fn show_prepared_main<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), tauri
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| tauri::Error::AssetNotFound("main-window".into()))?;
-    window.show()?;
-    platform::residency::record_main_shown(app);
-    Ok(())
+    match platform::autostart::launch_mode(app) {
+        platform::autostart::LaunchMode::LoginBackground => Ok(()),
+        platform::autostart::LaunchMode::Interactive => {
+            window.show()?;
+            platform::residency::record_main_shown(app);
+            Ok(())
+        }
+    }
 }
 
 pub fn run_app<R: Runtime, Finish>(app: App<R>, finish: Finish)

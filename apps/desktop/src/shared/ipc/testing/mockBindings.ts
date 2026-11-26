@@ -18,6 +18,10 @@ export const commands = {
     typedError<UiOrderSwitchOutcome, IpcError>(
       __TAURI_INVOKE("set_order_permission", { request }),
     ),
+  setAutoStart: (request: SetAutoStartRequest) =>
+    typedError<UiAutoStartView, IpcError>(
+      __TAURI_INVOKE("set_auto_start", { request }),
+    ),
   sendChatMessage: (
     request: SendChatMessageRequest_Deserialize,
     onChunk: Channel<ChatChunkEvent_Deserialize>,
@@ -908,6 +912,10 @@ export type SetAliasesRequest = {
   aliases: UiAliasInput[];
 };
 
+export type SetAutoStartRequest = {
+  state: UiAutoStartChoice;
+};
+
 export type SetBudgetPercentRequest = {
   percent: UiBudgetPercent;
 };
@@ -1089,6 +1097,12 @@ export type UiAllocationRow = {
 export type UiAllocationView = {
   instruments: UiAllocationRow[];
   concentration: UiConcentration;
+};
+
+export type UiAutoStartChoice = "on" | "off";
+
+export type UiAutoStartView = {
+  auto_start_at_login: UiToggleState;
 };
 
 export type UiBackupResult = {
@@ -2807,6 +2821,9 @@ export type MockCommandHandlers = {
   setOrderPermission: (args: {
     request: SetOrderPermissionRequest;
   }) => UiOrderSwitchOutcome | Promise<UiOrderSwitchOutcome>;
+  setAutoStart: (args: {
+    request: SetAutoStartRequest;
+  }) => UiAutoStartView | Promise<UiAutoStartView>;
   sendChatMessage: (args: {
     request: SendChatMessageRequest_Deserialize;
     onChunk: Channel<ChatChunkEvent_Deserialize>;
@@ -3005,6 +3022,12 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.setOrderPermission,
             "set_order_permission",
+            args,
+          );
+        case "set_auto_start":
+          return mockCommandHandler(
+            mockHandlers.setAutoStart,
+            "set_auto_start",
             args,
           );
         case "send_chat_message":

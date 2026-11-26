@@ -582,6 +582,7 @@ export const responses = {
     ],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
   },
+  setAutoStart: { auto_start_at_login: "off" },
   setBudgetPercent: {
     budget_percent: "70",
     claude_config_dir: null,

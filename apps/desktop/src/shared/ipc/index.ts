@@ -200,6 +200,7 @@ export {
   saveOrderSettings,
 } from "./risk-call";
 export { getSelfCheck, getStatus } from "./status-call";
+export { setAutoStart } from "./autostart-call";
 export {
   getDataStatus,
   type DataJob,

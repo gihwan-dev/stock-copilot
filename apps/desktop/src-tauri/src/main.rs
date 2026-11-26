@@ -950,6 +950,46 @@ fn holdings_listener(
     )
 }
 
+fn installed_bundle() -> Option<PathBuf> {
+    let executable = std::env::current_exe().ok()?;
+    let bundle = executable.parent()?.parent()?.parent()?;
+    bundle
+        .extension()
+        .filter(|extension| *extension == "app")
+        .map(|_app| bundle.to_path_buf())
+}
+
+fn prepare_login_start(app: &tauri::App<tauri::Wry>) {
+    use src_tauri::platform::autostart::{
+        LOGIN_ARGUMENT, LaunchAgentAutostart, LaunchMode, LoginItemsSetup,
+    };
+    let launched = tauri::Manager::env(app);
+    let mode = if launched
+        .args_os
+        .iter()
+        .any(|argument| argument == LOGIN_ARGUMENT)
+    {
+        LaunchMode::LoginBackground
+    } else {
+        LaunchMode::Interactive
+    };
+    let _mode = tauri::Manager::manage(app, mode);
+    let found = (
+        std::env::var_os("HOME").map(PathBuf::from),
+        installed_bundle(),
+        tauri::Manager::path(app).app_data_dir().ok(),
+    );
+    if let (Some(home), Some(bundle), Some(data_dir)) = found {
+        let _setup = tauri::Manager::manage(
+            app,
+            LoginItemsSetup {
+                port: LaunchAgentAutostart::in_home(&home, bundle),
+                data_dir,
+            },
+        );
+    }
+}
+
 fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
@@ -962,6 +1002,7 @@ fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Er
     match single_instance {
         InstanceAcquisition::Primary(guard) => {
             let _managed = tauri::Manager::manage(&app, InstanceSlot::holding(guard));
+            prepare_login_start(&app);
             start_updates(app.handle());
             start_toss_check(app.handle());
             run_app(app, |handle, code| handle.exit(code.as_i32()));

@@ -2,7 +2,7 @@ use tauri::Runtime;
 use tauri_specta::{Builder, Commands, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
-    ai_settings, app_version, briefing, chat, data_status, instruments, news_settings,
+    ai_settings, app_version, autostart, briefing, chat, data_status, instruments, news_settings,
     open_external, order_approval, portfolio, public_ip, risk_editor, schedule, scorecard,
     self_check, settings, signals, system_data, thesis, toss, transactions, updates,
 };
@@ -16,6 +16,7 @@ fn product_commands<R: Runtime>() -> Commands<R> {
         app_version::app_version::<tauri::Wry>,
         settings::get_settings::<tauri::Wry>,
         settings::set_order_permission::<tauri::Wry>,
+        autostart::set_auto_start::<tauri::Wry>,
         chat::send_chat_message::<tauri::Wry>,
         chat::get_chat_history::<tauri::Wry>,
         chat::resubscribe_chat_turn::<tauri::Wry>,
