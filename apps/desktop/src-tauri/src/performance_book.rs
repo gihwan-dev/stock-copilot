@@ -398,6 +398,36 @@ impl PerformanceBook {
         .await
     }
 
+    pub async fn record_day_from_closes<Store>(
+        &self,
+        store: &Store,
+        account: &AccountId,
+        now: Timestamp,
+    ) -> Result<(), String>
+    where
+        Store: SettledRowsSource + application::ValuationRepository,
+    {
+        let date = domain::last_valuation_date(now).map_err(|error| format!("{error:?}"))?;
+        let snapshot = self
+            .recompute_day(store, account, date)
+            .await
+            .map_err(|error| format!("closes:{error:?}"))?;
+        let _recorded = store
+            .append(account, &snapshot)
+            .await
+            .map_err(|error| format!("storage:{error:?}"))?;
+        crate::diagnostics_log::record(&application::DiagnosticEvent::Job(
+            application::JobDiagnosis {
+                job: application::DiagnosticText::new("daily_valuation_snapshot"),
+                note: application::JobRunNote::Executed {
+                    summary: application::DiagnosticText::new("recorded-from-session-closes"),
+                    processed: application::JobItemCount::new(1),
+                },
+            },
+        ));
+        Ok(())
+    }
+
     pub async fn refresh<Rows: SettledRowsSource>(&self, rows: &Rows, account: &AccountId) {
         let Ok(_running) = self.running.try_lock() else {
             return;

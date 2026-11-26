@@ -57,33 +57,14 @@ impl<R: Runtime, P: PortTypes> AppStoredJobs<R, P> {
         account: &domain::AccountId,
         now: Timestamp,
     ) -> Result<(), JobError> {
-        use application::ValuationRepository as _;
         let book = self
             .app
             .try_state::<Arc<crate::performance_book::PerformanceBook>>()
             .map(|state| Arc::clone(state.inner()))
             .ok_or_else(|| JobError::PortUnavailable(String::from("valuation-closes")))?;
-        let date = domain::last_valuation_date(now)
-            .map_err(|error| JobError::ExecutionFailed(format!("{error:?}")))?;
-        let snapshot = book
-            .recompute_day(&self.repositories, account, date)
+        book.record_day_from_closes(&self.repositories, account, now)
             .await
-            .map_err(|error| JobError::ExecutionFailed(format!("closes:{error:?}")))?;
-        let _recorded = self
-            .repositories
-            .append(account, &snapshot)
-            .await
-            .map_err(storage)?;
-        crate::diagnostics_log::record(&application::DiagnosticEvent::Job(
-            application::JobDiagnosis {
-                job: application::DiagnosticText::new("daily_valuation_snapshot"),
-                note: application::JobRunNote::Executed {
-                    summary: application::DiagnosticText::new("recorded-from-session-closes"),
-                    processed: application::JobItemCount::new(1),
-                },
-            },
-        ));
-        Ok(())
+            .map_err(JobError::ExecutionFailed)
     }
 
     fn refresh_performance(&self) {
@@ -350,7 +331,7 @@ impl<R: Runtime, P: PortTypes> BriefingPort for AppStoredJobs<R, P> {
 }
 
 impl<R: Runtime, P: PortTypes> DailyValuationPort for AppStoredJobs<R, P> {
-    async fn record_today(&self, _now: Timestamp) -> Result<(), JobError> {
+    async fn record_today(&self, now: Timestamp) -> Result<(), JobError> {
         let ports = self.ports()?;
         let unavailable = |_error| JobError::PortUnavailable(String::from("market-calendar"));
         let kr = ports
@@ -378,8 +359,7 @@ impl<R: Runtime, P: PortTypes> DailyValuationPort for AppStoredJobs<R, P> {
             let outcome = match observed {
                 Ok(_report) => Ok(()),
                 Err(error) if price_basis_gap(&error) == PriceBasisGap::UseSessionCloses => {
-                    self.record_from_closes(account, application::Clock::now(ports.clock.as_ref()))
-                        .await
+                    self.record_from_closes(account, now).await
                 }
                 Err(error) => Err(JobError::ExecutionFailed(format!("{error:?}"))),
             };
