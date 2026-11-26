@@ -109,13 +109,27 @@ mod tests {
     }
 
     #[test]
-    fn advisor_prompt_sets_a_length_budget_by_question_kind() {
+    fn advisor_prompt_follows_the_answer_mode_the_app_sets() {
         assert_pins(&[
-            "먼저 질문 종류를 정한다",
-            "세 문장 이하로 답한다. 표, 제목, 목록을 쓰지 않는다",
+            "`[answer_mode:short]` 또는 `[answer_mode:plan]`",
+            "모든 답의 첫 문장은 질문에 대한 결론이다",
+            "세 문장 이하로 답한다. 표, 제목, 목록, \"지켜볼 것\"을 쓰지 않는다",
+            "\"원하시면 짜 드리겠습니다\"처럼 미루지 않는다",
             "전체 15줄을 넘기지 않는다",
             "매매를 억지로 만들지 않는다",
-            "묻지 않은 계획을 덧붙이지 않는다",
+        ]);
+    }
+
+    #[test]
+    fn advisor_prompt_applies_principles_and_margins_to_the_whole_plan() {
+        assert_pins(&[
+            "원칙은 제안 전체에 적용한다",
+            "원칙을 다르게 해석하지 않는다",
+            "원칙 점검(최소 종목 수, 현금 하한)이 미달이면 안을 고쳐 다시 계산한다",
+            "한도보다 2~3%p 낮은 비중을 목표로",
+            "2~3회로 나누고 회차별 수량과 시점",
+            "줄일 금액과 옮겨 담을 구체 상품",
+            "주문 부탁에는 제안이 있든 없든 판단 한 문장을 붙인다",
         ]);
     }
 

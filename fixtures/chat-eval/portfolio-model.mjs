@@ -484,6 +484,7 @@ export const appSimulate = (scenario, args) => {
     total_after: null,
     cash_after: [],
     instruments: [],
+    principles: null,
   });
   const book = new Map(
     account.holdings.map((holding) => [`${holding.market}-${holding.symbol}`, { ...holding }]),
@@ -551,9 +552,23 @@ export const appSimulate = (scenario, args) => {
       };
     })
     .sort((left, right) => Number(right.weight_after) - Number(left.weight_after));
+  const principles = scenario.principles ?? {
+    cash_min_percent: "10",
+    concentration_min_count: "5",
+  };
+  const cashPercent = (cashKrw / total) * 100;
+  const holdingsAfter = instruments.length;
   return {
     outcome: "simulated",
     problem_symbol: null,
+    principles: {
+      holdings_after: String(holdingsAfter),
+      minimum_holdings: String(principles.concentration_min_count),
+      holdings: holdingsAfter >= Number(principles.concentration_min_count) ? "met" : "below",
+      cash_percent_after: cashPercent.toFixed(2),
+      minimum_cash_percent: Number(principles.cash_min_percent).toFixed(2),
+      cash: cashPercent >= Number(principles.cash_min_percent) ? "met" : "below",
+    },
     fills,
     total_after: money(total, "KRW"),
     cash_after: Object.entries(cash)

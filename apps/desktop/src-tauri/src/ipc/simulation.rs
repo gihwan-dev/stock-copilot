@@ -6,12 +6,15 @@ use domain::{
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use super::error::IpcError;
 use super::portfolio::{
     UiMoney, UiWeightLevel, display_name, level, managed, percent, stored, ui_money, view_outcome,
     weight_text,
+};
+use super::system_data::{
+    SystemDataIpcState, UiCashMinPercent, UiConcentrationCount, UiPrinciples, load_principles,
 };
 use crate::holdings_link::InstrumentDirectory;
 
@@ -110,6 +113,24 @@ pub struct UiCashAfter {
     pub weight: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum UiPrincipleStatus {
+    #[serde(rename = "met")]
+    Met,
+    #[serde(rename = "below")]
+    Below,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiPrincipleCheck {
+    pub holdings_after: String,
+    pub minimum_holdings: String,
+    pub holdings: UiPrincipleStatus,
+    pub cash_percent_after: String,
+    pub minimum_cash_percent: String,
+    pub cash: UiPrincipleStatus,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct UiTradeSimulation {
     pub outcome: UiSimulationOutcome,
@@ -118,6 +139,7 @@ pub struct UiTradeSimulation {
     pub total_after: Option<UiMoney>,
     pub cash_after: Vec<UiCashAfter>,
     pub instruments: Vec<UiSimulatedInstrument>,
+    pub principles: Option<UiPrincipleCheck>,
 }
 
 pub(crate) const fn ui_kind(kind: FundKind) -> UiFundKind {
@@ -189,6 +211,7 @@ fn failure(outcome: UiSimulationOutcome, symbol: Option<&Symbol>) -> UiTradeSimu
         total_after: None,
         cash_after: Vec::new(),
         instruments: Vec::new(),
+        principles: None,
     }
 }
 
@@ -328,11 +351,76 @@ fn fill_rows(fills: &[domain::SimulatedFill]) -> Vec<UiSimulatedFill> {
         .collect()
 }
 
+const fn minimum_holdings(count: UiConcentrationCount) -> usize {
+    match count {
+        UiConcentrationCount::Three => 3_usize,
+        UiConcentrationCount::Four => 4_usize,
+        UiConcentrationCount::Five => 5_usize,
+        UiConcentrationCount::Six => 6_usize,
+        UiConcentrationCount::Eight => 8_usize,
+        UiConcentrationCount::Ten => 10_usize,
+    }
+}
+
+const fn minimum_cash_units(percent: UiCashMinPercent) -> u32 {
+    match percent {
+        UiCashMinPercent::Zero => 0_u32,
+        UiCashMinPercent::Five => 500_u32,
+        UiCashMinPercent::Ten => 1_000_u32,
+        UiCashMinPercent::Twenty => 2_000_u32,
+        UiCashMinPercent::Thirty => 3_000_u32,
+    }
+}
+
+const fn status(met: std::cmp::Ordering) -> UiPrincipleStatus {
+    match met {
+        std::cmp::Ordering::Less => UiPrincipleStatus::Below,
+        std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => UiPrincipleStatus::Met,
+    }
+}
+
+fn units_text(units: u32) -> String {
+    let whole = units.checked_div(100_u32).unwrap_or(0_u32);
+    let part = units.checked_rem(100_u32).unwrap_or(0_u32);
+    format!("{whole}.{part:02}")
+}
+
+fn principle_check(after: &Allocation, principles: &UiPrinciples) -> UiPrincipleCheck {
+    let live = entries_of(after)
+        .iter()
+        .filter(|entry| entry.display().range() != AllocationDisplayRange::Zero);
+    let holdings = live
+        .clone()
+        .filter(|entry| matches_holding(entry.key()) == UiPrincipleStatus::Met)
+        .count();
+    let cash_units = live
+        .filter(|entry| matches_holding(entry.key()) == UiPrincipleStatus::Below)
+        .map(|entry| entry.display().units().as_u32())
+        .fold(0_u32, u32::saturating_add);
+    let minimum = minimum_holdings(principles.concentration_min_count);
+    let floor = minimum_cash_units(principles.cash_min_percent);
+    UiPrincipleCheck {
+        holdings_after: holdings.to_string(),
+        minimum_holdings: minimum.to_string(),
+        holdings: status(holdings.cmp(&minimum)),
+        cash_percent_after: units_text(cash_units),
+        minimum_cash_percent: units_text(floor),
+        cash: status(cash_units.cmp(&floor)),
+    }
+}
+
+const fn matches_holding(key: &AssetInstrument) -> UiPrincipleStatus {
+    match key {
+        AssetInstrument::Holding(_) => UiPrincipleStatus::Met,
+        AssetInstrument::Cash(_) => UiPrincipleStatus::Below,
+    }
+}
+
 pub(crate) fn simulated_view(
     before: &Allocation,
     trades: &[SimulatedTrade],
     directory: &InstrumentDirectory,
-    profile: &InvestorProfile,
+    (profile, principles): (&InvestorProfile, Option<&UiPrinciples>),
 ) -> UiTradeSimulation {
     let result = match domain::simulate_trades(before.valuation(), trades) {
         Ok(result) => result,
@@ -361,6 +449,7 @@ pub(crate) fn simulated_view(
         total_after: ui_money(&total_after),
         cash_after: cash_rows(&after, result.valuation()),
         instruments: instrument_rows(&inputs),
+        principles: principles.map(|found| principle_check(&after, found)),
     }
 }
 
@@ -388,5 +477,14 @@ pub async fn simulate_trades<R: Runtime>(
         .ok()
         .and_then(|loaded| loaded.profile)
         .unwrap_or_else(InvestorProfile::default);
-    Ok(simulated_view(allocation, &trades, &directory, &profile))
+    let principles = match app.try_state::<SystemDataIpcState>() {
+        Some(state) => load_principles(state.inner()).await.ok(),
+        None => None,
+    };
+    Ok(simulated_view(
+        allocation,
+        &trades,
+        &directory,
+        (&profile, principles.as_ref()),
+    ))
 }

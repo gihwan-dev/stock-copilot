@@ -1250,8 +1250,13 @@ const fn topic_label(topic: CollectionTopic) -> &'static str {
 }
 
 pub(crate) fn format_resumed_prompt(history: &ChatHistory, message: &UntrustedText) -> String {
+    let tagged = format!(
+        "{}\n{}",
+        application::chat_answer_mode(message).as_tag(),
+        message.as_untrusted_str()
+    );
     if history.messages().is_empty() {
-        return String::from(message.as_untrusted_str());
+        return tagged;
     }
     let mut combined = String::from("<conversation_history>\n");
     for entry in history.messages() {
@@ -1265,7 +1270,7 @@ pub(crate) fn format_resumed_prompt(history: &ChatHistory, message: &UntrustedTe
         combined.push('\n');
     }
     combined.push_str("</conversation_history>\n");
-    combined.push_str(message.as_untrusted_str());
+    combined.push_str(&tagged);
     combined
 }
 

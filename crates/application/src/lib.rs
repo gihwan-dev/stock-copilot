@@ -670,6 +670,8 @@ pub use investment_principles::{
     ApplyInvestmentPrinciples, PrinciplesRepository, UpdateInvestmentPrinciples,
 };
 
+mod chat_answer_mode;
+pub use chat_answer_mode::{ChatAnswerMode, chat_answer_mode};
 mod chat_number_check;
 pub use chat_number_check::{
     ChatNumberCheck, ChatNumberEvidence, ChatNumberEvidenceSet, NoNumberEvidence,

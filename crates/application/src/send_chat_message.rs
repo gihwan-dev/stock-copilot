@@ -297,6 +297,8 @@ pub fn build_chat_prompt(
             prompt.push_str("]\n");
         }
     }
+    prompt.push_str(crate::chat_answer_mode(message).as_tag());
+    prompt.push('\n');
     prompt.push_str(message.as_untrusted_str());
     AnalysisPrompt::try_new(&prompt)
 }

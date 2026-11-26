@@ -7,11 +7,12 @@ use domain::{
 };
 
 use super::{
-    UiFundKind, UiSimulationOutcome, UiTradeInput, UiTradeMarket, UiTradeSide, parse_trade,
-    simulated_view,
+    UiFundKind, UiPrincipleStatus, UiSimulationOutcome, UiTradeInput, UiTradeMarket, UiTradeSide,
+    parse_trade, simulated_view,
 };
 use crate::holdings_link::InstrumentDirectory;
 use crate::ipc::portfolio::UiWeightLevel;
+use crate::ipc::system_data::{UiCashMinPercent, UiConcentrationCount, UiPrinciples};
 
 fn krw(text: &str) -> Money {
     Money::parse(&NumericInput::try_new(text).expect("입력"), Currency::Krw).expect("금액")
@@ -111,7 +112,7 @@ fn an_empty_plan_reports_current_weights_limits_and_room() {
         &allocation(),
         &[],
         &directory(),
-        &InvestorProfile::default(),
+        (&InvestorProfile::default(), None),
     );
     assert_eq!(view.outcome, UiSimulationOutcome::Simulated);
     let samsung = view
@@ -145,7 +146,12 @@ fn a_sell_and_buy_plan_returns_fills_cash_and_new_weights() {
     .map(|trade| parse_trade(trade, before.valuation(), &lookup))
     .collect::<Option<Vec<_>>>()
     .expect("매매");
-    let view = simulated_view(&before, &trades, &directory(), &InvestorProfile::default());
+    let view = simulated_view(
+        &before,
+        &trades,
+        &directory(),
+        (&InvestorProfile::default(), None),
+    );
     assert_eq!(view.outcome, UiSimulationOutcome::Simulated);
     let amounts: Vec<&str> = view
         .fills
@@ -197,7 +203,7 @@ fn impossible_or_malformed_plans_say_why_without_numbers() {
         &before,
         &oversell,
         &directory(),
-        &InvestorProfile::default(),
+        (&InvestorProfile::default(), None),
     );
     assert_eq!(view.outcome, UiSimulationOutcome::SellExceedsHolding);
     assert_eq!(view.problem_symbol.as_deref(), Some("035720"));
@@ -210,5 +216,39 @@ fn impossible_or_malformed_plans_say_why_without_numbers() {
     assert_eq!(
         parse(&input("999999", UiTradeSide::Buy, "1", Some("1000"))),
         None
+    );
+}
+
+#[test]
+fn principles_are_checked_after_the_plan() {
+    let principles = UiPrinciples {
+        text: String::from("나눠서 산다"),
+        cash_min_percent: UiCashMinPercent::Twenty,
+        concentration_min_count: UiConcentrationCount::Three,
+    };
+    let view = simulated_view(
+        &allocation(),
+        &[],
+        &directory(),
+        (&InvestorProfile::default(), Some(&principles)),
+    );
+    let check = view.principles.expect("원칙 점검");
+    assert_eq!(
+        (
+            check.holdings_after.as_str(),
+            check.minimum_holdings.as_str(),
+            check.holdings,
+            check.cash_percent_after.as_str(),
+            check.minimum_cash_percent.as_str(),
+            check.cash
+        ),
+        (
+            "2",
+            "3",
+            UiPrincipleStatus::Below,
+            "11.20",
+            "20.00",
+            UiPrincipleStatus::Below
+        )
     );
 }
