@@ -5,12 +5,12 @@ use crate::platform::background::{CollectorFuture, CollectorWorker};
 use crate::platform::feed_watch::{SharedHeadlines, WatchedFeed, record_feed};
 use crate::ports::{PortTypes, Ports};
 use application::{
-    Clock, CollectFeed, CollectedObservation, CollectionConditions, CollectionDue,
-    CollectionInputs, CollectionPhase, CollectionPlan, CollectionScheduler, CollectionTarget,
-    DartCallCount, DartDailyUsage, DartKeyState, DataAvailability, FeedCursor, FeedRound,
-    FeedSource, FomcDay, InformationError, NewsDataSettings, NewsDataSettingsRepository, NewsFeed,
-    NewsMetadata, PlanCollectionSchedule, SourceSwitch, SystemPortError, WriteCompleted,
-    collection_due,
+    Clock, CollectFeed, CollectedObservation, CollectionCadence, CollectionConditions,
+    CollectionDue, CollectionInputs, CollectionMinutes, CollectionPhase, CollectionPlan,
+    CollectionScheduler, CollectionTarget, DartCallCount, DartDailyUsage, DartKeyState,
+    DataAvailability, FeedCursor, FeedRound, FeedRoundOutcome, FeedSource, FomcDay,
+    InformationError, NewsDataSettings, NewsDataSettingsRepository, NewsFeed, NewsMetadata,
+    PlanCollectionSchedule, SourceSwitch, SystemPortError, WriteCompleted, collection_due,
 };
 use application::{SecretStore, SourceState, SourceStatusRepository};
 use domain::{DataSource, Timestamp};
@@ -250,6 +250,22 @@ impl ScheduledFeed {
 struct FeedState {
     cursor: FeedCursor,
     last_attempt: Option<Timestamp>,
+    failures: u8,
+}
+
+pub const FAILURES_BEFORE_BACKOFF: u8 = 3;
+pub const BACKOFF_MINUTES: u16 = 360;
+
+fn effective_cadence(planned: CollectionCadence, failures: u8) -> CollectionCadence {
+    match (planned, failures >= FAILURES_BEFORE_BACKOFF) {
+        (CollectionCadence::Every(minutes), true) => {
+            match CollectionMinutes::try_new(BACKOFF_MINUTES) {
+                Ok(backoff) if backoff > minutes => CollectionCadence::Every(backoff),
+                Ok(_) | Err(_) => planned,
+            }
+        }
+        (cadence, _) => cadence,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -292,6 +308,7 @@ impl FeedCollectorWorker {
             .map(|_feed| FeedState {
                 cursor: FeedCursor::Start,
                 last_attempt: None,
+                failures: 0,
             })
             .collect();
         Self {
@@ -315,7 +332,8 @@ impl FeedCollectorWorker {
                 continue;
             }
             let now = self.inner.clock.now();
-            match collection_due(plan.cadence(feed.target), state.last_attempt, now) {
+            let cadence = effective_cadence(plan.cadence(feed.target), state.failures);
+            match collection_due(cadence, state.last_attempt, now) {
                 CollectionDue::Now => {}
                 CollectionDue::At(_) | CollectionDue::Off => continue,
             }
@@ -329,8 +347,19 @@ impl FeedCollectorWorker {
             report.attempted = report.attempted.saturating_add(1);
             state.last_attempt = Some(now);
             match runner.collect(state.cursor.clone()).await {
-                Ok(round) => state.cursor = round.cursor,
-                Err(_error) => report.failed = report.failed.saturating_add(1),
+                Ok(round) => {
+                    state.failures = match round.outcome {
+                        FeedRoundOutcome::SourceFailed => state.failures.saturating_add(1),
+                        FeedRoundOutcome::Collected
+                        | FeedRoundOutcome::NoData
+                        | FeedRoundOutcome::NotConfigured => 0,
+                    };
+                    state.cursor = round.cursor;
+                }
+                Err(_error) => {
+                    state.failures = state.failures.saturating_add(1);
+                    report.failed = report.failed.saturating_add(1);
+                }
             }
         }
         report
@@ -445,7 +474,11 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed + 'static> FeedRunner for AppFeedRunn
             .with_times(&times)
             .collect(&watched, cursor)
             .await;
-            record_feed(watched.diagnosis(&round, times.linked()).await);
+            record_feed(
+                watched
+                    .diagnosis(&round, times.linked(), times.probe())
+                    .await,
+            );
             round
         })
     }

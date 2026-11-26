@@ -263,7 +263,7 @@ pub use clock::Clock;
 mod diagnostics;
 pub use diagnostics::{
     BrokerCall, CallMethod, CallResult, DiagnosticEvent, DiagnosticText, DiagnosticsSink,
-    FeedDiagnosis, FeedFailure, FeedRunResult, HttpStatusCode, JobDiagnosis, JobRunNote,
+    FeedDiagnosis, FeedFailure, FeedRunResult, HttpStatusCode, JobDiagnosis, JobRunNote, LinkProbe,
     SourceCall, SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult, TokenIssue,
     TransportFailure, failure_reason, sync_failure_reason,
 };

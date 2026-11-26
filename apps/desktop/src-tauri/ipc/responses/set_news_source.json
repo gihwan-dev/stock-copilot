@@ -100,5 +100,9 @@
     "daily_move_percent": "5",
     "news_per_hour": "5"
   },
-  "aliases": []
+  "aliases": [],
+  "routes": {
+    "dart": "unset",
+    "sec": "unset"
+  }
 }

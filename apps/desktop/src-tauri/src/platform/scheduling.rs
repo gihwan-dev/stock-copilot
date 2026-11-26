@@ -246,6 +246,7 @@ pub fn register_stored_jobs<R: Runtime, P: PortTypes>(
     };
     registry.register(IntradayCompactionJob::new(stored()))?;
     registry.register(DailyBackupJob::new(stored()))?;
+    registry.register(scheduler::NewsRetentionJob::new(stored()))?;
     registry.register(BriefingJob::morning(stored()))?;
     registry.register(BriefingJob::closing_review(stored()))?;
     registry.register(BriefingJob::pre_us_market(stored()))?;

@@ -271,6 +271,25 @@ mod tests {
     }
 
     #[test]
+    fn kind_rejections_name_the_stage_and_shape_without_the_body() {
+        let html = sources::explain_kind_rss(b"<!DOCTYPE html><html><body>blocked</body></html>");
+        assert_eq!(html.rejected, sources::KindRejection::Rejected);
+        assert!(
+            html.detail.starts_with("stage=feed shape=html"),
+            "{}",
+            html.detail
+        );
+        assert!(!html.detail.contains("blocked"), "{}", html.detail);
+        let odd = sources::explain_kind_rss(
+            r#"<?xml version="1.0"?><rss><channel><item><title>[유]삼성전자 공시</title><link>https://kind.krx.co.kr/x?no=1</link></item></channel></rss>"#
+                .as_bytes(),
+        );
+        assert_eq!(odd.rejected, sources::KindRejection::Rejected);
+        assert!(odd.detail.contains("skipped=no-acptno:1"), "{}", odd.detail);
+        assert!(!odd.detail.contains("삼성전자"), "{}", odd.detail);
+    }
+
+    #[test]
     fn a_bare_email_gets_an_app_name_so_sec_accepts_the_header() {
         assert!(sec_contact_header("tester@example.com").is_some());
         assert!(sec_contact_header("Kim tester@example.com").is_some());

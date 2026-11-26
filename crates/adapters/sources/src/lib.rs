@@ -51,9 +51,9 @@ pub use kind_disclosures::{
     CorpCodeCandidate, CorpCodeResolution, CorpNameCodeResolver, DartFallbackCoverage,
     DartRssClient, DomesticDisclosureBatch, DomesticDisclosureCollector, DomesticDisclosureRoute,
     KindCorpMatchFailureReason, KindCorpResolutionReport, KindDisclosureClient,
-    KindDisclosureEntry, KindDisclosureFeed, KindFetchWindow, KindMarket, MatchedKindDisclosure,
-    ReceiptCorrespondence, UnmatchedKindDisclosure, kind_dart_receipt_correspondence,
-    normalize_corp_name, parse_kind_rss,
+    KindDisclosureEntry, KindDisclosureFeed, KindFetchWindow, KindMarket, KindParseReport,
+    KindRejection, MatchedKindDisclosure, ReceiptCorrespondence, UnmatchedKindDisclosure,
+    explain_kind_rss, kind_dart_receipt_correspondence, normalize_corp_name, parse_kind_rss,
 };
 pub use news_rss::{PressMacroSource, RssNewsFeed};
 pub use public_ip::{PublicIpAddress, PublicIpClient, PublicIpEndpoint, PublicIpError};
@@ -63,7 +63,8 @@ pub use registry::{
     SourceRegistry, SourceSpec,
 };
 pub use rss::{
-    ParsedFeedItem, collapse_whitespace, parse_feed, parse_feed_timestamp, strip_html_tags,
+    ParsedFeedItem, collapse_whitespace, feed_body_shape, parse_feed, parse_feed_timestamp,
+    strip_html_tags,
 };
 pub use stock_matching::{
     MatchDictionaryEntry, MatchNameAmbiguity, MatchNameKind, StockMatcher, TitleMatch,

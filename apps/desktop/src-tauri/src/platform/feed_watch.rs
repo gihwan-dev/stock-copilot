@@ -1,8 +1,8 @@
 use application::{
     CollectedCount, CollectedEntry, CollectedObservation, DataAvailability, DiagnosticEvent,
     FeedCursor, FeedDiagnosis, FeedFailure, FeedRound, FeedRoundOutcome, FeedRunResult, FeedSource,
-    HeadlineAdmission, InformationError, NewsFeed, NewsMetadata, RecentHeadlines, SystemPortError,
-    feed_data_source,
+    HeadlineAdmission, InformationError, LinkProbe, NewsFeed, NewsMetadata, RecentHeadlines,
+    SystemPortError, feed_data_source,
 };
 use domain::{InformationSource, NewsSource};
 use std::fmt;
@@ -124,6 +124,7 @@ impl<'a, F: NewsFeed> WatchedFeed<'a, F> {
         &self,
         round: &Result<FeedRound, SystemPortError>,
         linked: u32,
+        probe: LinkProbe,
     ) -> FeedDiagnosis {
         let source = feed_data_source(&self.feed.source());
         let failure = *self.failure.lock().await;
@@ -158,6 +159,7 @@ impl<'a, F: NewsFeed> WatchedFeed<'a, F> {
             duplicates: CollectedCount::new(self.duplicates.load(Ordering::Relaxed)),
             stored: CollectedCount::new(stored),
             linked: CollectedCount::new(linked),
+            probe,
         }
     }
 }

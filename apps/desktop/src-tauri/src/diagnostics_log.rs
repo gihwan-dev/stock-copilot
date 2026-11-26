@@ -142,6 +142,10 @@ fn describe(event: &DiagnosticEvent) -> String {
         ),
         DiagnosticEvent::Feed(diagnosis) => describe_feed(diagnosis),
         DiagnosticEvent::SourceCall(call) => describe_source_call(call),
+        DiagnosticEvent::SourceRejected { source, detail } => format!(
+            "source-rejected source={source:?} detail=\"{}\"",
+            detail.as_str()
+        ),
         DiagnosticEvent::Job(diagnosis) => describe_job(diagnosis),
     }
 }
@@ -176,13 +180,16 @@ const fn feed_result_name(result: FeedRunResult) -> &'static str {
 
 fn describe_feed(diagnosis: &FeedDiagnosis) -> String {
     format!(
-        "news-feed source={:?} result={} fetched={} duplicates={} stored={} linked={}",
+        "news-feed source={:?} result={} fetched={} duplicates={} stored={} linked={} name_seen={} needs_context={} group_only={}",
         diagnosis.source,
         feed_result_name(diagnosis.result),
         diagnosis.fetched.as_u32(),
         diagnosis.duplicates.as_u32(),
         diagnosis.stored.as_u32(),
-        diagnosis.linked.as_u32()
+        diagnosis.linked.as_u32(),
+        diagnosis.probe.name_seen.as_u32(),
+        diagnosis.probe.needs_context.as_u32(),
+        diagnosis.probe.group_only.as_u32()
     )
 }
 

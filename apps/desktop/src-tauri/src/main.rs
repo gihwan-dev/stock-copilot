@@ -1732,6 +1732,28 @@ impl src_tauri::ipc::news_settings::RouteLookup for StoredRoutes {
     }
 }
 
+fn named_matcher(names: &[src_tauri::news_tracking::MatchName]) -> sources::StockMatcher {
+    use src_tauri::news_tracking::{MatchNameClarity, MatchNameRole};
+    let entries = names
+        .iter()
+        .filter_map(|name| {
+            sources::MatchDictionaryEntry::new(
+                name.instrument.clone(),
+                &name.name,
+                match name.role {
+                    MatchNameRole::Official => sources::MatchNameKind::Official,
+                    MatchNameRole::Alias => sources::MatchNameKind::Alias,
+                },
+                match name.clarity {
+                    MatchNameClarity::Distinct => sources::MatchNameAmbiguity::Distinct,
+                    MatchNameClarity::NeedsContext => sources::MatchNameAmbiguity::CommonNoun,
+                },
+            )
+        })
+        .collect();
+    sources::StockMatcher::new(entries)
+}
+
 #[derive(Debug, Clone, Copy)]
 struct AliasTitleLinker;
 
@@ -1758,33 +1780,27 @@ impl TitleLinker for AliasTitleLinker {
             .to_vec()
     }
 
+    fn probe_named(
+        &self,
+        title: &domain::UntrustedText,
+        names: &[src_tauri::news_tracking::MatchName],
+    ) -> src_tauri::collected_links::NameProbe {
+        let found = named_matcher(names).match_title(title);
+        if !found.ambiguous().is_empty() {
+            src_tauri::collected_links::NameProbe::NeedsContext
+        } else if !found.group_mentions().is_empty() {
+            src_tauri::collected_links::NameProbe::GroupOnly
+        } else {
+            src_tauri::collected_links::NameProbe::Quiet
+        }
+    }
+
     fn instruments_named(
         &self,
         title: &domain::UntrustedText,
         names: &[src_tauri::news_tracking::MatchName],
     ) -> Vec<domain::InstrumentId> {
-        use src_tauri::news_tracking::{MatchNameClarity, MatchNameRole};
-        let entries = names
-            .iter()
-            .filter_map(|name| {
-                sources::MatchDictionaryEntry::new(
-                    name.instrument.clone(),
-                    &name.name,
-                    match name.role {
-                        MatchNameRole::Official => sources::MatchNameKind::Official,
-                        MatchNameRole::Alias => sources::MatchNameKind::Alias,
-                    },
-                    match name.clarity {
-                        MatchNameClarity::Distinct => sources::MatchNameAmbiguity::Distinct,
-                        MatchNameClarity::NeedsContext => sources::MatchNameAmbiguity::CommonNoun,
-                    },
-                )
-            })
-            .collect();
-        sources::StockMatcher::new(entries)
-            .match_title(title)
-            .matched()
-            .to_vec()
+        named_matcher(names).match_title(title).matched().to_vec()
     }
 }
 
@@ -5073,6 +5089,8 @@ mod news_linking_tests {
         assert_eq!(linked("[특징주] 005930 외국인 순매수"), ids(&["005930"]));
         assert_eq!(linked("AAPL shares rise after event"), ids(&["AAPL"]));
         assert_eq!(linked("애플 주가 급등"), ids(&["AAPL"]));
+        assert_eq!(linked("[특징주]삼성전자 급등"), ids(&["005930"]));
+        assert_eq!(linked("[유]삼성전자 주요사항보고서"), ids(&["005930"]));
     }
 
     #[test]

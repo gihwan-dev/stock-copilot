@@ -309,6 +309,15 @@ impl SourceHttpClient {
         self.limiter.current_timestamp()
     }
 
+    pub fn report_rejection(&self, source: HttpDataSource, detail: &str) {
+        if let Some(sink) = self.diagnostics.as_ref() {
+            sink.record(&DiagnosticEvent::SourceRejected {
+                source: source.data_source(),
+                detail: DiagnosticText::new(detail),
+            });
+        }
+    }
+
     fn observe(&self, watch: &CallWatch, result: CallResult) {
         let Some(sink) = self.diagnostics.as_ref() else {
             return;
