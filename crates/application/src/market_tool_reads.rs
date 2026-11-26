@@ -2,7 +2,58 @@ use std::future::Future;
 
 use domain::{DisplayInstrumentName, KnownMarket, Money, Quantity, Ratio, Symbol, Timestamp};
 
-use crate::{AllocationLabel, SystemPortError};
+use crate::{
+    AllocationLabel, MasterNotReady, PortError, PortErrorKind, SystemPortError, UnavailableCause,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarketToolError {
+    NotConnected,
+    NotOffered,
+    NotFound,
+    Rejected,
+    RateLimited,
+    Unavailable,
+    InvalidResponse,
+    Storage(SystemPortError),
+}
+
+impl From<SystemPortError> for MarketToolError {
+    fn from(error: SystemPortError) -> Self {
+        Self::Storage(error)
+    }
+}
+
+impl From<PortError> for MarketToolError {
+    fn from(error: PortError) -> Self {
+        match error.kind() {
+            PortErrorKind::MasterNotReady(MasterNotReady::MissingInstrument)
+            | PortErrorKind::NotFound(_) => Self::NotFound,
+            PortErrorKind::AccessDenied(_) | PortErrorKind::InvalidRequest(_) => Self::Rejected,
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::RateLimited,
+                ..
+            } => Self::RateLimited,
+            PortErrorKind::MasterNotReady(_) | PortErrorKind::Unavailable { .. } => {
+                Self::Unavailable
+            }
+            PortErrorKind::InvalidResponse(_) => Self::InvalidResponse,
+            PortErrorKind::Unsupported(_) => Self::NotOffered,
+        }
+    }
+}
+
+pub type MarketToolReply<V> = Result<Option<V>, MarketToolError>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarketToolName {
+    Quote,
+    Candles,
+    Overview,
+    Rankings,
+    Sectors,
+    InvestorFlow,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueProvenance {
@@ -177,33 +228,33 @@ pub trait MarketToolReads: Send + Sync {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = Result<Option<QuoteToolView>, SystemPortError>> + Send;
+    ) -> impl Future<Output = MarketToolReply<QuoteToolView>> + Send;
 
     fn candles(
         &self,
         symbol: &Symbol,
         market: KnownMarket,
         window: CandleWindow,
-    ) -> impl Future<Output = Result<Option<CandlesToolView>, SystemPortError>> + Send;
+    ) -> impl Future<Output = MarketToolReply<CandlesToolView>> + Send;
 
     fn market_overview(
         &self,
-    ) -> impl Future<Output = Result<Option<MarketOverviewToolView>, SystemPortError>> + Send;
+    ) -> impl Future<Output = MarketToolReply<MarketOverviewToolView>> + Send;
 
     fn rankings(
         &self,
         kind: RankingToolKind,
         market: KnownMarket,
-    ) -> impl Future<Output = Result<Option<RankingsToolView>, SystemPortError>> + Send;
+    ) -> impl Future<Output = MarketToolReply<RankingsToolView>> + Send;
 
     fn sectors(
         &self,
         market: KnownMarket,
-    ) -> impl Future<Output = Result<Option<SectorsToolView>, SystemPortError>> + Send;
+    ) -> impl Future<Output = MarketToolReply<SectorsToolView>> + Send;
 
     fn investor_flow(
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = Result<Option<InvestorFlowToolView>, SystemPortError>> + Send;
+    ) -> impl Future<Output = MarketToolReply<InvestorFlowToolView>> + Send;
 }

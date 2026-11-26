@@ -3,12 +3,12 @@ use application::{
     ArticleToolPort, BodyReadingSetting, CandleWindow, CandlesToolView, CollectedItemHandle,
     CollectedItemQuery, DisclosureToolLine, EstimateAssignmentRepository, EstimateCommitOutcome,
     EstimateRunContext, EstimateRunContextSource, InvestorFlowToolView, MarketOverviewToolView,
-    MarketToolReads, NewsToolLine, NewsToolReads, PerformancePeriod, PerformanceToolView,
-    PortfolioToolReads, PortfolioToolView, ProfileSource, QuoteToolView, RankingToolKind,
-    RankingsToolView, ScorecardObservationRepository, SectorsToolView, SystemFailure, SystemPort,
-    SystemPortError, ThesisRepository, ThesisRunMetadata, ThesisToolPort, TransactionsToolView,
-    WebResearchToolFailure, WebResearchToolOutcome, WebResearchToolPort, WebResearchToolRequest,
-    WriteCompleted,
+    MarketToolError, MarketToolReads, MarketToolReply, NewsToolLine, NewsToolReads,
+    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, ProfileSource,
+    QuoteToolView, RankingToolKind, RankingsToolView, ScorecardObservationRepository,
+    SectorsToolView, SystemFailure, SystemPort, SystemPortError, ThesisRepository,
+    ThesisRunMetadata, ThesisToolPort, TransactionsToolView, WebResearchToolFailure,
+    WebResearchToolOutcome, WebResearchToolPort, WebResearchToolRequest, WriteCompleted,
 };
 
 use domain::{
@@ -122,12 +122,12 @@ pub enum MarketReadCall {
 
 #[derive(Debug)]
 pub struct FixedMarketToolReads {
-    quote: ReadReply<QuoteToolView>,
-    candles: ReadReply<CandlesToolView>,
-    overview: ReadReply<MarketOverviewToolView>,
-    rankings: ReadReply<RankingsToolView>,
-    sectors: ReadReply<SectorsToolView>,
-    investor_flow: ReadReply<InvestorFlowToolView>,
+    quote: MarketToolReply<QuoteToolView>,
+    candles: MarketToolReply<CandlesToolView>,
+    overview: MarketToolReply<MarketOverviewToolView>,
+    rankings: MarketToolReply<RankingsToolView>,
+    sectors: MarketToolReply<SectorsToolView>,
+    investor_flow: MarketToolReply<InvestorFlowToolView>,
     calls: State<Vec<MarketReadCall>>,
 }
 
@@ -148,37 +148,48 @@ impl Default for FixedMarketToolReads {
 impl FixedMarketToolReads {
     #[must_use]
     pub fn with_quote(mut self, reply: ReadReply<QuoteToolView>) -> Self {
-        self.quote = reply;
+        self.quote = reply.map_err(MarketToolError::from);
         self
     }
 
     #[must_use]
     pub fn with_candles(mut self, reply: ReadReply<CandlesToolView>) -> Self {
-        self.candles = reply;
+        self.candles = reply.map_err(MarketToolError::from);
         self
     }
 
     #[must_use]
     pub fn with_overview(mut self, reply: ReadReply<MarketOverviewToolView>) -> Self {
-        self.overview = reply;
+        self.overview = reply.map_err(MarketToolError::from);
         self
     }
 
     #[must_use]
     pub fn with_rankings(mut self, reply: ReadReply<RankingsToolView>) -> Self {
-        self.rankings = reply;
+        self.rankings = reply.map_err(MarketToolError::from);
         self
     }
 
     #[must_use]
     pub fn with_sectors(mut self, reply: ReadReply<SectorsToolView>) -> Self {
-        self.sectors = reply;
+        self.sectors = reply.map_err(MarketToolError::from);
         self
     }
 
     #[must_use]
     pub fn with_investor_flow(mut self, reply: ReadReply<InvestorFlowToolView>) -> Self {
-        self.investor_flow = reply;
+        self.investor_flow = reply.map_err(MarketToolError::from);
+        self
+    }
+
+    #[must_use]
+    pub fn failing_with(mut self, error: MarketToolError) -> Self {
+        self.quote = Err(error);
+        self.candles = Err(error);
+        self.overview = Err(error);
+        self.rankings = Err(error);
+        self.sectors = Err(error);
+        self.investor_flow = Err(error);
         self
     }
 
@@ -197,7 +208,7 @@ impl MarketToolReads for FixedMarketToolReads {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = ReadReply<QuoteToolView>> + Send {
+    ) -> impl Future<Output = MarketToolReply<QuoteToolView>> + Send {
         self.record(MarketReadCall::Quote(symbol.clone(), market));
         ready(self.quote.clone())
     }
@@ -207,12 +218,14 @@ impl MarketToolReads for FixedMarketToolReads {
         symbol: &Symbol,
         market: KnownMarket,
         window: CandleWindow,
-    ) -> impl Future<Output = ReadReply<CandlesToolView>> + Send {
+    ) -> impl Future<Output = MarketToolReply<CandlesToolView>> + Send {
         self.record(MarketReadCall::Candles(symbol.clone(), market, window));
         ready(self.candles.clone())
     }
 
-    fn market_overview(&self) -> impl Future<Output = ReadReply<MarketOverviewToolView>> + Send {
+    fn market_overview(
+        &self,
+    ) -> impl Future<Output = MarketToolReply<MarketOverviewToolView>> + Send {
         self.record(MarketReadCall::Overview);
         ready(self.overview.clone())
     }
@@ -221,7 +234,7 @@ impl MarketToolReads for FixedMarketToolReads {
         &self,
         kind: RankingToolKind,
         market: KnownMarket,
-    ) -> impl Future<Output = ReadReply<RankingsToolView>> + Send {
+    ) -> impl Future<Output = MarketToolReply<RankingsToolView>> + Send {
         self.record(MarketReadCall::Rankings(kind, market));
         ready(self.rankings.clone())
     }
@@ -229,7 +242,7 @@ impl MarketToolReads for FixedMarketToolReads {
     fn sectors(
         &self,
         market: KnownMarket,
-    ) -> impl Future<Output = ReadReply<SectorsToolView>> + Send {
+    ) -> impl Future<Output = MarketToolReply<SectorsToolView>> + Send {
         self.record(MarketReadCall::Sectors(market));
         ready(self.sectors.clone())
     }
@@ -238,7 +251,7 @@ impl MarketToolReads for FixedMarketToolReads {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = ReadReply<InvestorFlowToolView>> + Send {
+    ) -> impl Future<Output = MarketToolReply<InvestorFlowToolView>> + Send {
         self.record(MarketReadCall::InvestorFlow(symbol.clone(), market));
         ready(self.investor_flow.clone())
     }

@@ -270,7 +270,7 @@ pub use diagnostics::{
     BrokerCall, CallMethod, CallResult, DiagnosticEvent, DiagnosticText, DiagnosticsSink,
     FeedDiagnosis, FeedFailure, FeedRunResult, HttpStatusCode, JobDiagnosis, JobRunNote, LinkProbe,
     SourceCall, SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult, TokenIssue,
-    TransportFailure, failure_reason, sync_failure_reason,
+    ToolReadDiagnosis, ToolReadResult, TransportFailure, failure_reason, sync_failure_reason,
 };
 mod notifier;
 pub use notifier::{Notification, Notifier};
@@ -413,9 +413,10 @@ pub use market_overview::{
 mod market_tool_reads;
 pub use market_tool_reads::{
     CandleToolLine, CandleWindow, CandleWindowError, CandlesToolView, InvestorFlowToolLine,
-    InvestorFlowToolView, MarketOverviewToolView, MarketToolReads, OverviewItem, OverviewToolLine,
-    OverviewUnit, QuoteToolView, RankingToolKind, RankingToolLine, RankingsToolView,
-    SectorToolLine, SectorsToolView, SessionStatus, SessionToolLine, ValueProvenance,
+    InvestorFlowToolView, MarketOverviewToolView, MarketToolError, MarketToolName, MarketToolReads,
+    MarketToolReply, OverviewItem, OverviewToolLine, OverviewUnit, QuoteToolView, RankingToolKind,
+    RankingToolLine, RankingsToolView, SectorToolLine, SectorsToolView, SessionStatus,
+    SessionToolLine, ValueProvenance,
 };
 mod news_tool_reads;
 pub use news_tool_reads::{
