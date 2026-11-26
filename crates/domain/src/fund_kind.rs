@@ -1,4 +1,4 @@
-use crate::{DisplayInstrumentName, ExcludedSecurityType, WeightCaps};
+use crate::{DisplayInstrumentName, ExcludedSecurityType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FundKind {
@@ -44,73 +44,17 @@ impl FundKind {
         symbol: Option<&crate::Symbol>,
         fallback: Self,
     ) -> Self {
-        let upper = name.map_or_else(String::new, |value| {
-            format!(" {} ", value.as_str().to_uppercase())
-        });
-        if [
-            "레버리지",
-            "인버스",
-            "곱버스",
-            "2X",
-            "3X",
-            "-1X",
-            "ULTRA",
-            " BULL ",
-            " BEAR ",
-            "DAILY",
-            "LEVERAGED",
-            "INVERSE",
-        ]
-        .iter()
-        .any(|marker| upper.contains(marker))
-        {
+        let upper = FundName::new(name);
+        if upper.leveraged() == Marker::Present {
             return Self::LeveragedOrInverse;
         }
-        let trimmed = upper.trim_end();
-        let broad_name = [
-            "S&P500",
-            "S&P 500",
-            "나스닥100",
-            "NASDAQ100",
-            "NASDAQ-100",
-            "NASDAQ 100",
-            "QQQ",
-            "코스피200",
-            "KOSPI200",
-            "KOSPI 200",
-            "코스닥150",
-            "KOSDAQ150",
-            "MSCI WORLD",
-            "MSCI ACWI",
-            "MSCI EM",
-            "ACWI",
-            "전세계",
-            "TOTAL STOCK",
-            "TOTAL WORLD",
-            "TOTAL MARKET",
-            "다우존스",
-            "DOW JONES",
-            "니케이225",
-            "NIKKEI",
-            "유로스탁스50",
-            "STOXX",
-            "국고채",
-            "TREASURY",
-            "종합채권",
-            "AGGREGATE",
-        ]
-        .iter()
-        .any(|marker| upper.contains(marker))
-            || [" 200", " 200TR", " 200 TR"]
-                .iter()
-                .any(|suffix| trimmed.ends_with(suffix));
         let broad_symbol = symbol.is_some_and(|value| {
             [
                 "SPY", "VOO", "IVV", "VTI", "VT", "QQQ", "QQQM", "SPLG", "AGG",
             ]
             .contains(&value.as_str())
         });
-        if broad_name || broad_symbol {
+        if upper.broad() == Marker::Present || broad_symbol {
             Self::BroadIndexFund
         } else {
             fallback
@@ -118,15 +62,96 @@ impl FundKind {
     }
 }
 
-impl WeightCaps {
-    #[must_use]
-    pub fn limits_for(self, kind: FundKind) -> Self {
-        let (cap, warning) = match kind {
-            FundKind::SingleSecurity | FundKind::SectorOrThemeFund => return self,
-            FundKind::BroadIndexFund => (self.sector_cap(), self.instrument_cap()),
-            FundKind::LeveragedOrInverse => (self.instrument_warning(), self.instrument_warning()),
-        };
-        Self::try_new(cap, warning, self.sector_cap()).unwrap_or(self)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Marker {
+    Present,
+    Absent,
+}
+
+impl Marker {
+    fn of(mut found: impl Iterator<Item = Self>) -> Self {
+        match found.next() {
+            Some(marker) => marker,
+            None => Self::Absent,
+        }
+    }
+}
+
+struct FundName(String);
+
+impl FundName {
+    fn new(name: Option<&DisplayInstrumentName>) -> Self {
+        Self(name.map_or_else(String::new, |value| {
+            format!(" {} ", value.as_str().to_uppercase())
+        }))
+    }
+
+    fn leveraged(&self) -> Marker {
+        Marker::of(
+            [
+                "레버리지",
+                "인버스",
+                "곱버스",
+                "2X",
+                "3X",
+                "-1X",
+                "ULTRA",
+                " BULL ",
+                " BEAR ",
+                "DAILY",
+                "LEVERAGED",
+                "INVERSE",
+            ]
+            .iter()
+            .filter(|marker| self.0.contains(*marker))
+            .map(|_marker| Marker::Present),
+        )
+    }
+
+    fn broad(&self) -> Marker {
+        let trimmed = self.0.trim_end();
+        Marker::of(
+            [
+                "S&P500",
+                "S&P 500",
+                "나스닥100",
+                "NASDAQ100",
+                "NASDAQ-100",
+                "NASDAQ 100",
+                "QQQ",
+                "코스피200",
+                "KOSPI200",
+                "KOSPI 200",
+                "코스닥150",
+                "KOSDAQ150",
+                "MSCI WORLD",
+                "MSCI ACWI",
+                "MSCI EM",
+                "ACWI",
+                "전세계",
+                "TOTAL STOCK",
+                "TOTAL WORLD",
+                "TOTAL MARKET",
+                "다우존스",
+                "DOW JONES",
+                "니케이225",
+                "NIKKEI",
+                "유로스탁스50",
+                "STOXX",
+                "국고채",
+                "TREASURY",
+                "종합채권",
+                "AGGREGATE",
+            ]
+            .iter()
+            .filter(|marker| self.0.contains(*marker))
+            .chain(
+                [" 200", " 200TR", " 200 TR"]
+                    .iter()
+                    .filter(|suffix| trimmed.ends_with(*suffix)),
+            )
+            .map(|_marker| Marker::Present),
+        )
     }
 }
 

@@ -80,14 +80,10 @@ impl Chars {
     }
 
     fn window(&self, start: Cursor, end: Cursor) -> Window {
-        Window(
-            self.0
-                .get(start.0..end.min(self.end()).0)
-                .unwrap_or_default()
-                .iter()
-                .map(|glyph| glyph.0)
-                .collect(),
-        )
+        Window(match self.0.get(start.0..end.min(self.end()).0) {
+            Some(glyphs) => glyphs.iter().map(|glyph| glyph.0).collect(),
+            None => String::new(),
+        })
     }
 }
 
@@ -145,7 +141,10 @@ impl Fixed {
     }
 
     fn halved(self) -> Self {
-        Self::new(self.0.checked_div(2_i128).unwrap_or_default())
+        match self.0.checked_div(2_i128) {
+            Some(half) => Self::new(half),
+            None => self,
+        }
     }
 
     const fn lower(self, tolerance: Self) -> Self {
@@ -337,6 +336,30 @@ fn build_claim(
     })
 }
 
+fn push_pairs(derived: &mut Vec<Fixed>, base: &[Fixed]) {
+    let percent = Fixed::new(HUNDRED.0.saturating_mul(SCALE.0));
+    for (left, right) in base
+        .iter()
+        .flat_map(|left| base.iter().map(move |right| (*left, *right)))
+        .filter(|(left, right)| left != right)
+    {
+        push_pair(derived, left, right, percent);
+    }
+}
+
+fn push_pair(derived: &mut Vec<Fixed>, left: Fixed, right: Fixed, percent: Fixed) {
+    derived.extend(left.plus(right));
+    derived.extend(left.gap(right));
+    derived.extend(left.times(right));
+    derived.extend(left.over(right));
+    derived.extend(left.over(right).and_then(|ratio| ratio.times(percent)));
+    derived.extend(
+        left.gap(right)
+            .and_then(|gap| gap.over(right))
+            .and_then(|ratio| ratio.times(percent)),
+    );
+}
+
 pub(super) struct DerivationBook {
     derived: Vec<Fixed>,
 }
@@ -351,24 +374,7 @@ impl DerivationBook {
             derived.extend(value.scaled_down(HUNDRED));
         }
         if Cursor::new(base.len()) <= MAX_PAIR_BASE {
-            let percent = Fixed::new(HUNDRED.0.saturating_mul(SCALE.0));
-            for left in &base {
-                for right in &base {
-                    if left == right {
-                        continue;
-                    }
-                    derived.extend(left.plus(*right));
-                    derived.extend(left.gap(*right));
-                    derived.extend(left.times(*right));
-                    derived.extend(left.over(*right));
-                    derived.extend(left.over(*right).and_then(|ratio| ratio.times(percent)));
-                    derived.extend(
-                        left.gap(*right)
-                            .and_then(|gap| gap.over(*right))
-                            .and_then(|ratio| ratio.times(percent)),
-                    );
-                }
-            }
+            push_pairs(&mut derived, &base);
         }
         derived.sort_unstable();
         derived.dedup();

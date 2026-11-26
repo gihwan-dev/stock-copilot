@@ -569,9 +569,13 @@ fn chat_eval_fixture_mirrors_the_app_command_tools() {
     let built = harness();
     let actual = serde_json::to_value(built.registry.list_rmcp_tools()).expect("도구 목록");
     let rendered = serde_json::to_string_pretty(&actual).expect("출력");
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../fixtures/mcp/app_tools_list.json");
-    let expected = std::fs::read_to_string(&path).unwrap_or_default();
+    let exe = testkit::test_executable().expect("시험 실행 파일");
+    let root = exe
+        .ancestors()
+        .find(|dir| dir.join("fixtures").join("mcp").is_dir())
+        .expect("fixtures/mcp가 있는 저장소 뿌리");
+    let expected = std::fs::read_to_string(root.join("fixtures/mcp/app_tools_list.json"))
+        .expect("앱 명령 도구 골든 파일");
     assert_eq!(
         rendered.trim_end(),
         expected.trim_end(),
