@@ -2,12 +2,12 @@ import { expect, test } from "vitest";
 import { parseFreeText, type FreeTextFold } from "../../../shared/lib";
 import { replyFold } from "./view";
 
-type Sample = "short" | "long" | "table" | "list";
+type Sample = "short" | "long" | "grid" | "list";
 
 const samples = {
   short: "Keep it. The weight is about 12%.",
   long: "One. Two! Three? Four. Five. Six.",
-  table: "Plan. A. B. C. D.\n\n| Item | Action |\n|---|---|\n| A | Buy |",
+  grid: "Plan. A. B. C. D.\n\n| Item | Action |\n|---|---|\n| A | Buy |",
   list: "Plan. A. B. C. D.\n\n- Watch",
 } as const;
 
@@ -28,6 +28,6 @@ test("prose longer than four sentences folds after the fourth", () => {
 });
 
 test("structured plans with tables or lists are never folded", () => {
-  expect(fold("table")).toStrictEqual({ kind: "whole" });
+  expect(fold("grid")).toStrictEqual({ kind: "whole" });
   expect(fold("list")).toStrictEqual({ kind: "whole" });
 });
