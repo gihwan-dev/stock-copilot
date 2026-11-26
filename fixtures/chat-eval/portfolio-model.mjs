@@ -485,6 +485,7 @@ export const appSimulate = (scenario, args) => {
     cash_after: [],
     instruments: [],
     principles: null,
+    issues: [],
   });
   const book = new Map(
     account.holdings.map((holding) => [`${holding.market}-${holding.symbol}`, { ...holding }]),
@@ -558,7 +559,19 @@ export const appSimulate = (scenario, args) => {
   };
   const cashPercent = (cashKrw / total) * 100;
   const holdingsAfter = instruments.length;
+  const checked = {
+    holdings: holdingsAfter >= Number(principles.concentration_min_count) ? "met" : "below",
+    cash: cashPercent >= Number(principles.cash_min_percent) ? "met" : "below",
+  };
+  const issues = [
+    ...instruments
+      .filter((row) => row.level_after === "over-cap")
+      .map((row) => ({ kind: "over-limit", symbol: row.symbol })),
+    ...(checked.holdings === "below" ? [{ kind: "holdings-below-minimum", symbol: null }] : []),
+    ...(checked.cash === "below" ? [{ kind: "cash-below-floor", symbol: null }] : []),
+  ];
   return {
+    issues,
     limits_source: scenario.profile === "default" ? "app-default" : "user-setting",
     valuation_fx: account.fx === null
       ? null

@@ -147,8 +147,25 @@ pub struct UiValuationFx {
     pub as_of: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum UiIssueKind {
+    #[serde(rename = "over-limit")]
+    OverLimit,
+    #[serde(rename = "holdings-below-minimum")]
+    HoldingsBelowMinimum,
+    #[serde(rename = "cash-below-floor")]
+    CashBelowFloor,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiSimulationIssue {
+    pub kind: UiIssueKind,
+    pub symbol: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct UiTradeSimulation {
+    pub issues: Vec<UiSimulationIssue>,
     pub limits_source: UiLimitSource,
     pub valuation_fx: Option<UiValuationFx>,
     pub outcome: UiSimulationOutcome,
@@ -223,6 +240,7 @@ fn parse_trade(
 
 fn failure(outcome: UiSimulationOutcome, symbol: Option<&Symbol>) -> UiTradeSimulation {
     UiTradeSimulation {
+        issues: Vec::new(),
         limits_source: UiLimitSource::AppDefault,
         valuation_fx: None,
         outcome,
@@ -436,6 +454,29 @@ const fn matches_holding(key: &AssetInstrument) -> UiPrincipleStatus {
     }
 }
 
+fn issues_of(
+    instruments: &[UiSimulatedInstrument],
+    principles: Option<&UiPrincipleCheck>,
+) -> Vec<UiSimulationIssue> {
+    let over = instruments
+        .iter()
+        .filter(|row| row.level_after == UiWeightLevel::OverCap)
+        .map(|row| UiSimulationIssue {
+            kind: UiIssueKind::OverLimit,
+            symbol: Some(row.symbol.clone()),
+        });
+    let principle = principles.into_iter().flat_map(|check| {
+        [
+            (check.holdings, UiIssueKind::HoldingsBelowMinimum),
+            (check.cash, UiIssueKind::CashBelowFloor),
+        ]
+        .into_iter()
+        .filter(|(state, _)| *state == UiPrincipleStatus::Below)
+        .map(|(_, kind)| UiSimulationIssue { kind, symbol: None })
+    });
+    over.chain(principle).collect()
+}
+
 fn valuation_fx(before: &Allocation) -> Option<UiValuationFx> {
     let rate = domain::valuation_fx_rate(before.valuation())?;
     Some(UiValuationFx {
@@ -472,7 +513,10 @@ pub(crate) fn simulated_view(
     }
     .into_parts()
     .0;
+    let instruments = instrument_rows(&inputs);
+    let checked = principles.map(|found| principle_check(&after, found));
     UiTradeSimulation {
+        issues: issues_of(&instruments, checked.as_ref()),
         limits_source: UiLimitSource::AppDefault,
         valuation_fx: valuation_fx(before),
         outcome: UiSimulationOutcome::Simulated,
@@ -480,8 +524,8 @@ pub(crate) fn simulated_view(
         fills: fill_rows(result.fills()),
         total_after: ui_money(&total_after),
         cash_after: cash_rows(&after, result.valuation()),
-        instruments: instrument_rows(&inputs),
-        principles: principles.map(|found| principle_check(&after, found)),
+        instruments,
+        principles: checked,
     }
 }
 

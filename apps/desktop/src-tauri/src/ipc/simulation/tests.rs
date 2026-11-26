@@ -7,8 +7,8 @@ use domain::{
 };
 
 use super::{
-    UiFundKind, UiPrincipleStatus, UiSimulationOutcome, UiTradeInput, UiTradeMarket, UiTradeSide,
-    parse_trade, simulated_view,
+    UiFundKind, UiIssueKind, UiPrincipleStatus, UiSimulationOutcome, UiTradeInput, UiTradeMarket,
+    UiTradeSide, parse_trade, simulated_view,
 };
 use crate::holdings_link::InstrumentDirectory;
 use crate::ipc::portfolio::UiWeightLevel;
@@ -125,6 +125,12 @@ fn an_empty_plan_reports_current_weights_limits_and_room() {
     assert_eq!(samsung.fund_kind, UiFundKind::SingleSecurity);
     assert_eq!(samsung.limit_percent, "20.00");
     assert_eq!(samsung.level_after, UiWeightLevel::OverCap);
+    let flagged: Vec<(UiIssueKind, Option<&str>)> = view
+        .issues
+        .iter()
+        .map(|issue| (issue.kind, issue.symbol.as_deref()))
+        .collect();
+    assert_eq!(flagged, vec![(UiIssueKind::OverLimit, Some("005930"))]);
     assert_eq!(
         samsung
             .room_to_limit

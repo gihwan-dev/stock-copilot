@@ -2329,6 +2329,9 @@ export type UiInstrumentsView_Serialize = {
 
 export type UiInterval = "1" | "2" | "5" | "10" | "15" | "30" | "60";
 
+export type UiIssueKind =
+  "over-limit" | "holdings-below-minimum" | "cash-below-floor";
+
 export type UiJobRun = {
   at: string;
   outcome: UiJobRunOutcome;
@@ -2782,6 +2785,19 @@ export type UiSimulatedInstrument_Serialize = {
   room_to_limit: UiMoney | null;
 };
 
+export type UiSimulationIssue =
+  UiSimulationIssue_Serialize | UiSimulationIssue_Deserialize;
+
+export type UiSimulationIssue_Deserialize = {
+  kind: UiIssueKind;
+  symbol?: string | null;
+};
+
+export type UiSimulationIssue_Serialize = {
+  kind: UiIssueKind;
+  symbol: string | null;
+};
+
 export type UiSimulationOutcome =
   | "simulated"
   | "invalid-trade"
@@ -2943,6 +2959,7 @@ export type UiTradeSimulation =
   UiTradeSimulation_Serialize | UiTradeSimulation_Deserialize;
 
 export type UiTradeSimulation_Deserialize = {
+  issues: UiSimulationIssue_Deserialize[];
   limits_source: UiLimitSource;
   valuation_fx?: UiValuationFx | null;
   outcome: UiSimulationOutcome;
@@ -2955,6 +2972,7 @@ export type UiTradeSimulation_Deserialize = {
 };
 
 export type UiTradeSimulation_Serialize = {
+  issues: UiSimulationIssue_Serialize[];
   limits_source: UiLimitSource;
   valuation_fx: UiValuationFx | null;
   outcome: UiSimulationOutcome;
