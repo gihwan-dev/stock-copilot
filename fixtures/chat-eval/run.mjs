@@ -132,14 +132,20 @@ const sentenceCount = (text) =>
     .filter((part) => part.trim().length > 1).length;
 const lineCount = (text) => text.split("\n").filter((line) => line.trim() !== "").length;
 
+const STRUCTURED = /^\s*(?:\||#{1,6}\s|[-*•]\s|\d+[.)]\s)/mu;
+
+export const visibleAnswer = (answer) => {
+  if (STRUCTURED.test(answer)) return answer;
+  const sentences = answer.trim().split(/(?<=[.?!。])\s+/u);
+  return sentences.length <= 4 ? answer : sentences.slice(0, 4).join(" ");
+};
+
 export const withinBudget = (expect, answer) => {
   if (expect.kind === "short") {
     return (
-      answer.length <= (expect.max_chars ?? 400) &&
-      sentenceCount(answer) <= 4 &&
-      !TABLE.test(answer) &&
-      !LIST_LINE.test(answer) &&
-      !HEADING_LINE.test(answer)
+      !STRUCTURED.test(answer) &&
+      visibleAnswer(answer).length <= (expect.max_chars ?? 450) &&
+      sentenceCount(answer) <= (expect.max_sentences ?? 6)
     );
   }
   return answer.length <= (expect.max_chars ?? 1500) && lineCount(answer) <= (expect.max_lines ?? 20);
@@ -163,6 +169,11 @@ export const deterministicChecks = (scenario, answer, toolNames, calls = []) => 
     ),
   };
   if (expect.table === true) checks.action_table = TABLE.test(answer);
+  if (expect.no_trades === true) {
+    checks.no_made_up_trades =
+      !TABLE.test(answer) &&
+      !/(\d[\d,]*\s?주|[\d,.]+\s?만\s?원(?:어치)?)[^.\n]{0,25}(사세요|사시|매수하|파세요|파시|매도하|넣으세요|담으세요)/u.test(answer);
+  }
   if ((expect.tools ?? []).length > 0) {
     checks.tools_used = expect.tools.every(
       (name) => toolNames.includes(name) || toolNames.includes(`app_${name}`),
@@ -493,7 +504,7 @@ ${scenario.expect?.judge ?? "(없음)"}
 ${userPrompt(scenario)}
 
 ## 앱이 정한 답 모양
-${answerMode(scenario.message) === "short" ? "short: 세 문장 이하, 표·목록·지켜볼 것 없이 결론·근거·할 일 한 문장이 정답이다. 이 형식을 지킨 답을 짧다는 이유로 actionable에서 깎지 않는다. 다만 할 일 문장에 금액·주수·상품·시점이 없으면 깎는다." : "plan: 결론, 근거, 할 일 표, 지켜볼 것, 15줄 이내."}
+${answerMode(scenario.message) === "short" ? "short: 최대 네 문장, 표·목록·제목·지켜볼 것 없이 결론 한 문장, 핵심 근거나 할 일 한두 문장, 필요하면 위험이나 원칙 위반 한 문장이 정답이다. 이 형식을 지킨 답을 짧다는 이유로 actionable에서 깎지 않는다. 다만 할 일 문장에 금액·주수·상품·시점이 없으면 깎는다. 네 문장 안에 담기 어려운 추가 판단(다른 종목, 묻지 않은 계획)이 없다고 깎지 않는다." : "plan: 결론, 근거, 할 일 표, 지켜볼 것, 15줄 이내."}
 
 ## 챗봇이 실제로 부른 도구와 받은 결과 (합성 자료)
 ${judgeContext(record)}
@@ -508,8 +519,9 @@ ${judgeContext(record)}
 - 짧은 질문(한 가지를 묻는 질문)에는 세 문장 안팎이 적절하다. 계획 질문에만 표와 지켜볼 것을 기대한다.
 
 ## 채점할 답변
+${answerMode(scenario.message) === "short" && visibleAnswer(record.text) !== record.text ? "앱은 짧은 답을 처음 네 문장까지만 보여 주고 나머지는 '자세히'로 접는다. 아래는 사용자가 처음 보는 부분이다. 이 부분을 기준으로 채점한다." : ""}
 <answer>
-${record.text}
+${answerMode(scenario.message) === "short" ? visibleAnswer(record.text) : record.text}
 </answer>
 
 JSON 한 개만 출력한다. 다른 글은 쓰지 않는다.
@@ -627,6 +639,47 @@ const summarize = (rows, variants) => {
       return String(mean(values) ?? "-");
     });
     lines.push(`| ${key} | ${cells.join(" | ")} |`);
+  }
+  const trials = [...new Set(rows.map((row) => row.trial))].sort();
+  if (trials.length > 1) {
+    lines.push("", "## 회차별 overall (평균 ± 표준편차)", "");
+    lines.push(`| 변형 | ${trials.map((trial) => `회차 ${trial + 1}`).join(" | ")} | 평균 ± 편차 |`);
+    lines.push(`|---|${trials.map(() => "---").join("|")}|---|`);
+    for (const variant of variants) {
+      const perTrial = trials.map((trial) =>
+        mean(
+          rows
+            .filter((row) => row.variant === variant && row.trial === trial && row.judge)
+            .map((row) => mean(Object.values(row.judge.scores))),
+        ),
+      );
+      const known = perTrial.filter((value) => value !== null);
+      const average = mean(known);
+      const spread = known.length > 1
+        ? Math.round(Math.sqrt(known.reduce((sum, value) => sum + (value - average) ** 2, 0) / (known.length - 1)) * 100) / 100
+        : null;
+      lines.push(`| ${variant} | ${perTrial.map((value) => value ?? "-").join(" | ")} | ${average ?? "-"} ± ${spread ?? "-"} |`);
+    }
+    lines.push("", "## 항목별 회차 편차 (표준편차)", "");
+    lines.push(`| 항목 | ${variants.join(" | ")} |`);
+    lines.push(`|---|${variants.map(() => "---").join("|")}|`);
+    for (const key of Object.keys(RUBRIC)) {
+      const cells = variants.map((variant) => {
+        const perTrial = trials
+          .map((trial) =>
+            mean(
+              rows
+                .filter((row) => row.variant === variant && row.trial === trial && row.judge)
+                .map((row) => row.judge.scores[key]),
+            ),
+          )
+          .filter((value) => value !== null);
+        if (perTrial.length < 2) return "-";
+        const average = mean(perTrial);
+        return String(Math.round(Math.sqrt(perTrial.reduce((sum, value) => sum + (value - average) ** 2, 0) / (perTrial.length - 1)) * 100) / 100);
+      });
+      lines.push(`| ${key} | ${cells.join(" | ")} |`);
+    }
   }
   lines.push("", "## 결정적 검사 통과율", "");
   lines.push(`| 검사 | ${variants.join(" | ")} |`);
@@ -760,6 +813,19 @@ const selfTest = async () => {
   const fabricated = deterministicChecks(target, good, ["get_portfolio"], [{ name: "app_request_order_approval", args: { proposal_id: "x" }, fabricated: true }]);
   expectThat(fabricated.failures.includes("no_fabricated_proposal"), "지어낸 제안 검출");
   expectThat(withinBudget({ kind: "short" }, "삼성전자는 약 135주를 팔면 됩니다. 이번 주에 두 번 나눠 파세요."), "짧은 답 통과");
+  expectThat(
+    visibleAnswer("하나입니다. 둘입니다. 셋입니다. 넷입니다. 다섯입니다.") === "하나입니다. 둘입니다. 셋입니다. 넷입니다.",
+    "접힌 부분만 보인다",
+  );
+  const idle = scenarios.find((scenario) => scenario.id === "no-action-needed");
+  expectThat(
+    deterministicChecks(idle, "오늘은 그대로 두셔도 됩니다. KODEX 200 약 30주를 사세요.", ["get_portfolio"]).failures.includes("no_made_up_trades"),
+    "할 일 없음에 매매 지어내기 검출",
+  );
+  expectThat(
+    !deterministicChecks(idle, "오늘은 그대로 두셔도 됩니다. 두 ETF는 더 늘리지 않으시면 됩니다.", ["get_portfolio"]).failures.includes("no_made_up_trades"),
+    "늘리지 말라는 말은 매매가 아니다",
+  );
   expectThat(!withinBudget({ kind: "short" }, "결론입니다.\n\n- 근거 하나\n- 근거 둘"), "짧은 질문에 목록 금지");
   expectThat(!withinBudget({ kind: "plan" }, Array.from({ length: 25 }, (_, index) => `줄 ${index}`).join("\n")), "계획 답 줄 수 상한");
   const markers = planMarkers();

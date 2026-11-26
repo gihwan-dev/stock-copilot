@@ -1,4 +1,6 @@
 {
+  "limits_source": "user-setting",
+  "valuation_fx": null,
   "outcome": "simulated",
   "problem_symbol": null,
   "fills": [
@@ -6,15 +8,27 @@
       "symbol": "005930",
       "side": "sell",
       "quantity": "75",
-      "price": { "amount": "72000", "currency": "KRW" },
-      "amount": { "amount": "5400000", "currency": "KRW" }
+      "price": {
+        "amount": "72000",
+        "currency": "KRW"
+      },
+      "amount": {
+        "amount": "5400000",
+        "currency": "KRW"
+      }
     }
   ],
-  "total_after": { "amount": "10000000", "currency": "KRW" },
+  "total_after": {
+    "amount": "10000000",
+    "currency": "KRW"
+  },
   "cash_after": [
     {
       "currency": "KRW",
-      "amount": { "amount": "6520000", "currency": "KRW" },
+      "amount": {
+        "amount": "6520000",
+        "currency": "KRW"
+      },
       "weight": "65.20"
     }
   ],
@@ -28,7 +42,18 @@
       "limit_percent": "20.00",
       "warning_percent": "10.00",
       "level_after": "warning",
-      "room_to_limit": { "amount": "200000", "currency": "KRW" }
+      "room_to_limit": {
+        "amount": "200000",
+        "currency": "KRW"
+      }
     }
-  ]
+  ],
+  "principles": {
+    "holdings_after": "4",
+    "minimum_holdings": "5",
+    "holdings": "below",
+    "cash_percent_after": "65.20",
+    "minimum_cash_percent": "10.00",
+    "cash": "met"
+  }
 }
