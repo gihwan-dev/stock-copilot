@@ -58,3 +58,13 @@ finding = "test-diff:modified:broker-toss::fx_market tests::capabilities_match_i
 decision = "approved"
 reason = "T-11 implements the sellable-quantity read, so the capability moves from the unsupported list to the supported list; reviewed by the main agent"
 assertion_change = true
+
+[[approval]]
+task = "news-boost"
+path = "crates/adapters/store-sqlite/src/migration_tests.rs"
+before_sha256 = "602044d95ff807fb1ae784ce0066274975c454ce6d8cbb9b3f3ce944408fffd5"
+after_sha256 = "8401ae0d1b7957d8428b8709edb5253b1a4d1186301b7ddf0200f4485f0901eb"
+finding = "test-diff:modified:store-sqlite migration_tests::fresh_open_records_clock_and_reopen_preserves_ledger"
+decision = "approved"
+reason = "migration 0026 (segye_finance source status) raises the fixed ledger count to 26; user-approved protected change, reviewed by the main agent"
+assertion_change = true
