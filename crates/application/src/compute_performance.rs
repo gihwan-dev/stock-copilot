@@ -1,11 +1,11 @@
 use crate::{Clock, PortError, SystemPortError, TransactionSyncRepository};
 use domain::{
-    AccountId, CalendarDate, CashUnavailable, CompleteTransactionResponse, Currency,
-    LedgerEvidence, Performance, PerformanceCurrency, PerformanceError, PerformanceRisk,
+    AccountId, BuyingPower, CalendarDate, CashAnchor, CashUnavailable, CompleteTransactionResponse,
+    Currency, LedgerEvidence, Performance, PerformanceCurrency, PerformanceError, PerformanceRisk,
     PerformanceSpan, RiskMetric, SettledRowSet, SettlementWindow, SnapshotError,
-    SnapshotInstrumentHistory, ValuationSnapshot, WindowDay, WindowLedger, derived_window_ledger,
-    performance_max_drawdown, performance_volatility, performance_window, recompute_window_day,
-    window_dates,
+    SnapshotInstrumentHistory, ValuationSnapshot, WindowDay, WindowLedger, anchored_window_ledger,
+    derived_window_ledger, performance_max_drawdown, performance_volatility, performance_window,
+    recompute_window_day, window_dates,
 };
 use std::future::Future;
 
@@ -26,6 +26,11 @@ impl<T: TransactionSyncRepository> SettledRowsSource for T {
 }
 
 pub trait PerformanceHistorySource: Send + Sync {
+    fn reported_cash(
+        &self,
+        account: &AccountId,
+        currency: Currency,
+    ) -> impl Future<Output = Option<BuyingPower>> + Send;
     fn complete_transactions(
         &self,
         account: &AccountId,
@@ -59,6 +64,7 @@ pub struct PerformanceSummary {
     pub volatility: PerformanceRisk,
     pub drawdown: RiskMetric,
     pub skipped: Vec<(CalendarDate, SnapshotError)>,
+    pub cash: Vec<(Currency, CashAnchor)>,
 }
 
 #[derive(Debug)]
@@ -92,6 +98,19 @@ where
         Ok(days)
     }
 
+    async fn reported(&self, account: &AccountId) -> [(Currency, Option<BuyingPower>); 2] {
+        [
+            (
+                Currency::Krw,
+                self.source.reported_cash(account, Currency::Krw).await,
+            ),
+            (
+                Currency::Usd,
+                self.source.reported_cash(account, Currency::Usd).await,
+            ),
+        ]
+    }
+
     pub async fn recompute_day(
         &self,
         account: &AccountId,
@@ -121,13 +140,16 @@ where
             .histories(&rows, window)
             .await
             .map_err(PerformanceRunError::Source)?;
-        let ledger = |currency| -> Result<WindowLedger, PerformanceRunError> {
-            let evidence = LedgerEvidence::from_complete_response(complete.clone())
-                .map_err(|reason| PerformanceRunError::Cash(currency, reason))?;
-            derived_window_ledger(&rows, window, currency, evidence, now)
-                .map_err(|reason| PerformanceRunError::Cash(currency, reason))
+        let inputs = WindowInputs {
+            reported: self.reported(account).await,
+            rows: &rows,
+            complete: &complete,
+            histories: &histories,
+            now,
         };
-        let (kr, us) = (ledger(Currency::Krw)?, ledger(Currency::Usd)?);
+        let [(_, kr_cash), (_, us_cash)] = inputs.reported;
+        let (kr, _kr_anchor) = cash_ledger(&inputs, window, Currency::Krw, kr_cash)?;
+        let (us, _us_anchor) = cash_ledger(&inputs, window, Currency::Usd, us_cash)?;
         recompute_window_day(&day, &rows, &histories, (&kr, &us), now)
             .map_err(|reason| PerformanceRunError::EdgeDay(date, reason))
     }
@@ -159,6 +181,7 @@ where
             .await
             .map_err(PerformanceRunError::Source)?;
         let inputs = WindowInputs {
+            reported: self.reported(account).await,
             rows: &rows,
             complete: &complete,
             histories: &histories,
@@ -167,15 +190,16 @@ where
         let mut dropped = Vec::new();
         for _attempt in 0_u8..4_u8 {
             match calculate(&inputs, &days)? {
-                Calculated::Done(performance, skipped) => {
+                Calculated::Done(performance, skipped, cash) => {
                     dropped.extend(skipped);
                     dropped.sort_by_key(|entry: &(CalendarDate, SnapshotError)| entry.0);
                     return Ok(PerformanceSummary {
                         span,
                         volatility: performance_volatility(&performance),
                         drawdown: performance_max_drawdown(&performance),
-                        performance,
+                        performance: *performance,
                         skipped: dropped,
+                        cash,
                     });
                 }
                 Calculated::Trim(edges) => {
@@ -193,10 +217,35 @@ where
 }
 
 struct WindowInputs<'a> {
+    reported: [(Currency, Option<BuyingPower>); 2],
     rows: &'a SettledRowSet,
     complete: &'a CompleteTransactionResponse,
     histories: &'a [SnapshotInstrumentHistory],
     now: domain::Timestamp,
+}
+
+fn cash_ledger(
+    inputs: &WindowInputs<'_>,
+    window: SettlementWindow,
+    currency: Currency,
+    reported: Option<BuyingPower>,
+) -> Result<(WindowLedger, CashAnchor), PerformanceRunError> {
+    let evidence = || {
+        LedgerEvidence::from_complete_response(inputs.complete.clone())
+            .map_err(|reason| PerformanceRunError::Cash(currency, reason))
+    };
+    let anchored = reported.map(|cash| {
+        anchored_window_ledger(inputs.rows, window, currency, evidence()?, cash)
+            .map_err(|reason| PerformanceRunError::Cash(currency, reason))
+    });
+    match anchored {
+        Some(Ok(found)) => Ok(found),
+        Some(Err(_)) | None => {
+            derived_window_ledger(inputs.rows, window, currency, evidence()?, inputs.now)
+                .map(|ledger| (ledger, CashAnchor::TransactionsOnly))
+                .map_err(|reason| PerformanceRunError::Cash(currency, reason))
+        }
+    }
 }
 
 fn calculate(
@@ -208,14 +257,9 @@ fn calculate(
     };
     let window = SettlementWindow::try_new(*first, *last)
         .map_err(|_error| PerformanceRunError::Window(SnapshotError::WrongPeriod))?;
-    let ledger = |currency| -> Result<WindowLedger, PerformanceRunError> {
-        let evidence = LedgerEvidence::from_complete_response(inputs.complete.clone())
-            .map_err(|reason| PerformanceRunError::Cash(currency, reason))?;
-        derived_window_ledger(inputs.rows, window, currency, evidence, inputs.now)
-            .map_err(|reason| PerformanceRunError::Cash(currency, reason))
-    };
-    let kr = ledger(Currency::Krw)?;
-    let us = ledger(Currency::Usd)?;
+    let [(_, kr_cash), (_, us_cash)] = inputs.reported;
+    let (kr, kr_anchor) = cash_ledger(inputs, window, Currency::Krw, kr_cash)?;
+    let (us, us_anchor) = cash_ledger(inputs, window, Currency::Usd, us_cash)?;
     let Recomputed {
         snapshots,
         rates,
@@ -243,11 +287,19 @@ fn calculate(
         PerformanceCurrency::ConvertedKrw,
     )
     .map_err(PerformanceRunError::Performance)?;
-    Ok(Calculated::Done(performance, skipped))
+    Ok(Calculated::Done(
+        Box::new(performance),
+        skipped,
+        vec![(Currency::Krw, kr_anchor), (Currency::Usd, us_anchor)],
+    ))
 }
 
 enum Calculated {
-    Done(Performance, Vec<(CalendarDate, SnapshotError)>),
+    Done(
+        Box<Performance>,
+        Vec<(CalendarDate, SnapshotError)>,
+        Vec<(Currency, CashAnchor)>,
+    ),
     Trim(Vec<(CalendarDate, SnapshotError)>),
 }
 

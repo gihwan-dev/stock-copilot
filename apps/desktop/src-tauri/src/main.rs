@@ -1086,6 +1086,15 @@ impl src_tauri::performance_book::PerformanceFeed for TossPerformanceFeed {
         )
     }
 
+    fn buying_power<'a>(
+        &'a self,
+        account: &'a domain::AccountId,
+        currency: domain::Currency,
+    ) -> BoxFuture<'a, Result<domain::BuyingPower, application::PortError>> {
+        use application::BrokerRead as _;
+        Box::pin(self.0.buying_power(account, currency))
+    }
+
     fn daily_candles<'a>(
         &'a self,
         instrument: &'a domain::QuoteInstrument,

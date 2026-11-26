@@ -285,3 +285,33 @@ fn the_window_ends_on_the_last_valued_day_and_spans_the_requested_days() {
     let year = performance_window(at(400, 8), PerformanceSpan::OneYear).expect("기간");
     assert_eq!(year.from(), date(35));
 }
+
+#[test]
+fn reported_cash_anchors_the_ledger_when_transactions_miss_some_flows() {
+    use super::{CashAnchor, anchored_window_ledger};
+    let mut dollar_buy = tx(TransactionKind::Buy, Currency::Usd, 3, 1, "10")
+        .data()
+        .clone();
+    dollar_buy.symbol = Some(Symbol::try_new("AAPL").expect("심볼"));
+    dollar_buy.asset_class = Some(AssetClass::Stock);
+    dollar_buy.quantity =
+        Some(Quantity::parse(&NumericInput::try_new("1").expect("입력")).expect("수량"));
+    let mut transactions = rows();
+    transactions.push(Transaction::try_new(dollar_buy).expect("달러 매수"));
+    let set = set(transactions);
+    let span = window(4, 6);
+    assert!(
+        derived_window_ledger(&set, span, Currency::Usd, evidence(&set, span), at(20, 0)).is_err(),
+        "거래내역만으로는 달러 현금이 음수라 맞출 수 없다"
+    );
+    let reported = crate::BuyingPower::new(money("0.12", Currency::Usd), at(20, 0));
+    let (dollars, anchor) =
+        anchored_window_ledger(&set, span, Currency::Usd, evidence(&set, span), reported)
+            .expect("보고 잔고 기준");
+    assert_eq!(anchor, CashAnchor::ReportedWithOtherFlows);
+    assert_eq!(dollars.period().window(), span);
+    let won = crate::BuyingPower::new(money("500", Currency::Krw), at(20, 0));
+    let (_won_ledger, won_anchor) =
+        anchored_window_ledger(&set, span, Currency::Krw, evidence(&set, span), won).expect("원화");
+    assert_eq!(won_anchor, CashAnchor::ReportedMatches);
+}

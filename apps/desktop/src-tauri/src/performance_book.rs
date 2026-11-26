@@ -35,6 +35,11 @@ pub trait PerformanceFeed: Send + Sync {
         date: CalendarDate,
     ) -> BoxFuture<'_, Result<MarketCalendar, PortError>>;
     fn fx_at(&self, at: Timestamp) -> BoxFuture<'_, Result<FxRate, PortError>>;
+    fn buying_power<'a>(
+        &'a self,
+        account: &'a AccountId,
+        currency: Currency,
+    ) -> BoxFuture<'a, Result<domain::BuyingPower, PortError>>;
     fn daily_candles<'a>(
         &'a self,
         instrument: &'a QuoteInstrument,
@@ -212,6 +217,14 @@ fn record_missing_candles(error: &PortError) {
 }
 
 impl PerformanceHistorySource for FeedHistory {
+    async fn reported_cash(
+        &self,
+        account: &AccountId,
+        currency: Currency,
+    ) -> Option<domain::BuyingPower> {
+        self.feed.buying_power(account, currency).await.ok()
+    }
+
     async fn complete_transactions(
         &self,
         account: &AccountId,
@@ -303,13 +316,21 @@ fn record_outcome(
     outcome: &Result<PerformanceSummary, PerformanceRunError>,
 ) {
     let detail = match outcome {
-        Ok(summary) => match summary.skipped.first() {
-            Some((_date, reason)) => format!(
-                "result=complete skipped_days={} first_skip={reason:?}",
-                summary.skipped.len()
-            ),
-            None => String::from("result=complete skipped_days=0"),
-        },
+        Ok(summary) => {
+            let cash = summary
+                .cash
+                .iter()
+                .map(|(currency, anchor)| format!("{currency:?}:{anchor:?}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            match summary.skipped.first() {
+                Some((_date, reason)) => format!(
+                    "result=complete cash={cash} skipped_days={} first_skip={reason:?}",
+                    summary.skipped.len()
+                ),
+                None => format!("result=complete cash={cash} skipped_days=0"),
+            }
+        }
         Err(error) => format!("result=failed reason={error:?}"),
     };
     crate::diagnostics_log::record(&application::DiagnosticEvent::Job(

@@ -1395,4 +1395,24 @@ mod tests {
             ]
         );
     }
+    #[test]
+    fn history_candles_normalize_session_stamped_rows_to_their_local_day() {
+        let mut body = fixture("daily")["body"].clone();
+        body["result"]["candles"][0]["timestamp"] = json!("2026-03-25T09:00:00+09:00");
+        body["result"]["candles"][1]["timestamp"] = json!("2026-03-24T15:30:00+09:00");
+        let server = serve(&[body]);
+        let candles =
+            run(adapter(&server).history_daily_candles(&instrument(), window())).expect("history");
+        let times: Vec<_> = candles
+            .iter()
+            .map(|candle| candle.time().timestamp())
+            .collect();
+        assert_eq!(
+            times,
+            vec![
+                at("2026-03-24T00:00:00+09:00"),
+                at("2026-03-25T00:00:00+09:00")
+            ]
+        );
+    }
 }
