@@ -255,13 +255,71 @@ struct CallWatch {
     started: domain::Timestamp,
 }
 
+fn io_failure(error: &std::io::Error) -> Option<TransportFailure> {
+    use std::io::ErrorKind;
+    let kind = error.kind();
+    if kind == ErrorKind::ConnectionRefused {
+        Some(TransportFailure::Refused)
+    } else if kind == ErrorKind::ConnectionReset || kind == ErrorKind::ConnectionAborted {
+        Some(TransportFailure::Reset)
+    } else if kind == ErrorKind::PermissionDenied
+        || kind == ErrorKind::NetworkUnreachable
+        || kind == ErrorKind::HostUnreachable
+    {
+        Some(TransportFailure::Blocked)
+    } else if kind == ErrorKind::TimedOut {
+        Some(TransportFailure::Timeout)
+    } else {
+        None
+    }
+}
+
+fn text_failure(text: &str) -> Option<TransportFailure> {
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("dns error") || lower.contains("failed to lookup") {
+        Some(TransportFailure::Dns)
+    } else if lower.contains("certificate")
+        || lower.contains("handshake")
+        || lower.contains("tls")
+        || lower.contains("alert")
+    {
+        Some(TransportFailure::Tls)
+    } else if lower.contains("operation not permitted") {
+        Some(TransportFailure::Blocked)
+    } else if lower.contains("connection refused") {
+        Some(TransportFailure::Refused)
+    } else if lower.contains("connection reset") {
+        Some(TransportFailure::Reset)
+    } else {
+        None
+    }
+}
+
+#[must_use]
+pub fn classify_transport(error: &(dyn std::error::Error + 'static)) -> Option<TransportFailure> {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    let mut found = None;
+    while let Some(layer) = current {
+        let here = layer
+            .downcast_ref::<std::io::Error>()
+            .and_then(io_failure)
+            .or_else(|| text_failure(&layer.to_string()));
+        if here.is_some() {
+            found = here;
+        }
+        current = layer.source();
+    }
+    found
+}
+
 fn transport_failure(error: &reqwest::Error) -> TransportFailure {
     if error.is_timeout() {
-        TransportFailure::Timeout
-    } else if error.is_connect() {
-        TransportFailure::Connect
-    } else {
-        TransportFailure::Other
+        return TransportFailure::Timeout;
+    }
+    match classify_transport(error) {
+        Some(found) => found,
+        None if error.is_connect() => TransportFailure::Connect,
+        None => TransportFailure::Other,
     }
 }
 

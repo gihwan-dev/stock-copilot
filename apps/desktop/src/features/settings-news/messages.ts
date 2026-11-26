@@ -19,6 +19,9 @@ const catalog = {
     ko: "끄면 제목과 요약만 AI에 들어가요." as UiText,
   },
   "news.interval": { ko: "수집 주기" as UiText },
+  "news.unreachable": {
+    ko: "이 기기에서 연결되지 않아요. 잠시 쉬었다가 다시 시도해요. 종목 기사는 Google 뉴스 검색으로 계속 받아요." as UiText,
+  },
   "news.source.KindDisclosure": { ko: "KRX KIND 공시" as UiText },
   "news.source.DartDisclosureApi": { ko: "DART 공시 목록" as UiText },
   "news.source.DartDisclosureRss": { ko: "DART 공시 RSS" as UiText },

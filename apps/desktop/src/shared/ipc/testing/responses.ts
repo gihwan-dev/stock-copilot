@@ -277,6 +277,7 @@ export const responses = {
         state: "on",
       },
     ],
+    unreachable: [],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
   },
   getPortfolio: {
@@ -726,6 +727,7 @@ export const responses = {
         state: "on",
       },
     ],
+    unreachable: [],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
   },
   setOptionalKey: {

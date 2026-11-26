@@ -105,6 +105,11 @@ impl FxRate {
     }
 
     #[must_use]
+    pub fn carried_to(self, validity: TimeInterval) -> Option<Self> {
+        (validity.start() >= self.as_of()).then_some(Self { validity, ..self })
+    }
+
+    #[must_use]
     pub fn validity_at(self, at: Timestamp) -> FxValidity {
         if at >= self.as_of() && at < self.valid_until() {
             FxValidity::Valid
