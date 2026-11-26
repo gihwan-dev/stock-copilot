@@ -324,6 +324,14 @@ impl MasterInstrument {
         Ok(Self { row, market })
     }
     #[must_use]
+    pub fn fund_kind(&self) -> crate::FundKind {
+        crate::FundKind::classify(
+            self.row.security_type.known(),
+            Some(&self.row.name),
+            Some(&self.row.symbol),
+        )
+    }
+    #[must_use]
     pub const fn row(&self) -> &MasterInstrumentRow {
         &self.row
     }
@@ -435,15 +443,18 @@ impl MasterInstrumentFacts {
     #[must_use]
     pub fn policy_security_facts(&self) -> PolicySecurityFacts {
         let mut values = BTreeMap::new();
+        let mut kinds = BTreeMap::new();
         for master in &self.0 {
             if let (Some(kind), Ok(instrument)) = (
                 master.row.security_type.known(),
                 master.resolved_instrument(),
             ) {
-                values.insert(AllocationInstrument::new(&instrument), kind);
+                let key = AllocationInstrument::new(&instrument);
+                kinds.insert(key.clone(), master.fund_kind());
+                values.insert(key, kind);
             }
         }
-        PolicySecurityFacts::from_master_lookup_results(values)
+        PolicySecurityFacts::from_master_lookup_results(values).with_fund_kinds(kinds)
     }
 }
 
