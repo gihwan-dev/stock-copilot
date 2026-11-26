@@ -30,6 +30,7 @@ fn news_to_http_source(source: &NewsSource) -> HttpDataSource {
         NewsSource::Maekyung => HttpDataSource::Maekyung,
         NewsSource::Yonhap => HttpDataSource::Yonhap,
         NewsSource::Edaily => HttpDataSource::Edaily,
+        NewsSource::SegyeFinance => HttpDataSource::SegyeFinance,
         NewsSource::BankOfKorea => HttpDataSource::BankOfKorea,
         NewsSource::FederalReserve => HttpDataSource::FederalReserve,
         NewsSource::GoogleNews => HttpDataSource::GoogleNews,

@@ -27,6 +27,7 @@ const catalog = {
   "news.source.Maekyung": { ko: "매일경제" as UiText },
   "news.source.Yonhap": { ko: "연합뉴스" as UiText },
   "news.source.Edaily": { ko: "이데일리" as UiText },
+  "news.source.SegyeFinance": { ko: "세계파이낸스" as UiText },
   "news.source.GoogleNews": { ko: "Google 뉴스" as UiText },
   "news.source.YahooFinance": { ko: "Yahoo Finance" as UiText },
   "news.source.SecEdgar": { ko: "SEC EDGAR" as UiText },

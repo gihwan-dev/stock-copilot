@@ -1086,6 +1086,15 @@ impl src_tauri::performance_book::PerformanceFeed for TossPerformanceFeed {
         )
     }
 
+    fn buying_power<'a>(
+        &'a self,
+        account: &'a domain::AccountId,
+        currency: domain::Currency,
+    ) -> BoxFuture<'a, Result<domain::BuyingPower, application::PortError>> {
+        use application::BrokerRead as _;
+        Box::pin(self.0.buying_power(account, currency))
+    }
+
     fn daily_candles<'a>(
         &'a self,
         instrument: &'a domain::QuoteInstrument,
@@ -1474,7 +1483,8 @@ const fn press_target(source: sources::PressMacroSource) -> application::Collect
         sources::PressMacroSource::Hankyung => application::CollectionTarget::HankyungRss,
         sources::PressMacroSource::Maekyung
         | sources::PressMacroSource::Yonhap
-        | sources::PressMacroSource::Edaily => application::CollectionTarget::PressRss,
+        | sources::PressMacroSource::Edaily
+        | sources::PressMacroSource::SegyeFinance => application::CollectionTarget::PressRss,
         sources::PressMacroSource::BankOfKorea | sources::PressMacroSource::FederalReserve => {
             application::CollectionTarget::CentralBankRss
         }
@@ -2425,7 +2435,7 @@ mod tests {
             .iter()
             .map(|feed| (feed.target, feed.regular.source()))
             .collect();
-        assert_eq!(sources.len(), 10);
+        assert_eq!(sources.len(), 11);
         assert!(sources.contains(&(
             CollectionTarget::HankyungRss,
             FeedSource::News(domain::NewsSource::Hankyung)

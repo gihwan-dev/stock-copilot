@@ -150,6 +150,7 @@ pub enum NewsSource {
     FederalReserve,
     GoogleNews,
     YahooFinance,
+    SegyeFinance,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -97,15 +97,33 @@ impl WindowLedger {
     }
 }
 
-pub fn derived_window_ledger(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CashAnchor {
+    TransactionsOnly,
+    ReportedMatches,
+    ReportedWithOtherFlows,
+}
+
+fn settled_cash_total(rows: &SettledRowSet, currency: Currency) -> Result<Money, CashUnavailable> {
+    rows.active_settled_for_calculation()
+        .filter(|row| row.data().currency == currency)
+        .try_fold(
+            Money::new(crate::Amount::new(Decimal::ZERO), currency),
+            |total, row| {
+                total
+                    .checked_add(&crate::cash_ledger::cash_delta(row.data())?)
+                    .map_err(CashUnavailable::Arithmetic)
+            },
+        )
+}
+
+fn window_ledger(
     rows: &SettledRowSet,
     window: SettlementWindow,
     currency: Currency,
     evidence: LedgerEvidence,
-    observed_at: Timestamp,
+    (opening, ending, observed_at): (Money, Money, Timestamp),
 ) -> Result<WindowLedger, CashUnavailable> {
-    let opening = settled_cash_through(rows, currency, window.from().inspection_predecessor())?;
-    let ending = settled_cash_through(rows, currency, window.to())?;
     let ledger = CashLedger::reconstruct(
         rows,
         CashLedgerInput {
@@ -123,6 +141,63 @@ pub fn derived_window_ledger(
         },
         ExternalFlows::Unavailable(reason) => Err(reason),
     }
+}
+
+pub fn anchored_window_ledger(
+    rows: &SettledRowSet,
+    window: SettlementWindow,
+    currency: Currency,
+    evidence: LedgerEvidence,
+    reported: BuyingPower,
+) -> Result<(WindowLedger, CashAnchor), CashUnavailable> {
+    let now = reported
+        .money()
+        .map_err(|_error| CashUnavailable::InvalidReportedCash)?;
+    if now.currency() != currency {
+        return Err(CashUnavailable::CurrencyMismatch);
+    }
+    let total = settled_cash_total(rows, currency)?;
+    let through_end = settled_cash_through(rows, currency, window.to())?;
+    let before_start =
+        settled_cash_through(rows, currency, window.from().inspection_predecessor())?;
+    let arithmetic = CashUnavailable::Arithmetic;
+    let ending = now
+        .checked_sub(&total.checked_sub(&through_end).map_err(arithmetic)?)
+        .map_err(arithmetic)?;
+    let opening = ending
+        .checked_sub(&through_end.checked_sub(&before_start).map_err(arithmetic)?)
+        .map_err(arithmetic)?;
+    let anchor = if total == now {
+        CashAnchor::ReportedMatches
+    } else {
+        CashAnchor::ReportedWithOtherFlows
+    };
+    window_ledger(
+        rows,
+        window,
+        currency,
+        evidence,
+        (opening, ending, reported.observed_at()),
+    )
+    .map(|ledger| (ledger, anchor))
+}
+
+pub fn derived_window_ledger(
+    rows: &SettledRowSet,
+    window: SettlementWindow,
+    currency: Currency,
+    evidence: LedgerEvidence,
+    observed_at: Timestamp,
+) -> Result<WindowLedger, CashUnavailable> {
+    let opening = settled_cash_through(rows, currency, window.from().inspection_predecessor())?;
+    let ending = settled_cash_through(rows, currency, window.to())?;
+    window_ledger(
+        rows,
+        window,
+        currency,
+        evidence,
+        (opening, ending, observed_at),
+    )
 }
 
 fn usable(

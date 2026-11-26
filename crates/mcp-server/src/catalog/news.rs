@@ -182,6 +182,7 @@ const fn news_source_name(source: &InformationSource) -> &'static str {
             NewsSource::Maekyung => "maekyung",
             NewsSource::Yonhap => "yonhap",
             NewsSource::Edaily => "edaily",
+            NewsSource::SegyeFinance => "segye_finance",
             NewsSource::BankOfKorea => "bank_of_korea",
             NewsSource::FederalReserve => "federal_reserve",
             NewsSource::GoogleNews => "google_news",

@@ -87,6 +87,7 @@ pub const fn feed_data_source(source: &FeedSource) -> DataSource {
             NewsSource::FederalReserve => DataSource::FederalReserve,
             NewsSource::GoogleNews => DataSource::GoogleNews,
             NewsSource::YahooFinance => DataSource::YahooFinance,
+            NewsSource::SegyeFinance => DataSource::SegyeFinance,
         },
         FeedSource::Disclosure(disclosure) => match disclosure {
             DisclosureSource::Kind => DataSource::KindDisclosure,

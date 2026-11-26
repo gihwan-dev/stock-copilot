@@ -195,6 +195,21 @@ enum Days {
 
 struct Source(Days);
 impl PerformanceHistorySource for Source {
+    fn reported_cash(
+        &self,
+        _account: &AccountId,
+        currency: Currency,
+    ) -> impl Future<Output = Option<domain::BuyingPower>> + Send {
+        let amount = match currency {
+            Currency::Krw => "1500",
+            Currency::Usd => "5",
+        };
+        ready(Some(domain::BuyingPower::new(
+            money(amount, currency),
+            now(),
+        )))
+    }
+
     fn complete_transactions(
         &self,
         _account: &AccountId,
@@ -312,5 +327,23 @@ fn one_day_is_recomputed_from_closes_and_cash_for_the_daily_record() {
         run(compute.recompute_day(&account(), date(14))).map(|found| found.settlement_date()),
         Err(PerformanceRunError::NoValuedDays),
         "평가하지 않는 날은 기록하지 않는다"
+    );
+}
+
+#[test]
+fn reported_cash_that_matches_the_rows_is_marked_as_matching() {
+    let summary = run(ComputePerformance {
+        rows: &Rows,
+        source: &Source(Days::Weekdays),
+        clock: &Fixed,
+    }
+    .execute(&account(), PerformanceSpan::OneMonth))
+    .expect("성과");
+    assert_eq!(
+        summary.cash,
+        vec![
+            (Currency::Krw, domain::CashAnchor::ReportedMatches),
+            (Currency::Usd, domain::CashAnchor::ReportedMatches),
+        ]
     );
 }

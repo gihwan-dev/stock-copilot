@@ -141,7 +141,7 @@ fn initial_settings_list_every_source_with_default_cadence_and_locked_reading() 
         },
     ))
     .expect("뉴스 설정");
-    assert_eq!(view.feeds.len(), 14);
+    assert_eq!(view.feeds.len(), 15);
     let kind = &view.feeds[0];
     assert_eq!(kind.source, UiFeedSource::KindDisclosure);
     assert_eq!(kind.interval_minutes, UiInterval::Two);

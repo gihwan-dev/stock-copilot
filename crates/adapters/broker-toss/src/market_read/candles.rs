@@ -132,30 +132,128 @@ fn history_status<S: SecretStore, T: Clock, R: TokenRenewal>(
     domain::regular_session_candle_status(session, parsed.collected_at).ok()
 }
 
+#[derive(Default)]
+struct HistorySkips {
+    unreadable: usize,
+    future: usize,
+    open_session: usize,
+    candle: usize,
+    shape: Option<String>,
+}
+
+impl HistorySkips {
+    fn record(&self) {
+        let skipped = self
+            .unreadable
+            .saturating_add(self.future)
+            .saturating_add(self.open_session)
+            .saturating_add(self.candle);
+        if skipped == 0 && self.shape.is_none() {
+            return;
+        }
+        crate::diagnostics::validation_failed(
+            ENDPOINT,
+            &format!(
+                "history-skipped unreadable={} future={} open-session={} candle={} daily-time={}",
+                self.unreadable,
+                self.future,
+                self.open_session,
+                self.candle,
+                self.shape.as_deref().unwrap_or("midnight")
+            ),
+        );
+    }
+}
+
+fn local_midnight(at: Timestamp) -> Option<(Timestamp, Option<String>)> {
+    let offset = i64::from(*at.offset_seconds().as_i32());
+    let local = at.utc_seconds().as_i64().checked_add(offset)?;
+    let into_day = local.rem_euclid(86_400);
+    let midnight = Timestamp::from_parts(
+        domain::UnixSeconds::new(at.utc_seconds().as_i64().checked_sub(into_day)?),
+        domain::Nanosecond::new(0),
+        at.offset_seconds(),
+    )
+    .ok()?;
+    let shape = (into_day != 0 || *at.nanosecond().as_u32() != 0)
+        .then(|| format!("{into_day}s-into-day@offset{offset:+}s"));
+    Some((midnight, shape))
+}
+
+fn history_parse<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    row: &broker_toss_schema::types::Candle,
+    instrument: &QuoteInstrument,
+    skips: &mut HistorySkips,
+) -> Option<ParsedCandle> {
+    let observed = reader.market_now();
+    let Some((day, shape)) = timestamp(&row.timestamp, ENDPOINT)
+        .ok()
+        .and_then(local_midnight)
+    else {
+        skips.unreadable = skips.unreadable.saturating_add(1);
+        return None;
+    };
+    if skips.shape.is_none() {
+        skips.shape = shape;
+    }
+    if day > observed {
+        skips.future = skips.future.saturating_add(1);
+        return None;
+    }
+    let unit = currency(&row.currency.to_string(), ENDPOINT).ok()?;
+    let values = (unit == instrument.currency())
+        .then(|| {
+            Ohlcv::try_new(
+                price(&row.open_price, unit, ENDPOINT).ok()?,
+                price(&row.high_price, unit, ENDPOINT).ok()?,
+                price(&row.low_price, unit, ENDPOINT).ok()?,
+                price(&row.close_price, unit, ENDPOINT).ok()?,
+                NumericInput::try_new(&row.volume)
+                    .and_then(|input| Quantity::parse(&input))
+                    .ok()?,
+            )
+            .ok()
+        })
+        .flatten();
+    let parsed = values.and_then(|ohlcv| {
+        CandleTime::try_new(day, CandlePeriod::Daily)
+            .ok()
+            .map(|time| ParsedCandle {
+                time,
+                values: ohlcv,
+                collected_at: observed,
+            })
+    });
+    if parsed.is_none() {
+        skips.unreadable = skips.unreadable.saturating_add(1);
+    }
+    parsed
+}
+
 fn history_candle<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     instrument: &QuoteInstrument,
     row: &broker_toss_schema::types::Candle,
+    skips: &mut HistorySkips,
 ) -> Option<Candle> {
-    let Ok(parsed) = parse(reader, row, instrument, CandlePeriod::Daily) else {
-        crate::diagnostics::validation_failed(ENDPOINT, "history-row-skipped:parse");
-        return None;
-    };
+    let parsed = history_parse(reader, row, instrument, skips)?;
     let Some(status) = history_status(reader, instrument, &parsed) else {
-        crate::diagnostics::validation_failed(ENDPOINT, "history-row-skipped:open-session");
+        skips.open_session = skips.open_session.saturating_add(1);
         return None;
     };
-    Candle::try_new(
+    let candle = Candle::try_new(
         instrument.instrument_id().clone(),
         parsed.time,
         PriceAdjustment::Raw,
         parsed.values,
         CandleObservation::new(parsed.collected_at, status),
     )
-    .inspect_err(|_error| {
-        crate::diagnostics::validation_failed(ENDPOINT, "history-row-skipped:candle");
-    })
-    .ok()
+    .ok();
+    if candle.is_none() {
+        skips.candle = skips.candle.saturating_add(1);
+    }
+    candle
 }
 
 pub(crate) async fn history<S: SecretStore, T: Clock, R: TokenRenewal>(
@@ -166,6 +264,7 @@ pub(crate) async fn history<S: SecretStore, T: Clock, R: TokenRenewal>(
     let mut before = format_time(window.end())?;
     let mut boundary = window.end();
     let mut result = BTreeMap::new();
+    let mut skips = HistorySkips::default();
     for _page in 0..PAGE_LIMIT {
         let value = reader
             .market_read(
@@ -185,7 +284,7 @@ pub(crate) async fn history<S: SecretStore, T: Clock, R: TokenRenewal>(
             })?;
         let mut oldest: Option<Timestamp> = None;
         for row in &decoded.candles {
-            let Some(candle) = history_candle(reader, instrument, row) else {
+            let Some(candle) = history_candle(reader, instrument, row, &mut skips) else {
                 continue;
             };
             let at = candle.time().timestamp();
@@ -196,16 +295,19 @@ pub(crate) async fn history<S: SecretStore, T: Clock, R: TokenRenewal>(
         }
         let reached = oldest.is_none_or(|at| at <= window.start());
         let Some(next) = decoded.next_before.filter(|_more| !reached) else {
+            skips.record();
             return Ok(result.into_values().collect());
         };
         let next_time = timestamp(&next, ENDPOINT)?;
         if next_time >= boundary {
             crate::diagnostics::validation_failed(ENDPOINT, "history-cursor-not-older");
+            skips.record();
             return Ok(result.into_values().collect());
         }
         before = next;
         boundary = next_time;
     }
+    skips.record();
     Ok(result.into_values().collect())
 }
 

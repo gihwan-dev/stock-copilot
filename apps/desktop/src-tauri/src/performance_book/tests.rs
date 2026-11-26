@@ -124,6 +124,14 @@ impl PerformanceFeed for DownFeed {
         Box::pin(ready(Err(denied(ReadEndpoint::FxRate))))
     }
 
+    fn buying_power<'a>(
+        &'a self,
+        _account: &'a AccountId,
+        _currency: Currency,
+    ) -> BoxFuture<'a, Result<domain::BuyingPower, PortError>> {
+        Box::pin(ready(Err(denied(ReadEndpoint::BuyingPower))))
+    }
+
     fn daily_candles<'a>(
         &'a self,
         _instrument: &'a QuoteInstrument,
@@ -242,6 +250,14 @@ impl PerformanceFeed for WeekFeed {
 
     fn fx_at(&self, _at: Timestamp) -> BoxFuture<'_, Result<FxRate, PortError>> {
         Box::pin(ready(Err(denied(ReadEndpoint::FxRate))))
+    }
+
+    fn buying_power<'a>(
+        &'a self,
+        _account: &'a AccountId,
+        _currency: Currency,
+    ) -> BoxFuture<'a, Result<domain::BuyingPower, PortError>> {
+        Box::pin(ready(Err(denied(ReadEndpoint::BuyingPower))))
     }
 
     fn daily_candles<'a>(
