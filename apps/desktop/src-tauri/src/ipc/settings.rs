@@ -292,7 +292,16 @@ pub async fn get_settings<R: Runtime>(
     let GetSettingsRequest {
         scope: SettingsQueryScope::All,
     } = request;
-    load_settings_view(app.state::<ScreenState>().inner()).await
+    let view = load_settings_view(app.state::<ScreenState>().inner()).await?;
+    Ok(
+        match app.try_state::<crate::platform::autostart::LoginItemsState>() {
+            Some(login) => UiSettingsView {
+                auto_start_at_login: super::autostart::toggle(login.items.desired_state()),
+                ..view
+            },
+            None => view,
+        },
+    )
 }
 
 #[tauri::command]

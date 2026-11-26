@@ -3,6 +3,7 @@ use tauri::test::{mock_builder, mock_context, noop_assets};
 use crate::build_app;
 mod autostart;
 mod collector;
+mod collector_plan;
 mod database;
 mod e2e_smoke;
 mod exit;
@@ -14,6 +15,7 @@ mod order_path;
 mod process_cleanup;
 mod residency;
 mod responsiveness;
+mod restart;
 mod scheduling;
 mod startup;
 

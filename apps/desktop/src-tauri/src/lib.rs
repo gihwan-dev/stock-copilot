@@ -21,6 +21,7 @@ pub mod platform;
 pub mod ports;
 pub mod product_events;
 pub mod product_ports;
+pub mod sector_classes;
 mod security;
 pub mod signal_flow;
 pub mod sqlite_ports;
@@ -49,7 +50,9 @@ pub fn build_app<R: Runtime, P: PortTypes>(
         .setup(move |app| {
             ipc::registry::specta_builder::<R>().mount_events(app);
             security::create_windows(app)?;
-            let _policy = platform::residency::apply_accessory_policy(app);
+            let tray =
+                platform::residency::install_tray(&platform::tray::UnavailableTrayController);
+            let _policy = platform::residency::apply_residency_policy(app, tray);
             app.manage(platform::residency::ResidencyState::new());
             let opened = open_product_database(app, &ports);
             let status = opened.status();
@@ -62,6 +65,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
                 app.try_state::<ai_runtime::ChatTurnBook>()
                     .map(|book| book.inner().clone()),
             );
+            let _login_items = platform::autostart::install(app, &ports.events);
             app.manage(ports);
             let _scheduling = platform::scheduling::start_background::<R, P>(app);
             let shutdown_hook = database_shutdown_hook(app, shared_database);
@@ -207,9 +211,14 @@ fn show_prepared_main<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), tauri
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| tauri::Error::AssetNotFound("main-window".into()))?;
-    window.show()?;
-    platform::residency::record_main_shown(app);
-    Ok(())
+    match platform::autostart::launch_mode(app) {
+        platform::autostart::LaunchMode::LoginBackground => Ok(()),
+        platform::autostart::LaunchMode::Interactive => {
+            window.show()?;
+            platform::residency::record_main_shown(app);
+            Ok(())
+        }
+    }
 }
 
 pub fn run_app<R: Runtime, Finish>(app: App<R>, finish: Finish)
@@ -244,8 +253,10 @@ where
             };
             if let Err(_error) = platform::residency::handle_reopen(handle, visibility) {}
         }
-        tauri::RunEvent::Exit
-        | tauri::RunEvent::WindowEvent { .. }
+        tauri::RunEvent::Exit => {
+            let _released = platform::single_instance::release_for_exit(handle);
+        }
+        tauri::RunEvent::WindowEvent { .. }
         | tauri::RunEvent::WebviewEvent { .. }
         | tauri::RunEvent::Ready
         | tauri::RunEvent::Resumed

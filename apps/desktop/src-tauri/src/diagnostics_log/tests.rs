@@ -155,3 +155,62 @@ fn the_log_file_rotates_once_it_reaches_the_cap() {
     assert!(u64::try_from(current.len()).expect("length") < 128);
     let _removed = std::fs::remove_dir_all(&directory);
 }
+
+#[test]
+fn scheduled_job_runs_and_full_inspection_get_their_own_lines() {
+    use crate::platform::job_settings::job_diagnosis;
+    use scheduler::{JobError, JobExecutionRecord, JobRunDetail, JobRunOutcome, ScheduledJobId};
+    let record = |id, outcome| JobExecutionRecord {
+        id,
+        scheduled_for: at(),
+        evaluated_at: at(),
+        outcome,
+    };
+    let cases = [
+        (
+            record(
+                ScheduledJobId::DailyValuationSnapshot,
+                JobRunOutcome::Executed(JobRunDetail::new("valuation_recorded", 1)),
+            ),
+            "2027-01-15T17:00:00+09:00 job id=daily_valuation_snapshot result=executed summary=valuation_recorded processed=1",
+        ),
+        (
+            record(
+                ScheduledJobId::MorningBriefing,
+                JobRunOutcome::SkippedMissedWindow,
+            ),
+            "2027-01-15T17:00:00+09:00 job id=morning_briefing result=skipped-missed-window",
+        ),
+        (
+            record(
+                ScheduledJobId::EstimateCycle,
+                JobRunOutcome::DeferredByAiQueue { resumes_at: None },
+            ),
+            "2027-01-15T17:00:00+09:00 job id=estimate_cycle result=deferred",
+        ),
+        (
+            record(
+                ScheduledJobId::EstimateResolution,
+                JobRunOutcome::Failed(JobError::PortUnavailable(String::from("market-calendar"))),
+            ),
+            "2027-01-15T17:00:00+09:00 job id=estimate_resolution result=failed reason=port-unavailable:market-calendar",
+        ),
+    ];
+    for (input, expected) in cases {
+        assert_eq!(
+            format_line(at(), &DiagnosticEvent::Job(job_diagnosis(&input))),
+            expected
+        );
+    }
+    assert_eq!(
+        format_line(
+            at(),
+            &sync(
+                SyncJob::TransactionsFullInspection,
+                SyncResult::Complete,
+                Vec::new()
+            )
+        ),
+        "2027-01-15T17:00:00+09:00 sync job=transactions-full-inspection result=complete"
+    );
+}

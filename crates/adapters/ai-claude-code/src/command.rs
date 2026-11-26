@@ -1,5 +1,7 @@
+use crate::chat_prompt::CHAT_SYSTEM_PROMPT;
 use application::{
-    AiRunId, InformationError, ModelName, ReasoningEffort, ResponseMismatch, RunKind, SecretValue,
+    AiRunId, InformationError, ModelName, ReasoningEffort, ResponseMismatch, RunKind, RunPurpose,
+    SecretValue,
 };
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -599,6 +601,7 @@ pub struct CommandPlanInput<'a> {
     pub work_dir: &'a Path,
     pub mcp_config_path: &'a Path,
     pub kind: RunKind,
+    pub purpose: RunPurpose,
     pub model: &'a ModelName,
     pub effort: ReasoningEffort,
     pub expected_mcp_server: &'a str,
@@ -615,6 +618,7 @@ impl fmt::Debug for CommandPlanInput<'_> {
             .field("work_dir", &self.work_dir)
             .field("mcp_config_path", &self.mcp_config_path)
             .field("kind", &self.kind)
+            .field("purpose", &self.purpose)
             .field("model", &self.model)
             .field("effort", &self.effort)
             .field("has_token", &self.mcp_token.is_some())
@@ -669,6 +673,10 @@ fn build_profile_args(input: &CommandPlanInput<'_>) -> Result<Vec<String>, Comma
     if let Some(effort_arg) = effort_flag_value(input.effort) {
         args.push(String::from("--effort"));
         args.push(String::from(effort_arg));
+    }
+    if input.kind == RunKind::Analysis && input.purpose == RunPurpose::Chat {
+        args.push(String::from("--append-system-prompt"));
+        args.push(String::from(CHAT_SYSTEM_PROMPT));
     }
     if input.kind == RunKind::Collection
         && let Some(schema) = input.collection_json_schema

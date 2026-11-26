@@ -71,7 +71,8 @@ export type ChatCardRef = {
   readonly id: EntityId;
 };
 
-export type ChatNumberCheck = "no-numbers" | "verified" | "unverified";
+export type ChatNumberCheck =
+  "no-numbers" | "verified" | "computed" | "unverified";
 
 export type ChatSourceKind = "tool" | "disclosure" | "news" | "web";
 

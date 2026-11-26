@@ -93,6 +93,7 @@ pub enum TokenIssue {
 pub enum SyncJob {
     Portfolio,
     Transactions,
+    TransactionsFullInspection,
     InstrumentMaster,
 }
 
@@ -158,6 +159,23 @@ pub struct SourceCall {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JobRunNote {
+    Executed {
+        summary: DiagnosticText,
+        processed: crate::JobItemCount,
+    },
+    SkippedMissedWindow,
+    Deferred,
+    Failed(DiagnosticText),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobDiagnosis {
+    pub job: DiagnosticText,
+    pub note: JobRunNote,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiagnosticEvent {
     BrokerCall(BrokerCall),
     ResponseRejected {
@@ -171,6 +189,7 @@ pub enum DiagnosticEvent {
         tool: DiagnosticText,
         summary: DiagnosticText,
     },
+    Job(JobDiagnosis),
     Feed(FeedDiagnosis),
     SourceCall(SourceCall),
 }

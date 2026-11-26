@@ -104,6 +104,23 @@ impl WeightCaps {
     pub fn sector_cap(self) -> ProfileWeight {
         self.sector_cap
     }
+    #[must_use]
+    pub fn limits_for(self, kind: crate::FundKind) -> Self {
+        let (cap, warning) = match kind {
+            crate::FundKind::SingleSecurity | crate::FundKind::SectorOrThemeFund => return self,
+            crate::FundKind::BroadIndexFund => (self.sector_cap, self.instrument_cap),
+            crate::FundKind::LeveragedOrInverse => {
+                (self.instrument_warning, self.instrument_warning)
+            }
+        };
+        match Self::try_new(cap, warning, self.sector_cap) {
+            Ok(limits) => limits,
+            Err(
+                WeightCapsError::WarningExceedsInstrument
+                | WeightCapsError::InstrumentExceedsSector,
+            ) => self,
+        }
+    }
 }
 
 impl Default for WeightCaps {

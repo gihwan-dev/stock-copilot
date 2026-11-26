@@ -22,7 +22,7 @@ use std::sync::Arc;
 use store_sqlite::SqliteRepositories;
 use tauri::{AppHandle, Manager, Runtime};
 
-pub const FULL_INSPECTION_RANGE_DAYS: u32 = 31;
+pub const FULL_INSPECTION_RANGE_DAYS: u32 = u32::MAX;
 
 pub struct AppStoredJobs<R: Runtime, P: PortTypes> {
     app: AppHandle<R>,
@@ -150,7 +150,9 @@ impl<R: Runtime, P: PortTypes> TransactionSyncPort for AppStoredJobs<R, P> {
                 Ok(_delivery) => tally.recent_synced = tally.recent_synced.saturating_add(1),
                 Err(error) => first_failure = first_failure.or_else(|| Some(storage(error))),
             }
-            match full.run_full_inspection(account, range_limit).await.outcome {
+            let inspected = full.run_full_inspection(account, range_limit).await.outcome;
+            record_full_inspection(&inspected);
+            match inspected {
                 Ok(FullInspectionRun::Completed { .. }) => {
                     tally.full_inspections_completed =
                         tally.full_inspections_completed.saturating_add(1);
@@ -164,6 +166,21 @@ impl<R: Runtime, P: PortTypes> TransactionSyncPort for AppStoredJobs<R, P> {
         }
         first_failure.map_or(Ok(tally), Err)
     }
+}
+
+fn record_full_inspection<E>(inspected: &Result<FullInspectionRun, E>) {
+    let result = match inspected {
+        Ok(FullInspectionRun::Completed { .. }) => application::SyncResult::Complete,
+        Ok(FullInspectionRun::AlreadyCompletedToday) => return,
+        Err(_error) => application::SyncResult::Failed,
+    };
+    crate::diagnostics_log::record(&application::DiagnosticEvent::Sync(
+        application::SyncDiagnosis {
+            job: application::SyncJob::TransactionsFullInspection,
+            result,
+            errors: Vec::new(),
+        },
+    ));
 }
 
 pub struct AppSpecWatch<R: Runtime, P: PortTypes, S> {

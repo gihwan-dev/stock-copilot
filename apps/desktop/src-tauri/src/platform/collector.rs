@@ -137,6 +137,57 @@ pub trait CollectionPlanner: Send + Sync {
     }
 }
 
+pub const PLAN_REUSE_SECONDS: i64 = 300;
+
+pub struct ReusedPlan {
+    inner: Arc<dyn CollectionPlanner>,
+    clock: Arc<dyn Clock>,
+    last: Mutex<Option<(Timestamp, CollectionPlan)>>,
+}
+
+impl Debug for ReusedPlan {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReusedPlan").finish_non_exhaustive()
+    }
+}
+
+impl ReusedPlan {
+    #[must_use]
+    pub fn new(inner: Arc<dyn CollectionPlanner>, clock: Arc<dyn Clock>) -> Self {
+        Self {
+            inner,
+            clock,
+            last: Mutex::new(None),
+        }
+    }
+}
+
+fn reusable(at: Timestamp, now: Timestamp, plan: &CollectionPlan) -> Option<CollectionPlan> {
+    let age = now
+        .utc_seconds()
+        .as_i64()
+        .saturating_sub(*at.utc_seconds().as_i64());
+    (0..PLAN_REUSE_SECONDS).contains(&age).then(|| plan.clone())
+}
+
+impl CollectionPlanner for ReusedPlan {
+    fn plan(&self) -> PlanFuture<'_> {
+        Box::pin(async move {
+            let now = self.clock.now();
+            let mut last = self.last.lock().await;
+            if let Some(plan) = last
+                .as_ref()
+                .and_then(|(at, plan)| reusable(*at, now, plan))
+            {
+                return plan;
+            }
+            let fresh = self.inner.plan().await;
+            *last = Some((now, fresh.clone()));
+            fresh
+        })
+    }
+}
+
 #[must_use]
 pub fn off_hours_plan() -> CollectionPlan {
     CollectionPlan::build(&CollectionConditions {
@@ -555,7 +606,10 @@ pub fn app_collector<R: Runtime, P: PortTypes>(
         .collect();
     FeedCollectorWorker::new(
         scheduled,
-        Arc::new(AppCollectionPlanner::<R, P>::new(app.clone())),
+        Arc::new(ReusedPlan::new(
+            Arc::new(AppCollectionPlanner::<R, P>::new(app.clone())),
+            Arc::clone(&clock),
+        )),
         clock,
         Duration::from_secs(COLLECTOR_TICK_SECONDS),
     )

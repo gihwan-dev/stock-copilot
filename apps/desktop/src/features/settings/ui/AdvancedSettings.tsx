@@ -1,6 +1,5 @@
 import type { ReactElement } from "react";
 import {
-  Badge,
   Card,
   DataText,
   Disclosure,
@@ -9,8 +8,9 @@ import {
   Stack,
   Text,
 } from "../../../shared/ds";
-import type { SettingsView, ToggleState } from "../../../shared/ipc";
+import type { SettingsView } from "../../../shared/ipc";
 import { settingsText, type SettingsMessageKey } from "../messages";
+import { AutoStartSwitch } from "./AutoStartSwitch";
 
 type Props = {
   readonly settings: SettingsView;
@@ -52,9 +52,6 @@ const summaryCards = (
         />,
       ];
 
-const toggleMessage = (state: ToggleState): SettingsMessageKey =>
-  state === "on" ? "stateOn" : "stateOff";
-
 const OptionalKeyRow = (props: {
   readonly labelKey: SettingsMessageKey;
   readonly configured: "configured" | "unconfigured";
@@ -69,18 +66,6 @@ const OptionalKeyRow = (props: {
         "ko",
       )}
     </Text>
-  </Inline>
-);
-
-const ToggleSummaryRow = (props: {
-  readonly labelKey: SettingsMessageKey;
-  readonly state: ToggleState;
-}): ReactElement => (
-  <Inline gap="space-2" align="center" wrap="wrap">
-    <Text variant="label">{settingsText(props.labelKey, "ko")}</Text>
-    <Badge tone={props.state === "on" ? "primary" : "neutral"}>
-      {settingsText(toggleMessage(props.state), "ko")}
-    </Badge>
   </Inline>
 );
 
@@ -146,10 +131,7 @@ const SystemCard = (props: Props): ReactElement => (
     }}
   >
     <Stack gap="space-3">
-      <ToggleSummaryRow
-        labelKey="autoStartLabel"
-        state={props.settings.autoStartAtLogin}
-      />
+      <AutoStartSwitch state={props.settings.autoStartAtLogin} />
       <Inline gap="space-2" align="center" wrap="wrap">
         <Text variant="label">
           {settingsText("accountSelectionLabel", "ko")}

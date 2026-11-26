@@ -45,7 +45,9 @@ use src_tauri::platform::notifier::{
 use src_tauri::platform::peer_process::PsPeerInspector;
 use src_tauri::platform::resolution::{ResolutionData, ResolutionDataSlot, ResolutionSource};
 use src_tauri::platform::scheduling::SpecWatchInputs;
-use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
+use src_tauri::platform::single_instance::{
+    InstanceAcquisition, InstanceSlot, SocketPath, attach_to_app,
+};
 use src_tauri::platform::system_notification::{
     NotificationHandleSlot, SystemNotificationDelivery,
 };
@@ -955,6 +957,46 @@ fn holdings_listener(
     )
 }
 
+fn installed_bundle() -> Option<PathBuf> {
+    let executable = std::env::current_exe().ok()?;
+    let bundle = executable.parent()?.parent()?.parent()?;
+    bundle
+        .extension()
+        .filter(|extension| *extension == "app")
+        .map(|_app| bundle.to_path_buf())
+}
+
+fn prepare_login_start(app: &tauri::App<tauri::Wry>) {
+    use src_tauri::platform::autostart::{
+        LOGIN_ARGUMENT, LaunchAgentAutostart, LaunchMode, LoginItemsSetup,
+    };
+    let launched = tauri::Manager::env(app);
+    let mode = if launched
+        .args_os
+        .iter()
+        .any(|argument| argument == LOGIN_ARGUMENT)
+    {
+        LaunchMode::LoginBackground
+    } else {
+        LaunchMode::Interactive
+    };
+    let _mode = tauri::Manager::manage(app, mode);
+    let found = (
+        std::env::var_os("HOME").map(PathBuf::from),
+        installed_bundle(),
+        tauri::Manager::path(app).app_data_dir().ok(),
+    );
+    if let (Some(home), Some(bundle), Some(data_dir)) = found {
+        let _setup = tauri::Manager::manage(
+            app,
+            LoginItemsSetup {
+                port: LaunchAgentAutostart::in_home(&home, bundle),
+                data_dir,
+            },
+        );
+    }
+}
+
 fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
@@ -965,7 +1007,9 @@ fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Er
     let single_instance = attach_to_app(app.handle(), socket_path)
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     match single_instance {
-        InstanceAcquisition::Primary(_guard) => {
+        InstanceAcquisition::Primary(guard) => {
+            let _managed = tauri::Manager::manage(&app, InstanceSlot::holding(guard));
+            prepare_login_start(&app);
             start_updates(app.handle());
             start_toss_check(app.handle());
             run_app(app, |handle, code| handle.exit(code.as_i32()));
@@ -980,6 +1024,7 @@ struct ProductToss {
     broker: Arc<ProductBroker>,
     portfolios: Arc<store_sqlite::SqlitePortfolioStore>,
     accounts: src_tauri::broker_link::AccountSlot,
+    sectors: Arc<src_tauri::sector_classes::SectorClasses>,
 }
 
 fn catalog_portfolio(
@@ -988,12 +1033,15 @@ fn catalog_portfolio(
     directory: &InstrumentDirectory,
 ) -> CatalogPortfolio {
     CatalogPortfolio::connected(
-        Arc::new(StoredPortfolioTools::new(
-            Arc::clone(&toss.portfolios),
-            (Arc::clone(repositories), Arc::clone(repositories)),
-            toss.accounts.clone(),
-            directory.clone(),
-        )),
+        Arc::new(
+            StoredPortfolioTools::new(
+                Arc::clone(&toss.portfolios),
+                (Arc::clone(repositories), Arc::clone(repositories)),
+                toss.accounts.clone(),
+                directory.clone(),
+            )
+            .with_sectors(Arc::clone(&toss.sectors)),
+        ),
         directory.clone(),
     )
 }
@@ -1011,9 +1059,17 @@ fn product_toss(
         Arc::clone(events),
     )
     .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let shared_broker = Arc::new(broker);
+    let sectors = Arc::new(src_tauri::sector_classes::SectorClasses::new(
+        Arc::new(src_tauri::sector_classes::MarketSectorFeed(Arc::clone(
+            &shared_broker,
+        ))),
+        Arc::<platform_macos::SystemClock>::clone(clock),
+    ));
     Ok(ProductToss {
         secrets,
-        broker: Arc::new(broker),
+        sectors,
+        broker: shared_broker,
         portfolios: Arc::new(store_sqlite::SqlitePortfolioStore::new(
             repositories.as_ref().clone(),
         )),

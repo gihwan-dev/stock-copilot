@@ -61,6 +61,7 @@ fn check_app_command_tool(tool: &UntrustedText) -> AnalysisToolAllowance {
         | "app_get_risk_settings"
         | "app_get_self_check"
         | "app_get_status"
+        | "app_get_data_status"
         | "app_get_scorecard"
         | "app_get_transactions"
         | "app_get_instruments"
