@@ -1796,6 +1796,35 @@
       "quiet": false,
       "namepath": "visual-update",
       "shebang": false
+    },
+    "chat-eval": {
+      "attributes": [],
+      "body": [["node fixtures/chat-eval/run.mjs ", [["variable", "args"]]]],
+      "dependencies": [],
+      "doc": null,
+      "name": "chat-eval",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "star",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "args",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "chat-eval",
+      "shebang": false
     }
   },
   "settings": {

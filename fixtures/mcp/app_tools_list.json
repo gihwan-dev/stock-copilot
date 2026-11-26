@@ -250,6 +250,32 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
+    "description": "Read when each data job (holdings, transactions, valuations, estimates, scoring, briefings, backup) last succeeded and runs next. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_data_status"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
     "description": "Read one instrument's detail screen by symbol. No side effects.",
     "inputSchema": {
       "additionalProperties": false,
