@@ -1088,13 +1088,7 @@ impl src_tauri::performance_book::PerformanceFeed for TossPerformanceFeed {
         instrument: &'a domain::QuoteInstrument,
         window: domain::TimeInterval,
     ) -> BoxFuture<'a, Result<Vec<domain::Candle>, application::PortError>> {
-        use application::BrokerRead as _;
-        Box::pin(self.0.candles(
-            instrument,
-            window,
-            domain::CandlePeriod::Daily,
-            domain::PriceAdjustment::Raw,
-        ))
+        Box::pin(self.0.history_daily_candles(instrument, window))
     }
 }
 

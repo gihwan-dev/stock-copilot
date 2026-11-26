@@ -1343,4 +1343,56 @@ mod tests {
             let _captured = server.finish().expect("requests");
         }
     }
+    #[test]
+    fn history_candles_accept_past_rows_without_sessions_in_either_order() {
+        let mut body = fixture("daily")["body"].clone();
+        let rows = body["result"]["candles"].as_array().expect("rows").clone();
+        body["result"]["candles"] = json!(rows.into_iter().rev().collect::<Vec<_>>());
+        let server = serve(&[body]);
+        let candles =
+            run(adapter(&server).history_daily_candles(&instrument(), window())).expect("history");
+        assert_eq!(candles.len(), 2);
+        assert_eq!(candles[0].time().timestamp(), window().start());
+        assert!(
+            candles
+                .iter()
+                .all(|candle| candle.status() == CandleStatus::Finalized
+                    && candle.adjustment() == PriceAdjustment::Raw)
+        );
+        let requests = server.finish().expect("requests");
+        assert!(String::from_utf8_lossy(&requests).contains("adjusted=false"));
+    }
+    #[test]
+    fn history_candles_skip_only_the_broken_and_future_rows() {
+        let mut body = fixture("daily")["body"].clone();
+        let mut broken = body["result"]["candles"][0].clone();
+        broken["timestamp"] = json!("2026-03-25T06:00:00+09:00");
+        broken["highPrice"] = json!("1");
+        let mut future = body["result"]["candles"][0].clone();
+        future["timestamp"] = json!("2030-01-01T00:00:00+09:00");
+        let rows: Vec<Value> = [future, broken]
+            .into_iter()
+            .chain(body["result"]["candles"].as_array().expect("rows").clone())
+            .collect();
+        body["result"]["candles"] = json!(rows);
+        let server = serve(&[body]);
+        let wide = TimeInterval::try_new(
+            at("2026-03-24T00:00:00+09:00"),
+            at("2031-01-01T00:00:00+09:00"),
+        )
+        .expect("window");
+        let candles =
+            run(adapter(&server).history_daily_candles(&instrument(), wide)).expect("history");
+        let times: Vec<_> = candles
+            .iter()
+            .map(|candle| candle.time().timestamp())
+            .collect();
+        assert_eq!(
+            times,
+            vec![
+                at("2026-03-24T00:00:00+09:00"),
+                at("2026-03-25T00:00:00+09:00")
+            ]
+        );
+    }
 }

@@ -199,6 +199,18 @@ impl FeedHistory {
     }
 }
 
+fn record_missing_candles(error: &PortError) {
+    crate::diagnostics_log::record(&application::DiagnosticEvent::Job(
+        application::JobDiagnosis {
+            job: application::DiagnosticText::new("performance_candles"),
+            note: application::JobRunNote::Failed(application::DiagnosticText::new(&format!(
+                "instrument-skipped kind={:?}",
+                error.kind()
+            ))),
+        },
+    ));
+}
+
 impl PerformanceHistorySource for FeedHistory {
     async fn complete_transactions(
         &self,
@@ -240,7 +252,13 @@ impl PerformanceHistorySource for FeedHistory {
                 domain::Market::from(stock.0),
                 currency_of(stock.0),
             );
-            let candles = self.candles_of(&stock, window).await?;
+            let candles = match self.candles_of(&stock, window).await {
+                Ok(found) => found,
+                Err(error) => {
+                    record_missing_candles(&error);
+                    Vec::new()
+                }
+            };
             histories.push(
                 SnapshotInstrumentHistory::new(identity, Vec::new(), candles)
                     .map_err(|_error| unavailable())?,
