@@ -136,32 +136,27 @@ fn history_status<S: SecretStore, T: Clock, R: TokenRenewal>(
 struct HistorySkips {
     unreadable: usize,
     future: usize,
-    open_session: usize,
     candle: usize,
-    shape: Option<String>,
 }
 
 impl HistorySkips {
-    fn record(&self) {
-        let skipped = self
+    fn summary(&self) -> Option<String> {
+        let dropped = self
             .unreadable
             .saturating_add(self.future)
-            .saturating_add(self.open_session)
             .saturating_add(self.candle);
-        if skipped == 0 && self.shape.is_none() {
-            return;
+        (dropped > 0).then(|| {
+            format!(
+                "history-skipped unreadable={} future={} candle={}",
+                self.unreadable, self.future, self.candle
+            )
+        })
+    }
+
+    fn record(&self) {
+        if let Some(detail) = self.summary() {
+            crate::diagnostics::validation_failed(ENDPOINT, &detail);
         }
-        crate::diagnostics::validation_failed(
-            ENDPOINT,
-            &format!(
-                "history-skipped unreadable={} future={} open-session={} candle={} daily-time={}",
-                self.unreadable,
-                self.future,
-                self.open_session,
-                self.candle,
-                self.shape.as_deref().unwrap_or("midnight")
-            ),
-        );
     }
 }
 
@@ -187,16 +182,13 @@ fn history_parse<S: SecretStore, T: Clock, R: TokenRenewal>(
     skips: &mut HistorySkips,
 ) -> Option<ParsedCandle> {
     let observed = reader.market_now();
-    let Some((day, shape)) = timestamp(&row.timestamp, ENDPOINT)
+    let Some((day, _shape)) = timestamp(&row.timestamp, ENDPOINT)
         .ok()
         .and_then(local_midnight)
     else {
         skips.unreadable = skips.unreadable.saturating_add(1);
         return None;
     };
-    if skips.shape.is_none() {
-        skips.shape = shape;
-    }
     if day > observed {
         skips.future = skips.future.saturating_add(1);
         return None;
@@ -238,10 +230,7 @@ fn history_candle<S: SecretStore, T: Clock, R: TokenRenewal>(
     skips: &mut HistorySkips,
 ) -> Option<Candle> {
     let parsed = history_parse(reader, row, instrument, skips)?;
-    let Some(status) = history_status(reader, instrument, &parsed) else {
-        skips.open_session = skips.open_session.saturating_add(1);
-        return None;
-    };
+    let status = history_status(reader, instrument, &parsed)?;
     let candle = Candle::try_new(
         instrument.instrument_id().clone(),
         parsed.time,
@@ -535,3 +524,6 @@ fn check_move(
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
