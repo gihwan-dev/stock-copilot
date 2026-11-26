@@ -10,6 +10,7 @@ mod exit;
 mod ipc_contract;
 mod key_provision;
 mod lifecycle;
+mod menu_bar;
 mod notifier;
 mod order_path;
 mod process_cleanup;

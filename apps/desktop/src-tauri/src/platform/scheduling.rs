@@ -128,6 +128,7 @@ pub fn start_background<R: Runtime, P: PortTypes>(app: &App<R>) -> SchedulingSta
     };
     let scheduler = Arc::new(built);
     bridge.bind(scheduler.event_subscriber().with_order_sync(demand));
+    app.manage(scheduler.triggers());
     bind_listeners(app, &scheduler, &ports, intraday, stored);
     let clock: Arc<dyn application::Clock> = Arc::<P::Clock>::clone(&ports.clock);
     let collector = collector_worker::<R, P>(app, clock);

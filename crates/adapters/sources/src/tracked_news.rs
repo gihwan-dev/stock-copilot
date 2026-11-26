@@ -80,6 +80,31 @@ impl TrackedSearch {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExactPhrase {
+    Quoted,
+    Loose,
+}
+
+const MIN_EXACT_PHRASE_CHARS: usize = 3;
+
+fn exact_phrase(target: &TrackedInstrument) -> ExactPhrase {
+    if target.name.as_str().trim().chars().count() >= MIN_EXACT_PHRASE_CHARS {
+        ExactPhrase::Quoted
+    } else {
+        ExactPhrase::Loose
+    }
+}
+
+#[must_use]
+pub fn google_query(target: &TrackedInstrument) -> String {
+    let name = target.name.as_str().trim();
+    match exact_phrase(target) {
+        ExactPhrase::Quoted => format!("\"{name}\""),
+        ExactPhrase::Loose => name.to_owned(),
+    }
+}
+
 fn approved_query(name: &str) -> Option<ApprovedWebSearchQuery> {
     match inspect_web_search_query(
         &WebSearchCandidateQuery::new(name),
@@ -178,10 +203,17 @@ impl TrackedNewsFeed {
         }
     }
 
+    fn links_directly(&self, target: &TrackedInstrument) -> bool {
+        match self.search {
+            TrackedSearch::YahooFinance => true,
+            TrackedSearch::GoogleNews => exact_phrase(target) == ExactPhrase::Quoted,
+        }
+    }
+
     async fn fetch_target(&self, target: &TrackedInstrument) -> Option<TargetItems> {
         match self.search {
             TrackedSearch::GoogleNews => {
-                let query = approved_query(target.name.as_str())?;
+                let query = approved_query(&google_query(target))?;
                 let feed = GoogleNewsFeed::new(Arc::clone(&self.client), query);
                 Some(feed.new_items(FeedCursor::Start).await)
             }
@@ -210,7 +242,7 @@ impl TrackedNewsFeed {
             if !seen.insert(url_of(&observation)) {
                 continue;
             }
-            if self.search == TrackedSearch::YahooFinance
+            if self.links_directly(target)
                 && let Some(instrument) = target.link_id()
             {
                 self.hints.remember(url_of(&observation), instrument);

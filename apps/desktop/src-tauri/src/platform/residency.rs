@@ -1,5 +1,5 @@
 use crate::lifecycle::{Lifecycle, LifecyclePhase};
-use crate::platform::tray::{TrayController, TrayIconState, TrayMenuAction, default_tray_menu};
+use crate::platform::tray::{TrayIconState, TrayMenuAction};
 use std::sync::RwLock;
 use tauri::{ActivationPolicy, App, AppHandle, Manager, Runtime};
 
@@ -116,16 +116,41 @@ pub fn begin_quit<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+fn follow_window_in_dock<R: Runtime>(app: &AppHandle<R>, visibility: MainWindowVisibility) {
+    if app
+        .try_state::<ResidencyPresence>()
+        .is_some_and(|presence| *presence.inner() == ResidencyPresence::MenuBarOnly)
+    {
+        let policy = match visibility {
+            MainWindowVisibility::Visible => ActivationPolicy::Regular,
+            MainWindowVisibility::Hidden => ActivationPolicy::Accessory,
+        };
+        if let Err(_unsupported) = app.set_activation_policy(policy) {}
+    }
+}
+
+pub fn settle_menu_bar<R: Runtime>(app: &AppHandle<R>, tray: TrayIconState) {
+    let _managed = app.manage(residency_presence(tray));
+    let visibility = app
+        .try_state::<ResidencyState>()
+        .map_or(MainWindowVisibility::Hidden, |state| {
+            state.main_visibility()
+        });
+    follow_window_in_dock(app, visibility);
+}
+
 pub fn record_main_shown<R: Runtime>(app: &AppHandle<R>) {
     if let Some(state) = app.try_state::<ResidencyState>() {
         state.record_shown();
     }
+    follow_window_in_dock(app, MainWindowVisibility::Visible);
 }
 
 pub fn record_main_hidden_on_close<R: Runtime>(app: &AppHandle<R>) {
     if let Some(state) = app.try_state::<ResidencyState>() {
         state.record_hidden_on_close();
     }
+    follow_window_in_dock(app, MainWindowVisibility::Hidden);
 }
 
 #[must_use]
@@ -189,14 +214,6 @@ pub const fn residency_presence(tray: TrayIconState) -> ResidencyPresence {
 }
 
 #[must_use]
-pub fn install_tray(controller: &dyn TrayController) -> TrayIconState {
-    match controller.install(&default_tray_menu()) {
-        Ok(state) => state,
-        Err(_unavailable) => TrayIconState::Hidden,
-    }
-}
-
-#[must_use]
 pub fn apply_residency_policy<R: Runtime>(
     app: &mut App<R>,
     tray: TrayIconState,
@@ -214,6 +231,9 @@ pub fn handle_tray_action<R: Runtime>(
 ) -> Result<(), tauri::Error> {
     match action {
         TrayMenuAction::OpenMain | TrayMenuAction::OpenSettings => show_and_focus_main(app),
+        TrayMenuAction::SyncNow | TrayMenuAction::DataStatus => {
+            crate::platform::menu_bar::run_action(app, action)
+        }
         TrayMenuAction::Quit => {
             begin_quit(app);
             app.exit(0);

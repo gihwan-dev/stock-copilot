@@ -10,6 +10,7 @@ import {
 import { useCallback, useState, type ReactElement } from "react";
 import type { ScreenSources } from "../shared/ipc";
 import type { AppRoutePath } from "../shared/lib";
+import { useNavigationEvent } from "../shared/platform";
 import {
   ScreenProviders,
   type NavigateFn,
@@ -90,6 +91,10 @@ export const AppRouter = (props: {
     },
     [router],
   );
+  const openDataStatus = useCallback((): void => {
+    router.history.push("/settings/status");
+  }, [router]);
+  useNavigationEvent(openDataStatus);
   return (
     <ScreenProviders go={go} sources={props.sources} system={props.system}>
       <RouterProvider router={router} />

@@ -36,6 +36,7 @@ pub enum NameProbe {
 #[derive(Debug, Default)]
 struct ProbeCounts {
     name_seen: AtomicU32,
+    matched: AtomicU32,
     needs_context: AtomicU32,
     group_only: AtomicU32,
 }
@@ -81,6 +82,7 @@ impl<'a, S> LinkingTimes<'a, S> {
             linked: AtomicU32::new(0),
             probe: ProbeCounts {
                 name_seen: AtomicU32::new(0),
+                matched: AtomicU32::new(0),
                 needs_context: AtomicU32::new(0),
                 group_only: AtomicU32::new(0),
             },
@@ -108,25 +110,30 @@ impl<'a, S> LinkingTimes<'a, S> {
         let read = |counter: &AtomicU32| CollectedCount::new(counter.load(Ordering::Relaxed));
         LinkProbe {
             name_seen: read(&self.probe.name_seen),
+            matched: read(&self.probe.matched),
             needs_context: read(&self.probe.needs_context),
             group_only: read(&self.probe.group_only),
         }
     }
+}
 
-    fn count_probe(
-        &self,
-        linker: &dyn TitleLinker,
-        entry: &CollectedEntry,
-        names: &[MatchName],
-        outcome: LinkResult,
-    ) {
+pub trait TitleProbe: Send + Sync {
+    fn inspect(&self, entry: &CollectedEntry);
+}
+
+impl<S: Sync> TitleProbe for LinkingTimes<'_, S> {
+    fn inspect(&self, entry: &CollectedEntry) {
+        let (Some(linker), Some(names)) = (self.linker, self.names) else {
+            return;
+        };
         let title = title_of(entry);
         let text = title.as_untrusted_str();
         if !names.iter().any(|name| text.contains(name.name.as_str())) {
             return;
         }
         bump(&self.probe.name_seen);
-        if outcome == LinkResult::Linked {
+        if !linker.instruments_named(title, names).is_empty() {
+            bump(&self.probe.matched);
             return;
         }
         match linker.probe_named(title, names) {
@@ -164,12 +171,6 @@ const fn title_of(entry: &CollectedEntry) -> &UntrustedText {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LinkResult {
-    Linked,
-    Unlinked,
-}
-
 fn named(
     linker: &dyn TitleLinker,
     entry: &CollectedEntry,
@@ -195,14 +196,7 @@ where
             return Ok(());
         };
         let instruments = if let Some(names) = self.names {
-            let found = named(linker, entry, names, self.hints);
-            let result = if found.is_empty() {
-                LinkResult::Unlinked
-            } else {
-                LinkResult::Linked
-            };
-            self.count_probe(linker, entry, names, result);
-            found
+            named(linker, entry, names, self.hints)
         } else {
             let settings = self
                 .store
