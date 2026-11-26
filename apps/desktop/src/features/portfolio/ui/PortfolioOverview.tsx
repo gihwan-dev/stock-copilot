@@ -2,8 +2,9 @@ import type { ReactElement } from "react";
 import {
   Card,
   EmptyState,
+  Grid,
+  GridItem,
   Skeleton,
-  Stack,
   StatusBar,
 } from "../../../shared/ds";
 import type {
@@ -51,9 +52,15 @@ const failureBody = (failure: IpcFailure): PortfolioMessageKey => {
   }
 };
 
+type Aside = {
+  readonly top: ReactElement;
+  readonly bottom: ReactElement;
+};
+
 type Props = {
   readonly sources: Pick<ScreenSources, "portfolio" | "allocation">;
   readonly onOpenTransactions: () => void;
+  readonly aside: Aside;
 };
 
 const OverviewReady = (props: {
@@ -61,30 +68,45 @@ const OverviewReady = (props: {
   readonly sources: Props["sources"];
   readonly retry: () => void;
   readonly onOpenTransactions: () => void;
+  readonly aside: Aside;
 }): ReactElement => (
-  <Stack gap="space-6">
-    {[
-      ...(props.view.connection === "stored"
-        ? [
-            <StatusBar key="stored" tone="info">
-              {portfolioText("storedNotice", "ko")}
-            </StatusBar>,
-          ]
-        : []),
-      <Stack key="overview" gap="space-4">
-        <SummaryCards view={props.view} />
+  <>
+    {props.view.connection === "stored" ? (
+      <StatusBar tone="info">{portfolioText("storedNotice", "ko")}</StatusBar>
+    ) : null}
+    <SummaryCards view={props.view} />
+    <Grid layout="fill-row">
+      <GridItem span={8}>
         <HoldingsCard
           holdings={props.view.holdings}
           onOpenTransactions={props.onOpenTransactions}
         />
-      </Stack>,
-      <AllocationSection
-        key="allocation"
-        load={props.sources.allocation}
-        retry={props.retry}
-      />,
-    ]}
-  </Stack>
+      </GridItem>
+      <GridItem span={4}>{props.aside.top}</GridItem>
+    </Grid>
+    <Grid layout="fill-row">
+      <GridItem span={8}>
+        <AllocationSection
+          load={props.sources.allocation}
+          retry={props.retry}
+        />
+      </GridItem>
+      <GridItem span={4}>{props.aside.bottom}</GridItem>
+    </Grid>
+  </>
+);
+
+const OverviewPending = (props: {
+  readonly status: ReactElement;
+  readonly aside: Aside;
+}): ReactElement => (
+  <>
+    {props.status}
+    <Grid layout="fill-row">
+      <GridItem span={6}>{props.aside.top}</GridItem>
+      <GridItem span={6}>{props.aside.bottom}</GridItem>
+    </Grid>
+  </>
 );
 
 export const PortfolioOverview = (props: Props): ReactElement => {
@@ -92,27 +114,43 @@ export const PortfolioOverview = (props: Props): ReactElement => {
   switch (portfolio.view.status) {
     case "loading":
       return (
-        <Card title={portfolioText("loadingTitle", "ko")}>
-          <Skeleton variant="text" lines={3} />
-        </Card>
+        <OverviewPending
+          status={
+            <Card title={portfolioText("loadingTitle", "ko")}>
+              <Skeleton variant="text" lines={3} />
+            </Card>
+          }
+          aside={props.aside}
+        />
       );
     case "empty":
       return (
-        <EmptyState title={text("app.readySummary", "ko")}>
-          {portfolioText("emptyBody", "ko")}
-        </EmptyState>
+        <OverviewPending
+          status={
+            <EmptyState title={text("app.readySummary", "ko")}>
+              {portfolioText("emptyBody", "ko")}
+            </EmptyState>
+          }
+          aside={props.aside}
+        />
       );
-    case "error": {
-      const action = {
-        label: portfolioText("retry", "ko"),
-        onPress: portfolio.retry,
-      };
+    case "error":
       return (
-        <EmptyState title={portfolioText("errorTitle", "ko")} action={action}>
-          {portfolioText(failureBody(portfolio.view.failure), "ko")}
-        </EmptyState>
+        <OverviewPending
+          status={
+            <EmptyState
+              title={portfolioText("errorTitle", "ko")}
+              action={{
+                label: portfolioText("retry", "ko"),
+                onPress: portfolio.retry,
+              }}
+            >
+              {portfolioText(failureBody(portfolio.view.failure), "ko")}
+            </EmptyState>
+          }
+          aside={props.aside}
+        />
       );
-    }
     case "ready":
       return (
         <OverviewReady
@@ -120,6 +158,7 @@ export const PortfolioOverview = (props: Props): ReactElement => {
           sources={props.sources}
           retry={portfolio.retry}
           onOpenTransactions={props.onOpenTransactions}
+          aside={props.aside}
         />
       );
   }

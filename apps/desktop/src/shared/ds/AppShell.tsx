@@ -137,7 +137,11 @@ export const AppShell = (props: AppShellProps): ReactElement => {
   const main = (
     <main className="relative flex-1 flex flex-col scroll-flex">
       <ShellChatBar chat={chatSlot} state={chatState} onChange={updateChat} />
-      <ScrollArea direction="vertical">{props.children}</ScrollArea>
+      {props.main === "fill" ? (
+        <div className="flex-1 flex flex-col scroll-flex">{props.children}</div>
+      ) : (
+        <ScrollArea direction="vertical">{props.children}</ScrollArea>
+      )}
     </main>
   );
   return (

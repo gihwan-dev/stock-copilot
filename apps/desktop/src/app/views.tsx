@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useState, type ReactElement } from "react";
 import { AboutSection } from "../features/about";
 import { BriefingCard, BriefingHistoryScreen } from "../features/briefing";
@@ -39,6 +39,7 @@ export const ShellLayout = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
   const [shown, setShown] = useState<EntityId | undefined>(undefined);
+  const matchRoute = useMatchRoute();
   const list = <InstrumentList sources={sources} onSelect={setShown} />;
   const status = (
     <>
@@ -69,6 +70,13 @@ export const ShellLayout = (): ReactElement => {
     <ChatSession context={undefined}>
       {(parts): ReactElement => (
         <AppShell
+          main={
+            shown === undefined &&
+            (matchRoute({ to: "/" }) !== false ||
+              matchRoute({ to: "/transactions" }) !== false)
+              ? "fill"
+              : "scroll"
+          }
           list={list}
           chat={parts.messages}
           chatComposer={parts.composer}
@@ -104,22 +112,29 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
       );
     case "ready":
       return (
-        <Stack gap="space-6">
-          <PortfolioOverview
-            sources={sources}
-            onOpenTransactions={(): void => {
-              go("/transactions");
-            }}
-          />
-          <SignalCards sources={sources} />
-          <BriefingCard
-            load={sources.briefings}
-            onOpenHistory={(): void => {
-              go("/briefings");
-            }}
-          />
-          <ScorecardPanel load={sources.scorecard} />
-        </Stack>
+        <PortfolioOverview
+          sources={sources}
+          onOpenTransactions={(): void => {
+            go("/transactions");
+          }}
+          aside={{
+            top: (
+              <SignalCards
+                sources={sources}
+                footer={<ScorecardPanel load={sources.scorecard} />}
+              />
+            ),
+            bottom: (
+              <BriefingCard
+                layout="fill"
+                load={sources.briefings}
+                onOpenHistory={(): void => {
+                  go("/briefings");
+                }}
+              />
+            ),
+          }}
+        />
       );
   }
 };
@@ -137,6 +152,7 @@ export const HomeView = (): ReactElement => {
   return (
     <Page
       title={text("app.homeTitle", "ko")}
+      layout="fill"
       actions={{
         label: text("app.openSettings", "ko"),
         onPress: (): void => {

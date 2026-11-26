@@ -15,6 +15,7 @@ export type AppShellProps = {
   readonly chatNotice?: ChatNoticeText | null;
   readonly status?: ReactElement | null;
   readonly children: ReactElement;
+  readonly main?: "scroll" | "fill";
   readonly chatOpen?: PanelState;
   readonly defaultChatOpen?: PanelState;
   readonly onChatOpenChange?: (next: PanelState) => void;
