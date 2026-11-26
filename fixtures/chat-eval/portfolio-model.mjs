@@ -1,4 +1,12 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 export const AS_OF = "2026-11-26T10:30:00+09:00";
+
+const MASTER = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "instrument-master.json"), "utf8"),
+).instruments;
 
 const DEFAULT_PROFILE = {
   source: "saved",
@@ -421,9 +429,151 @@ export const appResponses = (scenario, account, portfolio) => {
   };
 };
 
+const KIND_NAMES = {
+  single: "single-security",
+  broad: "broad-index-fund",
+  leveraged: "leveraged-or-inverse",
+  theme: "sector-or-theme-fund",
+};
+
+const catalogFor = (scenario) => {
+  const byKey = new Map();
+  for (const item of MASTER) byKey.set(`${item.market}-${item.symbol}`, { ...item, currency: currencyOf(item) });
+  for (const [symbol, extra] of Object.entries(scenario.instruments ?? {})) {
+    byKey.set(`${extra.market}-${symbol}`, { ...extra, symbol, currency: currencyOf(extra) });
+  }
+  for (const holding of normalizeHoldings(scenario)) {
+    byKey.set(`${holding.market}-${holding.symbol}`, { ...byKey.get(`${holding.market}-${holding.symbol}`), ...holding });
+  }
+  return byKey;
+};
+
+const pct = (value) => (Math.round(value * 10000) / 100).toFixed(2);
+
+export const appSearch = (scenario, args) => {
+  const query = String(args.query ?? "").toUpperCase().replaceAll(" ", "");
+  const kind = args.fund_kind;
+  const matches = [...catalogFor(scenario).values()]
+    .map((item) => ({
+      symbol: item.symbol,
+      market: item.market,
+      name: item.name,
+      fund_kind: KIND_NAMES[fundKind(item)],
+    }))
+    .filter((item) => !kind || item.fund_kind === kind)
+    .filter(
+      (item) =>
+        !query ||
+        item.name.toUpperCase().replaceAll(" ", "").includes(query) ||
+        item.symbol === query,
+    )
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .slice(0, 20);
+  return { matches };
+};
+
+export const appSimulate = (scenario, args) => {
+  const profile = profileOf(scenario);
+  const account = computeAccount(scenario);
+  const fx = account.fx ?? 1385;
+  const catalog = catalogFor(scenario);
+  const failure = (outcome, symbol = null) => ({
+    outcome,
+    problem_symbol: symbol,
+    fills: [],
+    total_after: null,
+    cash_after: [],
+    instruments: [],
+  });
+  const book = new Map(
+    account.holdings.map((holding) => [`${holding.market}-${holding.symbol}`, { ...holding }]),
+  );
+  const cash = { KRW: account.cash.KRW ?? 0, USD: account.cash.USD ?? 0 };
+  const fills = [];
+  for (const trade of args.trades ?? []) {
+    const key = `${trade.market}-${String(trade.symbol).toUpperCase()}`;
+    const known = catalog.get(key);
+    if (!known) return failure("invalid-trade");
+    const quantity = Number(trade.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) return failure("invalid-trade");
+    const held = book.get(key);
+    const price = trade.price !== undefined ? Number(trade.price) : held?.price;
+    if (!(price > 0)) return failure("missing-price", known.symbol);
+    const currency = trade.market === "US" ? "USD" : "KRW";
+    const amount = price * quantity;
+    if (trade.side === "sell") {
+      if (!held || held.qty < quantity) return failure("sell-exceeds-holding", known.symbol);
+      held.qty -= quantity;
+      held.price = price;
+      cash[currency] += amount;
+      if (held.qty === 0) book.delete(key);
+    } else {
+      if (cash[currency] < amount) return failure("insufficient-cash");
+      cash[currency] -= amount;
+      if (held) {
+        held.qty += quantity;
+        held.price = price;
+      } else {
+        book.set(key, { ...known, qty: quantity, avg: price, price, currency });
+      }
+    }
+    fills.push({
+      symbol: known.symbol,
+      side: trade.side,
+      quantity: String(quantity),
+      price: money(price, currency),
+      amount: money(amount, currency),
+    });
+  }
+  const toKrw = (value, currency) => (currency === "KRW" ? value : value * fx);
+  const cashKrw = cash.KRW + toKrw(cash.USD, "USD");
+  const total = [...book.values()].reduce((sum, item) => sum + toKrw(item.qty * item.price, item.currency), 0) + cashKrw;
+  const beforeWeight = (key) => {
+    const line = account.lines.find((row) => `${row.holding.market}-${row.holding.symbol}` === key);
+    return line && account.total ? pct(line.krw / account.total) : "0";
+  };
+  const instruments = [...book.entries()]
+    .map(([key, item]) => {
+      const value = toKrw(item.qty * item.price, item.currency);
+      const weight = value / total;
+      const kind = fundKind(item);
+      const limits = limitsFor(profile, kind);
+      return {
+        symbol: item.symbol,
+        name: item.name,
+        fund_kind: KIND_NAMES[kind],
+        weight_before: beforeWeight(key),
+        weight_after: pct(weight),
+        limit_percent: pct(limits.cap),
+        warning_percent: pct(limits.warning),
+        level_after: weight > limits.cap ? "over-cap" : weight > limits.warning ? "warning" : "normal",
+        room_to_limit: money(limits.cap * total - value, "KRW"),
+      };
+    })
+    .sort((left, right) => Number(right.weight_after) - Number(left.weight_after));
+  return {
+    outcome: "simulated",
+    problem_symbol: null,
+    fills,
+    total_after: money(total, "KRW"),
+    cash_after: Object.entries(cash)
+      .filter(([, amount]) => amount > 0)
+      .map(([currency, amount]) => ({
+        currency,
+        amount: money(amount, currency),
+        weight: pct(toKrw(amount, currency) / total),
+      })),
+    instruments,
+  };
+};
+
 export const appWrite = (scenario, name, args) => {
   const known = (scenario.signals ?? []).map((signal) => signal.proposal).filter(Boolean);
   switch (name) {
+    case "app_simulate_trades":
+      return { ok: appSimulate(scenario, args) };
+    case "app_search_instruments":
+      return { ok: appSearch(scenario, args) };
     case "app_set_principles":
       return { ok: args.principles ?? {} };
     case "app_save_investor_profile":
@@ -469,6 +619,9 @@ export const buildResponses = (scenario) => {
   };
   const instruments = {};
   for (const holding of account.holdings) instruments[holding.symbol] = holding;
+  for (const item of MASTER) {
+    instruments[item.symbol] ??= { ...item, currency: currencyOf(item) };
+  }
   for (const [symbol, extra] of Object.entries(scenario.instruments ?? {})) {
     instruments[symbol] = { ...extra, symbol, currency: currencyOf(extra) };
   }

@@ -101,8 +101,7 @@ mod tests {
     fn advisor_prompt_leads_with_a_decision_and_concrete_next_actions() {
         assert_pins(&[
             "투자 자문가",
-            "첫 줄: 결론 한두 문장",
-            "다음 행동",
+            "결론 한두 문장",
             "`종목 | 할 일 | 규모 | 가격·조건 | 시점`",
             "지켜볼 것",
             "처음 산 이유가 아직 맞는지",
@@ -110,33 +109,63 @@ mod tests {
     }
 
     #[test]
-    fn advisor_prompt_keeps_answers_as_short_as_the_question() {
+    fn advisor_prompt_sets_a_length_budget_by_question_kind() {
         assert_pins(&[
-            "짧은 질문에는 한두 줄로 답한다",
-            "할 일이 두 개 이상일 때만 표",
+            "먼저 질문 종류를 정한다",
+            "세 문장 이하로 답한다. 표, 제목, 목록을 쓰지 않는다",
+            "전체 15줄을 넘기지 않는다",
             "매매를 억지로 만들지 않는다",
-            "묻지 않은 계획",
+            "묻지 않은 계획을 덧붙이지 않는다",
         ]);
     }
 
     #[test]
-    fn advisor_prompt_only_cites_numbers_and_dates_it_looked_up() {
+    fn advisor_prompt_leaves_arithmetic_to_the_simulation_tool() {
         assert_pins(&[
-            "이번 대화에서 도구로 조회한 값만 쓴다",
+            "직접 계산하지 않는다. 매매 모의 계산 도구로 확인한다",
+            "매매 목록을 비워서 부른다",
+            "그 매매안을 모의 계산에 넣고",
+            "상품 검색 도구로 실제 상품을 찾아 이름과 코드를 쓴다",
+        ]);
+    }
+
+    #[test]
+    fn advisor_prompt_only_cites_what_it_looked_up() {
+        assert_pins(&[
+            "이번 대화에서 조회한 값만 쓴다",
             "일봉을 조회하고 그 값을 쓴다",
             "시장 개요를 먼저 조회한다",
-            "업종 분류 자료가 없으면 업종 비중과 업종 한도를 계산하지 않는다",
+            "조회하지 않은 대상에 대해 말하지 않는다",
+            "보유 종목과 관심 종목을 구분해서 말한다",
         ]);
     }
 
     #[test]
     fn advisor_prompt_follows_the_app_limits_per_fund_kind() {
         assert_pins(&[
-            "앱이 상품 종류별로 계산한 주의·초과 표시를 그대로 따른다",
-            "넓은 지수를 따르는 ETF에는 업종 한도를",
+            "상품 종류별 적용 한도와 주의선, 주의·초과 상태를 그대로 따른다",
+            "넓은 지수를 따르는 ETF에는 업종 한도를 한도로, 종목당 한도를 주의선으로",
             "레버리지·인버스 상품에는 종목당 주의선을",
             "다른 예외를 스스로 만들지 않는다",
-            "산 뒤의 비중이 같은 기준의 한도를 넘지 않게",
+            "그 합계가 업종 한도 아래로 내려가게",
+        ]);
+    }
+
+    #[test]
+    fn advisor_prompt_states_fixed_app_facts() {
+        assert_pins(&[
+            "승인 창에서 내용을 확인하고 Touch ID로 본인 확인",
+            "보유 종목과 관심 종목을 추적 대상으로 삼아",
+            "음의 복리",
+        ]);
+    }
+
+    #[test]
+    fn advisor_prompt_turns_cash_and_drops_into_concrete_plans() {
+        assert_pins(&[
+            "나머지 전액을 구체 상품에 배정한다",
+            "조건부 분할 매수 계획을 낸다",
+            "넓은 지수 ETF를 축으로",
         ]);
     }
 
@@ -146,6 +175,7 @@ mod tests {
             "unclassified",
             "instrument_weight_cap",
             "buying_power",
+            "room_to_limit",
             "app_으로 시작하는 이름",
             "\"앱 규칙\"",
             "답의 중심으로 삼지 않는다",
@@ -153,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn advisor_prompt_respects_principles_and_market_drops() {
+    fn advisor_prompt_respects_principles() {
         assert_pins(&[
             "사라고 하지 않고 금액도 제안하지 않는다",
             "겁먹고 파는 것을 권하지 않는다",
