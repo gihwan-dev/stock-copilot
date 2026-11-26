@@ -3,12 +3,12 @@ use application::{
     ArticleToolPort, BodyReadingSetting, CandleWindow, CandlesToolView, CollectedItemHandle,
     CollectedItemQuery, DisclosureToolLine, EstimateAssignmentRepository, EstimateCommitOutcome,
     EstimateRunContext, EstimateRunContextSource, InvestorFlowToolView, MarketOverviewToolView,
-    MarketToolError, MarketToolReads, MarketToolReply, NewsToolLine, NewsToolReads,
-    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, ProfileSource,
-    QuoteToolView, RankingToolKind, RankingsToolView, ScorecardObservationRepository,
-    SectorsToolView, SystemFailure, SystemPort, SystemPortError, ThesisRepository,
-    ThesisRunMetadata, ThesisToolPort, TransactionsToolView, WebResearchToolFailure,
-    WebResearchToolOutcome, WebResearchToolPort, WebResearchToolRequest, WriteCompleted,
+    MarketToolError, MarketToolReads, NewsToolLine, NewsToolReads, PerformancePeriod,
+    PerformanceToolView, PortfolioToolReads, PortfolioToolView, ProfileSource, QuoteToolView,
+    RankingToolKind, RankingsToolView, ScorecardObservationRepository, SectorsToolView,
+    SystemFailure, SystemPort, SystemPortError, ThesisRepository, ThesisRunMetadata,
+    ThesisToolPort, TransactionsToolView, WebResearchToolFailure, WebResearchToolOutcome,
+    WebResearchToolPort, WebResearchToolRequest, WriteCompleted,
 };
 
 use domain::{
@@ -122,12 +122,12 @@ pub enum MarketReadCall {
 
 #[derive(Debug)]
 pub struct FixedMarketToolReads {
-    quote: MarketToolReply<QuoteToolView>,
-    candles: MarketToolReply<CandlesToolView>,
-    overview: MarketToolReply<MarketOverviewToolView>,
-    rankings: MarketToolReply<RankingsToolView>,
-    sectors: MarketToolReply<SectorsToolView>,
-    investor_flow: MarketToolReply<InvestorFlowToolView>,
+    quote: Result<Option<QuoteToolView>, MarketToolError>,
+    candles: Result<Option<CandlesToolView>, MarketToolError>,
+    overview: Result<Option<MarketOverviewToolView>, MarketToolError>,
+    rankings: Result<Option<RankingsToolView>, MarketToolError>,
+    sectors: Result<Option<SectorsToolView>, MarketToolError>,
+    investor_flow: Result<Option<InvestorFlowToolView>, MarketToolError>,
     calls: State<Vec<MarketReadCall>>,
 }
 
@@ -208,7 +208,7 @@ impl MarketToolReads for FixedMarketToolReads {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<QuoteToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<QuoteToolView>, MarketToolError>> + Send {
         self.record(MarketReadCall::Quote(symbol.clone(), market));
         ready(self.quote.clone())
     }
@@ -218,14 +218,14 @@ impl MarketToolReads for FixedMarketToolReads {
         symbol: &Symbol,
         market: KnownMarket,
         window: CandleWindow,
-    ) -> impl Future<Output = MarketToolReply<CandlesToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<CandlesToolView>, MarketToolError>> + Send {
         self.record(MarketReadCall::Candles(symbol.clone(), market, window));
         ready(self.candles.clone())
     }
 
     fn market_overview(
         &self,
-    ) -> impl Future<Output = MarketToolReply<MarketOverviewToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<MarketOverviewToolView>, MarketToolError>> + Send {
         self.record(MarketReadCall::Overview);
         ready(self.overview.clone())
     }
@@ -234,7 +234,7 @@ impl MarketToolReads for FixedMarketToolReads {
         &self,
         kind: RankingToolKind,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<RankingsToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<RankingsToolView>, MarketToolError>> + Send {
         self.record(MarketReadCall::Rankings(kind, market));
         ready(self.rankings.clone())
     }
@@ -242,7 +242,7 @@ impl MarketToolReads for FixedMarketToolReads {
     fn sectors(
         &self,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<SectorsToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<SectorsToolView>, MarketToolError>> + Send {
         self.record(MarketReadCall::Sectors(market));
         ready(self.sectors.clone())
     }
@@ -251,7 +251,7 @@ impl MarketToolReads for FixedMarketToolReads {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<InvestorFlowToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<InvestorFlowToolView>, MarketToolError>> + Send {
         self.record(MarketReadCall::InvestorFlow(symbol.clone(), market));
         ready(self.investor_flow.clone())
     }

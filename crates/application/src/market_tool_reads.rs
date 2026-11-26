@@ -43,8 +43,6 @@ impl From<PortError> for MarketToolError {
     }
 }
 
-pub type MarketToolReply<V> = Result<Option<V>, MarketToolError>;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarketToolName {
     Quote,
@@ -228,33 +226,33 @@ pub trait MarketToolReads: Send + Sync {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<QuoteToolView>> + Send;
+    ) -> impl Future<Output = Result<Option<QuoteToolView>, MarketToolError>> + Send;
 
     fn candles(
         &self,
         symbol: &Symbol,
         market: KnownMarket,
         window: CandleWindow,
-    ) -> impl Future<Output = MarketToolReply<CandlesToolView>> + Send;
+    ) -> impl Future<Output = Result<Option<CandlesToolView>, MarketToolError>> + Send;
 
     fn market_overview(
         &self,
-    ) -> impl Future<Output = MarketToolReply<MarketOverviewToolView>> + Send;
+    ) -> impl Future<Output = Result<Option<MarketOverviewToolView>, MarketToolError>> + Send;
 
     fn rankings(
         &self,
         kind: RankingToolKind,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<RankingsToolView>> + Send;
+    ) -> impl Future<Output = Result<Option<RankingsToolView>, MarketToolError>> + Send;
 
     fn sectors(
         &self,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<SectorsToolView>> + Send;
+    ) -> impl Future<Output = Result<Option<SectorsToolView>, MarketToolError>> + Send;
 
     fn investor_flow(
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<InvestorFlowToolView>> + Send;
+    ) -> impl Future<Output = Result<Option<InvestorFlowToolView>, MarketToolError>> + Send;
 }

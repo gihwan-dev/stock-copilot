@@ -1,4 +1,4 @@
-use application::{MarketToolError, MarketToolReply, SystemPortError};
+use application::{MarketToolError, SystemPortError};
 use domain::{
     Currency, FxPair, FxRate, FxRateKind, Money, Quantity, Ratio, Timestamp, TotalCompleteness,
 };
@@ -205,7 +205,9 @@ pub(super) fn market_error(error: MarketToolError) -> ToolErrorPayload {
     }
 }
 
-pub(super) fn require_market<V>(reply: MarketToolReply<V>) -> Result<V, ToolErrorPayload> {
+pub(super) fn require_market<V>(
+    reply: Result<Option<V>, MarketToolError>,
+) -> Result<V, ToolErrorPayload> {
     match reply {
         Ok(Some(view)) => Ok(view),
         Ok(None) => Err(missing_data()),

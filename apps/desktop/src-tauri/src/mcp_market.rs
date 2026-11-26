@@ -5,11 +5,11 @@ use std::sync::Arc;
 use application::{
     AllocationLabel, BrokerRead, CandleToolLine, CandleWindow, CandlesToolView, Clock,
     DiagnosticEvent, InvestorFlowToolLine, InvestorFlowToolView, MarketInfo,
-    MarketOverviewToolView, MarketToolError, MarketToolName, MarketToolReads, MarketToolReply,
-    OverviewItem, OverviewToolLine, OverviewUnit, PortError, QuoteObservation, QuoteToolView,
-    RankingQuery, RankingToolKind, RankingToolLine, RankingsToolView, SectorRankingQuery,
-    SectorToolLine, SectorsToolView, SessionStatus, SessionToolLine, ToolReadDiagnosis,
-    ToolReadResult, ValueProvenance,
+    MarketOverviewToolView, MarketToolError, MarketToolName, MarketToolReads, OverviewItem,
+    OverviewToolLine, OverviewUnit, PortError, QuoteObservation, QuoteToolView, RankingQuery,
+    RankingToolKind, RankingToolLine, RankingsToolView, SectorRankingQuery, SectorToolLine,
+    SectorsToolView, SessionStatus, SessionToolLine, ToolReadDiagnosis, ToolReadResult,
+    ValueProvenance,
 };
 use domain::{
     AdjustmentBasis, CalendarDate, Candle, CandlePeriod, DisplayInstrumentName, FxPair, FxRate,
@@ -357,7 +357,7 @@ impl BrokerMarketTools {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> MarketToolReply<QuoteToolView> {
+    ) -> Result<Option<QuoteToolView>, MarketToolError> {
         let tool = MarketToolName::Quote;
         let Some(source) = self.quotes.as_ref() else {
             return Err(not_connected(tool));
@@ -387,7 +387,7 @@ impl BrokerMarketTools {
         symbol: &Symbol,
         market: KnownMarket,
         window: CandleWindow,
-    ) -> MarketToolReply<CandlesToolView> {
+    ) -> Result<Option<CandlesToolView>, MarketToolError> {
         let tool = MarketToolName::Candles;
         let (Some(source), Some(clock)) = (self.quotes.as_ref(), self.clock.as_ref()) else {
             return Err(not_connected(tool));
@@ -430,7 +430,7 @@ impl BrokerMarketTools {
         }))
     }
 
-    async fn read_overview(&self) -> MarketToolReply<MarketOverviewToolView> {
+    async fn read_overview(&self) -> Result<Option<MarketOverviewToolView>, MarketToolError> {
         let tool = MarketToolName::Overview;
         let (Some(quotes), Some(market), Some(clock)) = (
             self.quotes.as_ref(),
@@ -491,7 +491,7 @@ impl BrokerMarketTools {
         &self,
         kind: RankingToolKind,
         market: KnownMarket,
-    ) -> MarketToolReply<RankingsToolView> {
+    ) -> Result<Option<RankingsToolView>, MarketToolError> {
         let tool = MarketToolName::Rankings;
         let Some(source) = self.market.as_ref() else {
             return Err(not_connected(tool));
@@ -542,7 +542,7 @@ impl BrokerMarketTools {
         kind: RankingToolKind,
         market: KnownMarket,
         limit: RankingLimit,
-    ) -> MarketToolReply<RankingsToolView> {
+    ) -> Result<Option<RankingsToolView>, MarketToolError> {
         let tool = MarketToolName::Rankings;
         let Some(source) = self.market.as_ref() else {
             return Err(not_connected(tool));
@@ -583,7 +583,10 @@ impl BrokerMarketTools {
         }))
     }
 
-    async fn read_sectors(&self, market: KnownMarket) -> MarketToolReply<SectorsToolView> {
+    async fn read_sectors(
+        &self,
+        market: KnownMarket,
+    ) -> Result<Option<SectorsToolView>, MarketToolError> {
         let tool = MarketToolName::Sectors;
         let Some(source) = self.market.as_ref() else {
             return Err(not_connected(tool));
@@ -617,7 +620,7 @@ impl BrokerMarketTools {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> MarketToolReply<InvestorFlowToolView> {
+    ) -> Result<Option<InvestorFlowToolView>, MarketToolError> {
         let tool = MarketToolName::InvestorFlow;
         let (Some(quotes), Some(source), Some(clock)) = (
             self.quotes.as_ref(),
@@ -681,7 +684,7 @@ impl MarketToolReads for BrokerMarketTools {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<QuoteToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<QuoteToolView>, MarketToolError>> + Send {
         self.read_quote(symbol, market)
     }
 
@@ -690,13 +693,13 @@ impl MarketToolReads for BrokerMarketTools {
         symbol: &Symbol,
         market: KnownMarket,
         window: CandleWindow,
-    ) -> impl Future<Output = MarketToolReply<CandlesToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<CandlesToolView>, MarketToolError>> + Send {
         self.read_candles(symbol, market, window)
     }
 
     fn market_overview(
         &self,
-    ) -> impl Future<Output = MarketToolReply<MarketOverviewToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<MarketOverviewToolView>, MarketToolError>> + Send {
         self.read_overview()
     }
 
@@ -704,14 +707,14 @@ impl MarketToolReads for BrokerMarketTools {
         &self,
         kind: RankingToolKind,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<RankingsToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<RankingsToolView>, MarketToolError>> + Send {
         self.read_rankings(kind, market)
     }
 
     fn sectors(
         &self,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<SectorsToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<SectorsToolView>, MarketToolError>> + Send {
         self.read_sectors(market)
     }
 
@@ -719,7 +722,7 @@ impl MarketToolReads for BrokerMarketTools {
         &self,
         symbol: &Symbol,
         market: KnownMarket,
-    ) -> impl Future<Output = MarketToolReply<InvestorFlowToolView>> + Send {
+    ) -> impl Future<Output = Result<Option<InvestorFlowToolView>, MarketToolError>> + Send {
         self.read_investor_flow(symbol, market)
     }
 }
