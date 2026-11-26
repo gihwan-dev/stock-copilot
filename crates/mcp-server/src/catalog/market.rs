@@ -9,7 +9,7 @@ use domain::{KnownMarket, Symbol};
 use serde_json::{Map, Value, json};
 
 use crate::catalog::render::{
-    money, object, optional_money, optional_ratio, quantity, ratio, require, timestamp,
+    money, object, optional_money, optional_ratio, quantity, ratio, require_market, timestamp,
     untrusted_label,
 };
 use crate::pagination::{CursorStore, PageRequest, PaginationContext, paginate_items};
@@ -57,20 +57,22 @@ impl MarketToolKind {
     const fn description(self) -> &'static str {
         match self {
             Self::Quote => {
-                "Latest stored price for one listed symbol with the time it was collected."
+                "Latest brokerage price for one listed symbol with the time it was collected."
             }
             Self::Candles => {
-                "Stored daily candles for one symbol, newest first, paginated with limit and cursor. Includes the collection time."
+                "Recent finalized daily candles for one symbol from the brokerage, prices not adjusted for splits, newest first, paginated with limit and cursor. Includes the collection time."
             }
             Self::Overview => {
-                "Domestic indices, government bond yields, USD/KRW and market session status, plus US indices, rates, commodities and the dollar. Each value states whether it is official or an ETF-based approximation and when it was collected."
+                "KOSPI, KOSDAQ, Korean 3Y and 10Y government bond yields, USD/KRW and KR/US market session status, plus S&P 500, Nasdaq 100, gold, crude oil and the dollar approximated by US ETF prices in USD. Each value states whether it is official or an ETF-based approximation and when it was collected. Values that could not be read are left out."
             }
             Self::Rankings => {
-                "Stored market rankings by trading amount, price change or investor net buying, with the collection time."
+                "Today's brokerage rankings by trading amount or price change for KR or US, or domestic foreign or institution net buying in KRW, with the collection time."
             }
-            Self::Sectors => "Stored sector ranking by price change with the collection time.",
+            Self::Sectors => {
+                "Today's brokerage sector ranking by price change with trading amount, with the collection time."
+            }
             Self::InvestorFlow => {
-                "Stored foreign, institutional and individual net buying and short selling ratio for one domestic symbol, with the collection time."
+                "Daily foreign, institutional and individual net buying for one domestic symbol over recent trading days, in KRW estimated as net shares times that day's close (null when the close is unknown), with the collection time."
             }
         }
     }
@@ -171,7 +173,7 @@ impl<M: MarketToolReads + 'static, C: Clock + 'static> McpTool for MarketTool<M,
                 MarketToolKind::Quote => {
                     let symbol = parse_symbol(args.get("symbol"))?;
                     let market = parse_market(args.get("market"))?;
-                    let view = require(self.reads.quote(&symbol, market).await)?;
+                    let view = require_market(self.reads.quote(&symbol, market).await)?;
                     Ok(object(vec![
                         ("symbol", Value::String(view.symbol.as_str().to_owned())),
                         ("market", Value::String(market_code(view.market).to_owned())),
@@ -182,26 +184,26 @@ impl<M: MarketToolReads + 'static, C: Clock + 'static> McpTool for MarketTool<M,
                 }
                 MarketToolKind::Candles => self.candles(&invocation).await,
                 MarketToolKind::Overview => {
-                    let view = require(self.reads.market_overview().await)?;
+                    let view = require_market(self.reads.market_overview().await)?;
                     Ok(render_overview(&view))
                 }
                 MarketToolKind::Rankings => {
                     let kind = parse_ranking_kind(args.get("kind"))?;
                     let market = parse_market(args.get("market"))?;
                     let limit = parse_list_limit(args.get("limit"))?;
-                    let view = require(self.reads.rankings(kind, market).await)?;
+                    let view = require_market(self.reads.rankings(kind, market).await)?;
                     Ok(render_rankings(&view, limit))
                 }
                 MarketToolKind::Sectors => {
                     let market = parse_market(args.get("market"))?;
                     let limit = parse_list_limit(args.get("limit"))?;
-                    let view = require(self.reads.sectors(market).await)?;
+                    let view = require_market(self.reads.sectors(market).await)?;
                     Ok(render_sectors(&view, limit))
                 }
                 MarketToolKind::InvestorFlow => {
                     let symbol = parse_symbol(args.get("symbol"))?;
                     let market = parse_domestic_market(args.get("market"))?;
-                    let view = require(self.reads.investor_flow(&symbol, market).await)?;
+                    let view = require_market(self.reads.investor_flow(&symbol, market).await)?;
                     Ok(render_investor_flow(&view))
                 }
             }
@@ -219,7 +221,7 @@ impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
             args.get("limit").and_then(Value::as_u64),
             args.get("cursor").and_then(Value::as_str),
         )?;
-        let view = require(self.reads.candles(&symbol, market, window.clone()).await)?;
+        let view = require_market(self.reads.candles(&symbol, market, window.clone()).await)?;
         let mut lines: Vec<&CandleToolLine> = view.lines.iter().collect();
         lines.sort_by(|left, right| {
             let left_at = *left.opened_at.utc_seconds().as_i64();
