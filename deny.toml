@@ -247,6 +247,8 @@ allow = [
   { crate = "objc2", reason = "tauri 전이 의존성" },
   { crate = "objc2-app-kit", reason = "tauri 전이 의존성" },
   { crate = "objc2-core-foundation", reason = "tauri 전이 의존성" },
+  { crate = "objc2-core-graphics", reason = "tauri tray-icon 기능 전이 의존성 (메뉴 막대 상주, 사용자 승인 2026-11-26)" },
+  { crate = "tray-icon", reason = "tauri tray-icon 기능 (메뉴 막대 상주, 사용자 승인 2026-11-26)" },
   { crate = "objc2-encode", reason = "tauri 전이 의존성" },
   { crate = "objc2-exception-helper", reason = "tauri 전이 의존성" },
   { crate = "objc2-foundation", reason = "tauri 전이 의존성" },
@@ -407,6 +409,7 @@ skip-tree = []
 
 [bans.build]
 allow-build-scripts = [
+  { crate = "tray-icon" },
   { crate = "libsqlite3-sys" },
   { crate = "aws-lc-rs" },
   { crate = "aws-lc-sys" },
