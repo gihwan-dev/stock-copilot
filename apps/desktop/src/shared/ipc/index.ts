@@ -122,10 +122,12 @@ export type {
   ChatSourceKind,
   ChatStreamChunk,
   ChatStreamEvent,
+  ChatChangeTopic,
   ChatToolStatus,
   ChatToolTopic,
   ChatTurnStatus,
 } from "./chat-types";
+export { chatChangeTopics } from "./chat-types";
 export type {
   AccountRef,
   AliasText,

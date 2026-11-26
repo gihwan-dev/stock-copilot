@@ -1,4 +1,7 @@
 use application::{AiProvider, AiRunId, ChatHistory, InformationError, RunSpec};
+use src_tauri::ai_commands::{
+    AppCommandDeps, AppCommandSlot, AuditedAiJournal, register_app_commands,
+};
 use src_tauri::ai_runtime::{
     AiAvailability, AttachableAi, BridgeLocation, ChatTurnBook, LateAi, McpAttachedAi, McpRunLink,
     McpServerHost, McpServerHostParts, RunMetadataBook,
@@ -108,14 +111,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         signals: Arc::clone(&signals),
     });
     let toss = product_toss(&shared_clock, &events, &repositories)?;
-    let turns = ChatTurnBook::new();
+    let (turns, app_commands) = (ChatTurnBook::new(), Arc::new(AppCommandSlot::default()));
     let directory = InstrumentDirectory::default();
     let estimate_runs = EstimateRunBook::new();
     let ai = assemble_ai(
         discover_ai_setup(
             &context.config().identifier,
             bundled_bridge(),
-            turns.clone(),
+            (turns.clone(), Arc::clone(&app_commands)),
         )
         .with_market(market_tools(&toss, &shared_clock))
         .with_portfolio(catalog_portfolio(&toss, &repositories, &directory))
@@ -139,6 +142,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(directory)
         .manage(intraday)
         .manage(turns)
+        .manage(app_commands)
         .manage(toss_link_state(&toss, holdings.clone(), &shared_clock))
         .manage(holdings)
         .manage(self_check)
@@ -1517,6 +1521,7 @@ struct AiSetup {
     market: BrokerMarketTools,
     portfolio: CatalogPortfolio,
     estimate_runs: EstimateRunBook,
+    app_commands: Arc<AppCommandSlot<tauri::Wry>>,
 }
 
 impl AiSetup {
@@ -1669,7 +1674,7 @@ fn product_catalog(
     repositories: &Arc<SqliteRepositories>,
     (runs, collector): (&RunMetadataBook, &LateAi<ProductClaude>),
 ) -> Option<mcp_server::ToolRegistry> {
-    analysis_catalog(
+    let registry = analysis_catalog(
         clock,
         CatalogStores {
             theses: Arc::new(application::TimedThesisRepository::new(
@@ -1688,7 +1693,30 @@ fn product_catalog(
             estimate_runs: setup.estimate_runs.clone(),
         },
     )
-    .ok()
+    .ok()?;
+    with_app_commands(registry, setup, clock, repositories)
+}
+
+fn with_app_commands(
+    mut registry: mcp_server::ToolRegistry,
+    setup: &AiSetup,
+    clock: &Arc<platform_macos::SystemClock>,
+    repositories: &Arc<SqliteRepositories>,
+) -> Option<mcp_server::ToolRegistry> {
+    register_app_commands(
+        &mut registry,
+        AppCommandDeps {
+            app: Arc::clone(&setup.app_commands),
+            turns: setup.turns.clone(),
+            journal: Arc::new(AuditedAiJournal::new(
+                Arc::clone(repositories),
+                Arc::clone(clock),
+            )),
+            cursors: mcp_server::make_cursor_store(Arc::clone(clock)),
+        },
+    )
+    .ok()?;
+    Some(registry)
 }
 
 fn claude_ai(
@@ -1808,7 +1836,11 @@ where
     }
 }
 
-fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBook) -> AiSetup {
+fn discover_ai_setup(
+    identifier: &str,
+    bridge: BridgeLocation,
+    (turns, app_commands): (ChatTurnBook, Arc<AppCommandSlot<tauri::Wry>>),
+) -> AiSetup {
     let DiscoveredCli {
         executable,
         host_env,
@@ -1840,6 +1872,7 @@ fn discover_ai_setup(identifier: &str, bridge: BridgeLocation, turns: ChatTurnBo
         market: BrokerMarketTools::unconnected(),
         portfolio: CatalogPortfolio::default(),
         estimate_runs: EstimateRunBook::new(),
+        app_commands,
     }
 }
 
@@ -2432,6 +2465,7 @@ mod ai_composition_tests {
             market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
             portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
             estimate_runs: src_tauri::estimate_flow::EstimateRunBook::new(),
+            app_commands: Arc::default(),
         };
         assemble_ai(setup, clock, events, repositories).expect("AI 조립")
     }
@@ -2466,6 +2500,17 @@ mod ai_composition_tests {
             .expect("도구 배열")
             .iter()
             .map(|tool| format!("mcp__stock__{}", tool["name"].as_str().expect("이름")))
+            .chain(
+                src_tauri::ai_commands::COMMAND_POLICIES
+                    .iter()
+                    .filter(|entry| entry.policy != src_tauri::ai_commands::AiPolicy::Never)
+                    .map(|entry| {
+                        format!(
+                            "mcp__stock__{}",
+                            src_tauri::ai_commands::tool_name_of(entry.ipc)
+                        )
+                    }),
+            )
             .collect()
     }
 
@@ -2542,6 +2587,7 @@ mod ai_composition_tests {
             market: src_tauri::broker_link::BrokerMarketTools::unconnected(),
             portfolio: src_tauri::mcp_portfolio::CatalogPortfolio::default(),
             estimate_runs: src_tauri::estimate_flow::EstimateRunBook::new(),
+            app_commands: Arc::default(),
         }
     }
 

@@ -14,7 +14,7 @@ import type { AssistantReply, ChatExchange } from "../model/transcript";
 import { linkVerdict } from "../model/view";
 import { ChatCardView } from "./ChatCardView";
 import { ChatSources } from "./ChatSources";
-import { failureLabel, toolLabel } from "./labels";
+import { changeLabel, failureLabel, toolLabel } from "./labels";
 
 const denyLinks = (): "deny" => "deny";
 
@@ -66,6 +66,13 @@ const Reply = (props: {
     ) : (
       <Stack gap="space-1">{[]}</Stack>
     )}
+    <Stack gap="space-1">
+      {props.reply.changes.map((change) => (
+        <Text key={change} variant="caption" tone="ink-muted">
+          {changeLabel(change)}
+        </Text>
+      ))}
+    </Stack>
     {props.reply.phase === "streaming" && props.reply.text === "" ? (
       <Skeleton variant="text" />
     ) : (
