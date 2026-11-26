@@ -51,9 +51,10 @@ pub fn build_app<R: Runtime, P: PortTypes>(
         .setup(move |app| {
             ipc::registry::specta_builder::<R>().mount_events(app);
             security::create_windows(app)?;
-            let tray =
-                platform::residency::install_tray(&platform::tray::UnavailableTrayController);
-            let _policy = platform::residency::apply_residency_policy(app, tray);
+            let _policy = platform::residency::apply_residency_policy(
+                app,
+                platform::tray::TrayIconState::Hidden,
+            );
             app.manage(platform::residency::ResidencyState::new());
             let opened = open_product_database(app, &ports);
             let status = opened.status();

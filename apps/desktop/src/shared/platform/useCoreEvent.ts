@@ -8,42 +8,31 @@ type EventInvalidationPlan =
   | { readonly scope: "all" }
   | { readonly scope: "keys"; readonly keys: readonly AppQueryKey[] };
 
-const invalidationForCoreEvent = (
-  event: CoreUiEvent,
-): EventInvalidationPlan => {
-  switch (event.category) {
-    case "all":
-      return { scope: "all" };
-    case "settings":
-      return {
-        scope: "keys",
-        keys: [queryKeys.settings, queryKeys.allocation, queryKeys.selfCheck],
-      };
-    case "portfolio":
-      return {
-        scope: "keys",
-        keys: [queryKeys.portfolio, queryKeys.allocation],
-      };
-    case "transactions":
-      return {
-        scope: "keys",
-        keys: [
-          queryKeys.transactions,
-          queryKeys.portfolio,
-          queryKeys.allocation,
-        ],
-      };
-    case "status":
-      return {
-        scope: "keys",
-        keys: [queryKeys.selfCheck, queryKeys.status, queryKeys.settings],
-      };
-    case "activity":
-      return { scope: "keys", keys: [] };
-    case "briefing":
-      return { scope: "keys", keys: [queryKeys.briefings] };
-  }
-};
+const plans = {
+  all: { scope: "all" },
+  settings: {
+    scope: "keys",
+    keys: [queryKeys.settings, queryKeys.allocation, queryKeys.selfCheck],
+  },
+  portfolio: {
+    scope: "keys",
+    keys: [queryKeys.portfolio, queryKeys.allocation],
+  },
+  transactions: {
+    scope: "keys",
+    keys: [queryKeys.transactions, queryKeys.portfolio, queryKeys.allocation],
+  },
+  status: {
+    scope: "keys",
+    keys: [queryKeys.selfCheck, queryKeys.status, queryKeys.settings],
+  },
+  activity: { scope: "keys", keys: [] },
+  briefing: { scope: "keys", keys: [queryKeys.briefings] },
+  navigation: { scope: "keys", keys: [] },
+} as const satisfies Record<CoreUiEvent["category"], EventInvalidationPlan>;
+
+const invalidationForCoreEvent = (event: CoreUiEvent): EventInvalidationPlan =>
+  plans[event.category];
 
 export const useCoreEvent = (): void => {
   const client = useQueryClient();
@@ -58,5 +47,15 @@ export const useCoreEvent = (): void => {
         }
       }),
     [client],
+  );
+};
+
+export const useNavigationEvent = (openDataStatus: () => void): void => {
+  useEffect(
+    () =>
+      subscribeCoreEvents((event): void => {
+        if (event.category === "navigation") openDataStatus();
+      }),
+    [openDataStatus],
   );
 };

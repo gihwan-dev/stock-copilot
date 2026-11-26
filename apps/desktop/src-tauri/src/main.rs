@@ -1007,6 +1007,8 @@ fn run_primary(app: tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Er
     match single_instance {
         InstanceAcquisition::Primary(guard) => {
             let _managed = tauri::Manager::manage(&app, InstanceSlot::holding(guard));
+            let tray = src_tauri::platform::menu_bar::install(&app);
+            src_tauri::platform::residency::settle_menu_bar(app.handle(), tray);
             prepare_login_start(&app);
             start_updates(app.handle());
             start_toss_check(app.handle());

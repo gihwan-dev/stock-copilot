@@ -2161,7 +2161,8 @@ export type UiEvent =
       SignalRaised?: never;
       SourceStatusChanged?: never;
       ThesisUpdated?: never;
-    });
+    })
+  | "ShowDataStatus";
 
 export type UiExcludableType = "etf" | "etn" | "preferred" | "spac" | "reit";
 

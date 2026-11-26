@@ -4,6 +4,7 @@ pub mod collector;
 pub mod feed_watch;
 pub mod intraday;
 pub mod job_settings;
+pub mod menu_bar;
 pub mod notifier;
 pub mod peer_process;
 pub mod process_cleanup;
