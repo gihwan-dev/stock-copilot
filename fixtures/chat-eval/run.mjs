@@ -115,6 +115,8 @@ const PROCESS_OPENERS =
 
 const TABLE = /^\s*\|.+\|\s*$\n^\s*\|[\s:|-]+\|\s*$/m;
 
+const firstSentence = (text) => text.split(/(?<=[.?!。])\s+/)[0] ?? text;
+
 const firstLine = (text) =>
   (text.split("\n").find((line) => line.trim() !== "") ?? "")
     .replace(/^#+\s*/, "")
@@ -151,8 +153,8 @@ export const deterministicChecks = (scenario, answer, toolNames, calls = []) => 
     no_rule_recital: RULE_RECITAL.every((pattern) => !pattern.test(answer)),
     no_order_claim: ORDER_CLAIM.every((pattern) => !pattern.test(answer)),
     headline_first:
-      head.length >= 6 && head.length <= 220 && !PROCESS_OPENERS.test(head),
-    brevity: withinBudget(expect, answer),
+      head.length >= 6 && firstSentence(head).length <= 160 && !PROCESS_OPENERS.test(head),
+    brevity: withinBudget({ ...expect, kind: answerMode(scenario.message) }, answer),
     mentions: (expect.mention ?? []).every((source) =>
       new RegExp(source).test(answer),
     ),
@@ -207,11 +209,24 @@ const screenLine = (screen) => {
   return parts.length ? `[screen_context:${parts.join(",")}]\n` : "";
 };
 
+const MODE_SOURCE = join(repoRoot, "crates/application/src/chat_answer_mode.rs");
+
+export const planMarkers = () => {
+  const source = readFileSync(MODE_SOURCE, "utf8");
+  const block = source.slice(source.indexOf("if ["), source.indexOf("]\n    .iter()"));
+  return [...block.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+};
+
+export const answerMode = (message) => {
+  const compact = String(message).replace(/\s+/g, "");
+  return planMarkers().some((marker) => compact.includes(marker)) ? "plan" : "short";
+};
+
 export const userPrompt = (scenario) => {
-  const message = `${screenLine(scenario.screen)}${scenario.message}`;
-  if (!scenario.history?.length) return message;
+  const tagged = `[answer_mode:${answerMode(scenario.message)}]\n${scenario.message}`;
+  if (!scenario.history?.length) return `${screenLine(scenario.screen)}${tagged}`;
   const lines = scenario.history.map((entry) => `${entry.role}: ${entry.text}`);
-  return `<conversation_history>\n${lines.join("\n")}\n</conversation_history>\n${message}`;
+  return `<conversation_history>\n${lines.join("\n")}\n</conversation_history>\n${tagged}`;
 };
 
 const parseArgs = (argv) => {
@@ -476,6 +491,9 @@ ${scenario.expect?.judge ?? "(없음)"}
 
 ## 사용자 질문
 ${userPrompt(scenario)}
+
+## 앱이 정한 답 모양
+${answerMode(scenario.message) === "short" ? "short: 세 문장 이하, 표·목록·지켜볼 것 없이 결론·근거·할 일 한 문장이 정답이다. 이 형식을 지킨 답을 짧다는 이유로 actionable에서 깎지 않는다. 다만 할 일 문장에 금액·주수·상품·시점이 없으면 깎는다." : "plan: 결론, 근거, 할 일 표, 지켜볼 것, 15줄 이내."}
 
 ## 챗봇이 실제로 부른 도구와 받은 결과 (합성 자료)
 ${judgeContext(record)}
@@ -744,11 +762,26 @@ const selfTest = async () => {
   expectThat(withinBudget({ kind: "short" }, "삼성전자는 약 135주를 팔면 됩니다. 이번 주에 두 번 나눠 파세요."), "짧은 답 통과");
   expectThat(!withinBudget({ kind: "short" }, "결론입니다.\n\n- 근거 하나\n- 근거 둘"), "짧은 질문에 목록 금지");
   expectThat(!withinBudget({ kind: "plan" }, Array.from({ length: 25 }, (_, index) => `줄 ${index}`).join("\n")), "계획 답 줄 수 상한");
+  const markers = planMarkers();
+  expectThat(markers.length >= 10 && markers.includes("점검"), `답 모양 표지 ${markers.length}`);
+  for (const [text, expected] of [
+    ["포트폴리오 점검 좀 해줘", "plan"],
+    ["뭐 팔까?", "short"],
+    ["오늘 뭐 해야 해?", "plan"],
+    ["지금 내 계좌 괜찮아?", "short"],
+  ]) {
+    expectThat(answerMode(text) === expected, `답 모양 ${text}`);
+  }
+  expectThat(
+    userPrompt({ message: "뭐 살까?", screen: { symbol: "005930", market: "KR" } }) ===
+      "[screen_context:symbol=005930,market=KR]\n[answer_mode:short]\n뭐 살까?",
+    "앱과 같은 메시지 앞머리",
+  );
   const prompt = loadCandidatePrompt();
   expectThat(prompt.includes("투자 자문가") && prompt.length > 1000, "후보 프롬프트 추출");
   expectThat(
-    userPrompt(scenarios.find((scenario) => scenario.id === "casual-followup-shares")).startsWith(
-      "<conversation_history>\nuser: ",
+    userPrompt(scenarios.find((scenario) => scenario.id === "casual-followup-shares")).includes(
+      "</conversation_history>\n[answer_mode:short]\n",
     ),
     "대화 이력 형식",
   );
