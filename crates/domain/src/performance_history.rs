@@ -18,13 +18,13 @@ pub enum PerformanceSpan {
     OneYear,
 }
 impl PerformanceSpan {
-    const fn days(self) -> u16 {
-        match self {
+    const fn days(self) -> crate::CalendarDays {
+        crate::CalendarDays::new(match self {
             Self::OneMonth => 30,
             Self::ThreeMonths => 91,
             Self::SixMonths => 182,
             Self::OneYear => 365,
-        }
+        })
     }
 }
 
@@ -125,12 +125,21 @@ pub fn derived_window_ledger(
     }
 }
 
-fn usable(candle: &Candle, instrument: &InstrumentId, currency: Currency) -> bool {
-    candle.instrument() == instrument
+fn usable(
+    candle: &Candle,
+    instrument: &InstrumentId,
+    currency: Currency,
+) -> Result<(), SnapshotError> {
+    if candle.instrument() == instrument
         && candle.values().close().as_money().currency() == currency
         && candle.time().period() == CandlePeriod::Daily
         && candle.status() == CandleStatus::Finalized
         && candle.adjustment() == PriceAdjustment::Raw
+    {
+        Ok(())
+    } else {
+        Err(SnapshotError::InvalidCandle)
+    }
 }
 
 pub fn day_price_evidence(
@@ -145,7 +154,7 @@ pub fn day_price_evidence(
         .candles()
         .iter()
         .find(|candle| {
-            candle.time().date() == date && usable(candle, identity.instrument(), currency)
+            candle.time().date() == date && usable(candle, identity.instrument(), currency).is_ok()
         })
         .ok_or(SnapshotError::MissingPrice)?;
     let price = candle.values().close();

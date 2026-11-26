@@ -74,13 +74,10 @@ where
     Source: PerformanceHistorySource,
     Time: Clock,
 {
-    pub async fn execute(
+    async fn valued_days(
         &self,
-        account: &AccountId,
-        span: PerformanceSpan,
-    ) -> Result<PerformanceSummary, PerformanceRunError> {
-        let now = self.clock.now();
-        let requested = performance_window(now, span).map_err(PerformanceRunError::Window)?;
+        requested: SettlementWindow,
+    ) -> Result<Vec<(CalendarDate, WindowDay)>, PerformanceRunError> {
         let mut days = Vec::new();
         for date in window_dates(requested) {
             if let Some(day) = self
@@ -92,6 +89,17 @@ where
                 days.push((date, day));
             }
         }
+        Ok(days)
+    }
+
+    pub async fn execute(
+        &self,
+        account: &AccountId,
+        span: PerformanceSpan,
+    ) -> Result<PerformanceSummary, PerformanceRunError> {
+        let now = self.clock.now();
+        let requested = performance_window(now, span).map_err(PerformanceRunError::Window)?;
+        let days = self.valued_days(requested).await?;
         let (Some((first, _)), Some((last, _))) = (days.first(), days.last()) else {
             return Err(PerformanceRunError::NoValuedDays);
         };
@@ -120,8 +128,11 @@ where
             .histories(&rows, window)
             .await
             .map_err(PerformanceRunError::Source)?;
-        let (snapshots, rates, skipped) =
-            recompute_days(&days, &rows, &histories, (&kr, &us), now)?;
+        let Recomputed {
+            snapshots,
+            rates,
+            skipped,
+        } = recompute_days(&days, &rows, &histories, (&kr, &us), now)?;
         let performance = Performance::calculate(
             &snapshots,
             (&kr.flow_period(), &us.flow_period()),
@@ -139,11 +150,11 @@ where
     }
 }
 
-type Recomputed = (
-    Vec<ValuationSnapshot>,
-    Vec<domain::FxRate>,
-    Vec<(CalendarDate, SnapshotError)>,
-);
+struct Recomputed {
+    snapshots: Vec<ValuationSnapshot>,
+    rates: Vec<domain::FxRate>,
+    skipped: Vec<(CalendarDate, SnapshotError)>,
+}
 
 fn recompute_days(
     days: &[(CalendarDate, WindowDay)],
@@ -171,7 +182,11 @@ fn recompute_days(
             Err(reason) => skipped.push((*date, reason)),
         }
     }
-    Ok((snapshots, rates, skipped))
+    Ok(Recomputed {
+        snapshots,
+        rates,
+        skipped,
+    })
 }
 
 #[cfg(test)]
