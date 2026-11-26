@@ -2,6 +2,14 @@ import type { Locale, UiText } from "../../shared/lib";
 
 const catalog = {
   totalTitle: { ko: "총평가" as UiText },
+  performanceTitle: { ko: "기간 수익률" as UiText },
+  performanceDrawdown: { ko: "최대 낙폭(1년)" as UiText },
+  performanceOneMonth: { ko: "1개월" as UiText },
+  performanceThreeMonths: { ko: "3개월" as UiText },
+  performanceSixMonths: { ko: "6개월" as UiText },
+  performanceOneYear: { ko: "1년" as UiText },
+  performancePending: { ko: "계산 중" as UiText },
+  performanceError: { ko: "기간 수익률을 불러오지 못했어요" as UiText },
   totalApproximate: { ko: "근사값" as UiText },
   totalHint: {
     ko: "보유 평가액과 매수가능금액을 원화로 환산해 더한 근사값이에요." as UiText,

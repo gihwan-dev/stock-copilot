@@ -127,6 +127,10 @@ export const commands = {
     typedError<UiDataStatusView_Serialize, IpcError>(
       __TAURI_INVOKE("get_data_status", { request }),
     ),
+  getPerformance: (request: GetPerformanceRequest) =>
+    typedError<UiPerformanceView_Serialize, IpcError>(
+      __TAURI_INVOKE("get_performance", { request }),
+    ),
   getScorecard: (request: GetScorecardRequest) =>
     typedError<UiScorecardView_Serialize, IpcError>(
       __TAURI_INVOKE("get_scorecard", { request }),
@@ -704,6 +708,10 @@ export type GetJobSchedulesRequest = {
   scope: JobSchedulesScope;
 };
 
+export type GetPerformanceRequest = {
+  scope: PerformanceScope;
+};
+
 export type GetPortfolioRequest = {
   scope: PortfolioScope;
 };
@@ -824,6 +832,8 @@ export type OrderApprovalStatus =
   | "broker-rejected"
   | "outcome-unknown"
   | "unavailable";
+
+export type PerformanceScope = "current";
 
 export type PortfolioScope = "current";
 
@@ -2438,6 +2448,38 @@ export type UiOrderSwitchOutcome = {
 export type UiOrderSwitchOutcomeKind =
   "changed" | "unchanged" | "denied" | "unavailable";
 
+export type UiPerformanceLine =
+  UiPerformanceLine_Serialize | UiPerformanceLine_Deserialize;
+
+export type UiPerformanceLine_Deserialize = {
+  span: UiPerformanceSpan;
+  period_return?: UiSignedRate | null;
+  max_drawdown?: UiSignedRate | null;
+  from?: string | null;
+  to?: string | null;
+};
+
+export type UiPerformanceLine_Serialize = {
+  span: UiPerformanceSpan;
+  period_return: UiSignedRate | null;
+  max_drawdown: UiSignedRate | null;
+  from: string | null;
+  to: string | null;
+};
+
+export type UiPerformanceSpan = "1m" | "3m" | "6m" | "1y";
+
+export type UiPerformanceView =
+  UiPerformanceView_Serialize | UiPerformanceView_Deserialize;
+
+export type UiPerformanceView_Deserialize = {
+  lines: UiPerformanceLine_Deserialize[];
+};
+
+export type UiPerformanceView_Serialize = {
+  lines: UiPerformanceLine_Serialize[];
+};
+
 export type UiPortfolioView =
   UiPortfolioView_Serialize | UiPortfolioView_Deserialize;
 
@@ -2691,6 +2733,11 @@ export type UiSignalsView_Serialize = {
 
 export type UiSignedAmount = {
   amount: UiMoney;
+  rate: string;
+  direction: UiDirection;
+};
+
+export type UiSignedRate = {
   rate: string;
   direction: UiDirection;
 };

@@ -206,6 +206,13 @@ export {
 export { getSelfCheck, getStatus } from "./status-call";
 export { setAutoStart } from "./autostart-call";
 export {
+  getPerformance,
+  type PerformanceLine,
+  type PerformanceSpan,
+  type PerformanceView,
+  type SignedRate,
+} from "./performance-call";
+export {
   getDataStatus,
   type DataJob,
   type DataJobStatus,

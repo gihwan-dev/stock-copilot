@@ -3,9 +3,9 @@ use tauri_specta::{Builder, Commands, ErrorHandlingMode, collect_commands, colle
 
 use super::{
     ai_settings, app_version, autostart, briefing, chat, data_status, instrument_search,
-    instruments, news_settings, open_external, order_approval, portfolio, public_ip, risk_editor,
-    schedule, scorecard, self_check, settings, signals, simulation, system_data, thesis, toss,
-    transactions, updates,
+    instruments, news_settings, open_external, order_approval, performance, portfolio, public_ip,
+    risk_editor, schedule, scorecard, self_check, settings, signals, simulation, system_data,
+    thesis, toss, transactions, updates,
 };
 
 #[expect(
@@ -43,6 +43,7 @@ fn product_commands<R: Runtime>() -> Commands<R> {
         self_check::get_self_check::<tauri::Wry>,
         self_check::get_status::<tauri::Wry>,
         data_status::get_data_status::<tauri::Wry>,
+        performance::get_performance::<tauri::Wry>,
         scorecard::get_scorecard::<tauri::Wry>,
         transactions::get_transactions::<tauri::Wry>,
         instruments::get_instruments::<tauri::Wry>,

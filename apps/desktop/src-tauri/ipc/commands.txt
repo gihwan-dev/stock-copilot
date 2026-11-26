@@ -16,6 +16,7 @@ get_instrument_detail
 get_instruments
 get_job_schedules
 get_news_settings
+get_performance
 get_portfolio
 get_principles
 get_public_ip

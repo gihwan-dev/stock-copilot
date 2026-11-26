@@ -1,0 +1,32 @@
+{
+  "lines": [
+    {
+      "span": "1m",
+      "period_return": null,
+      "max_drawdown": null,
+      "from": null,
+      "to": null
+    },
+    {
+      "span": "3m",
+      "period_return": null,
+      "max_drawdown": null,
+      "from": null,
+      "to": null
+    },
+    {
+      "span": "6m",
+      "period_return": null,
+      "max_drawdown": null,
+      "from": null,
+      "to": null
+    },
+    {
+      "span": "1y",
+      "period_return": null,
+      "max_drawdown": null,
+      "from": null,
+      "to": null
+    }
+  ]
+}

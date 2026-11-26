@@ -13,8 +13,8 @@ use crate::ipc::event_bridge::UiEventBridge;
 use crate::ipc::order_approval::OrderApprovalRequest;
 use crate::ipc::{
     ai_settings, app_version, briefing, chat, data_status, instrument_search, instruments,
-    news_settings, portfolio, public_ip, risk_editor, schedule, scorecard, self_check, settings,
-    signals, simulation, system_data, thesis, toss, transactions, updates,
+    news_settings, performance, portfolio, public_ip, risk_editor, schedule, scorecard, self_check,
+    settings, signals, simulation, system_data, thesis, toss, transactions, updates,
 };
 
 type Fixed = &'static [(&'static str, &'static str)];
@@ -244,6 +244,15 @@ fn status_routes<R: Runtime>() -> Vec<Route<R>> {
             chat::get_chat_history::<R>,
         ),
     ]
+}
+
+fn performance_routes<R: Runtime>() -> Vec<Route<R>> {
+    vec![ipc(
+        "get_performance",
+        "Read period returns (1m, 3m, 6m, 1y) and max drawdown recomputed from transactions and daily closes. No side effects.",
+        fixed(&[("scope", "current")]),
+        performance::get_performance::<R>,
+    )]
 }
 
 fn portfolio_routes<R: Runtime>() -> Vec<Route<R>> {
@@ -682,6 +691,7 @@ pub(super) fn all_routes<R: Runtime>() -> Vec<Route<R>> {
     [
         status_routes::<R>(),
         portfolio_routes::<R>(),
+        performance_routes::<R>(),
         planning_routes::<R>(),
         settings_reads::<R>(),
         risk_writes::<R>(),

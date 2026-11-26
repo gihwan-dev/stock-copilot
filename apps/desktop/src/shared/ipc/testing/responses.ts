@@ -279,6 +279,38 @@ export const responses = {
     ],
     wake: { daily_move_percent: "5", news_per_hour: "5" },
   },
+  getPerformance: {
+    lines: [
+      {
+        from: null,
+        max_drawdown: null,
+        period_return: null,
+        span: "1m",
+        to: null,
+      },
+      {
+        from: null,
+        max_drawdown: null,
+        period_return: null,
+        span: "3m",
+        to: null,
+      },
+      {
+        from: null,
+        max_drawdown: null,
+        period_return: null,
+        span: "6m",
+        to: null,
+      },
+      {
+        from: null,
+        max_drawdown: null,
+        period_return: null,
+        span: "1y",
+        to: null,
+      },
+    ],
+  },
   getPortfolio: {
     currencies: [
       {

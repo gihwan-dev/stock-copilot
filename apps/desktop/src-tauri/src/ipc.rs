@@ -15,6 +15,7 @@ pub mod instruments;
 pub mod news_settings;
 pub mod open_external;
 pub mod order_approval;
+pub mod performance;
 pub mod portfolio;
 pub mod public_ip;
 pub mod registry;

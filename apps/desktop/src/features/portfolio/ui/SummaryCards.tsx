@@ -15,6 +15,7 @@ import {
 import type { CurrencyValue, PortfolioView } from "../../../shared/ipc";
 import type { Currency } from "../../../shared/lib";
 import { portfolioText, type PortfolioMessageKey } from "../messages";
+import { PerformanceSummary } from "./PerformanceCard";
 
 const TableRoot = Table.Root;
 const TableHead = Table.Head;
@@ -83,6 +84,7 @@ const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
           </Badge>
         </Inline>,
         <TodayLine key="today" view={props.view} />,
+        <PerformanceSummary key="performance" />,
         <MetaLine key="meta" view={props.view} />,
         <Text key="hint" variant="caption" tone="ink-muted">
           {portfolioText("totalHint", "ko")}

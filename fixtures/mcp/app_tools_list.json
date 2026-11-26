@@ -388,6 +388,32 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
+    "description": "Read period returns (1m, 3m, 6m, 1y) and max drawdown recomputed from transactions and daily closes. No side effects.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "app_get_performance"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
     "description": "Read the portfolio screen for the selected account. No side effects.",
     "inputSchema": {
       "additionalProperties": false,
