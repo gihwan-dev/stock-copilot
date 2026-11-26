@@ -5,8 +5,9 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, OnceLock, RwLock};
 
 use application::{
-    BrokerCall, CallMethod, CallResult, Clock, DiagnosticEvent, DiagnosticsSink, SyncDiagnosis,
-    SyncFailureReason, SyncJob, SyncResult, TokenIssue, TransportFailure, sync_failure_reason,
+    BrokerCall, CallMethod, CallResult, Clock, DiagnosticEvent, DiagnosticsSink, FeedDiagnosis,
+    FeedFailure, FeedRunResult, SourceCall, SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult,
+    TokenIssue, TransportFailure, sync_failure_reason,
 };
 use domain::{TimeSpan, Timestamp};
 
@@ -134,7 +135,49 @@ fn describe(event: &DiagnosticEvent) -> String {
             tool.as_str(),
             summary.as_str()
         ),
+        DiagnosticEvent::Feed(diagnosis) => describe_feed(diagnosis),
+        DiagnosticEvent::SourceCall(call) => describe_source_call(call),
     }
+}
+
+const fn feed_result_name(result: FeedRunResult) -> &'static str {
+    match result {
+        FeedRunResult::Collected => "collected",
+        FeedRunResult::NoData => "no-new-items",
+        FeedRunResult::NotConfigured => "not-configured",
+        FeedRunResult::Failed(FeedFailure::Unavailable) => "failed-unavailable",
+        FeedRunResult::Failed(FeedFailure::InvalidResponse) => "failed-invalid-response",
+        FeedRunResult::Failed(FeedFailure::InvalidCredential) => "failed-credential",
+        FeedRunResult::Failed(FeedFailure::Storage) => "failed-storage",
+    }
+}
+
+fn describe_feed(diagnosis: &FeedDiagnosis) -> String {
+    format!(
+        "news-feed source={:?} result={} fetched={} duplicates={} stored={} linked={}",
+        diagnosis.source,
+        feed_result_name(diagnosis.result),
+        diagnosis.fetched.as_u32(),
+        diagnosis.duplicates.as_u32(),
+        diagnosis.stored.as_u32(),
+        diagnosis.linked.as_u32()
+    )
+}
+
+fn describe_source_call(call: &SourceCall) -> String {
+    let mut line = format!(
+        "source-call source={:?} host={}",
+        call.source,
+        call.host.as_str()
+    );
+    let _status = match call.result {
+        CallResult::Status(status) => write!(line, " status={}", status.as_u16()),
+        CallResult::Transport(failure) => write!(line, " transport={}", transport_name(failure)),
+    };
+    if let Some(duration) = call.duration.and_then(millis) {
+        let _duration = write!(line, " ms={duration}");
+    }
+    line
 }
 
 fn describe_call(call: &BrokerCall) -> String {

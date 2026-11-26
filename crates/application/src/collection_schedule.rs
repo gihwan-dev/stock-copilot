@@ -265,6 +265,14 @@ impl CollectionPlan {
     }
 
     #[must_use]
+    pub(crate) const fn from_entries(
+        phase: CollectionPhase,
+        entries: Vec<PlannedCollection>,
+    ) -> Self {
+        Self { phase, entries }
+    }
+
+    #[must_use]
     pub const fn phase(&self) -> CollectionPhase {
         self.phase
     }

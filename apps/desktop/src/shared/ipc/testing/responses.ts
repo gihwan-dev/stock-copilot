@@ -121,6 +121,7 @@ export const responses = {
       value: { amount: "714000", currency: "KRW" },
     },
     name: "삼성전자",
+    news: [],
     price: { amount: "71400", currency: "KRW" },
     quoted_at: "2026-11-25T10:00:00+09:00",
     symbol: "005930",

@@ -1,5 +1,7 @@
-use crate::{PortError, PortErrorKind, ReadEndpoint, ResponseMismatch, UnavailableCause};
-use domain::{SyncOutcome, TimeSpan};
+use crate::{
+    CollectedCount, PortError, PortErrorKind, ReadEndpoint, ResponseMismatch, UnavailableCause,
+};
+use domain::{DataSource, SyncOutcome, TimeSpan};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiagnosticText(String);
@@ -121,6 +123,40 @@ pub struct SyncDiagnosis {
     pub errors: Vec<PortError>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FeedFailure {
+    Unavailable,
+    InvalidResponse,
+    InvalidCredential,
+    Storage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FeedRunResult {
+    Collected,
+    NoData,
+    NotConfigured,
+    Failed(FeedFailure),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedDiagnosis {
+    pub source: DataSource,
+    pub result: FeedRunResult,
+    pub fetched: CollectedCount,
+    pub duplicates: CollectedCount,
+    pub stored: CollectedCount,
+    pub linked: CollectedCount,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceCall {
+    pub source: DataSource,
+    pub host: DiagnosticText,
+    pub result: CallResult,
+    pub duration: Option<TimeSpan>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiagnosticEvent {
     BrokerCall(BrokerCall),
@@ -135,6 +171,8 @@ pub enum DiagnosticEvent {
         tool: DiagnosticText,
         summary: DiagnosticText,
     },
+    Feed(FeedDiagnosis),
+    SourceCall(SourceCall),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

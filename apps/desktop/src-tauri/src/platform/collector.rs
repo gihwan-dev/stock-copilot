@@ -1,15 +1,21 @@
 use crate::collected_links::{CollectedLinker, LinkingTimes};
+use crate::holdings_link::InstrumentDirectory;
+use crate::news_tracking::{MatchName, NewsTracking, match_names};
 use crate::platform::background::{CollectorFuture, CollectorWorker};
+use crate::platform::feed_watch::{SharedHeadlines, WatchedFeed, record_feed};
 use crate::ports::{PortTypes, Ports};
 use application::{
     Clock, CollectFeed, CollectedObservation, CollectionConditions, CollectionDue,
     CollectionInputs, CollectionPhase, CollectionPlan, CollectionScheduler, CollectionTarget,
     DartCallCount, DartDailyUsage, DartKeyState, DataAvailability, FeedCursor, FeedRound,
-    FeedSource, FomcDay, InformationError, NewsFeed, NewsMetadata, PlanCollectionSchedule,
-    SystemPortError, WriteCompleted, collection_due,
+    FeedSource, FomcDay, InformationError, NewsDataSettings, NewsDataSettingsRepository, NewsFeed,
+    NewsMetadata, PlanCollectionSchedule, SourceSwitch, SystemPortError, WriteCompleted,
+    collection_due,
 };
-use domain::Timestamp;
+use domain::{DataSource, Timestamp};
 use scheduler::LoopControl;
+use sources::{NewsLinkHints, TrackedTargets};
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -19,11 +25,22 @@ use store_sqlite::SqliteRepositories;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, watch};
 
+#[cfg(test)]
+mod tests;
+
 pub const COLLECTOR_TICK_SECONDS: u64 = 30;
 
 pub type FeedRoundFuture<'a> =
     Pin<Box<dyn Future<Output = Result<FeedRound, SystemPortError>> + Send + 'a>>;
 pub type PlanFuture<'a> = Pin<Box<dyn Future<Output = CollectionPlan> + Send + 'a>>;
+pub type ReadyFuture<'a> = Pin<Box<dyn Future<Output = RunnerReadiness> + Send + 'a>>;
+pub type SwitchFuture<'a> = Pin<Box<dyn Future<Output = BTreeSet<DataSource>> + Send + 'a>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunnerReadiness {
+    Ready,
+    Waiting,
+}
 
 pub type FeedItemsFuture<'a> = Pin<
     Box<
@@ -105,10 +122,18 @@ pub struct CollectorFeeds(pub Vec<CollectorFeed>);
 
 pub trait FeedRunner: Send + Sync {
     fn collect(&self, cursor: FeedCursor) -> FeedRoundFuture<'_>;
+
+    fn readiness(&self) -> ReadyFuture<'_> {
+        Box::pin(std::future::ready(RunnerReadiness::Ready))
+    }
 }
 
 pub trait CollectionPlanner: Send + Sync {
     fn plan(&self) -> PlanFuture<'_>;
+
+    fn disabled(&self) -> SwitchFuture<'_> {
+        Box::pin(std::future::ready(BTreeSet::new()))
+    }
 }
 
 #[must_use]
@@ -132,6 +157,7 @@ impl CollectionPlanner for OffHoursPlanner {
 
 pub struct ScheduledFeed {
     target: CollectionTarget,
+    source: Option<DataSource>,
     startup: Option<Arc<dyn FeedRunner>>,
     regular: Arc<dyn FeedRunner>,
 }
@@ -149,9 +175,16 @@ impl ScheduledFeed {
     pub fn new(target: CollectionTarget, regular: Arc<dyn FeedRunner>) -> Self {
         Self {
             target,
+            source: None,
             startup: None,
             regular,
         }
+    }
+
+    #[must_use]
+    pub const fn with_source(mut self, source: DataSource) -> Self {
+        self.source = Some(source);
+        self
     }
 
     #[must_use]
@@ -222,9 +255,13 @@ impl FeedCollectorWorker {
 
     pub async fn collect_due(&self) -> CollectorRoundReport {
         let plan = self.inner.planner.plan().await;
+        let disabled = self.inner.planner.disabled().await;
         let mut states = self.inner.states.lock().await;
         let mut report = CollectorRoundReport::default();
         for (feed, state) in self.inner.feeds.iter().zip(states.iter_mut()) {
+            if feed.source.is_some_and(|source| disabled.contains(&source)) {
+                continue;
+            }
             let now = self.inner.clock.now();
             match collection_due(plan.cadence(feed.target), state.last_attempt, now) {
                 CollectionDue::Now => {}
@@ -234,6 +271,9 @@ impl FeedCollectorWorker {
                 (Some(startup), None) => startup,
                 (Some(_) | None, Some(_)) | (None, None) => &feed.regular,
             };
+            if runner.readiness().await == RunnerReadiness::Waiting {
+                continue;
+            }
             report.attempted = report.attempted.saturating_add(1);
             state.last_attempt = Some(now);
             match runner.collect(state.cursor.clone()).await {
@@ -272,6 +312,7 @@ pub struct AppFeedRunner<R: Runtime, P: PortTypes, F> {
     app: AppHandle<R>,
     repositories: SqliteRepositories,
     feed: F,
+    headlines: SharedHeadlines,
     ports: PhantomData<fn() -> P>,
 }
 
@@ -283,13 +324,38 @@ impl<R: Runtime, P: PortTypes, F> Debug for AppFeedRunner<R, P, F> {
 
 impl<R: Runtime, P: PortTypes, F: NewsFeed> AppFeedRunner<R, P, F> {
     #[must_use]
-    pub const fn new(app: AppHandle<R>, repositories: SqliteRepositories, feed: F) -> Self {
+    pub fn new(app: AppHandle<R>, repositories: SqliteRepositories, feed: F) -> Self {
         Self {
             app,
             repositories,
             feed,
+            headlines: SharedHeadlines::default(),
             ports: PhantomData,
         }
+    }
+
+    #[must_use]
+    pub fn sharing(mut self, headlines: &SharedHeadlines) -> Self {
+        self.headlines = headlines.clone();
+        self
+    }
+
+    async fn settings(&self) -> NewsDataSettings {
+        match NewsDataSettingsRepository::load(&self.repositories).await {
+            Ok(Some(settings)) => settings,
+            Ok(None) | Err(_) => NewsDataSettings::initial(),
+        }
+    }
+
+    async fn tracked_names(&self) -> Option<Vec<MatchName>> {
+        let tracking = self.app.try_state::<NewsTracking>()?;
+        let directory = self
+            .app
+            .try_state::<InstrumentDirectory>()
+            .map_or_else(InstrumentDirectory::default, |names| names.inner().clone());
+        let tracked = tracking.tracked().await;
+        let settings = self.settings().await;
+        Some(match_names(&tracked, settings.aliases(), &directory))
     }
 }
 
@@ -306,20 +372,39 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed + 'static> FeedRunner for AppFeedRunn
                 return Err(unopened());
             }
             let ports = self.app.try_state::<Ports<P>>().ok_or_else(unopened)?;
+            let names = self.tracked_names().await;
+            let hints = self.app.try_state::<NewsLinkHints>();
             let linker = self
                 .app
                 .try_state::<CollectedLinker>()
                 .map(|state| Arc::clone(&state.0));
-            let times = LinkingTimes::new(&self.repositories, linker.as_deref());
-            CollectFeed::new(
+            let plain = LinkingTimes::new(&self.repositories, linker.as_deref());
+            let times = match names.as_deref() {
+                Some(found) => plain.with_names(found, hints.as_ref().map(tauri::State::inner)),
+                None => plain,
+            };
+            let watched = WatchedFeed::new(&self.feed, &self.headlines);
+            let round = CollectFeed::new(
                 &self.repositories,
                 &self.repositories,
                 ports.clock.as_ref(),
                 &ports.events,
             )
             .with_times(&times)
-            .collect(&self.feed, cursor)
-            .await
+            .collect(&watched, cursor)
+            .await;
+            record_feed(watched.diagnosis(&round, times.linked()).await);
+            round
+        })
+    }
+
+    fn readiness(&self) -> ReadyFuture<'_> {
+        Box::pin(async move {
+            let opened = self.repositories.shared().read().await.is_some();
+            match (opened, self.app.try_state::<Ports<P>>()) {
+                (true, Some(_)) => RunnerReadiness::Ready,
+                (true, None) | (false, _) => RunnerReadiness::Waiting,
+            }
         })
     }
 }
@@ -356,6 +441,14 @@ impl<R: Runtime, P: PortTypes> AppCollectionPlanner<R, P> {
             ports: PhantomData,
         }
     }
+
+    async fn settings(&self) -> Option<NewsDataSettings> {
+        let repositories = self.app.try_state::<Arc<SqliteRepositories>>()?;
+        NewsDataSettingsRepository::load(repositories.as_ref())
+            .await
+            .ok()
+            .flatten()
+    }
 }
 
 impl<R: Runtime, P: PortTypes> CollectionPlanner for AppCollectionPlanner<R, P> {
@@ -375,10 +468,26 @@ impl<R: Runtime, P: PortTypes> CollectionPlanner for AppCollectionPlanner<R, P> 
                 dart_usage: DartDailyUsage::new(DartCallCount::new(0), DartCallCount::new(1)),
             })
             .await;
-            match planned {
+            let plan = match planned {
                 Ok(plan) => plan,
                 Err(_error) => off_hours_plan(),
+            };
+            match self.settings().await {
+                Some(settings) => settings.adjusted_plan(&plan),
+                None => plan,
             }
+        })
+    }
+
+    fn disabled(&self) -> SwitchFuture<'_> {
+        Box::pin(async move {
+            let Some(settings) = self.settings().await else {
+                return BTreeSet::new();
+            };
+            DataSource::all()
+                .into_iter()
+                .filter(|source| settings.source_switch(*source) == SourceSwitch::Off)
+                .collect()
         })
     }
 }
@@ -390,18 +499,19 @@ pub fn app_collector<R: Runtime, P: PortTypes>(
     feeds: &CollectorFeeds,
     clock: Arc<dyn Clock>,
 ) -> FeedCollectorWorker {
+    let headlines = SharedHeadlines::default();
     let runner = |feed: &SharedFeed| -> Arc<dyn FeedRunner> {
-        Arc::new(AppFeedRunner::<R, P, SharedFeed>::new(
-            app.clone(),
-            repositories.clone(),
-            feed.clone(),
-        ))
+        Arc::new(
+            AppFeedRunner::<R, P, SharedFeed>::new(app.clone(), repositories.clone(), feed.clone())
+                .sharing(&headlines),
+        )
     };
     let scheduled = feeds
         .0
         .iter()
         .map(|feed| {
-            let regular = ScheduledFeed::new(feed.target, runner(&feed.regular));
+            let regular = ScheduledFeed::new(feed.target, runner(&feed.regular))
+                .with_source(application::feed_data_source(&feed.regular.source()));
             match &feed.startup {
                 Some(startup) => regular.with_startup(runner(startup)),
                 None => regular,

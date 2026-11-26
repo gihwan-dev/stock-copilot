@@ -4,8 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use application::{
-    Clock, ConditionalGet, CredentialSource, InformationError, ResetTime, ResponseMismatch,
-    SecretValue, SourceAttemptOutcome,
+    CallResult, Clock, ConditionalGet, CredentialSource, DiagnosticEvent, DiagnosticText,
+    DiagnosticsSink, HttpStatusCode, InformationError, ResetTime, ResponseMismatch, SecretValue,
+    SourceAttemptOutcome, SourceCall, TransportFailure,
 };
 use reqwest::Client;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
@@ -248,11 +249,28 @@ async fn read_bounded_body(
     })
 }
 
+struct CallWatch {
+    source: HttpDataSource,
+    host: Option<String>,
+    started: domain::Timestamp,
+}
+
+fn transport_failure(error: &reqwest::Error) -> TransportFailure {
+    if error.is_timeout() {
+        TransportFailure::Timeout
+    } else if error.is_connect() {
+        TransportFailure::Connect
+    } else {
+        TransportFailure::Other
+    }
+}
+
 pub struct SourceHttpClient {
     client: Client,
     endpoint: SourceEndpoint,
     limiter: SourceRateLimiter,
     contact: Option<ContactUserAgent>,
+    diagnostics: Option<Arc<dyn DiagnosticsSink>>,
 }
 
 impl fmt::Debug for SourceHttpClient {
@@ -276,12 +294,31 @@ impl SourceHttpClient {
             endpoint,
             limiter: SourceRateLimiter::new(clock, wait),
             contact,
+            diagnostics: None,
         })
+    }
+
+    #[must_use]
+    pub fn with_diagnostics(mut self, sink: Arc<dyn DiagnosticsSink>) -> Self {
+        self.diagnostics = Some(sink);
+        self
     }
 
     #[must_use]
     pub fn now(&self) -> domain::Timestamp {
         self.limiter.current_timestamp()
+    }
+
+    fn observe(&self, watch: &CallWatch, result: CallResult) {
+        let Some(sink) = self.diagnostics.as_ref() else {
+            return;
+        };
+        sink.record(&DiagnosticEvent::SourceCall(SourceCall {
+            source: watch.source.data_source(),
+            host: DiagnosticText::new(watch.host.as_deref().unwrap_or("-")),
+            result,
+            duration: watch.started.elapsed_until(self.now()).ok(),
+        }));
     }
 
     pub async fn fetch(&self, target: &SourceFetch) -> Result<SourceFetchOutcome, SourceHttpError> {
@@ -291,6 +328,11 @@ impl SourceHttpClient {
             resolve_wire_url(spec, self.endpoint, &target.url, target.credential.as_ref())?;
         let mut budget = self.limiter.lock(spec.bucket()).await;
         self.limiter.admit(&mut budget).await?;
+        let watch = CallWatch {
+            source: target.source,
+            host: wire_url.host_str().map(str::to_owned),
+            started: self.now(),
+        };
         let mut call = self
             .client
             .get(wire_url)
@@ -303,12 +345,14 @@ impl SourceHttpClient {
         }
         let response = match call.send().await {
             Ok(resp) => resp,
-            Err(_error) => {
+            Err(error) => {
                 self.limiter.mark_finished(&mut budget);
+                self.observe(&watch, CallResult::Transport(transport_failure(&error)));
                 return Err(SourceHttpError::Transport);
             }
         };
         let status = response.status().as_u16();
+        self.observe(&watch, CallResult::Status(HttpStatusCode::new(status)));
         let outcome = match status {
             304 => match spec.conditional_get() {
                 ConditionalGet::Supported => Ok(SourceFetchOutcome::NotModified),
