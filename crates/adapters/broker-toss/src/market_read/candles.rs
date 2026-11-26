@@ -1,3 +1,4 @@
+use crate::account_read::SessionSupply;
 use crate::market_read::{currency, invalid, price, timestamp};
 use crate::{QueryKey, ReadRequest, ReadRoute, TokenRenewal, TossAccountRead};
 use application::{Clock, PortError, ReadEndpoint, SecretStore};
@@ -91,7 +92,7 @@ pub(crate) async fn candles<S: SecretStore, T: Clock, R: TokenRenewal>(
             if at < window.start() || at >= window.end() {
                 continue;
             }
-            let candle = assemble(reader, parsed, instrument, mode.adjustment)?;
+            let candle = assemble(reader, parsed, instrument, mode.adjustment).await?;
             if result.get(&at).is_some_and(|old| !same(old, &candle)) {
                 return Err(rejected_at("candles:candles:4"));
             }
@@ -99,7 +100,7 @@ pub(crate) async fn candles<S: SecretStore, T: Clock, R: TokenRenewal>(
         }
         if previous.is_some_and(|at| at <= window.start()) || decoded.next_before.is_none() {
             let candles = result.into_values().collect::<Vec<_>>();
-            validate_gaps(reader, instrument, period, &candles)?;
+            validate_gaps(reader, instrument, period, &candles).await?;
             validate_adjusted_moves(reader, instrument, period, mode, &candles)?;
             return Ok(candles);
         }
@@ -128,8 +129,10 @@ fn history_status<S: SecretStore, T: Clock, R: TokenRenewal>(
     if settled {
         return Some(CandleStatus::Finalized);
     }
-    let session = session_for(reader, instrument, parsed.time.date()).ok()?;
-    domain::regular_session_candle_status(session, parsed.collected_at).ok()
+    let session = known_session(reader, instrument, parsed.time.date())
+        .ok()
+        .flatten()?;
+    domain::regular_session_candle_status(&session, parsed.collected_at).ok()
 }
 
 #[derive(Default)]
@@ -337,7 +340,7 @@ fn parse<S: SecretStore, T: Clock, R: TokenRenewal>(
     let at = timestamp(&row.timestamp, ENDPOINT)?;
     let observed = reader.market_now();
     let unit = currency(&row.currency.to_string(), ENDPOINT)?;
-    if unit != instrument.currency() || at > observed {
+    if unit != instrument.currency() {
         return Err(rejected_at("candles:parse:1"));
     }
     let values = Ohlcv::try_new(
@@ -356,6 +359,9 @@ fn parse<S: SecretStore, T: Clock, R: TokenRenewal>(
             .ok_or_else(|| rejected_at("candles:parse:5"))?,
         CandlePeriod::Minute => at,
     };
+    if stamped > observed {
+        return Err(rejected_at("candles:parse:1"));
+    }
     let time =
         CandleTime::try_new(stamped, period).map_err(|_error| rejected_at("candles:parse:4"))?;
     Ok(ParsedCandle {
@@ -364,7 +370,32 @@ fn parse<S: SecretStore, T: Clock, R: TokenRenewal>(
         collected_at: observed,
     })
 }
-fn assemble<S: SecretStore, T: Clock, R: TokenRenewal>(
+fn settled(parsed: &ParsedCandle) -> SettledDay {
+    let after_a_day = parsed.time.timestamp().checked_add(TimeSpan::DAY);
+    if after_a_day.is_ok_and(|end| end <= parsed.collected_at) {
+        SettledDay::Settled
+    } else {
+        SettledDay::Open
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SettledDay {
+    Settled,
+    Open,
+}
+async fn daily_status<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    parsed: &ParsedCandle,
+    instrument: &QuoteInstrument,
+) -> Result<CandleStatus, PortError> {
+    if reader.session_supply() == SessionSupply::Live && settled(parsed) == SettledDay::Settled {
+        return Ok(CandleStatus::Finalized);
+    }
+    let session = session_for(reader, instrument, parsed.time.date()).await?;
+    domain::regular_session_candle_status(&session, parsed.collected_at)
+        .map_err(|_error| rejected_at("candles:assemble:1"))
+}
+async fn assemble<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     parsed: ParsedCandle,
     instrument: &QuoteInstrument,
@@ -372,11 +403,7 @@ fn assemble<S: SecretStore, T: Clock, R: TokenRenewal>(
 ) -> Result<Candle, PortError> {
     let status = match parsed.time.period() {
         CandlePeriod::Minute => CandleStatus::Finalized,
-        CandlePeriod::Daily => {
-            let session = session_for(reader, instrument, parsed.time.date())?;
-            domain::regular_session_candle_status(session, parsed.collected_at)
-                .map_err(|_error| rejected_at("candles:assemble:1"))?
-        }
+        CandlePeriod::Daily => daily_status(reader, &parsed, instrument).await?,
     };
     Candle::try_new(
         instrument.instrument_id().clone(),
@@ -387,7 +414,7 @@ fn assemble<S: SecretStore, T: Clock, R: TokenRenewal>(
     )
     .map_err(|_error| rejected_at("candles:assemble:2"))
 }
-fn validate_gaps<S: SecretStore, T: Clock, R: TokenRenewal>(
+async fn validate_gaps<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     instrument: &QuoteInstrument,
     period: CandlePeriod,
@@ -409,30 +436,46 @@ fn validate_gaps<S: SecretStore, T: Clock, R: TokenRenewal>(
                 }
             }
             CandlePeriod::Daily => {
-                validate_daily_gap(reader, instrument, next, right.time().timestamp())?;
+                validate_daily_gap(reader, instrument, next, right.time().timestamp()).await?;
             }
         }
     }
     Ok(())
 }
 
-fn session_for<'a, S: SecretStore, T: Clock, R: TokenRenewal>(
-    reader: &'a TossAccountRead<S, T, R>,
+fn known_session<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
     instrument: &QuoteInstrument,
     date: domain::CalendarDate,
-) -> Result<&'a domain::MarketSession, PortError> {
-    let mut matching = reader.market_sessions().iter().filter(|entry| {
+) -> Result<Option<domain::MarketSession>, PortError> {
+    let known = reader.known_sessions();
+    let mut matching = known.iter().filter(|entry| {
         entry.market() == domain::Market::from(*instrument.market()) && entry.date() == date
     });
-    let session = matching
-        .next()
-        .ok_or_else(|| unsupported(application::BrokerCapability::DailyCandles))?;
+    let session = matching.next().cloned();
     if matching.next().is_some() {
         return Err(rejected_at("candles:session_for:1"));
     }
     Ok(session)
 }
-fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
+async fn session_for<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    instrument: &QuoteInstrument,
+    date: domain::CalendarDate,
+) -> Result<domain::MarketSession, PortError> {
+    if let Some(session) = known_session(reader, instrument, date)? {
+        return Ok(session);
+    }
+    if reader.session_supply() == SessionSupply::Live {
+        let calendar = crate::market_calendar::fetch_on(reader, *instrument.market(), date).await?;
+        reader.remember_sessions(&calendar);
+        if let Some(session) = known_session(reader, instrument, date)? {
+            return Ok(session);
+        }
+    }
+    Err(unsupported(application::BrokerCapability::DailyCandles))
+}
+async fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     instrument: &QuoteInstrument,
     left: Timestamp,
@@ -445,11 +488,19 @@ fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
         .checked_add(TimeSpan::DAY)
         .map_err(|_error| rejected_at("candles:validate_daily_gap:2"))?;
     while next.offset_calendar_date() < right.offset_calendar_date() {
-        if !session_for(reader, instrument, next.offset_calendar_date())?
-            .sessions()
-            .is_empty()
-        {
-            return Err(rejected_at("candles:validate_daily_gap:3"));
+        let date = next.offset_calendar_date();
+        match (reader.session_supply(), date.week_part()) {
+            (SessionSupply::Live, domain::WeekPart::Weekend) => {}
+            (SessionSupply::Live, domain::WeekPart::Weekday)
+            | (SessionSupply::Fixed, domain::WeekPart::Weekday | domain::WeekPart::Weekend) => {
+                if !session_for(reader, instrument, date)
+                    .await?
+                    .sessions()
+                    .is_empty()
+                {
+                    return Err(rejected_at("candles:validate_daily_gap:3"));
+                }
+            }
         }
         next = next
             .checked_add(TimeSpan::DAY)

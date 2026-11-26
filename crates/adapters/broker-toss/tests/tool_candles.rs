@@ -77,10 +77,10 @@ mod tests {
         }
     }
     #[derive(Clone)]
-    struct Time(Arc<crate::support::FakeTime>);
+    struct Time(Timestamp);
     impl Clock for Time {
         fn now(&self) -> Timestamp {
-            self.0.now()
+            self.0
         }
     }
     fn response(body: &Value) -> Vec<u8> {
@@ -130,25 +130,28 @@ mod tests {
         ])
         .expect("facts")
     }
-    fn adapter(server: &ScriptedHttpServer) -> TossAccountRead<Store, Time, Renewal> {
-        let clock = crate::support::time();
+    fn adapter_at(server: &ScriptedHttpServer, now: &str) -> TossAccountRead<Store, Time, Renewal> {
+        let fake = crate::support::time();
         let client = TossHttpClient::new(
             &TossEndpoint::local(server.port()).expect("local"),
-            Arc::<crate::support::FakeTime>::clone(&clock),
-            Arc::<crate::support::FakeTime>::clone(&clock),
+            Arc::<crate::support::FakeTime>::clone(&fake),
+            fake,
         )
         .expect("client");
         TossAccountRead::new(
             TokenManager::new(
                 client,
                 Store,
-                Time(Arc::<crate::support::FakeTime>::clone(&clock)),
+                Time(at(now)),
                 Renewal,
                 Arc::new(EventBus::default()),
             ),
-            Time(clock),
+            Time(at(now)),
             master(),
         )
+    }
+    fn adapter(server: &ScriptedHttpServer) -> TossAccountRead<Store, Time, Renewal> {
+        adapter_at(server, "2027-01-15T17:00:00+09:00")
     }
     fn run<T>(future: impl Future<Output = T>) -> T {
         tokio::runtime::Builder::new_current_thread()
@@ -199,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_daily_candles_need_market_sessions_the_live_reader_never_has() {
+    fn strict_daily_candles_without_a_session_supply_report_the_missing_capability() {
         let server = serve(&[session_stamped_page()]);
         let failure = run(adapter(&server).candles(
             &instrument(),
@@ -248,6 +251,114 @@ mod tests {
                     CandleStatus::Finalized
                 ),
             ]
+        );
+    }
+
+    fn kr_day(date: &str) -> Value {
+        json!({
+                "date": date,
+                "integrated": {
+                    "preMarket": null,
+                    "regularMarket": {
+                        "startTime": format!("{date}T09:00:00+09:00"),
+                        "endTime": format!("{date}T15:30:00+09:00")
+                    },
+                    "afterMarket": null
+                }
+        })
+    }
+    fn monday_calendar() -> Value {
+        json!({
+            "result": {
+                "previousBusinessDay": kr_day("2026-03-20"),
+                "today": kr_day("2026-03-23"),
+                "nextBusinessDay": kr_day("2026-03-24")
+            }
+        })
+    }
+    fn page(rows: &[Value]) -> Value {
+        json!({ "result": { "candles": rows, "nextBefore": null } })
+    }
+    fn span(start: &str, end: &str) -> TimeInterval {
+        TimeInterval::try_new(at(start), at(end)).expect("window")
+    }
+    fn statuses(candles: &[domain::Candle]) -> Vec<(Timestamp, CandleStatus)> {
+        candles
+            .iter()
+            .map(|candle| (candle.time().timestamp(), candle.status()))
+            .collect()
+    }
+
+    #[test]
+    fn live_chart_candles_include_todays_open_candle_during_the_session() {
+        let server = serve(&[
+            page(&[
+                row("2026-03-23T14:00:00+09:00", "201000"),
+                row("2026-03-20T14:00:00+09:00", "199500"),
+                row("2026-03-19T14:00:00+09:00", "198000"),
+            ]),
+            monday_calendar(),
+        ]);
+        let reader = adapter_at(&server, "2026-03-23T10:00:00+09:00").with_live_market_sessions();
+        let candles = run(reader.candles(
+            &instrument(),
+            span("2026-03-18T00:00:00+09:00", "2026-03-23T10:00:00+09:00"),
+            CandlePeriod::Daily,
+            PriceAdjustment::Raw,
+        ))
+        .expect("chart candles");
+        assert_eq!(
+            statuses(&candles),
+            vec![
+                (at("2026-03-19T00:00:00+09:00"), CandleStatus::Finalized),
+                (at("2026-03-20T00:00:00+09:00"), CandleStatus::Finalized),
+                (at("2026-03-23T00:00:00+09:00"), CandleStatus::InProgress),
+            ]
+        );
+        server.finish().expect("served");
+    }
+
+    #[test]
+    fn live_scoring_reads_todays_closing_candle_after_the_close() {
+        let today = || page(&[row("2026-03-23T14:00:00+09:00", "201000")]);
+        let server = serve(&[today(), monday_calendar(), today()]);
+        let reader = adapter_at(&server, "2026-03-23T16:00:00+09:00").with_live_market_sessions();
+        let window = span("2026-03-22T00:00:00+09:00", "2026-03-23T16:00:00+09:00");
+        let adjusted = run(reader.candles(
+            &instrument(),
+            window,
+            CandlePeriod::Daily,
+            PriceAdjustment::Adjusted(AdjustmentBasis::new(window.end())),
+        ))
+        .expect("adjusted");
+        let raw = run(reader.candles(
+            &instrument(),
+            window,
+            CandlePeriod::Daily,
+            PriceAdjustment::Raw,
+        ))
+        .expect("raw");
+        let closing = vec![(at("2026-03-23T00:00:00+09:00"), CandleStatus::Finalized)];
+        assert_eq!(statuses(&adjusted), closing);
+        assert_eq!(statuses(&raw), closing);
+        assert_eq!(raw[0].values().close().as_money(), krw("201000"));
+        server.finish().expect("served");
+    }
+
+    #[test]
+    fn live_daily_candles_still_reject_a_future_day() {
+        let server = serve(&[page(&[row("2026-03-24T14:00:00+09:00", "201000")])]);
+        let reader = adapter_at(&server, "2026-03-23T10:00:00+09:00").with_live_market_sessions();
+        let failure = run(reader.candles(
+            &instrument(),
+            span("2026-03-18T00:00:00+09:00", "2026-03-23T10:00:00+09:00"),
+            CandlePeriod::Daily,
+            PriceAdjustment::Raw,
+        ))
+        .expect_err("future day");
+        assert_eq!(
+            failure.kind(),
+            PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
         );
     }
 }
