@@ -1,6 +1,16 @@
-import type { ReactElement } from "react";
+import { useId, useState, type ReactElement } from "react";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import { text } from "../lib";
-import { shellDismiss } from "../platform/input";
+import {
+  chatPanelLimits,
+  clearChatShare,
+  initialChatShare,
+  readChatShare,
+  saveChatShare,
+  shellDismiss,
+  useFollowEnd,
+  useShellResize,
+} from "../platform/input";
 import { Divider } from "./Divider";
 import { ScrollArea } from "./ScrollArea";
 import {
@@ -80,9 +90,11 @@ const ChatBody = (props: {
   readonly chat: ReactElement;
   readonly composer: ReactElement | null;
 }): ReactElement => {
+  const followId = useId();
+  useFollowEnd(followId, props.composer === null ? "none" : "end");
   return (
     <>
-      <div className="flex flex-col flex-1 scroll-flex">
+      <div id={followId} className="flex flex-col flex-1 scroll-flex">
         <ScrollArea direction="vertical">
           <div className="p-space-4 flex flex-col gap-space-3">
             {props.chat}
@@ -93,9 +105,45 @@ const ChatBody = (props: {
     </>
   );
 };
+const ResizableArea = (props: {
+  readonly main: ReactElement;
+  readonly chat: ReactElement;
+}): ReactElement => {
+  const [share, setShare] = useState(readChatShare);
+  const [key, setKey] = useState<"a" | "b">("a");
+  return (
+    <Group orientation="horizontal" className="flex flex-1 scroll-flex">
+      <Panel id="shell-main" minSize="40" className="flex flex-col scroll-flex">
+        {props.main}
+      </Panel>
+      <Separator
+        aria-label={text("shell.resizeChat", "ko")}
+        disableDoubleClick
+        onDoubleClick={(): void => {
+          clearChatShare();
+          setShare(initialChatShare());
+          setKey(key === "a" ? "b" : "a");
+        }}
+        className="flex-none w-border-hairline bg-line hover:bg-primary focus-visible:bg-primary focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring"
+      />
+      <Panel
+        key={key}
+        id="shell-chat"
+        defaultSize={share}
+        minSize={chatPanelLimits.min}
+        maxSize={chatPanelLimits.max}
+        onResize={saveChatShare}
+        className="flex flex-col scroll-flex"
+      >
+        {props.chat}
+      </Panel>
+    </Group>
+  );
+};
 const ShellChat = (
   props: ChatProps & { readonly main: ReactElement },
 ): ReactElement => {
+  const layout = useShellResize();
   const inner = (
     <>
       <ChatHead
@@ -106,6 +154,20 @@ const ShellChat = (
       <ChatBody chat={props.chat} composer={props.composer ?? null} />
     </>
   );
+  if (layout === "resizable")
+    return (
+      <ResizableArea
+        main={props.main}
+        chat={
+          <aside
+            aria-label={text("shell.chat", "ko")}
+            className="flex flex-col flex-1 bg-surface scroll-flex"
+          >
+            {inner}
+          </aside>
+        }
+      />
+    );
   return (
     <>
       {props.main}

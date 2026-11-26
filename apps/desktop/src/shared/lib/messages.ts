@@ -88,6 +88,7 @@ const catalog = {
   "shell.closeList": { ko: "종목 목록 닫기" as UiText },
   "shell.openChat": { ko: "채팅 열기" as UiText },
   "shell.closeChat": { ko: "채팅 닫기" as UiText },
+  "shell.resizeChat": { ko: "채팅 너비 조절" as UiText },
   "shell.showChatNotice": { ko: "전송 안내 자세히 보기" as UiText },
   "shell.hideChatNotice": { ko: "전송 안내 접기" as UiText },
   "app.homeTitle": { ko: "내 현황" as UiText },

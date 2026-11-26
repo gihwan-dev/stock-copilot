@@ -88,3 +88,25 @@ export const parseCanvasColor = (
   input: unknown,
 ): Result<CanvasColor, BrandError> =>
   fromParse(canvasColorSchema.safeParse(input));
+
+export type PanelShare = string & Brand<"PanelShare">;
+export type PanelBounds = {
+  readonly min: number;
+  readonly max: number;
+  readonly initial: number;
+};
+const panelShareSchema = z.coerce.number().positive();
+const shareText = (share: number): PanelShare =>
+  share.toFixed(1).replace(/\.0$/u, "") as PanelShare;
+export const clampPanelShare = (
+  input: unknown,
+  bounds: PanelBounds,
+): PanelShare => {
+  const parsed = panelShareSchema.safeParse(
+    typeof input === "string" && input.trim() === "" ? undefined : input,
+  );
+  if (!parsed.success) return shareText(bounds.initial);
+  if (parsed.data < bounds.min) return shareText(bounds.min);
+  if (parsed.data > bounds.max) return shareText(bounds.max);
+  return shareText(parsed.data);
+};

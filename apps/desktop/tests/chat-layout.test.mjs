@@ -11,7 +11,8 @@ before(async () => {
 import {createElement as h} from "react";
 import {render,cleanup,act,fireEvent} from "@testing-library/react";
 import {AppShell,Markdown,ChatInput,Text} from DS_ENTRY;
-import {parseFreeText,text} from LIB_ENTRY;
+import {parseFreeText,text,clampPanelShare} from LIB_ENTRY;
+import {readChatShare,saveChatShare,clearChatShare,initialChatShare} from INPUT_ENTRY;
 window.cleanup=cleanup;window.act=act;window.fire=fireEvent;
 window.markdown=(value,flavor)=>{cleanup();window.calls=[];return render(h(Markdown,{content:parseFreeText(value).value,flavor,linkAllowed:()=>"allow",onOpenLink:url=>window.calls.push(url)}));};
 window.composer=(draft)=>{cleanup();window.calls=[];window.drafts=[];return render(h(ChatInput,{layout:"compact",onSend:value=>window.calls.push(value),onDraftChange:value=>window.drafts.push(value),...(draft===undefined?{}:{draft:parseFreeText(draft).value})}));};
@@ -20,9 +21,29 @@ window.shell=()=>{cleanup();return render(h(AppShell,{
   chatComposer:h(Text,null,text("chat.send","ko")),
   chatNotice:{summary:text("notice.chatDataShort","ko"),detail:text("notice.chatData","ko")},
 },h(Text,null,text("app.title","ko"))));};
+window.transcript=(count)=>h(AppShell,{
+  chat:h("div",null,...Array.from({length:count},(_,index)=>h(Text,{key:index},text("shell.chat","ko")))),
+  chatComposer:h(Text,null,text("chat.send","ko")),
+},h(Text,null,text("app.title","ko")));
+window.renderShell=(count)=>{cleanup();return render(window.transcript(count));};
+window.share={read:readChatShare,save:saveChatShare,clear:clearChatShare,initial:initialChatShare,clamp:clampPanelShare};
 `);
 });
 after(() => fixture?.close());
+
+const wideWindow = (w) => {
+  w.Element.prototype.getAnimations = () => [];
+  w.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  w.matchMedia = () => ({
+    matches: true,
+    addEventListener() {},
+    removeEventListener() {},
+  });
+};
 
 test("chat markdown renders GFM tables, code, lists and strikethrough without raw HTML", async () => {
   const w = fixture.open();
@@ -111,6 +132,38 @@ test("compact composer sends on Enter, keeps Shift+Enter, and follows a controll
   assert.equal(w.document.querySelector("button").disabled, false);
 });
 
+test("chat panel width share is clamped, saved and reset", () => {
+  const w = fixture.open();
+  const bounds = { min: 25, max: 50, initial: 33 };
+  assert.equal(w.share.clamp(10, bounds), "25");
+  assert.equal(w.share.clamp(80, bounds), "50");
+  assert.equal(w.share.clamp("41.26", bounds), "41.3");
+  assert.equal(w.share.clamp("", bounds), "33");
+  assert.equal(w.share.clamp("넓게", bounds), "33");
+  assert.equal(w.share.clamp(null, bounds), "33");
+  const initial = w.share.initial();
+  assert.equal(w.share.read(), initial);
+  w.share.save({ asPercentage: 37.04, inPixels: 400 });
+  assert.equal(w.localStorage.getItem("stock-copilot.chat-share"), "37");
+  assert.equal(w.share.read(), "37");
+  w.share.save({ asPercentage: 90, inPixels: 900 });
+  assert.equal(w.share.read(), "50");
+  w.localStorage.setItem("stock-copilot.chat-share", "3");
+  assert.equal(w.share.read(), "25");
+  w.share.save({ asPercentage: 0, inPixels: 0 });
+  assert.equal(w.share.read(), "25");
+  w.share.clear();
+  assert.equal(w.localStorage.getItem("stock-copilot.chat-share"), null);
+  assert.equal(w.share.read(), initial);
+  const setItem = w.Storage.prototype.setItem;
+  w.Storage.prototype.setItem = () => {
+    throw new w.DOMException("full", "QuotaExceededError");
+  };
+  assert.doesNotThrow(() => w.share.save({ asPercentage: 40, inPixels: 400 }));
+  w.Storage.prototype.setItem = setItem;
+  assert.equal(w.share.read(), initial);
+});
+
 test("chat panel pins the composer below the scrolling messages and folds the notice", async () => {
   const w = fixture.open();
   const view = await w.act(() => w.shell());
@@ -144,6 +197,75 @@ test("chat panel pins the composer below the scrolling messages and folds the no
       'button[aria-label="전송 안내 접기"][aria-expanded="true"]',
     ),
   );
+  view.unmount();
+});
+
+test("wide windows get a keyboard-focusable resize handle between main and chat", async () => {
+  const w = fixture.open();
+  wideWindow(w);
+  w.localStorage.setItem("stock-copilot.chat-share", "40");
+  await w.act(() => w.shell());
+  const handle = w.document.querySelector(
+    '[role="separator"][aria-label="채팅 너비 조절"]',
+  );
+  assert.ok(handle);
+  assert.equal(handle.getAttribute("tabindex"), "0");
+  const panels = Array.from(w.document.querySelectorAll("[data-panel]"));
+  assert.deepEqual(
+    panels.map((panel) => panel.id),
+    ["shell-main", "shell-chat"],
+  );
+  assert.ok(panels[0].querySelector("main"));
+  assert.ok(panels[1].querySelector('aside[aria-label="AI 채팅"]'));
+  await w.act(() => w.fire.doubleClick(handle));
+  assert.equal(w.localStorage.getItem("stock-copilot.chat-share"), null);
+  assert.ok(w.document.querySelector("[data-panel]#shell-chat aside"));
+});
+
+test("chat transcript follows new messages until the user scrolls up", async () => {
+  const w = fixture.open();
+  const view = await w.act(() => w.renderShell(1));
+  const viewport = w.document.querySelector(
+    'aside[aria-label="AI 채팅"] [data-scroll-viewport]',
+  );
+  assert.ok(viewport);
+  const metrics = { scrollHeight: 1000, clientHeight: 200, scrollTop: 800 };
+  for (const key of ["scrollHeight", "clientHeight"])
+    Object.defineProperty(viewport, key, { get: () => metrics[key] });
+  Object.defineProperty(viewport, "scrollTop", {
+    get: () => metrics.scrollTop,
+    set: (value) => {
+      metrics.scrollTop = value;
+    },
+  });
+  const jumps = [];
+  viewport.scrollTo = ({ top }) => {
+    jumps.push(top);
+    metrics.scrollTop = top - metrics.clientHeight;
+  };
+  const settle = () => new Promise((done) => w.setTimeout(done, 0));
+  metrics.scrollHeight = 1200;
+  await w.act(() => view.rerender(w.transcript(2)));
+  await settle();
+  assert.deepEqual(jumps, [1200], "pinned to the end, a new message scrolls");
+  metrics.scrollTop = 100;
+  await w.act(() => w.fire.scroll(viewport));
+  const before = jumps.length;
+  metrics.scrollHeight = 1400;
+  await w.act(() => view.rerender(w.transcript(3)));
+  await settle();
+  assert.equal(
+    jumps.length,
+    before,
+    "scrolled up, new messages do not move the view",
+  );
+  metrics.scrollTop = 1400 - 200 - 10;
+  await w.act(() => w.fire.scroll(viewport));
+  await settle();
+  metrics.scrollHeight = 1600;
+  await w.act(() => view.rerender(w.transcript(4)));
+  await settle();
+  assert.equal(jumps.at(-1), 1600, "back near the end, following resumes");
   view.unmount();
 });
 
