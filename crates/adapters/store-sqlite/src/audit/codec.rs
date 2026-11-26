@@ -128,6 +128,11 @@ pub(crate) fn encode_kind(kind: &AuditKind) -> (&'static str, String) {
             put_web_search(&mut out, record);
             "web_search_checked"
         }
+        AuditKind::AiCommandApplied { tool, summary } => {
+            out.push(tool.as_str());
+            out.push(summary.as_str());
+            "ai_command_applied"
+        }
     };
     (tag, out.finish())
 }

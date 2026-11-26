@@ -247,6 +247,10 @@ mod tests {
         kinds.push(AuditKind::WebSearchChecked(
             application::WebSearchAuditRecord::user_direct(digest),
         ));
+        kinds.push(AuditKind::AiCommandApplied {
+            tool: application::ToolName::try_new("app_set_principles").expect("도구"),
+            summary: application::DiagnosticText::new("principles={3 fields}"),
+        });
         kinds
     }
 
@@ -277,6 +281,10 @@ mod tests {
                     AuditKind::RiskSettingsChanged(change.clone())
                 }
                 AuditKind::WebSearchChecked(record) => AuditKind::WebSearchChecked(record.clone()),
+                AuditKind::AiCommandApplied { tool, summary } => AuditKind::AiCommandApplied {
+                    tool: tool.clone(),
+                    summary: summary.clone(),
+                },
             }
         }
         for kind in audit_kinds() {
