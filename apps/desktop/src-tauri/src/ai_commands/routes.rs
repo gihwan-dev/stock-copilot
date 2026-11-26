@@ -481,7 +481,7 @@ const JOBS: [&str; 8] = [
     "news-collection",
 ];
 
-const FEED_SOURCES: [&str; 15] = [
+const FEED_SOURCES: [&str; 16] = [
     "KindDisclosure",
     "DartDisclosureApi",
     "DartDisclosureRss",
@@ -490,6 +490,7 @@ const FEED_SOURCES: [&str; 15] = [
     "Maekyung",
     "Yonhap",
     "Edaily",
+    "SegyeFinance",
     "GoogleNews",
     "YahooFinance",
     "SecEdgar",

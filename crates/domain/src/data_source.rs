@@ -21,6 +21,7 @@ pub enum DataSource {
     Maekyung,
     Yonhap,
     Edaily,
+    SegyeFinance,
     GoogleNews,
     WebSearch,
     YahooFinance,
@@ -33,7 +34,7 @@ pub enum DataSource {
 
 impl DataSource {
     #[must_use]
-    pub const fn all() -> [Self; 17] {
+    pub const fn all() -> [Self; 18] {
         [
             Self::KindDisclosure,
             Self::DartDisclosureApi,
@@ -44,6 +45,7 @@ impl DataSource {
             Self::Maekyung,
             Self::Yonhap,
             Self::Edaily,
+            Self::SegyeFinance,
             Self::GoogleNews,
             Self::WebSearch,
             Self::YahooFinance,
@@ -66,6 +68,7 @@ impl DataSource {
             NewsSource::FederalReserve => Self::FederalReserve,
             NewsSource::GoogleNews => Self::GoogleNews,
             NewsSource::YahooFinance => Self::YahooFinance,
+            NewsSource::SegyeFinance => Self::SegyeFinance,
         }
     }
 
@@ -82,6 +85,7 @@ impl DataSource {
             | Self::Maekyung
             | Self::Yonhap
             | Self::Edaily
+            | Self::SegyeFinance
             | Self::GoogleNews
             | Self::YahooFinance => DataSourceCategory::News,
             Self::BankOfKorea | Self::FederalReserve | Self::UsTreasury | Self::Fred => {
@@ -101,9 +105,9 @@ mod tests {
     #[test]
     fn all_sources_are_unique_and_cover_every_category() {
         let all = DataSource::all();
-        assert_eq!(all.len(), 17);
+        assert_eq!(all.len(), 18);
         let unique: BTreeSet<DataSource> = all.into_iter().collect();
-        assert_eq!(unique.len(), 17);
+        assert_eq!(unique.len(), 18);
         for (source, expected) in [
             (DataSource::KindDisclosure, DataSourceCategory::Disclosure),
             (

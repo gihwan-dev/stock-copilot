@@ -33,6 +33,7 @@ pub const fn headline_role(entry: &CollectedEntry) -> HeadlineRole {
                 | NewsSource::Maekyung
                 | NewsSource::Yonhap
                 | NewsSource::Edaily
+                | NewsSource::SegyeFinance
                 | NewsSource::BankOfKorea
                 | NewsSource::FederalReserve,
             )

@@ -56,7 +56,9 @@ impl SourceAiBodyReadSettings {
             NewsSource::BankOfKorea => self.bank_of_korea,
             NewsSource::FederalReserve => self.federal_reserve,
             NewsSource::YahooFinance => self.yahoo_finance,
-            NewsSource::Yonhap | NewsSource::GoogleNews => AiBodyReadToggle::Disabled,
+            NewsSource::Yonhap | NewsSource::GoogleNews | NewsSource::SegyeFinance => {
+                AiBodyReadToggle::Disabled
+            }
         }
     }
 
@@ -72,12 +74,14 @@ impl SourceAiBodyReadSettings {
             NewsSource::BankOfKorea => self.bank_of_korea = toggle,
             NewsSource::FederalReserve => self.federal_reserve = toggle,
             NewsSource::YahooFinance => self.yahoo_finance = toggle,
-            NewsSource::Yonhap | NewsSource::GoogleNews => match toggle {
-                AiBodyReadToggle::Disabled => {}
-                AiBodyReadToggle::Enabled => {
-                    return Err(AiBodyReadSettingError::SourceLockedOff(source.clone()));
+            NewsSource::Yonhap | NewsSource::GoogleNews | NewsSource::SegyeFinance => {
+                match toggle {
+                    AiBodyReadToggle::Disabled => {}
+                    AiBodyReadToggle::Enabled => {
+                        return Err(AiBodyReadSettingError::SourceLockedOff(source.clone()));
+                    }
                 }
-            },
+            }
         }
         Ok(())
     }
@@ -86,7 +90,7 @@ impl SourceAiBodyReadSettings {
     pub const fn policy_for(&self, source: &NewsSource) -> AiBodyReadPolicy {
         match source {
             NewsSource::GoogleNews => AiBodyReadPolicy::TitleOnly,
-            NewsSource::Yonhap => AiBodyReadPolicy::TitleAndSummary,
+            NewsSource::Yonhap | NewsSource::SegyeFinance => AiBodyReadPolicy::TitleAndSummary,
             NewsSource::Hankyung
             | NewsSource::Maekyung
             | NewsSource::Edaily

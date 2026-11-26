@@ -192,6 +192,7 @@ pub enum UiFeedSource {
     Maekyung,
     Yonhap,
     Edaily,
+    SegyeFinance,
     GoogleNews,
     YahooFinance,
     SecEdgar,
@@ -201,7 +202,7 @@ pub enum UiFeedSource {
     Fred,
 }
 
-const SOURCES: [UiFeedSource; 14] = [
+const SOURCES: [UiFeedSource; 15] = [
     UiFeedSource::KindDisclosure,
     UiFeedSource::DartDisclosureApi,
     UiFeedSource::DartDisclosureRss,
@@ -209,6 +210,7 @@ const SOURCES: [UiFeedSource; 14] = [
     UiFeedSource::Hankyung,
     UiFeedSource::Maekyung,
     UiFeedSource::Yonhap,
+    UiFeedSource::SegyeFinance,
     UiFeedSource::GoogleNews,
     UiFeedSource::YahooFinance,
     UiFeedSource::SecEdgar,
@@ -416,6 +418,7 @@ const fn data_source(source: UiFeedSource) -> DataSource {
         UiFeedSource::Maekyung => DataSource::Maekyung,
         UiFeedSource::Yonhap => DataSource::Yonhap,
         UiFeedSource::Edaily => DataSource::Edaily,
+        UiFeedSource::SegyeFinance => DataSource::SegyeFinance,
         UiFeedSource::GoogleNews => DataSource::GoogleNews,
         UiFeedSource::YahooFinance => DataSource::YahooFinance,
         UiFeedSource::SecEdgar => DataSource::SecEdgar,
@@ -432,6 +435,7 @@ const fn news_source(source: UiFeedSource) -> Option<NewsSource> {
         UiFeedSource::Maekyung => Some(NewsSource::Maekyung),
         UiFeedSource::Yonhap => Some(NewsSource::Yonhap),
         UiFeedSource::Edaily => Some(NewsSource::Edaily),
+        UiFeedSource::SegyeFinance => Some(NewsSource::SegyeFinance),
         UiFeedSource::GoogleNews => Some(NewsSource::GoogleNews),
         UiFeedSource::YahooFinance => Some(NewsSource::YahooFinance),
         UiFeedSource::BankOfKorea => Some(NewsSource::BankOfKorea),
@@ -453,9 +457,10 @@ const fn target(source: UiFeedSource) -> CollectionTarget {
         | UiFeedSource::DartDisclosureRss
         | UiFeedSource::DartFundamentals => CollectionTarget::DartList,
         UiFeedSource::Hankyung => CollectionTarget::HankyungRss,
-        UiFeedSource::Maekyung | UiFeedSource::Yonhap | UiFeedSource::Edaily => {
-            CollectionTarget::PressRss
-        }
+        UiFeedSource::Maekyung
+        | UiFeedSource::Yonhap
+        | UiFeedSource::Edaily
+        | UiFeedSource::SegyeFinance => CollectionTarget::PressRss,
         UiFeedSource::GoogleNews => CollectionTarget::GoogleNews,
         UiFeedSource::YahooFinance => CollectionTarget::YahooFinance,
         UiFeedSource::SecEdgar => CollectionTarget::SecEdgar,
@@ -511,7 +516,9 @@ fn shown_interval(settings: &NewsDataSettings, source: UiFeedSource) -> UiInterv
 
 fn body_reading(settings: &NewsDataSettings, source: UiFeedSource) -> UiBodyReading {
     match news_source(source) {
-        Some(NewsSource::Yonhap | NewsSource::GoogleNews) | None => UiBodyReading::Locked,
+        Some(NewsSource::Yonhap | NewsSource::GoogleNews | NewsSource::SegyeFinance) | None => {
+            UiBodyReading::Locked
+        }
         Some(news) => match settings.body_read().toggle_for(&news) {
             AiBodyReadToggle::Enabled => UiBodyReading::On,
             AiBodyReadToggle::Disabled => UiBodyReading::Off,

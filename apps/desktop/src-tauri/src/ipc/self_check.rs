@@ -263,6 +263,7 @@ const fn source_code(source: DataSource) -> &'static str {
         DataSource::Maekyung => "maekyung",
         DataSource::Yonhap => "yonhap",
         DataSource::Edaily => "edaily",
+        DataSource::SegyeFinance => "segye-finance",
         DataSource::GoogleNews => "google-news",
         DataSource::WebSearch => "web-search",
         DataSource::YahooFinance => "yahoo-finance",
