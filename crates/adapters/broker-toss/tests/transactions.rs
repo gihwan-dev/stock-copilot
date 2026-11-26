@@ -1137,4 +1137,71 @@ mod tests {
         );
         assert_eq!(requests.matches("&to=").count(), 0);
     }
+    fn read_window(
+        responses: Vec<Vec<u8>>,
+        target: SettlementWindow,
+    ) -> (
+        Result<application::TransactionRead, application::PortError>,
+        String,
+    ) {
+        let mut scripted = vec![issued()];
+        scripted.extend(responses);
+        let server = ScriptedHttpServer::start(scripted).expect("server");
+        let outcome = run(adapter(&server).transactions(
+            &AccountId::new(731),
+            target,
+            &TransactionFilter::all(),
+        ));
+        let requests = String::from_utf8(server.finish().expect("requests")).expect("UTF8");
+        (outcome, requests)
+    }
+    #[test]
+    fn a_whole_history_window_sends_no_start_date() {
+        let whole =
+            SettlementWindow::try_new(date("0001-01-01"), date("2026-09-30")).expect("기간");
+        let (outcome, requests) = read_window(vec![ok(page(json!([row()]), Value::Null))], whole);
+        let application::TransactionRead::Complete(completed) = outcome.expect("조회") else {
+            panic!("incomplete")
+        };
+        assert_eq!(completed.rows().as_slice().len(), 1);
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/transactions?limit=100 HTTP")
+                .count(),
+            1
+        );
+        assert_eq!(requests.matches("from=").count(), 0);
+    }
+    #[test]
+    fn a_rejected_start_date_falls_back_to_the_whole_history_once() {
+        let malformed = response(
+            "400 Bad Request",
+            &json!({"error":{"code":"malformed","message":"합성 오류"}}),
+        );
+        let (outcome, requests) =
+            read_responses(vec![malformed, ok(page(json!([row()]), Value::Null))]);
+        let application::TransactionRead::Complete(completed) = outcome.expect("대체 조회")
+        else {
+            panic!("incomplete")
+        };
+        assert_eq!(completed.rows().as_slice().len(), 1);
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/transactions?limit=100&from=2026-09-01 HTTP")
+                .count(),
+            1
+        );
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/transactions?limit=100 HTTP")
+                .count(),
+            1
+        );
+        let twice = response(
+            "400 Bad Request",
+            &json!({"error":{"code":"malformed","message":"합성 오류"}}),
+        );
+        let (failed, _requests) = read_responses(vec![twice.clone(), twice]);
+        assert!(failed.is_err(), "대체 뒤에도 거부되면 실패로 남긴다");
+    }
 }

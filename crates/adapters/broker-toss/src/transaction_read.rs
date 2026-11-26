@@ -52,19 +52,42 @@ impl From<PortError> for PageFault {
         Self::Interrupted(error)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorRestart {
+    Available,
+    Used,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StartQuery {
+    Sent(domain::CalendarDate),
+    Omitted,
+}
+
+fn start_query(window: SettlementWindow) -> StartQuery {
+    let earliest_sent = domain::CalendarDate::from_parts(
+        domain::CalendarYear::new(2000),
+        domain::MonthNumber::new(1),
+        domain::DayNumber::new(1),
+    );
+    match earliest_sent {
+        Ok(floor) if window.from() >= floor => StartQuery::Sent(window.from()),
+        Ok(_) | Err(_) => StartQuery::Omitted,
+    }
+}
+
 fn transactions_request(
     account: &AccountId,
-    window: SettlementWindow,
+    start: StartQuery,
     filter: &TransactionFilter,
     cursor: Option<&str>,
 ) -> ReadRequest {
     let mut request = ReadRequest::new(ReadRoute::Transactions)
         .with_account(SecretValue::new(account.as_i64().to_string().into_bytes()))
-        .with_query(QueryKey::Limit, "100".to_owned())
-        .with_query(
-            QueryKey::From,
-            crate::market_calendar::date_text(window.from()),
-        );
+        .with_query(QueryKey::Limit, "100".to_owned());
+    if let StartQuery::Sent(from) = start {
+        request = request.with_query(QueryKey::From, crate::market_calendar::date_text(from));
+    }
     if let Some(kinds) = filter.selected_kinds() {
         request = request.with_query(
             QueryKey::TransactionTypes,
@@ -226,13 +249,14 @@ pub(crate) async fn fetch<Store: SecretStore, Time: Clock, Renewal: TokenRenewal
     window: SettlementWindow,
     filter: &TransactionFilter,
 ) -> Conversion<TransactionRead> {
-    let mut restarted = false;
+    let mut restarted = CursorRestart::Available;
+    let mut start = start_query(window);
     let mut pages = Pages::default();
     for _page in 0_u16..8192 {
         let response = match tokens
             .get(&transactions_request(
                 account,
-                window,
+                start,
                 filter,
                 pages.cursor.as_deref(),
             ))
@@ -248,11 +272,8 @@ pub(crate) async fn fetch<Store: SecretStore, Time: Clock, Renewal: TokenRenewal
                 );
             }
         };
-        if cursor_error(&response, &pages) {
-            if restarted {
-                return Err(read_failure(&response));
-            }
-            restarted = true;
+        if let Some(next) = restart_plan(&response, &pages, start, restarted)? {
+            (start, restarted) = next;
             pages = Pages::default();
             continue;
         }
@@ -280,6 +301,23 @@ pub(crate) async fn fetch<Store: SecretStore, Time: Clock, Renewal: TokenRenewal
         }
     }
     pages.interrupted(account, window, filter, invalid())
+}
+fn restart_plan(
+    response: &crate::RawResponse,
+    pages: &Pages,
+    start: StartQuery,
+    restarted: CursorRestart,
+) -> Conversion<Option<(StartQuery, CursorRestart)>> {
+    if cursor_error(response, pages) {
+        return match restarted {
+            CursorRestart::Used => Err(read_failure(response)),
+            CursorRestart::Available => Ok(Some((start, CursorRestart::Used))),
+        };
+    }
+    if response.status() == 400 && pages.cursor.is_none() && start != StartQuery::Omitted {
+        return Ok(Some((StartQuery::Omitted, restarted)));
+    }
+    Ok(None)
 }
 fn read_failure(response: &crate::RawResponse) -> PortError {
     response

@@ -128,20 +128,23 @@ fn now() -> Timestamp {
     valuation_time(date(20))
 }
 
-fn deposit(day: u8, amount: &str) -> Transaction {
+fn deposit_in(currency: Currency, day: u8, amount: &str) -> Transaction {
     Transaction::try_new(TransactionData {
         kind: TransactionKind::Deposit,
-        market: domain::Market::Kr,
-        currency: Currency::Krw,
+        market: match currency {
+            Currency::Krw => domain::Market::Kr,
+            Currency::Usd => domain::Market::Us,
+        },
+        currency,
         symbol: None,
         asset_class: None,
         isin: None,
         quantity: None,
         filled_price: None,
-        amount: Some(money(amount, Currency::Krw)),
-        commission: money("0", Currency::Krw),
-        tax: money("0", Currency::Krw),
-        net_amount: Some(money(amount, Currency::Krw)),
+        amount: Some(money(amount, currency)),
+        commission: money("0", currency),
+        tax: money("0", currency),
+        net_amount: Some(money(amount, currency)),
         exchange_rate: None,
         settlement_date: date(day),
         settlement: Settlement::Settled,
@@ -151,8 +154,16 @@ fn deposit(day: u8, amount: &str) -> Transaction {
     .expect("입금")
 }
 
+fn deposit(day: u8, amount: &str) -> Transaction {
+    deposit_in(Currency::Krw, day, amount)
+}
+
 fn transactions() -> Vec<Transaction> {
-    vec![deposit(1, "1000"), deposit(15, "500")]
+    vec![
+        deposit(1, "1000"),
+        deposit_in(Currency::Usd, 1, "5"),
+        deposit(15, "500"),
+    ]
 }
 
 struct Rows;
@@ -178,6 +189,7 @@ impl SettledRowsSource for Rows {
 #[derive(Clone, Copy)]
 enum Days {
     Weekdays,
+    FirstWithoutFx,
     None,
 }
 
@@ -211,7 +223,11 @@ impl PerformanceHistorySource for Source {
                 calendar: snapshot_calendar(day),
                 fx: Some(fx(day)),
             }),
-            (Days::Weekdays | Days::None, _) => None,
+            (Days::FirstWithoutFx, Some(day)) => Some(WindowDay {
+                calendar: snapshot_calendar(day),
+                fx: (day != 10).then(|| fx(day)),
+            }),
+            (Days::Weekdays | Days::FirstWithoutFx | Days::None, _) => None,
         }))
     }
 
@@ -258,5 +274,43 @@ fn no_valued_day_in_the_window_is_reported_instead_of_a_zero_return() {
         .execute(&account(), PerformanceSpan::OneMonth))
         .map(|summary| summary.span),
         Err(PerformanceRunError::NoValuedDays)
+    );
+}
+
+#[test]
+fn a_failed_first_day_narrows_the_window_and_is_listed_as_skipped() {
+    let summary = run(ComputePerformance {
+        rows: &Rows,
+        source: &Source(Days::FirstWithoutFx),
+        clock: &Fixed,
+    }
+    .execute(&account(), PerformanceSpan::OneMonth))
+    .expect("성과");
+    assert_eq!(summary.performance.start(), date(11));
+    assert_eq!(summary.performance.end(), date(20));
+    assert_eq!(
+        summary
+            .skipped
+            .iter()
+            .map(|entry| entry.0)
+            .collect::<Vec<_>>(),
+        vec![date(10)]
+    );
+    assert_eq!(summary.performance.twr().to_string(), "0.000000");
+}
+
+#[test]
+fn one_day_is_recomputed_from_closes_and_cash_for_the_daily_record() {
+    let compute = ComputePerformance {
+        rows: &Rows,
+        source: &Source(Days::Weekdays),
+        clock: &Fixed,
+    };
+    let snapshot = run(compute.recompute_day(&account(), date(16))).expect("하루");
+    assert_eq!(snapshot.settlement_date(), date(16));
+    assert_eq!(
+        run(compute.recompute_day(&account(), date(14))).map(|found| found.settlement_date()),
+        Err(PerformanceRunError::NoValuedDays),
+        "평가하지 않는 날은 기록하지 않는다"
     );
 }
