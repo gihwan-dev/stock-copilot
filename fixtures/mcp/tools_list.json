@@ -21,7 +21,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Stored daily candles for one symbol, newest first, paginated with limit and cursor. Includes the collection time.",
+    "description": "Recent finalized daily candles for one symbol from the brokerage, prices not adjusted for splits, newest first, paginated with limit and cursor. Includes the collection time.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -127,7 +127,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Stored foreign, institutional and individual net buying and short selling ratio for one domestic symbol, with the collection time.",
+    "description": "Daily foreign, institutional and individual net buying for one domestic symbol over recent trading days, in KRW estimated as net shares times that day's close (null when the close is unknown), with the collection time.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -157,7 +157,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Domestic indices, government bond yields, USD/KRW and market session status, plus US indices, rates, commodities and the dollar. Each value states whether it is official or an ETF-based approximation and when it was collected.",
+    "description": "KOSPI, KOSDAQ, Korean 3Y and 10Y government bond yields, USD/KRW and KR/US market session status, plus S&P 500, Nasdaq 100, gold, crude oil and the dollar approximated by US ETF prices in USD. Each value states whether it is official or an ETF-based approximation and when it was collected. Values that could not be read are left out.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {},
@@ -228,7 +228,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Latest stored price for one listed symbol with the time it was collected.",
+    "description": "Latest brokerage price for one listed symbol with the time it was collected.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -259,7 +259,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Stored market rankings by trading amount, price change or investor net buying, with the collection time.",
+    "description": "Today's brokerage rankings by trading amount or price change for KR or US, or domestic foreign or institution net buying in KRW, with the collection time.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -315,7 +315,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Stored sector ranking by price change with the collection time.",
+    "description": "Today's brokerage sector ranking by price change with trading amount, with the collection time.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {

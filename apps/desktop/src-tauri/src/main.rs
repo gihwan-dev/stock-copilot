@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             bundled_bridge(),
             (turns.clone(), Arc::clone(&app_commands)),
         )
-        .with_market(market_tools(&toss, &shared_clock))
+        .with_market(market_tools(&toss, &shared_clock, &directory))
         .with_portfolio(catalog_portfolio(&toss, &repositories, &directory))
         .with_estimate_runs(estimate_runs.clone()),
         &shared_clock,
@@ -447,12 +447,34 @@ fn estimate_identity() -> Option<application::EstimateRunIdentity> {
     })
 }
 
-fn market_tools(toss: &ProductToss, clock: &Arc<platform_macos::SystemClock>) -> BrokerMarketTools {
-    BrokerMarketTools::connected(Arc::<ProductBroker>::clone(&toss.broker)).with_clock(Arc::<
-        platform_macos::SystemClock,
-    >::clone(
-        clock
-    ))
+struct ToolCandleFeed(Arc<ProductBroker>);
+
+impl src_tauri::broker_link::ToolQuoteSource for ToolCandleFeed {
+    fn quotes(
+        &self,
+        instruments: Vec<domain::QuoteInstrument>,
+    ) -> BoxFuture<'_, Result<Vec<application::QuoteObservation>, application::PortError>> {
+        Box::pin(async move { application::BrokerRead::quotes(&*self.0, &instruments).await })
+    }
+
+    fn daily_candles(
+        &self,
+        instrument: domain::QuoteInstrument,
+        window: domain::TimeInterval,
+    ) -> BoxFuture<'_, Result<Vec<domain::Candle>, application::PortError>> {
+        Box::pin(async move { self.0.history_daily_candles(&instrument, window).await })
+    }
+}
+
+fn market_tools(
+    toss: &ProductToss,
+    clock: &Arc<platform_macos::SystemClock>,
+    directory: &InstrumentDirectory,
+) -> BrokerMarketTools {
+    BrokerMarketTools::connected(Arc::new(ToolCandleFeed(Arc::clone(&toss.broker))))
+        .with_market(Arc::<ProductBroker>::clone(&toss.broker))
+        .with_names(directory.clone())
+        .with_clock(Arc::<platform_macos::SystemClock>::clone(clock))
 }
 
 type ProductCalendars = ResolutionData<TossResolutionSource>;
@@ -1257,7 +1279,8 @@ where
         .map_err(|_error| broker_toss::TossHttpError::Configuration)?;
     Ok(
         broker_toss::TossAccountRead::new(tokens, SharedClock(clock), master)
-            .showing_unmatched_holdings(),
+            .showing_unmatched_holdings()
+            .with_live_market_sessions(),
     )
 }
 
@@ -4518,6 +4541,138 @@ mod toss_assembly_tests {
         assert_eq!(
             waited,
             src_tauri::database::SetupWait::Settled(src_tauri::database::DatabaseStatus::Ready)
+        );
+    }
+}
+
+#[cfg(test)]
+mod chart_candle_assembly_tests {
+    use application::SecretValue;
+    use src_tauri::ipc::instruments::InstrumentMarket;
+    use std::sync::Arc;
+    use testkit::ScriptedHttpServer;
+    use testkit_ports::memory::MemoryReply;
+    use testkit_ports::system_fakes::MemorySecretStore;
+
+    fn http(body: &str) -> Vec<u8> {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .into_bytes()
+    }
+
+    fn at(text: &str) -> domain::Timestamp {
+        broker_toss::TossTimestamp::try_from(text)
+            .expect("시각")
+            .into_domain()
+    }
+
+    fn candle(stamp: &str, close: &str) -> String {
+        format!(
+            r#"{{"timestamp":"{stamp}","openPrice":"{close}","highPrice":"{close}","lowPrice":"{close}","closePrice":"{close}","volume":"1200","currency":"KRW"}}"#
+        )
+    }
+
+    fn kr_day(date: &str) -> String {
+        format!(
+            r#"{{"date":"{date}","integrated":{{"preMarket":null,"regularMarket":{{"startTime":"{date}T09:00:00+09:00","endTime":"{date}T15:30:00+09:00"}},"afterMarket":null}}}}"#
+        )
+    }
+
+    fn script() -> Vec<Vec<u8>> {
+        vec![
+            http(r#"{"access_token":"fake-access-token","token_type":"Bearer","expires_in":3600}"#),
+            http(&format!(
+                r#"{{"result":{{"candles":[{},{},{}],"nextBefore":null}}}}"#,
+                candle("2026-03-23T14:00:00+09:00", "201000"),
+                candle("2026-03-20T14:00:00+09:00", "199500"),
+                candle("2026-03-19T14:00:00+09:00", "198000"),
+            )),
+            http(&format!(
+                r#"{{"result":{{"previousBusinessDay":{},"today":{},"nextBusinessDay":{}}}}}"#,
+                kr_day("2026-03-20"),
+                kr_day("2026-03-23"),
+                kr_day("2026-03-24"),
+            )),
+        ]
+    }
+
+    async fn secrets() -> Arc<MemorySecretStore> {
+        let secrets = Arc::new(MemorySecretStore::default());
+        for _ in 0_u8..8_u8 {
+            secrets.script_load().push(MemoryReply::Memory);
+            secrets.script_store().push(MemoryReply::Memory);
+        }
+        for (key, value) in [
+            (application::SecretKey::TossClientId, "client-id-chart-5c1"),
+            (
+                application::SecretKey::TossClientSecret,
+                "client-secret-chart-8d2",
+            ),
+        ] {
+            let _stored = application::SecretStore::store(
+                &*secrets,
+                key,
+                SecretValue::new(value.as_bytes().to_vec()),
+            )
+            .await
+            .expect("키");
+        }
+        secrets
+    }
+
+    #[test]
+    fn production_reader_serves_chart_candles_with_todays_open_candle() {
+        let server = ScriptedHttpServer::start(script()).expect("가짜 토스");
+        let now = at("2026-03-23T10:00:00+09:00");
+        let candles = tauri::async_runtime::block_on(async {
+            let broker = super::live_toss_read(
+                &broker_toss::TossEndpoint::local(server.port()).expect("주소"),
+                secrets().await,
+                Arc::new(testkit_ports::SteppedClock::new(now)),
+                Arc::new(application::EventBus::default()),
+            )
+            .expect("어댑터");
+            let instrument =
+                domain::QuoteInstrument::restore_from_saved_state(domain::SavedQuoteInstrument {
+                    market: domain::KnownMarket::Kr,
+                    currency: domain::Currency::Krw,
+                    symbol: domain::Symbol::try_new("000660").expect("종목"),
+                    instrument_id: domain::InstrumentId::try_new("chart-000660").expect("ID"),
+                })
+                .expect("시세 종목");
+            let window =
+                domain::TimeInterval::try_new(at("2026-03-18T00:00:00+09:00"), now).expect("창");
+            broker.daily(instrument, window).await.expect("차트 일봉")
+        });
+        let days: Vec<_> = candles
+            .iter()
+            .map(|candle| (candle.time().timestamp(), candle.status()))
+            .collect();
+        assert_eq!(
+            days,
+            vec![
+                (
+                    at("2026-03-19T00:00:00+09:00"),
+                    domain::CandleStatus::Finalized
+                ),
+                (
+                    at("2026-03-20T00:00:00+09:00"),
+                    domain::CandleStatus::Finalized
+                ),
+                (
+                    at("2026-03-23T00:00:00+09:00"),
+                    domain::CandleStatus::InProgress
+                ),
+            ]
+        );
+        let requests = String::from_utf8(server.finish().expect("요청")).expect("UTF-8");
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/market-calendar/KR?date=2026-03-23")
+                .count(),
+            1
         );
     }
 }

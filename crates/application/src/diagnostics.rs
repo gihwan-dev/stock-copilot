@@ -1,5 +1,6 @@
 use crate::{
-    CollectedCount, PortError, PortErrorKind, ReadEndpoint, ResponseMismatch, UnavailableCause,
+    CollectedCount, MarketToolName, PortError, PortErrorKind, ReadEndpoint, ResponseMismatch,
+    UnavailableCause,
 };
 use domain::{DataSource, SyncOutcome, TimeSpan};
 
@@ -191,6 +192,18 @@ pub struct JobDiagnosis {
     pub note: JobRunNote,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolReadResult {
+    NotConnected,
+    Failed(PortError),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolReadDiagnosis {
+    pub tool: MarketToolName,
+    pub result: ToolReadResult,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiagnosticEvent {
     BrokerCall(BrokerCall),
@@ -216,6 +229,7 @@ pub enum DiagnosticEvent {
         instruments: CollectedCount,
         items: CollectedCount,
     },
+    ToolRead(ToolReadDiagnosis),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

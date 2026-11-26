@@ -99,6 +99,12 @@ pub enum TimeError {
     NegativeSpan,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WeekPart {
+    Weekday,
+    Weekend,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CalendarDate(Date);
 impl CalendarDate {
@@ -114,6 +120,26 @@ impl CalendarDate {
         Date::from_calendar_date(year.0, calendar_month, day.0)
             .map(Self)
             .map_err(|_error| TimeError::InvalidComponent)
+    }
+    #[must_use]
+    pub const fn week_part(self) -> WeekPart {
+        match self.0.weekday() {
+            time::Weekday::Saturday | time::Weekday::Sunday => WeekPart::Weekend,
+            time::Weekday::Monday
+            | time::Weekday::Tuesday
+            | time::Weekday::Wednesday
+            | time::Weekday::Thursday
+            | time::Weekday::Friday => WeekPart::Weekday,
+        }
+    }
+    pub fn start_at_offset(self, offset: OffsetSeconds) -> Result<Timestamp, TimeError> {
+        let zone = UtcOffset::from_whole_seconds(offset.0)
+            .map_err(|_error| TimeError::InvalidComponent)?;
+        Timestamp::from_parts(
+            UnixSeconds(self.0.midnight().assume_offset(zone).unix_timestamp()),
+            Nanosecond(0),
+            offset,
+        )
     }
     #[must_use]
     pub const fn year(self) -> CalendarYear {

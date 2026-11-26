@@ -45,7 +45,15 @@ pub struct TossAccountRead<Store, Time, Renewal> {
     clock: Time,
     master: std::sync::RwLock<std::sync::Arc<MasterInstrumentFacts>>,
     candle_sessions: Vec<domain::MarketSession>,
+    live_sessions: std::sync::RwLock<Vec<domain::MarketSession>>,
+    session_supply: SessionSupply,
     unmatched: UnmatchedHoldings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SessionSupply {
+    Fixed,
+    Live,
 }
 impl<Store, Time, Renewal> std::fmt::Debug for TossAccountRead<Store, Time, Renewal> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -79,6 +87,8 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
             clock,
             master: std::sync::RwLock::new(std::sync::Arc::new(master)),
             candle_sessions: Vec::new(),
+            live_sessions: std::sync::RwLock::new(Vec::new()),
+            session_supply: SessionSupply::Fixed,
             unmatched: UnmatchedHoldings::Reject,
         }
     }
@@ -156,6 +166,48 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     pub fn with_candle_sessions(mut self, sessions: Vec<domain::MarketSession>) -> Self {
         self.candle_sessions = sessions;
         self
+    }
+    #[must_use]
+    pub const fn with_live_market_sessions(mut self) -> Self {
+        self.session_supply = SessionSupply::Live;
+        self
+    }
+    pub(crate) const fn session_supply(&self) -> SessionSupply {
+        self.session_supply
+    }
+    pub(crate) fn known_sessions(&self) -> Vec<domain::MarketSession> {
+        let mut known = self.candle_sessions.clone();
+        match self.live_sessions.read() {
+            Ok(guard) => known.extend(guard.iter().cloned()),
+            Err(poisoned) => known.extend(poisoned.into_inner().iter().cloned()),
+        }
+        known
+    }
+    pub(crate) fn remember_sessions(&self, calendar: &domain::MarketCalendar) {
+        let mut rows = vec![
+            calendar.previous_business_day().clone(),
+            calendar.today().clone(),
+            calendar.next_business_day().clone(),
+        ];
+        rows.extend(
+            calendar
+                .implied_holidays()
+                .iter()
+                .map(|holiday| holiday.today().clone()),
+        );
+        let known = self.known_sessions();
+        let fresh: Vec<domain::MarketSession> = rows
+            .into_iter()
+            .filter(|row| {
+                !known
+                    .iter()
+                    .any(|entry| entry.market() == row.market() && entry.date() == row.date())
+            })
+            .collect();
+        match self.live_sessions.write() {
+            Ok(mut guard) => guard.extend(fresh),
+            Err(poisoned) => poisoned.into_inner().extend(fresh),
+        }
     }
     #[must_use]
     pub fn with_market_master(self, master: MasterInstrumentFacts) -> Self {

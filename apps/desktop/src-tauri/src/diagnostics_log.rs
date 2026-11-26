@@ -6,8 +6,9 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use application::{
     BrokerCall, CallMethod, CallResult, Clock, DiagnosticEvent, DiagnosticsSink, FeedDiagnosis,
-    FeedFailure, FeedRunResult, JobDiagnosis, JobRunNote, SourceCall, SyncDiagnosis,
-    SyncFailureReason, SyncJob, SyncResult, TokenIssue, TransportFailure, sync_failure_reason,
+    FeedFailure, FeedRunResult, JobDiagnosis, JobRunNote, MarketToolName, SourceCall,
+    SyncDiagnosis, SyncFailureReason, SyncJob, SyncResult, TokenIssue, ToolReadDiagnosis,
+    ToolReadResult, TransportFailure, sync_failure_reason,
 };
 use domain::{TimeSpan, Timestamp};
 
@@ -152,6 +153,31 @@ fn describe(event: &DiagnosticEvent) -> String {
             detail.as_str()
         ),
         DiagnosticEvent::Job(diagnosis) => describe_job(diagnosis),
+        DiagnosticEvent::ToolRead(diagnosis) => describe_tool_read(diagnosis),
+    }
+}
+
+const fn tool_name(tool: MarketToolName) -> &'static str {
+    match tool {
+        MarketToolName::Quote => "get_quote",
+        MarketToolName::Candles => "get_candles",
+        MarketToolName::Overview => "get_market_overview",
+        MarketToolName::Rankings => "get_rankings",
+        MarketToolName::Sectors => "get_sectors",
+        MarketToolName::InvestorFlow => "get_investor_flow",
+    }
+}
+
+fn describe_tool_read(diagnosis: &ToolReadDiagnosis) -> String {
+    let tool = tool_name(diagnosis.tool);
+    match diagnosis.result {
+        ToolReadResult::NotConnected => format!("tool-read tool={tool} result=not-connected"),
+        ToolReadResult::Failed(error) => format!(
+            "tool-read tool={tool} result=failed endpoint={:?} status={:?} kind={:?}",
+            error.endpoint(),
+            error.status(),
+            error.kind()
+        ),
     }
 }
 

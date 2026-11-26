@@ -1,4 +1,4 @@
-use application::SystemPortError;
+use application::{MarketToolError, MarketToolReply, SystemPortError};
 use domain::{
     Currency, FxPair, FxRate, FxRateKind, Money, Quantity, Ratio, Timestamp, TotalCompleteness,
 };
@@ -160,6 +160,56 @@ pub(super) fn require<V>(reply: Result<Option<V>, SystemPortError>) -> Result<V,
         Ok(Some(view)) => Ok(view),
         Ok(None) => Err(missing_data()),
         Err(error) => Err(upstream_error(&error)),
+    }
+}
+
+#[must_use]
+pub(super) fn market_error(error: MarketToolError) -> ToolErrorPayload {
+    match error {
+        MarketToolError::NotConnected => ToolErrorPayload::non_retryable(
+            ToolErrorCode::DataUnavailable,
+            None,
+            "the brokerage account is not connected in the app, so live market data is not available; do not retry until the user connects it",
+        ),
+        MarketToolError::NotOffered => ToolErrorPayload::non_retryable(
+            ToolErrorCode::DataUnavailable,
+            None,
+            "the brokerage does not offer this market data for the requested market",
+        ),
+        MarketToolError::NotFound => ToolErrorPayload::non_retryable(
+            ToolErrorCode::DataUnavailable,
+            None,
+            "the brokerage has no data for this symbol",
+        ),
+        MarketToolError::Rejected => ToolErrorPayload::non_retryable(
+            ToolErrorCode::DataUnavailable,
+            None,
+            "the brokerage rejected this market data request",
+        ),
+        MarketToolError::RateLimited => ToolErrorPayload::retryable(
+            ToolErrorCode::RateLimited,
+            None,
+            "the brokerage is limiting requests right now; retry later",
+        ),
+        MarketToolError::Unavailable => ToolErrorPayload::retryable(
+            ToolErrorCode::UpstreamUnavailable,
+            None,
+            "the brokerage market data service is temporarily unavailable; retry later",
+        ),
+        MarketToolError::InvalidResponse => ToolErrorPayload::non_retryable(
+            ToolErrorCode::InternalError,
+            None,
+            "the brokerage returned market data the app could not read",
+        ),
+        MarketToolError::Storage(port_error) => upstream_error(&port_error),
+    }
+}
+
+pub(super) fn require_market<V>(reply: MarketToolReply<V>) -> Result<V, ToolErrorPayload> {
+    match reply {
+        Ok(Some(view)) => Ok(view),
+        Ok(None) => Err(missing_data()),
+        Err(error) => Err(market_error(error)),
     }
 }
 

@@ -107,7 +107,7 @@ mod market_session;
 pub use domain_time::{
     CalendarDate, CalendarDays, CalendarYear, DayNumber, MonthNumber, Nanosecond, OffsetSeconds,
     SpanSeconds, TimeError, TimeInterval, TimeIntervalError, TimeSpan, Timestamp, UnixSeconds,
-    valuation_time,
+    WeekPart, valuation_time,
 };
 pub use market_session::{
     AuctionBoundary, MarketCalendar, MarketCalendarError, MarketSegment, MarketSession,

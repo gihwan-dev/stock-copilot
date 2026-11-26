@@ -11,6 +11,11 @@ impl Ratio {
         Self(value)
     }
 
+    #[must_use]
+    pub fn of_amount(amount: Amount) -> Self {
+        Self::new(amount.as_decimal())
+    }
+
     pub fn parse(input: &NumericInput) -> Result<Self, NumericError> {
         input
             .parse_amount()
