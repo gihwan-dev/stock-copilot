@@ -230,6 +230,11 @@ impl NewsDataSettings {
     }
 
     #[must_use]
+    pub fn adjusted_plan(&self, plan: &CollectionPlan) -> CollectionPlan {
+        CollectionPlan::from_entries(plan.phase(), self.adjust_plan(plan))
+    }
+
+    #[must_use]
     pub fn adjust_plan(&self, plan: &CollectionPlan) -> Vec<PlannedCollection> {
         plan.entries()
             .iter()

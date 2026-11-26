@@ -26,6 +26,11 @@ const catalog = {
   chartLabel: { ko: "일봉 차트" as UiText },
   chartEmpty: { ko: "차트로 그릴 일봉이 없어요" as UiText },
   holdingTitle: { ko: "내 보유" as UiText },
+  newsTitle: { ko: "최근 뉴스" as UiText },
+  newsEmpty: {
+    ko: "최근 7일 동안 이 종목을 다룬 뉴스가 아직 없어요" as UiText,
+  },
+  newsOpen: { ko: "기사 열기" as UiText },
   holdingNone: { ko: "이 종목은 보유하고 있지 않아요" as UiText },
   quantity: { ko: "수량" as UiText },
   value: { ko: "평가 금액" as UiText },

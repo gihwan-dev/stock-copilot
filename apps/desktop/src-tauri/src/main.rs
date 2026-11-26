@@ -1285,14 +1285,32 @@ fn product_builder(
             Arc::<platform_macos::SystemClock>::clone(clock),
         ))
         .manage(public_ip_runtime(clock));
-    let with_feeds = builder.manage(collector_feeds(clock));
+    let tracking = src_tauri::news_tracking::NewsTracking::default();
+    let hints = sources::NewsLinkHints::default();
+    let with_feeds = builder
+        .manage(collector_feeds(clock, &tracking, &hints))
+        .manage(tracking)
+        .manage(hints);
     match spec_watch_inputs(clock) {
         Some(inputs) => with_feeds.manage(inputs),
         None => with_feeds,
     }
 }
 
-fn collector_feeds(clock: &Arc<platform_macos::SystemClock>) -> CollectorFeeds {
+#[derive(Debug)]
+struct LoggedSourceCalls;
+
+impl application::DiagnosticsSink for LoggedSourceCalls {
+    fn record(&self, event: &application::DiagnosticEvent) {
+        src_tauri::diagnostics_log::record(event);
+    }
+}
+
+fn collector_feeds(
+    clock: &Arc<platform_macos::SystemClock>,
+    tracking: &src_tauri::news_tracking::NewsTracking,
+    hints: &sources::NewsLinkHints,
+) -> CollectorFeeds {
     let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
     let Ok(http) = sources::SourceHttpClient::new(
         sources::SourceEndpoint::live(),
@@ -1302,7 +1320,7 @@ fn collector_feeds(clock: &Arc<platform_macos::SystemClock>) -> CollectorFeeds {
     ) else {
         return CollectorFeeds::default();
     };
-    let client = Arc::new(http);
+    let client = Arc::new(http.with_diagnostics(Arc::new(LoggedSourceCalls)));
     let mut feeds: Vec<CollectorFeed> = sources::PressMacroSource::ALL
         .into_iter()
         .map(|source| CollectorFeed {
@@ -1322,6 +1340,27 @@ fn collector_feeds(clock: &Arc<platform_macos::SystemClock>) -> CollectorFeeds {
         startup: Some(kind(sources::KindFetchWindow::StartupCatchUp)),
         regular: kind(sources::KindFetchWindow::Regular),
     });
+    for (target, search) in [
+        (
+            application::CollectionTarget::GoogleNews,
+            sources::TrackedSearch::GoogleNews,
+        ),
+        (
+            application::CollectionTarget::YahooFinance,
+            sources::TrackedSearch::YahooFinance,
+        ),
+    ] {
+        feeds.push(CollectorFeed {
+            target,
+            startup: None,
+            regular: SharedFeed::new(sources::TrackedNewsFeed::new(
+                Arc::clone(&client),
+                search,
+                Arc::new(tracking.clone()),
+                hints.clone(),
+            )),
+        });
+    }
     CollectorFeeds(feeds)
 }
 
@@ -1653,6 +1692,35 @@ impl TitleLinker for AliasTitleLinker {
                     alias.alias.as_str(),
                     sources::MatchNameKind::Alias,
                     sources::MatchNameAmbiguity::Distinct,
+                )
+            })
+            .collect();
+        sources::StockMatcher::new(entries)
+            .match_title(title)
+            .matched()
+            .to_vec()
+    }
+
+    fn instruments_named(
+        &self,
+        title: &domain::UntrustedText,
+        names: &[src_tauri::news_tracking::MatchName],
+    ) -> Vec<domain::InstrumentId> {
+        use src_tauri::news_tracking::{MatchNameClarity, MatchNameRole};
+        let entries = names
+            .iter()
+            .filter_map(|name| {
+                sources::MatchDictionaryEntry::new(
+                    name.instrument.clone(),
+                    &name.name,
+                    match name.role {
+                        MatchNameRole::Official => sources::MatchNameKind::Official,
+                        MatchNameRole::Alias => sources::MatchNameKind::Alias,
+                    },
+                    match name.clarity {
+                        MatchNameClarity::Distinct => sources::MatchNameAmbiguity::Distinct,
+                        MatchNameClarity::NeedsContext => sources::MatchNameAmbiguity::CommonNoun,
+                    },
                 )
             })
             .collect();
@@ -2208,13 +2276,17 @@ mod tests {
     fn composition_root_registers_keyless_press_and_kind_feeds_for_the_collector() {
         use application::{CollectionTarget, FeedSource, NewsFeed};
         let clock = std::sync::Arc::new(platform_macos::SystemClock::new().expect("시계"));
-        let feeds = super::collector_feeds(&clock);
+        let feeds = super::collector_feeds(
+            &clock,
+            &src_tauri::news_tracking::NewsTracking::default(),
+            &sources::NewsLinkHints::default(),
+        );
         let sources: Vec<(CollectionTarget, FeedSource)> = feeds
             .0
             .iter()
             .map(|feed| (feed.target, feed.regular.source()))
             .collect();
-        assert_eq!(sources.len(), 7);
+        assert_eq!(sources.len(), 9);
         assert!(sources.contains(&(
             CollectionTarget::HankyungRss,
             FeedSource::News(domain::NewsSource::Hankyung)
@@ -4886,5 +4958,79 @@ mod estimate_flow_assembly_tests {
             let _closed = shared.close().await;
         });
         std::fs::remove_dir_all(directory).expect("정리");
+    }
+}
+
+#[cfg(test)]
+mod news_linking_tests {
+    use application::TrackedInstrument;
+    use domain::{DisplayInstrumentName, InstrumentId, KnownMarket, Symbol, UntrustedText};
+    use src_tauri::collected_links::TitleLinker;
+    use src_tauri::holdings_link::InstrumentDirectory;
+    use src_tauri::news_tracking::{MatchName, match_names};
+
+    fn tracked(symbol: &str, market: KnownMarket, name: &str) -> TrackedInstrument {
+        TrackedInstrument {
+            symbol: Symbol::try_new(symbol).expect("종목"),
+            market,
+            name: DisplayInstrumentName::try_new(name).expect("이름"),
+        }
+    }
+
+    fn names() -> Vec<MatchName> {
+        match_names(
+            &[
+                tracked("005930", KnownMarket::Kr, "삼성전자"),
+                tracked("000660", KnownMarket::Kr, "SK하이닉스"),
+                tracked("AAPL", KnownMarket::Us, "애플"),
+            ],
+            &[],
+            &InstrumentDirectory::default(),
+        )
+    }
+
+    fn linked(title: &str) -> Vec<String> {
+        super::AliasTitleLinker
+            .instruments_named(&UntrustedText::try_new(title).expect("제목"), &names())
+            .iter()
+            .map(|instrument| instrument.as_str().to_owned())
+            .collect()
+    }
+
+    fn ids(symbols: &[&str]) -> Vec<String> {
+        symbols
+            .iter()
+            .map(|symbol| {
+                InstrumentId::try_new(symbol)
+                    .expect("종목")
+                    .as_str()
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn holding_names_and_codes_link_articles_without_any_alias_setup() {
+        assert_eq!(linked("삼성전자, 3분기 영업익 10조"), ids(&["005930"]));
+        assert_eq!(linked("SK하이닉스 HBM 공급 확대"), ids(&["000660"]));
+        assert_eq!(linked("[특징주] 005930 외국인 순매수"), ids(&["005930"]));
+        assert_eq!(linked("AAPL shares rise after event"), ids(&["AAPL"]));
+        assert_eq!(linked("애플 주가 급등"), ids(&["AAPL"]));
+    }
+
+    #[test]
+    fn group_prefixes_and_short_common_names_do_not_link_unrelated_articles() {
+        assert_eq!(
+            linked("삼성바이오로직스 신공장 착공"),
+            ids(&[]),
+            "삼성 계열사"
+        );
+        assert_eq!(linked("삼성 그룹 인사 발표"), ids(&[]), "그룹명만");
+        assert_eq!(linked("애플망고 수입 늘어"), ids(&[]), "다른 단어의 일부");
+        assert_eq!(
+            linked("올해 애플 신제품 공개 행사"),
+            ids(&[]),
+            "증권 문맥 없음"
+        );
     }
 }

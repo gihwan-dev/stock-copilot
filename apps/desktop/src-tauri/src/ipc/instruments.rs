@@ -236,6 +236,7 @@ pub struct UiInstrumentDetail {
     pub quoted_at: String,
     pub candles: Vec<UiInstrumentCandle>,
     pub holding: Option<UiInstrumentHolding>,
+    pub news: Vec<crate::ipc::instrument_news::UiInstrumentNews>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
@@ -621,6 +622,7 @@ pub async fn load_instrument_detail(
             .iter()
             .find(|holding| holding.instrument().symbol() == symbol)
             .and_then(holding_view),
+        news: Vec::new(),
     })
 }
 
@@ -699,13 +701,22 @@ pub async fn get_instrument_detail<R: Runtime>(
     let symbol = parse_symbol(&request.symbol)?;
     let (state, directory) = managed(&app)?;
     let screen = app.try_state::<ScreenState>();
-    load_instrument_detail(
+    let mut detail = load_instrument_detail(
         &state,
         screen.as_ref().map(tauri::State::inner),
         &directory,
         &symbol,
     )
-    .await
+    .await?;
+    if let Some(store) = app.try_state::<Arc<store_sqlite::SqliteRepositories>>() {
+        detail.news = crate::ipc::instrument_news::recent_news(
+            store.inner().as_ref(),
+            &symbol,
+            state.clock.now(),
+        )
+        .await;
+    }
+    Ok(detail)
 }
 
 #[tauri::command]

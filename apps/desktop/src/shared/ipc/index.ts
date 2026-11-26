@@ -80,6 +80,7 @@ export type {
   BriefingsView,
   InstrumentCandle,
   InstrumentDetailView,
+  InstrumentNewsLine,
   InstrumentListRow,
   InstrumentListView,
   ScorecardBinRow,

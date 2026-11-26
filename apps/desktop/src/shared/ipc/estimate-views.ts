@@ -103,6 +103,14 @@ export type InstrumentCandle = {
   readonly close: ChartDecimal;
 };
 
+export type InstrumentNewsLine = {
+  readonly id: EntityId;
+  readonly title: FreeText;
+  readonly source: FreeText;
+  readonly publishedAt: Timestamp;
+  readonly url: ExternalUrl | undefined;
+};
+
 export type InstrumentDetailView = {
   readonly id: EntityId;
   readonly name: FreeText;
@@ -120,6 +128,7 @@ export type InstrumentDetailView = {
         readonly profitRate: PercentDisplay;
       }
     | undefined;
+  readonly news?: readonly InstrumentNewsLine[];
 };
 
 export type BriefingKind = "morning" | "closing-review" | "pre-us-market";

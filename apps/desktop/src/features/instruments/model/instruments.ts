@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  openExternal,
   toScreenState,
   type InstrumentDetailView,
   type InstrumentListView,
@@ -13,10 +14,18 @@ import {
   queryKeys,
   screenKeys,
   type EntityId,
+  type ExternalUrl,
   type FreeText,
   type InputValue,
 } from "../../../shared/lib";
 import { detach } from "../../../shared/platform";
+
+export const useOpenArticle = (): ((url: ExternalUrl) => void) => {
+  const mutation = useMutation({ mutationFn: openExternal });
+  return (url): void => {
+    mutation.mutate(url);
+  };
+};
 
 const useRefresh = (): (() => void) => {
   const client = useQueryClient();
