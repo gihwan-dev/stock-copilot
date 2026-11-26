@@ -91,7 +91,6 @@ pub const COMMAND_POLICIES: [CommandPolicy; 53] = [
     never("copy_text"),
     never("submit_toss_keys"),
     never("restart_to_update"),
-    never("set_auto_start"),
     never("delete_all_data"),
     never("set_optional_key"),
     never("set_claude_config_dir"),

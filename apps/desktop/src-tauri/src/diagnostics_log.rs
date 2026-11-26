@@ -141,11 +141,6 @@ fn describe(event: &DiagnosticEvent) -> String {
             summary.as_str()
         ),
         DiagnosticEvent::Job(diagnosis) => describe_job(diagnosis),
-        DiagnosticEvent::AiCommandApplied { tool, summary } => format!(
-            "ai-command tool={} summary=\"{}\"",
-            tool.as_str(),
-            summary.as_str()
-        ),
     }
 }
 
