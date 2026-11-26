@@ -53,7 +53,8 @@ pub use kind_disclosures::{
     KindCorpMatchFailureReason, KindCorpResolutionReport, KindDisclosureClient,
     KindDisclosureEntry, KindDisclosureFeed, KindFetchWindow, KindMarket, KindParseReport,
     KindRejection, MatchedKindDisclosure, ReceiptCorrespondence, UnmatchedKindDisclosure,
-    explain_kind_rss, kind_dart_receipt_correspondence, normalize_corp_name, parse_kind_rss,
+    escape_url, explain_kind_rss, kind_dart_receipt_correspondence, link_shape,
+    normalize_corp_name, parse_kind_rss,
 };
 pub use news_rss::{PressMacroSource, RssNewsFeed};
 pub use public_ip::{PublicIpAddress, PublicIpClient, PublicIpEndpoint, PublicIpError};
@@ -75,7 +76,7 @@ pub use tracked_disclosures::{
 };
 pub use tracked_news::{
     MAX_ITEMS_PER_TARGET, MAX_TRACKED_TARGETS, NewsLinkHints, TRACKED_RECENCY_SECONDS,
-    TrackedNewsFeed, TrackedSearch, TrackedTargets, is_recent,
+    TrackedNewsFeed, TrackedSearch, TrackedTargets, google_query, is_recent,
 };
 pub use us_macro::{
     FredSeries, TreasuryTenor, UsMacroClient, build_fred_observations_url,

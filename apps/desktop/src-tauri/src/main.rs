@@ -1435,6 +1435,7 @@ fn collector_feeds(
     let disclosure_feeds = disclosure_feeds(&client, clock, tracking, hints);
     let mut feeds: Vec<CollectorFeed> = sources::PressMacroSource::ALL
         .into_iter()
+        .filter(|source| *source != sources::PressMacroSource::Edaily)
         .map(|source| CollectorFeed {
             target: press_target(source),
             startup: None,
@@ -2433,7 +2434,7 @@ mod tests {
             .iter()
             .map(|feed| (feed.target, feed.regular.source()))
             .collect();
-        assert_eq!(sources.len(), 11);
+        assert_eq!(sources.len(), 10);
         assert!(sources.contains(&(
             CollectionTarget::HankyungRss,
             FeedSource::News(domain::NewsSource::Hankyung)
