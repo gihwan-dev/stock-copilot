@@ -259,7 +259,12 @@ pub use system_port_error::{
     RecordOutcome, SystemDiagnostic, SystemFailure, SystemPort, SystemPortError, WriteCompleted,
 };
 mod clock;
+mod compute_performance;
 pub use clock::Clock;
+pub use compute_performance::{
+    ComputePerformance, PerformanceHistorySource, PerformanceRunError, PerformanceSummary,
+    SettledRowsSource,
+};
 mod diagnostics;
 pub use diagnostics::{
     BrokerCall, CallMethod, CallResult, DiagnosticEvent, DiagnosticText, DiagnosticsSink,

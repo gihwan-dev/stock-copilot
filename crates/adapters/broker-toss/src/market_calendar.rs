@@ -22,7 +22,7 @@ pub(crate) async fn fetch_on<S: SecretStore, T: Clock, R: TokenRenewal>(
     fetch_request(reader, market, Some(date)).await
 }
 
-fn date_text(value: CalendarDate) -> String {
+pub(crate) fn date_text(value: CalendarDate) -> String {
     format!(
         "{:04}-{:02}-{:02}",
         value.year().as_i32(),

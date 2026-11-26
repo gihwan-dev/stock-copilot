@@ -17,6 +17,7 @@ pub mod mcp_research;
 pub mod mcp_sources;
 pub mod news_tracking;
 pub mod order_runtime;
+pub mod performance_book;
 pub mod platform;
 pub mod ports;
 pub mod product_events;

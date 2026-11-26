@@ -1,0 +1,34 @@
+{
+  "outcome": "simulated",
+  "problem_symbol": null,
+  "fills": [
+    {
+      "symbol": "005930",
+      "side": "sell",
+      "quantity": "75",
+      "price": { "amount": "72000", "currency": "KRW" },
+      "amount": { "amount": "5400000", "currency": "KRW" }
+    }
+  ],
+  "total_after": { "amount": "10000000", "currency": "KRW" },
+  "cash_after": [
+    {
+      "currency": "KRW",
+      "amount": { "amount": "6520000", "currency": "KRW" },
+      "weight": "65.20"
+    }
+  ],
+  "instruments": [
+    {
+      "symbol": "005930",
+      "name": "삼성전자",
+      "fund_kind": "single-security",
+      "weight_before": "72.00",
+      "weight_after": "18.00",
+      "limit_percent": "20.00",
+      "warning_percent": "10.00",
+      "level_after": "warning",
+      "room_to_limit": { "amount": "200000", "currency": "KRW" }
+    }
+  ]
+}

@@ -2,9 +2,10 @@ use tauri::Runtime;
 use tauri_specta::{Builder, Commands, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::{
-    ai_settings, app_version, autostart, briefing, chat, data_status, instruments, news_settings,
-    open_external, order_approval, portfolio, public_ip, risk_editor, schedule, scorecard,
-    self_check, settings, signals, system_data, thesis, toss, transactions, updates,
+    ai_settings, app_version, autostart, briefing, chat, data_status, instrument_search,
+    instruments, news_settings, open_external, order_approval, portfolio, public_ip, risk_editor,
+    schedule, scorecard, self_check, settings, signals, simulation, system_data, thesis, toss,
+    transactions, updates,
 };
 
 #[expect(
@@ -26,6 +27,8 @@ fn product_commands<R: Runtime>() -> Commands<R> {
         briefing::get_briefings::<tauri::Wry>,
         portfolio::get_portfolio::<tauri::Wry>,
         portfolio::get_allocation::<tauri::Wry>,
+        simulation::simulate_trades::<tauri::Wry>,
+        instrument_search::search_instruments::<tauri::Wry>,
         schedule::get_job_schedules::<tauri::Wry>,
         schedule::set_job_schedule::<tauri::Wry>,
         public_ip::get_public_ip::<tauri::Wry>,

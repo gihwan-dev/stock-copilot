@@ -212,6 +212,11 @@ pub use portfolio_valuation::{CurrencyEvaluation, HoldingCount, MetricTotal};
 
 mod exclusions;
 mod fund_kind;
+mod trade_simulation;
+pub use trade_simulation::{
+    SimulatedFill, SimulatedTrade, TradeSide, TradeSimulation, TradeSimulationError, krw_exposures,
+    room_to_cap, simulate_trades,
+};
 mod horizon;
 mod investor_profile;
 #[cfg(test)]
@@ -424,6 +429,12 @@ pub use performance_arithmetic::PerformanceValue;
 mod benchmark;
 pub use benchmark::{BenchmarkDividends, BenchmarkKind, BenchmarkObservation, BenchmarkSeries};
 mod performance_contract;
+mod performance_history;
+pub use performance_history::{
+    PerformanceSpan, WindowDay, WindowLedger, day_price_evidence, derived_window_ledger,
+    last_valuation_date, performance_max_drawdown, performance_window, recompute_window_day,
+    settled_cash_through, window_dates,
+};
 mod performance_risk;
 pub use performance_risk::{
     BetaMetric, PerformanceBeta, PerformanceRisk, RiskMetric, performance_beta,

@@ -282,7 +282,7 @@ mod tests {
         assert_eq!(requests.matches("cursor=first_1").count(), 2);
         assert_eq!(
             requests
-                .matches("GET /api/v1/transactions?limit=100 HTTP")
+                .matches("GET /api/v1/transactions?limit=100&from=2026-09-01 HTTP")
                 .count(),
             2
         );
@@ -1117,5 +1117,91 @@ mod tests {
             panic!("incomplete")
         };
         assert_overflow_tail(&actual, &tail);
+    }
+    #[test]
+    fn the_window_start_is_sent_and_pending_rows_beyond_the_window_end_still_arrive() {
+        let mut pending = row();
+        pending["settled"] = json!(false);
+        pending["settlementDate"] = json!("2026-10-02");
+        let (outcome, requests) =
+            read_responses(vec![ok(page(json!([row(), pending]), Value::Null))]);
+        let application::TransactionRead::Complete(completed) = outcome.expect("조회") else {
+            panic!("incomplete")
+        };
+        assert_eq!(completed.rows().as_slice().len(), 2);
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/transactions?limit=100&from=2026-09-01 HTTP")
+                .count(),
+            1
+        );
+        assert_eq!(requests.matches("&to=").count(), 0);
+    }
+    fn read_window(
+        responses: Vec<Vec<u8>>,
+        target: SettlementWindow,
+    ) -> (
+        Result<application::TransactionRead, application::PortError>,
+        String,
+    ) {
+        let mut scripted = vec![issued()];
+        scripted.extend(responses);
+        let server = ScriptedHttpServer::start(scripted).expect("server");
+        let outcome = run(adapter(&server).transactions(
+            &AccountId::new(731),
+            target,
+            &TransactionFilter::all(),
+        ));
+        let requests = String::from_utf8(server.finish().expect("requests")).expect("UTF8");
+        (outcome, requests)
+    }
+    #[test]
+    fn a_whole_history_window_sends_no_start_date() {
+        let whole =
+            SettlementWindow::try_new(date("0001-01-01"), date("2026-09-30")).expect("기간");
+        let (outcome, requests) = read_window(vec![ok(page(json!([row()]), Value::Null))], whole);
+        let application::TransactionRead::Complete(completed) = outcome.expect("조회") else {
+            panic!("incomplete")
+        };
+        assert_eq!(completed.rows().as_slice().len(), 1);
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/transactions?limit=100 HTTP")
+                .count(),
+            1
+        );
+        assert_eq!(requests.matches("from=").count(), 0);
+    }
+    #[test]
+    fn a_rejected_start_date_falls_back_to_the_whole_history_once() {
+        let malformed = response(
+            "400 Bad Request",
+            &json!({"error":{"code":"malformed","message":"합성 오류"}}),
+        );
+        let (outcome, requests) =
+            read_responses(vec![malformed, ok(page(json!([row()]), Value::Null))]);
+        let application::TransactionRead::Complete(completed) = outcome.expect("대체 조회")
+        else {
+            panic!("incomplete")
+        };
+        assert_eq!(completed.rows().as_slice().len(), 1);
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/transactions?limit=100&from=2026-09-01 HTTP")
+                .count(),
+            1
+        );
+        assert_eq!(
+            requests
+                .matches("GET /api/v1/transactions?limit=100 HTTP")
+                .count(),
+            1
+        );
+        let twice = response(
+            "400 Bad Request",
+            &json!({"error":{"code":"malformed","message":"합성 오류"}}),
+        );
+        let (failed, _requests) = read_responses(vec![twice.clone(), twice]);
+        assert!(failed.is_err(), "대체 뒤에도 거부되면 실패로 남긴다");
     }
 }

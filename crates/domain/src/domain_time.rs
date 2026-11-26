@@ -147,6 +147,12 @@ impl CalendarDate {
             remaining.min(i64::from(*limit.as_u32()).saturating_sub(1)),
         )))
     }
+    pub(crate) fn days_before(self, count: CalendarDays) -> Self {
+        Self(self.0.saturating_sub(SignedDuration::days(count.0)))
+    }
+    pub(crate) fn inspection_predecessor(self) -> Self {
+        Self(self.0.saturating_sub(SignedDuration::days(1)))
+    }
     pub(crate) fn inspection_successor(self) -> Self {
         Self(self.0.saturating_add(SignedDuration::days(1)))
     }
@@ -171,6 +177,9 @@ pub fn valuation_time(date: CalendarDate) -> Timestamp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CalendarDays(i64);
 impl CalendarDays {
+    pub(crate) const fn new(value: i64) -> Self {
+        Self(value)
+    }
     #[must_use]
     pub const fn as_i64(&self) -> &i64 {
         &self.0

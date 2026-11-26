@@ -52,11 +52,84 @@ impl<R: Runtime, P: PortTypes> AppStoredJobs<R, P> {
             .map(|state| state.inner().clone())
     }
 
+    async fn record_from_closes(
+        &self,
+        account: &domain::AccountId,
+        now: Timestamp,
+    ) -> Result<(), JobError> {
+        use application::ValuationRepository as _;
+        let book = self
+            .app
+            .try_state::<Arc<crate::performance_book::PerformanceBook>>()
+            .map(|state| Arc::clone(state.inner()))
+            .ok_or_else(|| JobError::PortUnavailable(String::from("valuation-closes")))?;
+        let date = domain::last_valuation_date(now)
+            .map_err(|error| JobError::ExecutionFailed(format!("{error:?}")))?;
+        let snapshot = book
+            .recompute_day(&self.repositories, account, date)
+            .await
+            .map_err(|error| JobError::ExecutionFailed(format!("closes:{error:?}")))?;
+        let _recorded = self
+            .repositories
+            .append(account, &snapshot)
+            .await
+            .map_err(storage)?;
+        crate::diagnostics_log::record(&application::DiagnosticEvent::Job(
+            application::JobDiagnosis {
+                job: application::DiagnosticText::new("daily_valuation_snapshot"),
+                note: application::JobRunNote::Executed {
+                    summary: application::DiagnosticText::new("recorded-from-session-closes"),
+                    processed: application::JobItemCount::new(1),
+                },
+            },
+        ));
+        Ok(())
+    }
+
+    fn refresh_performance(&self) {
+        let Some(book) = self
+            .app
+            .try_state::<Arc<crate::performance_book::PerformanceBook>>()
+            .map(|state| Arc::clone(state.inner()))
+        else {
+            return;
+        };
+        let Ok(ports) = self.ports() else {
+            return;
+        };
+        let Some(account) = ports.saved_accounts.current().into_iter().next() else {
+            return;
+        };
+        let rows = self.repositories.clone();
+        let _task = tauri::async_runtime::spawn(async move {
+            book.refresh(&rows, &account).await;
+        });
+    }
+
     fn ports(&self) -> Result<tauri::State<'_, Ports<P>>, JobError> {
         self.app
             .try_state::<Ports<P>>()
             .ok_or_else(|| JobError::PortUnavailable(String::from("ports")))
     }
+}
+
+const fn price_basis_gap(error: &application::ValuationSnapshotError) -> PriceBasisGap {
+    match error {
+        application::ValuationSnapshotError::PriceBasisDefinitionPending
+        | application::ValuationSnapshotError::Snapshot(
+            domain::SnapshotError::MissingPrice | domain::SnapshotError::InvalidCandle,
+        ) => PriceBasisGap::UseSessionCloses,
+        application::ValuationSnapshotError::Repository(_)
+        | application::ValuationSnapshotError::MissingPortfolio
+        | application::ValuationSnapshotError::UnavailablePortfolio
+        | application::ValuationSnapshotError::Snapshot(_) => PriceBasisGap::Unrelated,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PriceBasisGap {
+    UseSessionCloses,
+    Unrelated,
 }
 
 fn storage(error: impl std::fmt::Debug) -> JobError {
@@ -301,9 +374,17 @@ impl<R: Runtime, P: PortTypes> DailyValuationPort for AppStoredJobs<R, P> {
         );
         let mut first_failure = None;
         for account in &ports.saved_accounts.current() {
-            if let Err(error) = use_case.execute(account, &calendar).await {
-                first_failure =
-                    first_failure.or_else(|| Some(JobError::ExecutionFailed(format!("{error:?}"))));
+            let observed = use_case.execute(account, &calendar).await;
+            let outcome = match observed {
+                Ok(_report) => Ok(()),
+                Err(error) if price_basis_gap(&error) == PriceBasisGap::UseSessionCloses => {
+                    self.record_from_closes(account, application::Clock::now(ports.clock.as_ref()))
+                        .await
+                }
+                Err(error) => Err(JobError::ExecutionFailed(format!("{error:?}"))),
+            };
+            if let Err(error) = outcome {
+                first_failure = first_failure.or(Some(error));
             }
         }
         first_failure.map_or(Ok(()), Err)
@@ -313,6 +394,7 @@ impl<R: Runtime, P: PortTypes> DailyValuationPort for AppStoredJobs<R, P> {
         &self,
         _now: Timestamp,
     ) -> impl Future<Output = Result<Vec<CalendarDate>, JobError>> + Send {
+        self.refresh_performance();
         std::future::ready(Ok(Vec::new()))
     }
 

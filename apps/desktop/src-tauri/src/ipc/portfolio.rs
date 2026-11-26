@@ -287,7 +287,7 @@ fn today(valuation: &PortfolioValuation) -> Option<UiSignedAmount> {
     signed(amount, percent(&daily.rate()))
 }
 
-fn view_outcome<T>(view: &RecordedView<T>) -> Result<&T, IpcError> {
+pub(crate) fn view_outcome<T>(view: &RecordedView<T>) -> Result<&T, IpcError> {
     match view.outcome() {
         SyncOutcome::Complete(value) | SyncOutcome::Partial(value) => Ok(value),
         SyncOutcome::Failed => Err(IpcError {
@@ -332,7 +332,7 @@ pub fn to_portfolio_view(
     })
 }
 
-fn level(
+pub(crate) fn level(
     weight: &domain::AssetWeight,
     profile: &InvestorProfile,
     kind: domain::FundKind,
@@ -348,7 +348,7 @@ fn level(
     }
 }
 
-fn weight_text(display: &domain::AllocationDisplay) -> String {
+pub(crate) fn weight_text(display: &domain::AllocationDisplay) -> String {
     match display.range() {
         AllocationDisplayRange::Zero => String::from("0"),
         AllocationDisplayRange::BelowUnit => String::from("0.01"),
@@ -455,7 +455,9 @@ pub fn to_allocation_view(
     }
 }
 
-fn stored<T>(loaded: Result<StoredView<T>, SystemPortError>) -> Result<RecordedView<T>, IpcError> {
+pub(crate) fn stored<T>(
+    loaded: Result<StoredView<T>, SystemPortError>,
+) -> Result<RecordedView<T>, IpcError> {
     match loaded.map_err(|error| IpcError::from(application::ClassifiedError::class(&error)))? {
         StoredView::Missing => Err(IpcError {
             kind: IpcErrorKind::NoData,
@@ -489,7 +491,7 @@ pub async fn load_allocation(
     Ok(to_allocation_view(allocation, directory, &profile))
 }
 
-fn managed<R: Runtime>(
+pub(crate) fn managed<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(&ScreenState, InstrumentDirectory), IpcError> {
     let screen = app.try_state::<ScreenState>().ok_or(IpcError {

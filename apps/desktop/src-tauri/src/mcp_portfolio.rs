@@ -3,10 +3,10 @@ use std::sync::Arc;
 use application::{
     AllocationAxis, AllocationLabel, AllocationLine, AllocationToolView, BuyingPowerLine,
     ConcentrationLine, GetAllocationView, GetPortfolioView, HoldingToolLine, MarketDataRepository,
-    PerformancePeriod, PerformanceToolView, PortfolioRepository, PortfolioToolReads,
-    PortfolioToolView, RecordedView, RetryDelay, RiskMetrics, SampleSufficiency, StoredView,
-    SystemFailure, SystemPort, SystemPortError, TransactionRepository, TransactionToolKind,
-    TransactionToolLine, TransactionsToolView,
+    PerformancePeriod, PerformanceSummary, PerformanceToolView, PortfolioRepository,
+    PortfolioToolReads, PortfolioToolView, RecordedView, RetryDelay, RiskMetrics,
+    SampleSufficiency, StoredView, SystemFailure, SystemPort, SystemPortError,
+    TransactionRepository, TransactionToolKind, TransactionToolLine, TransactionsToolView,
 };
 use domain::{
     AccountId, AllocationCurrency, AllocationDisplay, AllocationDisplayRange, AllocationEntry,
@@ -18,6 +18,7 @@ use domain::{
 use crate::broker_link::AccountSlot;
 use crate::holdings_link::InstrumentDirectory;
 use crate::ipc::state::BoxFuture;
+use crate::performance_book::PerformanceBook;
 use crate::sector_classes::SectorClasses;
 
 #[cfg(test)]
@@ -30,6 +31,7 @@ pub struct StoredPortfolioTools<P, S, T = S> {
     accounts: AccountSlot,
     directory: InstrumentDirectory,
     sectors: Option<Arc<SectorClasses>>,
+    performance: Option<Arc<PerformanceBook>>,
 }
 
 impl<P, S, T> std::fmt::Debug for StoredPortfolioTools<P, S, T> {
@@ -53,6 +55,15 @@ impl<P, S, T> StoredPortfolioTools<P, S, T> {
             accounts,
             directory,
             sectors: None,
+            performance: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_performance(self, performance: Arc<PerformanceBook>) -> Self {
+        Self {
+            performance: Some(performance),
+            ..self
         }
     }
 
@@ -94,6 +105,27 @@ fn units_ratio(display: &AllocationDisplay) -> Option<Ratio> {
     let (whole, part) = digits.split_at_checked(digits.len().saturating_sub(4))?;
     let input = NumericInput::try_new(&format!("{whole}.{part}")).ok()?;
     Ratio::parse(&input).ok()
+}
+
+const fn span_of(period: PerformancePeriod) -> Option<domain::PerformanceSpan> {
+    match period {
+        PerformancePeriod::OneMonth => Some(domain::PerformanceSpan::OneMonth),
+        PerformancePeriod::ThreeMonths => Some(domain::PerformanceSpan::ThreeMonths),
+        PerformancePeriod::SixMonths => Some(domain::PerformanceSpan::SixMonths),
+        PerformancePeriod::OneYear => Some(domain::PerformanceSpan::OneYear),
+        PerformancePeriod::SinceStart => None,
+    }
+}
+
+fn value_ratio(value: domain::PerformanceValue) -> Option<Ratio> {
+    Ratio::parse(&NumericInput::try_new(&value.to_string()).ok()?).ok()
+}
+
+fn metric_ratio(metric: domain::RiskMetric) -> Option<Ratio> {
+    match metric {
+        domain::RiskMetric::Value(value) => value_ratio(value),
+        domain::RiskMetric::InsufficientSamples | domain::RiskMetric::Unavailable(_) => None,
+    }
 }
 
 fn tool_name(symbol: &Symbol, directory: &InstrumentDirectory) -> Option<DisplayInstrumentName> {
@@ -326,6 +358,11 @@ where
         }))
     }
 
+    fn performance_summary(&self, period: PerformancePeriod) -> Option<PerformanceSummary> {
+        let span = span_of(period)?;
+        self.performance.as_ref()?.summary(span)
+    }
+
     async fn assignments(&self, account: &AccountId) -> Option<SectorAssignments> {
         let sectors = self.sectors.as_ref()?;
         let masters: Vec<MasterInstrument> = match self.portfolios.latest(account).await {
@@ -382,17 +419,33 @@ where
         else {
             return Ok(None);
         };
-        Ok(Some(PerformanceToolView {
-            account: masked,
-            period,
-            computed_at: view.recorded_at(),
-            sample: SampleSufficiency::Insufficient,
-            time_weighted_return: None,
-            money_weighted_return: None,
-            benchmarks: Vec::new(),
-            risk: RiskMetrics {
-                annualized_volatility: None,
-                max_drawdown: None,
+        let summary = self.performance_summary(period);
+        Ok(Some(match summary {
+            Some(found) => PerformanceToolView {
+                account: masked,
+                period,
+                computed_at: view.recorded_at(),
+                sample: SampleSufficiency::Sufficient,
+                time_weighted_return: value_ratio(found.performance.twr()),
+                money_weighted_return: found.performance.mwr().ok().and_then(value_ratio),
+                benchmarks: Vec::new(),
+                risk: RiskMetrics {
+                    annualized_volatility: metric_ratio(found.volatility.annual()),
+                    max_drawdown: metric_ratio(found.drawdown),
+                },
+            },
+            None => PerformanceToolView {
+                account: masked,
+                period,
+                computed_at: view.recorded_at(),
+                sample: SampleSufficiency::Insufficient,
+                time_weighted_return: None,
+                money_weighted_return: None,
+                benchmarks: Vec::new(),
+                risk: RiskMetrics {
+                    annualized_volatility: None,
+                    max_drawdown: None,
+                },
             },
         }))
     }
