@@ -2451,6 +2451,17 @@ export type UiPortfolioView_Serialize = {
   today: UiSignedAmount | null;
 };
 
+export type UiPrincipleCheck = {
+  holdings_after: string;
+  minimum_holdings: string;
+  holdings: UiPrincipleStatus;
+  cash_percent_after: string;
+  minimum_cash_percent: string;
+  cash: UiPrincipleStatus;
+};
+
+export type UiPrincipleStatus = "met" | "below";
+
 export type UiPrinciples = {
   text: string;
   cash_min_percent: UiCashMinPercent;
@@ -2874,6 +2885,7 @@ export type UiTradeSimulation_Deserialize = {
   total_after?: UiMoney | null;
   cash_after: UiCashAfter[];
   instruments: UiSimulatedInstrument_Deserialize[];
+  principles?: UiPrincipleCheck | null;
 };
 
 export type UiTradeSimulation_Serialize = {
@@ -2883,6 +2895,7 @@ export type UiTradeSimulation_Serialize = {
   total_after: UiMoney | null;
   cash_after: UiCashAfter[];
   instruments: UiSimulatedInstrument_Serialize[];
+  principles: UiPrincipleCheck | null;
 };
 
 export type UiTrading = "trading" | "suspended";

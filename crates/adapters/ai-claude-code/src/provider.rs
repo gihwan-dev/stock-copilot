@@ -1252,7 +1252,7 @@ const fn topic_label(topic: CollectionTopic) -> &'static str {
 pub(crate) fn format_resumed_prompt(history: &ChatHistory, message: &UntrustedText) -> String {
     let tagged = format!(
         "{}\n{}",
-        application::chat_answer_mode(message).as_tag(),
+        application::chat_answer_mode(message).tag().as_str(),
         message.as_untrusted_str()
     );
     if history.messages().is_empty() {

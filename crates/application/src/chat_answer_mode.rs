@@ -6,13 +6,23 @@ pub enum ChatAnswerMode {
     Plan,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatAnswerModeTag(String);
+
+impl ChatAnswerModeTag {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 impl ChatAnswerMode {
     #[must_use]
-    pub const fn as_tag(self) -> &'static str {
-        match self {
+    pub fn tag(self) -> ChatAnswerModeTag {
+        ChatAnswerModeTag(String::from(match self {
             Self::Short => "[answer_mode:short]",
             Self::Plan => "[answer_mode:plan]",
-        }
+        }))
     }
 }
 
@@ -92,7 +102,7 @@ mod tests {
 
     #[test]
     fn tags_are_fixed_strings_the_prompt_refers_to() {
-        assert_eq!(ChatAnswerMode::Short.as_tag(), "[answer_mode:short]");
-        assert_eq!(ChatAnswerMode::Plan.as_tag(), "[answer_mode:plan]");
+        assert_eq!(ChatAnswerMode::Short.tag().as_str(), "[answer_mode:short]");
+        assert_eq!(ChatAnswerMode::Plan.tag().as_str(), "[answer_mode:plan]");
     }
 }
