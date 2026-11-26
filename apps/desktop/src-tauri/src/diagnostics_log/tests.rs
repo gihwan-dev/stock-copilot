@@ -214,3 +214,50 @@ fn scheduled_job_runs_and_full_inspection_get_their_own_lines() {
         "2027-01-15T17:00:00+09:00 sync job=transactions-full-inspection result=complete"
     );
 }
+
+fn later(seconds: i64) -> Timestamp {
+    Timestamp::from_parts(
+        UnixSeconds::new(1_800_000_000_i64.checked_add(seconds).expect("시각")),
+        Nanosecond::new(0),
+        OffsetSeconds::new(0),
+    )
+    .expect("time")
+}
+
+#[test]
+fn successful_calls_become_one_line_per_window_while_failures_stay_immediate() {
+    use super::{CallRouting, CallTally};
+    let mut tally = CallTally::default();
+    let ok = call(CallResult::Status(HttpStatusCode::new(200)), None);
+    assert_eq!(tally.observe(at(), &ok), (CallRouting::Tallied, None));
+    assert_eq!(tally.observe(later(60), &ok), (CallRouting::Tallied, None));
+    let failed = call(
+        CallResult::Status(HttpStatusCode::new(500)),
+        Some("server-error"),
+    );
+    assert_eq!(
+        tally.observe(later(90), &failed),
+        (CallRouting::WriteNow, None)
+    );
+    let timeout = call(CallResult::Transport(TransportFailure::Timeout), None);
+    assert_eq!(
+        tally.observe(later(95), &timeout),
+        (CallRouting::WriteNow, None)
+    );
+    let (routing, summary) = tally.observe(later(1_800), &ok);
+    assert_eq!(routing, CallRouting::Tallied);
+    assert_eq!(
+        summary.as_deref(),
+        Some("2027-01-15T17:30:00+09:00 toss-calls ok minutes=30 GET /api/v1/holdings=2")
+    );
+    let sync_line = sync(SyncJob::Portfolio, SyncResult::Complete, Vec::new());
+    assert_eq!(
+        tally.observe(later(1_900), &sync_line),
+        (CallRouting::WriteNow, None)
+    );
+    assert_eq!(
+        tally.flush(later(2_000)).as_deref(),
+        Some("2027-01-15T17:33:20+09:00 toss-calls ok minutes=3 GET /api/v1/holdings=1")
+    );
+    assert_eq!(tally.flush(later(2_100)), None);
+}

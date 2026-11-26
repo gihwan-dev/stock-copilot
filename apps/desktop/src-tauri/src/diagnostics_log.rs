@@ -34,6 +34,86 @@ pub struct DiagnosticsLog {
     clock: Arc<dyn Clock>,
     lines: Sender<String>,
     portfolio: RwLock<Option<SyncFailureReason>>,
+    calls: RwLock<CallTally>,
+}
+
+pub const CALL_TALLY_SECONDS: i64 = 1_800;
+
+#[derive(Debug, Default)]
+pub struct CallTally {
+    started: Option<Timestamp>,
+    counts: std::collections::BTreeMap<String, u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallRouting {
+    Tallied,
+    WriteNow,
+}
+
+fn routine_call(event: &DiagnosticEvent) -> Option<String> {
+    let DiagnosticEvent::BrokerCall(call) = event else {
+        return None;
+    };
+    let CallResult::Status(status) = call.result else {
+        return None;
+    };
+    let ok = (200..300).contains(status.as_u16()) && call.code.is_none();
+    ok.then(|| {
+        let method = match call.method {
+            CallMethod::Get => "GET",
+            CallMethod::Post => "POST",
+        };
+        format!("{method} {}", call.path.as_str())
+    })
+}
+
+impl CallTally {
+    pub fn observe(
+        &mut self,
+        at: Timestamp,
+        event: &DiagnosticEvent,
+    ) -> (CallRouting, Option<String>) {
+        let due = self.started.is_some_and(|started| {
+            at.utc_seconds()
+                .as_i64()
+                .saturating_sub(*started.utc_seconds().as_i64())
+                >= CALL_TALLY_SECONDS
+        });
+        let summary = if due { self.flush(at) } else { None };
+        match routine_call(event) {
+            Some(key) => {
+                if self.started.is_none() {
+                    self.started = Some(at);
+                }
+                let count = self.counts.entry(key).or_insert(0);
+                *count = count.saturating_add(1);
+                (CallRouting::Tallied, summary)
+            }
+            None => (CallRouting::WriteNow, summary),
+        }
+    }
+
+    pub fn flush(&mut self, at: Timestamp) -> Option<String> {
+        let started = self.started.take()?;
+        let parts: Vec<String> = self
+            .counts
+            .iter()
+            .map(|(key, count)| format!("{key}={count}"))
+            .collect();
+        self.counts.clear();
+        let minutes = at
+            .utc_seconds()
+            .as_i64()
+            .saturating_sub(*started.utc_seconds().as_i64())
+            .checked_div(60)
+            .unwrap_or(0);
+        Some(format!(
+            "{} toss-calls ok minutes={minutes} {}",
+            kst_iso(at).unwrap_or_else(|| String::from("unknown-time")),
+            parts.join(" ")
+        ))
+    }
 }
 
 impl std::fmt::Debug for DiagnosticsLog {
@@ -53,6 +133,7 @@ impl DiagnosticsLog {
             clock,
             lines,
             portfolio: RwLock::new(None),
+            calls: RwLock::new(CallTally::default()),
         })
     }
 
@@ -92,8 +173,17 @@ impl DiagnosticsSink for DiagnosticsLog {
         if let DiagnosticEvent::Sync(diagnosis) = event {
             self.remember(diagnosis);
         }
-        let line = format_line(self.clock.now(), event);
-        let _queued = self.lines.send(line);
+        let now = self.clock.now();
+        let (routing, summary) = match self.calls.write() {
+            Ok(mut tally) => tally.observe(now, event),
+            Err(poisoned) => poisoned.into_inner().observe(now, event),
+        };
+        if let Some(line) = summary {
+            let _queued = self.lines.send(line);
+        }
+        if routing == CallRouting::WriteNow {
+            let _queued = self.lines.send(format_line(now, event));
+        }
     }
 }
 
