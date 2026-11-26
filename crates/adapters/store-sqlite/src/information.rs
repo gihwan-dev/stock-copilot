@@ -511,6 +511,27 @@ impl CollectedTimes for InformationStore<'_> {
     }
 }
 
+impl application::CollectedPresenceCheck for InformationStore<'_> {
+    async fn presence(
+        &self,
+        url: &NormalizedUrl,
+    ) -> Result<application::CollectedPresence, SystemPortError> {
+        let wanted = url.as_str().to_owned();
+        let stored: Option<String> = self
+            .database
+            .read(move |connection| {
+                connection
+                    .query_row(sql::KNOWN_URL, [wanted], |row| row.get(0))
+                    .optional()
+            })
+            .await?;
+        Ok(match stored {
+            Some(_) => application::CollectedPresence::Stored,
+            None => application::CollectedPresence::New,
+        })
+    }
+}
+
 impl application::CollectedUrlCatalog for InformationStore<'_> {
     async fn find_collected(
         &self,

@@ -727,7 +727,7 @@ pub use headline_grouping::{
 };
 
 mod tracked_news;
-pub use tracked_news::TrackedInstrument;
+pub use tracked_news::{CollectedPresence, CollectedPresenceCheck, TrackedInstrument};
 
 mod news_retention;
 pub use news_retention::{

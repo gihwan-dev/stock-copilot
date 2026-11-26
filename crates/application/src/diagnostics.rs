@@ -146,6 +146,7 @@ pub struct FeedDiagnosis {
     pub result: FeedRunResult,
     pub fetched: CollectedCount,
     pub duplicates: CollectedCount,
+    pub known: CollectedCount,
     pub stored: CollectedCount,
     pub linked: CollectedCount,
     pub probe: LinkProbe,

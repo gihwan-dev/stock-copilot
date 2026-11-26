@@ -129,3 +129,24 @@ fn assert_pruned(rt: &tokio::runtime::Runtime, store: &InformationStore<'_>) {
         0
     );
 }
+
+#[test]
+fn presence_reports_only_urls_that_are_already_stored() {
+    use application::{CollectedPresence, CollectedPresenceCheck};
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = InformationStore::new(&database);
+    let item = news(NewsSource::Yonhap, "https://www.yna.co.kr/view/known");
+    rt.block_on(store.store(&item)).expect("저장");
+    assert_eq!(
+        rt.block_on(store.presence(item.collected().url())),
+        Ok(CollectedPresence::Stored)
+    );
+    let other = NormalizedUrl::try_new("https://www.yna.co.kr/view/new").expect("주소");
+    assert_eq!(
+        rt.block_on(store.presence(&other)),
+        Ok(CollectedPresence::New)
+    );
+}

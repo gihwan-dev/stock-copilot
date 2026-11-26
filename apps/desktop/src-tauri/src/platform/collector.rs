@@ -464,7 +464,7 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed + 'static> FeedRunner for AppFeedRunn
                 Some(found) => plain.with_names(found, hints.as_ref().map(tauri::State::inner)),
                 None => plain,
             };
-            let watched = WatchedFeed::new(&self.feed, &self.headlines);
+            let watched = WatchedFeed::new(&self.feed, &self.headlines, &self.repositories);
             let round = CollectFeed::new(
                 &self.repositories,
                 &self.repositories,
