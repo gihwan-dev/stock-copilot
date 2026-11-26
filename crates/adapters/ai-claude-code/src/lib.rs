@@ -1,4 +1,5 @@
 mod attachment;
+mod chat_prompt;
 mod chat_session;
 mod collection;
 mod command;
@@ -15,6 +16,7 @@ mod quota;
 mod sandbox;
 
 pub use attachment::{RunMcpAttachment, SpawnedPidNotice};
+pub use chat_prompt::CHAT_SYSTEM_PROMPT;
 pub use chat_session::{
     ChatProcessReuse, ChatTurnConfig, ChatTurnOutput, CliRecordCleanup, PersistentChatSession,
     cleanup_cli_project_records, encode_claude_project_dir_name,
