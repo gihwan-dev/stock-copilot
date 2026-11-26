@@ -1,11 +1,11 @@
 use crate::{Clock, PortError, SystemPortError, TransactionSyncRepository};
 use domain::{
     AccountId, BuyingPower, CalendarDate, CashAnchor, CashUnavailable, CompleteTransactionResponse,
-    Currency, LedgerEvidence, Performance, PerformanceCurrency, PerformanceError, PerformanceRisk,
-    PerformanceSpan, RiskMetric, SettledRowSet, SettlementWindow, SnapshotError,
+    Currency, DayFx, LedgerEvidence, Performance, PerformanceCurrency, PerformanceError,
+    PerformanceRisk, PerformanceSpan, RiskMetric, SettledRowSet, SettlementWindow, SnapshotError,
     SnapshotInstrumentHistory, ValuationSnapshot, WindowDay, WindowLedger, anchored_window_ledger,
     derived_window_ledger, performance_max_drawdown, performance_volatility, performance_window,
-    recompute_window_day, window_dates,
+    recompute_window_day, recompute_window_day_with_fallback, window_dates,
 };
 use std::future::Future;
 
@@ -65,6 +65,7 @@ pub struct PerformanceSummary {
     pub drawdown: RiskMetric,
     pub skipped: Vec<(CalendarDate, SnapshotError)>,
     pub cash: Vec<(Currency, CashAnchor)>,
+    pub stale_fx: Vec<CalendarDate>,
 }
 
 #[derive(Debug)]
@@ -190,18 +191,7 @@ where
         let mut dropped = Vec::new();
         for _attempt in 0_u8..4_u8 {
             match calculate(&inputs, &days)? {
-                Calculated::Done(performance, skipped, cash) => {
-                    dropped.extend(skipped);
-                    dropped.sort_by_key(|entry: &(CalendarDate, SnapshotError)| entry.0);
-                    return Ok(PerformanceSummary {
-                        span,
-                        volatility: performance_volatility(&performance),
-                        drawdown: performance_max_drawdown(&performance),
-                        performance: *performance,
-                        skipped: dropped,
-                        cash,
-                    });
-                }
+                Calculated::Done(done) => return Ok(summarize(span, *done, dropped)),
                 Calculated::Trim(edges) => {
                     days.retain(|entry| edges.iter().all(|edge| edge.0 != entry.0));
                     dropped.extend(edges);
@@ -264,6 +254,7 @@ fn calculate(
         snapshots,
         rates,
         skipped,
+        stale_fx,
     } = recompute_days(days, inputs.rows, inputs.histories, (&kr, &us), inputs.now);
     let valued: Vec<CalendarDate> = snapshots
         .iter()
@@ -287,19 +278,41 @@ fn calculate(
         PerformanceCurrency::ConvertedKrw,
     )
     .map_err(PerformanceRunError::Performance)?;
-    Ok(Calculated::Done(
-        Box::new(performance),
+    Ok(Calculated::Done(Box::new(Done {
+        performance,
         skipped,
-        vec![(Currency::Krw, kr_anchor), (Currency::Usd, us_anchor)],
-    ))
+        cash: vec![(Currency::Krw, kr_anchor), (Currency::Usd, us_anchor)],
+        stale_fx,
+    })))
+}
+
+fn summarize(
+    span: PerformanceSpan,
+    done: Done,
+    mut dropped: Vec<(CalendarDate, SnapshotError)>,
+) -> PerformanceSummary {
+    dropped.extend(done.skipped);
+    dropped.sort_by_key(|entry: &(CalendarDate, SnapshotError)| entry.0);
+    PerformanceSummary {
+        span,
+        volatility: performance_volatility(&done.performance),
+        drawdown: performance_max_drawdown(&done.performance),
+        performance: done.performance,
+        skipped: dropped,
+        cash: done.cash,
+        stale_fx: done.stale_fx,
+    }
+}
+
+struct Done {
+    performance: Performance,
+    skipped: Vec<(CalendarDate, SnapshotError)>,
+    cash: Vec<(Currency, CashAnchor)>,
+    stale_fx: Vec<CalendarDate>,
 }
 
 enum Calculated {
-    Done(
-        Box<Performance>,
-        Vec<(CalendarDate, SnapshotError)>,
-        Vec<(Currency, CashAnchor)>,
-    ),
+    Done(Box<Done>),
     Trim(Vec<(CalendarDate, SnapshotError)>),
 }
 
@@ -307,6 +320,7 @@ struct Recomputed {
     snapshots: Vec<ValuationSnapshot>,
     rates: Vec<domain::FxRate>,
     skipped: Vec<(CalendarDate, SnapshotError)>,
+    stale_fx: Vec<CalendarDate>,
 }
 
 fn recompute_days(
@@ -317,13 +331,18 @@ fn recompute_days(
     now: domain::Timestamp,
 ) -> Recomputed {
     let mut snapshots = Vec::new();
-    let mut rates = Vec::new();
+    let mut rates: Vec<domain::FxRate> = Vec::new();
     let mut skipped = Vec::new();
+    let mut stale_fx = Vec::new();
     for (date, day) in days {
-        match recompute_window_day(day, rows, histories, ledgers, now) {
-            Ok(snapshot) => {
+        let fallback = rates.last().copied();
+        match recompute_window_day_with_fallback(day, rows, histories, ledgers, (now, fallback)) {
+            Ok((snapshot, used)) => {
                 snapshots.push(snapshot);
-                rates.extend(day.fx);
+                match used {
+                    DayFx::OfTheDay => rates.extend(day.fx),
+                    DayFx::StaleWithSmallDollarShare => stale_fx.push(*date),
+                }
             }
             Err(reason) => skipped.push((*date, reason)),
         }
@@ -332,6 +351,7 @@ fn recompute_days(
         snapshots,
         rates,
         skipped,
+        stale_fx,
     }
 }
 

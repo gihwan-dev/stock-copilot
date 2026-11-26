@@ -288,6 +288,76 @@ pub fn recompute_window_day(
     ValuationSnapshot::recompute(input)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DayFx {
+    OfTheDay,
+    StaleWithSmallDollarShare,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DollarShare {
+    Small,
+    Material,
+}
+
+fn dollar_share(snapshot: &ValuationSnapshot, rate: FxRate) -> Result<DollarShare, SnapshotError> {
+    let dollars = snapshot.account_value(Currency::Usd)?.amount().as_decimal();
+    let total = snapshot
+        .account_krw_value()?
+        .clone()
+        .into_parts()
+        .0
+        .amount()
+        .as_decimal();
+    if total <= Decimal::ZERO {
+        return Ok(DollarShare::Material);
+    }
+    let converted = dollars
+        .abs()
+        .checked_mul(rate.quote_per_base().as_money().amount().as_decimal())
+        .ok_or(SnapshotError::MissingFx)?;
+    let share = converted
+        .checked_div(total)
+        .ok_or(SnapshotError::MissingFx)?;
+    let small = Decimal::new(1, 3);
+    Ok(if share < small {
+        DollarShare::Small
+    } else {
+        DollarShare::Material
+    })
+}
+
+pub fn recompute_window_day_with_fallback(
+    day: &WindowDay,
+    rows: &SettledRowSet,
+    histories: &[SnapshotInstrumentHistory],
+    ledgers: (&WindowLedger, &WindowLedger),
+    (recorded_at, fallback): (Timestamp, Option<FxRate>),
+) -> Result<(ValuationSnapshot, DayFx), SnapshotError> {
+    let original = match recompute_window_day(day, rows, histories, ledgers, recorded_at) {
+        Ok(snapshot) => return Ok((snapshot, DayFx::OfTheDay)),
+        Err(reason @ (SnapshotError::MissingFx | SnapshotError::InvalidFx)) => reason,
+        Err(other) => return Err(other),
+    };
+    let at = valuation_time(day.calendar.dates().date(Currency::Krw));
+    let carried = fallback.and_then(|rate| {
+        let until = at.checked_add(crate::TimeSpan::DAY).ok()?;
+        rate.carried_to(crate::TimeInterval::try_new(at, until).ok()?)
+    });
+    let Some(rate) = carried else {
+        return Err(original);
+    };
+    let retried = WindowDay {
+        calendar: day.calendar,
+        fx: Some(rate),
+    };
+    let snapshot = recompute_window_day(&retried, rows, histories, ledgers, recorded_at)?;
+    match dollar_share(&snapshot, rate)? {
+        DollarShare::Small => Ok((snapshot, DayFx::StaleWithSmallDollarShare)),
+        DollarShare::Material => Err(original),
+    }
+}
+
 #[must_use]
 pub fn performance_max_drawdown(performance: &Performance) -> RiskMetric {
     if performance.returns.is_empty() {

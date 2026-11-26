@@ -326,3 +326,32 @@ fn a_rate_is_carried_forward_only_to_later_times() {
     let earlier = crate::TimeInterval::try_new(at(4, 7), at(4, 8)).expect("구간");
     assert_eq!(friday.carried_to(earlier), None);
 }
+
+#[test]
+fn a_missing_rate_is_replaced_only_when_dollars_are_a_tiny_share() {
+    use super::{DayFx, recompute_window_day_with_fallback};
+    let run = |dollars: &str| {
+        let set = set(vec![
+            tx(TransactionKind::Deposit, Currency::Krw, 2, 1, "1000000"),
+            tx(TransactionKind::Deposit, Currency::Usd, 2, 1, dollars),
+        ]);
+        let span = window(4, 5);
+        let kr = derived_window_ledger(&set, span, Currency::Krw, evidence(&set, span), at(20, 0))
+            .expect("원화");
+        let us = derived_window_ledger(&set, span, Currency::Usd, evidence(&set, span), at(20, 0))
+            .expect("달러");
+        recompute_window_day_with_fallback(
+            &WindowDay {
+                calendar: calendar(5),
+                fx: None,
+            },
+            &set,
+            &[],
+            (&kr, &us),
+            (at(20, 0), Some(fx(at(4, 7), "1300"))),
+        )
+        .map(|(_snapshot, used)| used)
+    };
+    assert_eq!(run("0.12"), Ok(DayFx::StaleWithSmallDollarShare));
+    assert_eq!(run("1000"), Err(SnapshotError::MissingFx));
+}

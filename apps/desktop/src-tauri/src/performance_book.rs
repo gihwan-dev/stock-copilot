@@ -369,10 +369,14 @@ fn record_outcome(
                 .join(",");
             match summary.skipped.first() {
                 Some((_date, reason)) => format!(
-                    "result=complete cash={cash} skipped_days={} first_skip={reason:?}",
+                    "result=complete cash={cash} stale_fx_days={} skipped_days={} first_skip={reason:?}",
+                    summary.stale_fx.len(),
                     summary.skipped.len()
                 ),
-                None => format!("result=complete cash={cash} skipped_days=0"),
+                None => format!(
+                    "result=complete cash={cash} stale_fx_days={} skipped_days=0",
+                    summary.stale_fx.len()
+                ),
             }
         }
         Err(error) => format!("result=failed reason={error:?}"),
