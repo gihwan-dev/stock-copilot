@@ -208,6 +208,13 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     ) -> Result<domain::MarketCalendar, PortError> {
         crate::market_calendar::fetch_on(self, market, date).await
     }
+    pub async fn history_daily_candles(
+        &self,
+        instrument: &domain::QuoteInstrument,
+        window: domain::TimeInterval,
+    ) -> Result<Vec<domain::Candle>, PortError> {
+        crate::market_read::candles::history(self, instrument, window).await
+    }
     pub fn tokens(&self) -> &TokenManager<Store, Time, Renewal> {
         &self.tokens
     }

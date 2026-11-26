@@ -56,7 +56,8 @@ export type CoreUiEvent =
   | { readonly category: "transactions"; readonly kind: TransactionEventKind }
   | { readonly category: "status"; readonly kind: StatusEventKind }
   | { readonly category: "activity"; readonly kind: ActivityEventKind }
-  | { readonly category: "briefing"; readonly kind: "BriefingFinished" };
+  | { readonly category: "briefing"; readonly kind: "BriefingFinished" }
+  | { readonly category: "navigation"; readonly kind: "ShowDataStatus" };
 
 const nonEmptyId = z.string().min(1);
 const marketSchema = z.enum(["Kr", "Us"]);
@@ -112,6 +113,7 @@ const unitEvents: ReadonlyMap<string, CoreUiEvent> = new Map<
   unitEntry({ category: "status", kind: "SelfCheckChanged" }),
   unitEntry({ category: "status", kind: "BrokerConnectionChanged" }),
   unitEntry({ category: "status", kind: "AiBudgetChanged" }),
+  unitEntry({ category: "navigation", kind: "ShowDataStatus" }),
 ]);
 
 type KeyedEntry = {

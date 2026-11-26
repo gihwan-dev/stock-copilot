@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
 export { detach } from "./detach";
-export { useCoreEvent } from "./useCoreEvent";
+export { useCoreEvent, useNavigationEvent } from "./useCoreEvent";
 
 export const mountApp = (app: Readonly<ReactElement>): void => {
   const container = document.getElementById("root");
