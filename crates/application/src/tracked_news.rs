@@ -1,4 +1,4 @@
-use crate::SystemPortError;
+use crate::{AliasName, SystemPortError};
 use domain::{DisplayInstrumentName, InstrumentId, KnownMarket, NormalizedUrl, Symbol};
 use std::future::Future;
 
@@ -7,6 +7,7 @@ pub struct TrackedInstrument {
     pub symbol: Symbol,
     pub market: KnownMarket,
     pub name: DisplayInstrumentName,
+    pub aliases: Vec<AliasName>,
 }
 
 impl TrackedInstrument {

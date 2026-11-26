@@ -5134,6 +5134,7 @@ mod news_linking_tests {
             symbol: Symbol::try_new(symbol).expect("종목"),
             market,
             name: DisplayInstrumentName::try_new(name).expect("이름"),
+            aliases: Vec::new(),
         }
     }
 

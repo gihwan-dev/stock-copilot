@@ -163,6 +163,7 @@ pub struct LinkProbe {
     pub matched: CollectedCount,
     pub needs_context: CollectedCount,
     pub group_only: CollectedCount,
+    pub boundary: CollectedCount,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,6 +211,10 @@ pub enum DiagnosticEvent {
     SourceRejected {
         source: DataSource,
         detail: DiagnosticText,
+    },
+    Relinked {
+        instruments: CollectedCount,
+        items: CollectedCount,
     },
 }
 

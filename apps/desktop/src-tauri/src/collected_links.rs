@@ -1,8 +1,8 @@
 use crate::news_tracking::MatchName;
 use application::{
-    CollectedCount, CollectedEntry, CollectedTimes, InformationKey, InformationLinks, LinkProbe,
-    NewsDataSettings, NewsDataSettingsRepository, PublicationTime, StockAlias, SystemPortError,
-    WriteCompleted,
+    CollectedCount, CollectedEntry, CollectedItemReads, CollectedKind, CollectedTimes,
+    InformationKey, InformationLinks, LinkProbe, NewsDataSettings, NewsDataSettingsRepository,
+    PublicationTime, StockAlias, SystemPortError, WriteCompleted,
 };
 use domain::{InformationSource, InstrumentId, NormalizedUrl, Timestamp, UntrustedText};
 use sources::NewsLinkHints;
@@ -13,6 +13,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod relink_tests;
 
 pub trait TitleLinker: Send + Sync {
     fn instruments_in(&self, title: &UntrustedText, aliases: &[StockAlias]) -> Vec<InstrumentId>;
@@ -39,6 +42,7 @@ struct ProbeCounts {
     matched: AtomicU32,
     needs_context: AtomicU32,
     group_only: AtomicU32,
+    boundary: AtomicU32,
 }
 
 fn bump(counter: &AtomicU32) {
@@ -85,6 +89,7 @@ impl<'a, S> LinkingTimes<'a, S> {
                 matched: AtomicU32::new(0),
                 needs_context: AtomicU32::new(0),
                 group_only: AtomicU32::new(0),
+                boundary: AtomicU32::new(0),
             },
         }
     }
@@ -113,6 +118,7 @@ impl<'a, S> LinkingTimes<'a, S> {
             matched: read(&self.probe.matched),
             needs_context: read(&self.probe.needs_context),
             group_only: read(&self.probe.group_only),
+            boundary: read(&self.probe.boundary),
         }
     }
 }
@@ -137,7 +143,7 @@ impl<S: Sync> TitleProbe for LinkingTimes<'_, S> {
             return;
         }
         match linker.probe_named(title, names) {
-            NameProbe::Quiet => {}
+            NameProbe::Quiet => bump(&self.probe.boundary),
             NameProbe::NeedsContext => bump(&self.probe.needs_context),
             NameProbe::GroupOnly => bump(&self.probe.group_only),
         }
@@ -149,6 +155,36 @@ const fn url_of(entry: &CollectedEntry) -> &NormalizedUrl {
         CollectedEntry::News(item) => item.collected().url(),
         CollectedEntry::Disclosure(item) => item.collected().url(),
     }
+}
+
+pub async fn relink_recent<S: CollectedItemReads + InformationLinks>(
+    store: &S,
+    linker: &dyn TitleLinker,
+    names: &[MatchName],
+    since: Timestamp,
+) -> Result<u32, SystemPortError> {
+    if names.is_empty() {
+        return Ok(0);
+    }
+    let mut changed = 0_u32;
+    for kind in [CollectedKind::News, CollectedKind::Disclosure] {
+        for item in store.collected_since(kind, since).await? {
+            let found = linker.instruments_named(title_of(&item.entry), names);
+            let mut merged: BTreeSet<InstrumentId> = item.instruments.iter().cloned().collect();
+            let before = merged.len();
+            merged.extend(found);
+            let Some(key) = key_of(&item.entry) else {
+                continue;
+            };
+            if merged.len() == before {
+                continue;
+            }
+            let all: Vec<InstrumentId> = merged.into_iter().collect();
+            let WriteCompleted = store.set_instruments(&key, &all).await?;
+            changed = changed.saturating_add(1);
+        }
+    }
+    Ok(changed)
 }
 
 fn key_of(entry: &CollectedEntry) -> Option<InformationKey> {

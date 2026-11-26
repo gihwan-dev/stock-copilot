@@ -38,6 +38,7 @@ mod tests {
             symbol: Symbol::try_new(symbol).expect("종목"),
             market,
             name: DisplayInstrumentName::try_new(name).expect("이름"),
+            aliases: Vec::new(),
         }
     }
 
@@ -328,5 +329,35 @@ mod tests {
                 .expect("수집"),
             DataAvailability::NoData
         );
+    }
+
+    #[test]
+    fn stored_aliases_add_google_searches_after_every_official_name() {
+        let mut samsung = tracked("005930", KnownMarket::Kr, "삼성전자");
+        samsung.aliases = vec![
+            application::AliasName::try_new("삼전").expect("약칭"),
+            application::AliasName::try_new("삼성전자").expect("같은 이름"),
+        ];
+        let searches = sources::with_alias_searches(vec![
+            samsung,
+            tracked("000660", KnownMarket::Kr, "SK하이닉스"),
+        ]);
+        let names: Vec<&str> = searches.iter().map(|search| search.name.as_str()).collect();
+        assert_eq!(names, vec!["삼성전자", "SK하이닉스", "삼전"]);
+        assert_eq!(searches[2].symbol.as_str(), "005930");
+        assert_eq!(
+            sources::google_query(&searches[2]),
+            "삼전",
+            "두 글자 약칭은 따옴표 없이"
+        );
+        let many: Vec<TrackedInstrument> = (0_u32..40)
+            .map(|index| {
+                let mut item = tracked("005930", KnownMarket::Kr, &format!("종목{index}"));
+                item.aliases =
+                    vec![application::AliasName::try_new(&format!("약칭{index}")).expect("약칭")];
+                item
+            })
+            .collect();
+        assert!(sources::with_alias_searches(many).len() <= sources::MAX_GOOGLE_SEARCHES.max(40));
     }
 }

@@ -80,6 +80,38 @@ impl TrackedSearch {
     }
 }
 
+pub const MAX_GOOGLE_SEARCHES: usize = 30;
+
+#[must_use]
+pub fn with_alias_searches(tracked: Vec<TrackedInstrument>) -> Vec<TrackedInstrument> {
+    let mut searches = Vec::with_capacity(tracked.len());
+    let mut asked: BTreeSet<String> = BTreeSet::new();
+    let mut extra = Vec::new();
+    for target in tracked {
+        asked.insert(target.name.as_str().trim().to_owned());
+        for alias in &target.aliases {
+            if let Ok(name) = domain::DisplayInstrumentName::try_new(alias.as_str()) {
+                extra.push(TrackedInstrument {
+                    symbol: target.symbol.clone(),
+                    market: target.market,
+                    name,
+                    aliases: Vec::new(),
+                });
+            }
+        }
+        searches.push(target);
+    }
+    for search in extra {
+        if searches.len() >= MAX_GOOGLE_SEARCHES {
+            break;
+        }
+        if asked.insert(search.name.as_str().trim().to_owned()) {
+            searches.push(search);
+        }
+    }
+    searches
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExactPhrase {
     Quoted,
@@ -284,7 +316,7 @@ impl NewsFeed for TrackedNewsFeed {
         &self,
         since: FeedCursor,
     ) -> Result<DataAvailability<(Vec<CollectedObservation>, FeedCursor)>, InformationError> {
-        let targets: Vec<TrackedInstrument> = self
+        let tracked: Vec<TrackedInstrument> = self
             .targets
             .tracked()
             .await
@@ -292,6 +324,10 @@ impl NewsFeed for TrackedNewsFeed {
             .filter(|target| self.search.wants(target.market))
             .take(MAX_TRACKED_TARGETS)
             .collect();
+        let targets = match self.search {
+            TrackedSearch::GoogleNews => with_alias_searches(tracked),
+            TrackedSearch::YahooFinance => tracked,
+        };
         if targets.is_empty() {
             return Ok(DataAvailability::NoData);
         }

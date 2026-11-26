@@ -99,6 +99,7 @@ mod tests {
             symbol: Symbol::try_new("AAPL").expect("종목"),
             market: KnownMarket::Us,
             name: DisplayInstrumentName::try_new("애플").expect("이름"),
+            aliases: Vec::new(),
         }
     }
 
@@ -187,6 +188,54 @@ mod tests {
         let requests = server.finish().expect("요청");
         let head = String::from_utf8_lossy(&requests[0]).into_owned();
         assert!(head.contains("bgn_de=20261112&end_de=20261112"), "{head}");
+    }
+
+    fn dart_page(page: u32, total: u32, receipts: &[&str]) -> String {
+        let rows: Vec<String> = receipts
+            .iter()
+            .map(|receipt| {
+                format!(
+                    r#"{{"corp_cls":"Y","corp_name":"삼성전자","corp_code":"00126380","stock_code":"005930","report_nm":"주요사항보고서","rcept_no":"{receipt}","flr_nm":"삼성전자","rcept_dt":"20261112","rm":""}}"#
+                )
+            })
+            .collect();
+        format!(
+            r#"{{"status":"000","page_no":{page},"total_page":{total},"total_count":{},"list":[{}]}}"#,
+            receipts.len(),
+            rows.join(",")
+        )
+    }
+
+    #[test]
+    fn dart_follows_pages_until_it_meets_seen_receipts_or_the_page_cap() {
+        let first = dart_page(1, 3, &["20261112000003", "20261112000002"]);
+        let second = dart_page(2, 2, &["20261112000001"]);
+        let again = dart_page(1, 3, &["20261112000003", "20261112000002"]);
+        let server = serve_sequence(vec![json(&first), json(&second), json(&again)]).expect("서버");
+        let feed = DartLatestFeed::new(
+            client(server.port()),
+            Arc::new(Inputs {
+                key: Some("0123456789abcdef0123456789abcdef01234567"),
+                contact: None,
+                tracked: Vec::new(),
+            }),
+            NewsLinkHints::default(),
+        );
+        let found = runtime()
+            .block_on(feed.new_items(FeedCursor::Start))
+            .expect("수집");
+        let DataAvailability::Available((items, _cursor)) = found else {
+            panic!("공시가 있어야 한다: {found:?}");
+        };
+        assert_eq!(items.len(), 3, "마지막 쪽까지 받는다");
+        assert_eq!(
+            runtime().block_on(feed.new_items(FeedCursor::Start)),
+            Ok(DataAvailability::NoData),
+            "첫 쪽이 모두 본 공시면 다음 쪽을 묻지 않는다"
+        );
+        let requests = server.finish().expect("요청");
+        assert_eq!(requests.len(), 3);
+        assert!(String::from_utf8_lossy(&requests[1]).contains("page_no=2"));
     }
 
     const SEC_TICKERS: &str =

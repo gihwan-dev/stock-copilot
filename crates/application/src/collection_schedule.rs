@@ -285,6 +285,25 @@ impl CollectionPlan {
     }
 
     #[must_use]
+    pub fn with_cadence(&self, target: CollectionTarget, cadence: CollectionCadence) -> Self {
+        Self {
+            phase: self.phase,
+            entries: self
+                .entries
+                .iter()
+                .map(|entry| PlannedCollection {
+                    target: entry.target,
+                    cadence: if entry.target == target {
+                        cadence
+                    } else {
+                        entry.cadence
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    #[must_use]
     pub fn cadence(&self, target: CollectionTarget) -> CollectionCadence {
         self.entries
             .iter()

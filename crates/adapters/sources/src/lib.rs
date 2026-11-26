@@ -72,12 +72,13 @@ pub use stock_matching::{
     MatchDictionaryEntry, MatchNameAmbiguity, MatchNameKind, StockMatcher, TitleMatch,
 };
 pub use tracked_disclosures::{
-    ContactFuture, DartKeySource, DartLatestFeed, SecClientParts, SecContactSource, SecTrackedFeed,
-    SecretFuture, kst_date, sec_contact_header,
+    ContactFuture, DartKeySource, DartLatestFeed, MAX_DART_PAGES, SecClientParts, SecContactSource,
+    SecTrackedFeed, SecretFuture, kst_date, sec_contact_header,
 };
 pub use tracked_news::{
-    MAX_ITEMS_PER_TARGET, MAX_TRACKED_TARGETS, NewsLinkHints, TRACKED_RECENCY_SECONDS,
-    TrackedNewsFeed, TrackedSearch, TrackedTargets, google_query, is_recent,
+    MAX_GOOGLE_SEARCHES, MAX_ITEMS_PER_TARGET, MAX_TRACKED_TARGETS, NewsLinkHints,
+    TRACKED_RECENCY_SECONDS, TrackedNewsFeed, TrackedSearch, TrackedTargets, google_query,
+    is_recent, with_alias_searches,
 };
 pub use us_macro::{
     FredSeries, TreasuryTenor, UsMacroClient, build_fred_observations_url,

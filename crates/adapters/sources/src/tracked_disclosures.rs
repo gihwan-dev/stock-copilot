@@ -23,6 +23,7 @@ use crate::{
 
 const KST_OFFSET_SECONDS: i32 = 9 * 3_600;
 const SEEN_LIMIT: usize = 4_000;
+pub const MAX_DART_PAGES: u32 = 5;
 const SEC_RECENT_SECONDS: u64 = 7_u64 * 86_400_u64;
 const SEC_FILINGS_PER_COMPANY: usize = 5;
 const SEC_MAP_REFRESH_SECONDS: u64 = 86_400;
@@ -100,6 +101,35 @@ impl DartLatestFeed {
             seen: Mutex::new(SeenKeys::default()),
         }
     }
+
+    async fn take_new(
+        &self,
+        page: &crate::DartDisclosurePage,
+        observations: &mut Vec<CollectedObservation>,
+    ) -> usize {
+        let collected_at = self.client.now();
+        let mut seen = self.seen.lock().await;
+        let before = observations.len();
+        for entry in page.entries() {
+            let disclosure = entry.disclosure().clone();
+            let url = disclosure.collected().url().clone();
+            if !seen.insert(url.as_str()) {
+                continue;
+            }
+            if let Some(instrument) = entry
+                .stock_code()
+                .and_then(|code| InstrumentId::try_new(code.as_str()).ok())
+            {
+                self.hints.remember(&url, instrument);
+            }
+            observations.push(CollectedObservation::new(
+                CollectedEntry::Disclosure(disclosure),
+                PublicationTime::NotProvided,
+                collected_at,
+            ));
+        }
+        observations.len().saturating_sub(before)
+    }
 }
 
 impl NewsFeed for DartLatestFeed {
@@ -122,31 +152,23 @@ impl NewsFeed for DartLatestFeed {
             return Ok(DataAvailability::NoData);
         };
         let dart = DartDisclosureClient::new(Arc::clone(&self.client), Some(Arc::new(key)));
-        let page = match dart.fetch_page(today, today, 1).await? {
-            DataAvailability::Available(page) => page,
-            DataAvailability::NotConfigured => return Ok(DataAvailability::NotConfigured),
-            DataAvailability::NoData => return Ok(DataAvailability::NoData),
-        };
-        let collected_at = self.client.now();
-        let mut seen = self.seen.lock().await;
         let mut observations = Vec::new();
-        for entry in page.entries() {
-            let disclosure = entry.disclosure().clone();
-            let url = disclosure.collected().url().clone();
-            if !seen.insert(url.as_str()) {
-                continue;
+        let mut page_no = 1_u32;
+        loop {
+            let page = match dart.fetch_page(today, today, page_no).await {
+                Ok(DataAvailability::Available(page)) => page,
+                Ok(DataAvailability::NotConfigured) if page_no == 1 => {
+                    return Ok(DataAvailability::NotConfigured);
+                }
+                Ok(DataAvailability::NoData | DataAvailability::NotConfigured) => break,
+                Err(error) if page_no == 1 => return Err(error),
+                Err(_later_page) => break,
+            };
+            let fresh = self.take_new(&page, &mut observations).await;
+            if fresh == 0 || page_no >= page.total_page() || page_no >= MAX_DART_PAGES {
+                break;
             }
-            if let Some(instrument) = entry
-                .stock_code()
-                .and_then(|code| InstrumentId::try_new(code.as_str()).ok())
-            {
-                self.hints.remember(&url, instrument);
-            }
-            observations.push(CollectedObservation::new(
-                CollectedEntry::Disclosure(disclosure),
-                PublicationTime::NotProvided,
-                collected_at,
-            ));
+            page_no = page_no.saturating_add(1);
         }
         if observations.is_empty() {
             return Ok(DataAvailability::NoData);

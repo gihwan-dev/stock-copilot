@@ -1,6 +1,7 @@
 use super::{
-    CollectionPlanner, FeedCollectorWorker, FeedRoundFuture, FeedRunner, OffHoursPlanner,
-    PlanFuture, ReadyFuture, RunnerReadiness, ScheduledFeed, SwitchFuture, off_hours_plan,
+    AfterClose, CollectionPlanner, FeedCollectorWorker, FeedRoundFuture, FeedRunner,
+    OffHoursPlanner, PlanFuture, ReadyFuture, RunnerReadiness, ScheduledFeed, SwitchFuture,
+    after_close_boost, after_close_window, off_hours_plan,
 };
 use application::{CollectedCount, CollectionTarget, FeedCursor, FeedRound, FeedRoundOutcome};
 use domain::{
@@ -177,4 +178,46 @@ fn a_source_failing_three_times_in_a_row_backs_off_to_six_hours() {
     assert_eq!(edaily.calls.load(Ordering::SeqCst), 3, "6시간 동안 쉰다");
     tauri::async_runtime::block_on(collector.collect_due());
     assert_eq!(edaily.calls.load(Ordering::SeqCst), 4);
+}
+
+fn kst(seconds_from_midnight: i64, day_offset: i64) -> Timestamp {
+    at(1_795_618_800_i64
+        .saturating_add(day_offset.saturating_mul(86_400))
+        .saturating_add(seconds_from_midnight))
+}
+
+#[test]
+fn after_close_window_is_weekday_kst_15_30_to_19_00() {
+    assert_eq!(
+        after_close_window(kst(15 * 3_600 + 30 * 60, 0)),
+        AfterClose::Inside
+    );
+    assert_eq!(
+        after_close_window(kst(18 * 3_600 + 59 * 60, 0)),
+        AfterClose::Inside
+    );
+    assert_eq!(after_close_window(kst(19 * 3_600, 0)), AfterClose::Outside);
+    assert_eq!(after_close_window(kst(15 * 3_600, 0)), AfterClose::Outside);
+    assert_eq!(
+        after_close_window(kst(16 * 3_600, 2)),
+        AfterClose::Outside,
+        "토요일"
+    );
+}
+
+#[test]
+fn kind_polls_every_ten_minutes_only_after_close_in_off_hours() {
+    let off = off_hours_plan();
+    let boosted = after_close_boost(&off, kst(16 * 3_600, 0));
+    assert_eq!(
+        boosted.cadence(CollectionTarget::KindDisclosure),
+        application::CollectionCadence::Every(
+            application::CollectionMinutes::try_new(10).expect("주기")
+        )
+    );
+    assert_eq!(
+        boosted.cadence(CollectionTarget::PressRss),
+        off.cadence(CollectionTarget::PressRss)
+    );
+    assert_eq!(after_close_boost(&off, kst(20 * 3_600, 0)), off);
 }

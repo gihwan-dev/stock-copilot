@@ -142,6 +142,11 @@ fn describe(event: &DiagnosticEvent) -> String {
         ),
         DiagnosticEvent::Feed(diagnosis) => describe_feed(diagnosis),
         DiagnosticEvent::SourceCall(call) => describe_source_call(call),
+        DiagnosticEvent::Relinked { instruments, items } => format!(
+            "news-relink instruments={} items={}",
+            instruments.as_u32(),
+            items.as_u32()
+        ),
         DiagnosticEvent::SourceRejected { source, detail } => format!(
             "source-rejected source={source:?} detail=\"{}\"",
             detail.as_str()
@@ -180,7 +185,7 @@ const fn feed_result_name(result: FeedRunResult) -> &'static str {
 
 fn describe_feed(diagnosis: &FeedDiagnosis) -> String {
     format!(
-        "news-feed source={:?} result={} fetched={} duplicates={} known={} stored={} linked={} name_seen={} matched={} needs_context={} group_only={}",
+        "news-feed source={:?} result={} fetched={} duplicates={} known={} stored={} linked={} name_seen={} matched={} needs_context={} group_only={} boundary={}",
         diagnosis.source,
         feed_result_name(diagnosis.result),
         diagnosis.fetched.as_u32(),
@@ -191,7 +196,8 @@ fn describe_feed(diagnosis: &FeedDiagnosis) -> String {
         diagnosis.probe.name_seen.as_u32(),
         diagnosis.probe.matched.as_u32(),
         diagnosis.probe.needs_context.as_u32(),
-        diagnosis.probe.group_only.as_u32()
+        diagnosis.probe.group_only.as_u32(),
+        diagnosis.probe.boundary.as_u32()
     )
 }
 

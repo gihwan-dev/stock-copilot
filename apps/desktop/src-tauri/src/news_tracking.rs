@@ -23,6 +23,22 @@ const MIN_TICKER_CHARS: usize = 3;
 
 type TrackedList<'a> = Pin<Box<dyn Future<Output = Vec<TrackedInstrument>> + Send + 'a>>;
 
+fn aliases_of(
+    aliases: &[StockAlias],
+    directory: &InstrumentDirectory,
+    symbol: &domain::Symbol,
+) -> Vec<application::AliasName> {
+    aliases
+        .iter()
+        .filter(|alias| {
+            directory
+                .by_instrument(&alias.instrument)
+                .is_some_and(|entry| entry.master.row().symbol == *symbol)
+        })
+        .map(|alias| alias.alias.clone())
+        .collect()
+}
+
 pub trait NewsInputs: TrackedTargets + DartKeySource + SecContactSource {}
 
 impl<T: TrackedTargets + DartKeySource + SecContactSource> NewsInputs for T {}
@@ -44,6 +60,16 @@ impl<R: Runtime, P: PortTypes> AppNewsInputs<R, P> {
         Self {
             app,
             ports: PhantomData,
+        }
+    }
+
+    async fn stored_aliases(&self) -> Vec<StockAlias> {
+        let Some(store) = self.app.try_state::<Arc<SqliteRepositories>>() else {
+            return Vec::new();
+        };
+        match NewsDataSettingsRepository::load(store.inner().as_ref()).await {
+            Ok(Some(settings)) => settings.aliases().to_vec(),
+            Ok(None) | Err(_) => Vec::new(),
         }
     }
 }
@@ -95,14 +121,17 @@ impl<R: Runtime, P: PortTypes> TrackedTargets for AppNewsInputs<R, P> {
             )
             .await
             {
-                Ok(rows) => rows
-                    .into_iter()
-                    .map(|row| TrackedInstrument {
-                        symbol: row.symbol,
-                        market: row.entry.market,
-                        name: row.entry.name,
-                    })
-                    .collect(),
+                Ok(rows) => {
+                    let aliases = self.stored_aliases().await;
+                    rows.into_iter()
+                        .map(|row| TrackedInstrument {
+                            aliases: aliases_of(&aliases, &directory, &row.symbol),
+                            symbol: row.symbol,
+                            market: row.entry.market,
+                            name: row.entry.name,
+                        })
+                        .collect()
+                }
                 Err(_unreadable) => Vec::new(),
             }
         })

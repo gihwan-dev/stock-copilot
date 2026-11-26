@@ -188,6 +188,57 @@ impl CollectionPlanner for ReusedPlan {
     }
 }
 
+pub const AFTER_CLOSE_KIND_MINUTES: u16 = 10;
+const KST_OFFSET_SECONDS: i64 = 9 * 3_600;
+const AFTER_CLOSE_START: i64 = 15 * 3_600 + 30 * 60;
+const AFTER_CLOSE_END: i64 = 19 * 3_600;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AfterClose {
+    Inside,
+    Outside,
+}
+
+#[must_use]
+pub fn after_close_window(now: Timestamp) -> AfterClose {
+    let local = now
+        .utc_seconds()
+        .as_i64()
+        .saturating_add(KST_OFFSET_SECONDS);
+    let (Some(second_of_day), Some(day)) = (
+        local.checked_rem_euclid(86_400),
+        local.checked_div_euclid(86_400),
+    ) else {
+        return AfterClose::Outside;
+    };
+    let weekday = day.saturating_add(3).checked_rem_euclid(7);
+    let weekday_ok = weekday.is_some_and(|value| value < 5);
+    if weekday_ok && (AFTER_CLOSE_START..AFTER_CLOSE_END).contains(&second_of_day) {
+        AfterClose::Inside
+    } else {
+        AfterClose::Outside
+    }
+}
+
+#[must_use]
+pub fn after_close_boost(plan: &CollectionPlan, now: Timestamp) -> CollectionPlan {
+    let off_hours = plan.phase() == CollectionPhase::OffHours;
+    let inside = after_close_window(now) == AfterClose::Inside;
+    if let (true, true, Ok(minutes), CollectionCadence::Every(current)) = (
+        off_hours,
+        inside,
+        CollectionMinutes::try_new(AFTER_CLOSE_KIND_MINUTES),
+        plan.cadence(CollectionTarget::KindDisclosure),
+    ) && current > minutes
+    {
+        return plan.with_cadence(
+            CollectionTarget::KindDisclosure,
+            CollectionCadence::Every(minutes),
+        );
+    }
+    plan.clone()
+}
+
 #[must_use]
 pub fn off_hours_plan() -> CollectionPlan {
     CollectionPlan::build(&CollectionConditions {
@@ -394,7 +445,35 @@ pub struct AppFeedRunner<R: Runtime, P: PortTypes, F> {
     repositories: SqliteRepositories,
     feed: F,
     headlines: SharedHeadlines,
+    relinked: RelinkMemory,
     ports: PhantomData<fn() -> P>,
+}
+
+pub const RELINK_DAYS: u64 = 14;
+
+fn application_window(now: Timestamp) -> Option<Timestamp> {
+    let span = domain::TimeSpan::try_new(
+        domain::SpanSeconds::new(RELINK_DAYS.saturating_mul(86_400)),
+        domain::Nanosecond::new(0),
+    )
+    .ok()?;
+    now.checked_sub(span).ok()
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RelinkMemory(Arc<Mutex<BTreeSet<domain::InstrumentId>>>);
+
+impl RelinkMemory {
+    pub async fn newly_tracked(&self, names: &[MatchName]) -> Vec<MatchName> {
+        let mut known = self.0.lock().await;
+        let fresh: Vec<MatchName> = names
+            .iter()
+            .filter(|name| !known.contains(&name.instrument))
+            .cloned()
+            .collect();
+        known.extend(names.iter().map(|name| name.instrument.clone()));
+        fresh
+    }
 }
 
 impl<R: Runtime, P: PortTypes, F> Debug for AppFeedRunner<R, P, F> {
@@ -411,6 +490,7 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed> AppFeedRunner<R, P, F> {
             repositories,
             feed,
             headlines: SharedHeadlines::default(),
+            relinked: RelinkMemory::default(),
             ports: PhantomData,
         }
     }
@@ -419,6 +499,45 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed> AppFeedRunner<R, P, F> {
     pub fn sharing(mut self, headlines: &SharedHeadlines) -> Self {
         self.headlines = headlines.clone();
         self
+    }
+
+    #[must_use]
+    pub fn remembering(mut self, relinked: &RelinkMemory) -> Self {
+        self.relinked = relinked.clone();
+        self
+    }
+
+    async fn relink_new_names(
+        &self,
+        names: &[MatchName],
+        title_linker: Option<&dyn crate::collected_links::TitleLinker>,
+        now: Timestamp,
+    ) {
+        let fresh = self.relinked.newly_tracked(names).await;
+        let Some(linker) = title_linker else {
+            return;
+        };
+        if fresh.is_empty() {
+            return;
+        }
+        let Some(since) = application_window(now) else {
+            return;
+        };
+        let Ok(items) =
+            crate::collected_links::relink_recent(&self.repositories, linker, &fresh, since).await
+        else {
+            return;
+        };
+        let instruments: BTreeSet<&domain::InstrumentId> =
+            fresh.iter().map(|name| &name.instrument).collect();
+        crate::diagnostics_log::record(&application::DiagnosticEvent::Relinked {
+            instruments: application::CollectedCount::new(
+                instruments
+                    .iter()
+                    .fold(0_u32, |total, _id| total.saturating_add(1)),
+            ),
+            items: application::CollectedCount::new(items),
+        });
     }
 
     async fn settings(&self) -> NewsDataSettings {
@@ -459,6 +578,10 @@ impl<R: Runtime, P: PortTypes, F: NewsFeed + 'static> FeedRunner for AppFeedRunn
                 .app
                 .try_state::<CollectedLinker>()
                 .map(|state| Arc::clone(&state.0));
+            if let Some(found) = names.as_deref() {
+                self.relink_new_names(found, linker.as_deref(), ports.clock.now())
+                    .await;
+            }
             let plain = LinkingTimes::new(&self.repositories, linker.as_deref());
             let times = match names.as_deref() {
                 Some(found) => plain.with_names(found, hints.as_ref().map(tauri::State::inner)),
@@ -581,10 +704,11 @@ impl<R: Runtime, P: PortTypes> CollectionPlanner for AppCollectionPlanner<R, P> 
                 dart_usage: DartDailyUsage::new(DartCallCount::new(0), DartCallCount::new(1)),
             })
             .await;
-            let plan = match planned {
+            let base = match planned {
                 Ok(plan) => plan,
                 Err(_error) => off_hours_plan(),
             };
+            let plan = after_close_boost(&base, ports.clock.now());
             match self.settings().await {
                 Some(settings) => settings.adjusted_plan(&plan),
                 None => plan,
@@ -620,10 +744,12 @@ pub fn app_collector<R: Runtime, P: PortTypes>(
     clock: Arc<dyn Clock>,
 ) -> FeedCollectorWorker {
     let headlines = SharedHeadlines::default();
+    let relinked = RelinkMemory::default();
     let runner = |feed: &SharedFeed| -> Arc<dyn FeedRunner> {
         Arc::new(
             AppFeedRunner::<R, P, SharedFeed>::new(app.clone(), repositories.clone(), feed.clone())
-                .sharing(&headlines),
+                .sharing(&headlines)
+                .remembering(&relinked),
         )
     };
     let scheduled = feeds
