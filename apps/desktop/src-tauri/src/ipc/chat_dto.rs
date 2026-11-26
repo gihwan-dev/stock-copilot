@@ -100,6 +100,7 @@ pub struct CancelChatTurnRequest {
 pub enum ChatNumberCheckDto {
     NoNumbers,
     Verified,
+    Computed,
     Unverified,
 }
 
@@ -410,6 +411,7 @@ pub fn number_check_dto(chunk: &ChatChunk) -> Option<ChatChunkDto> {
             status: match check {
                 ChatNumberCheck::NoNumbers => ChatNumberCheckDto::NoNumbers,
                 ChatNumberCheck::Verified => ChatNumberCheckDto::Verified,
+                ChatNumberCheck::Computed => ChatNumberCheckDto::Computed,
                 ChatNumberCheck::Unverified => ChatNumberCheckDto::Unverified,
             },
         })

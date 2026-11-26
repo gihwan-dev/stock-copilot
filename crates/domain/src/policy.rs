@@ -241,7 +241,10 @@ pub(crate) fn signal_buy_limit(
     }
     let sector = candidate_sector(&policy.profile, assignments, instrument)?;
     let snapshot = snapshot(valuation, assignments)?;
-    let caps = policy.profile.weight_caps();
+    let caps = policy
+        .profile
+        .weight_caps()
+        .limits_for(facts.fund_kind(instrument));
     reject_at_cap(
         &snapshot.instruments,
         &AssetInstrument::Holding(instrument.clone()),
@@ -344,9 +347,14 @@ fn current_instruments(
             AllocationSector::Unclassified => unassigned = unassigned.saturating_add(1),
             AllocationSector::EtfFund | AllocationSector::Cash => {}
         }
-        if row.weight().cmp_profile_weight(&caps.instrument_cap()) == Ordering::Greater {
+        let limits = caps.limits_for(facts.fund_kind(instrument));
+        if row.weight().cmp_profile_weight(&limits.instrument_cap()) == Ordering::Greater {
             findings.push(PolicyViolation::InstrumentCap(instrument.clone()));
-        } else if row.weight().cmp_profile_weight(&caps.instrument_warning()) != Ordering::Less {
+        } else if row
+            .weight()
+            .cmp_profile_weight(&limits.instrument_warning())
+            != Ordering::Less
+        {
             findings.push(PolicyViolation::InstrumentWarning(instrument.clone()));
         }
     }
