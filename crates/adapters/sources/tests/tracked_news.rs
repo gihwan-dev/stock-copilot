@@ -209,7 +209,51 @@ mod tests {
         let requests = server.finish().expect("요청");
         assert_eq!(requests.len(), 3);
         let head = String::from_utf8_lossy(&requests[0]).into_owned();
-        assert!(head.contains("/rss/search?q=%EC%82%BC%EC%84%B1"), "{head}");
+        assert!(
+            head.contains("/rss/search?q=%22%EC%82%BC%EC%84%B1"),
+            "{head}"
+        );
+        let short = String::from_utf8_lossy(&requests[2]).into_owned();
+        assert!(
+            short.contains("/rss/search?q=%EC%95%A0%ED%94%8C&"),
+            "{short}"
+        );
+    }
+
+    #[test]
+    fn exact_phrase_results_link_to_the_searched_name_but_short_names_rely_on_titles() {
+        let body = rss(&[(
+            "반도체 수출 반등 - 한국경제",
+            "https://news.google.com/rss/articles/Z1",
+            FRESH,
+        )]);
+        let short = rss(&[(
+            "애플 신제품 - 연합뉴스",
+            "https://news.google.com/rss/articles/Z2",
+            FRESH,
+        )]);
+        let server = serve_sequence(vec![xml(&body), xml(&short)]).expect("서버");
+        let hints = NewsLinkHints::default();
+        let feed = TrackedNewsFeed::new(
+            client(server.port()),
+            TrackedSearch::GoogleNews,
+            targets(vec![
+                tracked("005930", KnownMarket::Kr, "삼성전자"),
+                tracked("AAPL", KnownMarket::Us, "애플"),
+            ]),
+            hints.clone(),
+        );
+        let _found = runtime()
+            .block_on(feed.new_items(FeedCursor::Start))
+            .expect("수집");
+        let long = NormalizedUrl::try_new("https://news.google.com/rss/articles/Z1").expect("주소");
+        let two = NormalizedUrl::try_new("https://news.google.com/rss/articles/Z2").expect("주소");
+        assert_eq!(
+            hints.take(&long).into_iter().collect::<Vec<_>>(),
+            vec![InstrumentId::try_new("005930").expect("종목")]
+        );
+        assert_eq!(hints.take(&two).len(), 0, "두 글자 이름은 제목 매칭만 쓴다");
+        assert_eq!(server.finish().expect("요청").len(), 2);
     }
 
     #[test]

@@ -201,7 +201,7 @@ pub enum UiFeedSource {
     Fred,
 }
 
-const SOURCES: [UiFeedSource; 15] = [
+const SOURCES: [UiFeedSource; 14] = [
     UiFeedSource::KindDisclosure,
     UiFeedSource::DartDisclosureApi,
     UiFeedSource::DartDisclosureRss,
@@ -209,7 +209,6 @@ const SOURCES: [UiFeedSource; 15] = [
     UiFeedSource::Hankyung,
     UiFeedSource::Maekyung,
     UiFeedSource::Yonhap,
-    UiFeedSource::Edaily,
     UiFeedSource::GoogleNews,
     UiFeedSource::YahooFinance,
     UiFeedSource::SecEdgar,
