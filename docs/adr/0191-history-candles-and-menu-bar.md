@@ -1,4 +1,4 @@
-# ADR 0190: 과거 평가 전용 일봉 조회, 종목 단위 실패 격리, 메뉴 막대 상주
+# ADR 0191: 과거 평가 전용 일봉 조회, 종목 단위 실패 격리, 메뉴 막대 상주
 
 - 상태: 확정 (2026-11-26). v0.5.6 진단 기록에서 `daily_valuation_snapshot`과 `performance_*`가 모두 `Candles InvalidResponse(Validation)`로 실패한 것을 고친다. ADR 0188·0189의 후속이다.
 
