@@ -188,25 +188,15 @@ test("minimum window supports keyboard travel between dashboard, briefing reader
         .locator("main [data-scroll-viewport]")
         .filter({ hasText: "대화 36 — 보유 종목을 확인했습니다." })
         .first();
-      await tab.waitForFunction(() => {
-        const scroller = document.querySelector("main [data-scroll-viewport]");
-        return (
-          scroller &&
-          scroller.scrollHeight > scroller.clientHeight &&
-          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 3
-        );
-      });
+      const atLastMessage = (scroller) =>
+        scroller.scrollHeight > scroller.clientHeight &&
+        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 3;
+      await tab.waitForFunction(atLastMessage, await messages.elementHandle());
       const input = tab.getByRole("textbox", { name: "메시지" });
       await input.fill("새 응답 위치를 확인해 줘");
       await input.press("Enter");
       await tab.getByText("스크롤 확인용 새 응답입니다.").waitFor();
-      await tab.waitForFunction(() => {
-        const scroller = document.querySelector("main [data-scroll-viewport]");
-        return (
-          scroller &&
-          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 3
-        );
-      });
+      await tab.waitForFunction(atLastMessage, await messages.elementHandle());
       const before = await input.boundingBox();
       assert.ok(
         before.y >= 0 && before.y + before.height <= sizes.minimum.height,
