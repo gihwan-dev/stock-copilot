@@ -7,6 +7,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimateContext {
     reference: PriceObservation,
+    close_at: Option<Timestamp>,
     created_at: Timestamp,
 }
 impl EstimateContext {
@@ -14,8 +15,21 @@ impl EstimateContext {
     pub fn new(reference: PriceObservation, created_at: Timestamp) -> Self {
         Self {
             reference,
+            close_at: None,
             created_at,
         }
+    }
+    pub(crate) fn with_close(mut self, close_at: Option<Timestamp>) -> Self {
+        self.close_at = close_at;
+        self
+    }
+    #[must_use]
+    pub const fn close_at(&self) -> Option<Timestamp> {
+        self.close_at
+    }
+    #[must_use]
+    pub const fn reference(&self) -> &PriceObservation {
+        &self.reference
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +49,7 @@ pub struct SavedEstimateTask {
     pub market: crate::KnownMarket,
     pub reference_price: crate::Price,
     pub reference_at: Timestamp,
+    pub close_at: Option<Timestamp>,
     pub created_at: Timestamp,
     pub volatility: Volatility,
     pub horizon: Horizon,
@@ -82,7 +97,10 @@ impl EstimateTask {
         } else {
             crate::Currency::Usd
         };
-        if context.reference.price().as_money().currency() != expected_currency
+        if context
+            .close_at
+            .is_some_and(|close| close > context.reference.observed_at())
+            || context.reference.price().as_money().currency() != expected_currency
             || context
                 .reference
                 .check(context.reference.instrument(), context.created_at)
@@ -120,6 +138,10 @@ impl EstimateTask {
     #[must_use]
     pub fn reference(&self) -> &PriceObservation {
         &self.context.reference
+    }
+    #[must_use]
+    pub const fn close_at(&self) -> Option<Timestamp> {
+        self.context.close_at
     }
     #[must_use]
     pub fn created_at(&self) -> Timestamp {
@@ -171,6 +193,7 @@ impl EstimateTask {
             market,
             reference_price: self.context.reference.price(),
             reference_at: self.context.reference.observed_at(),
+            close_at: self.close_at(),
             created_at: self.context.created_at,
             volatility: self.volatility.clone(),
             horizon: Horizon::new(selection),
@@ -198,7 +221,7 @@ impl EstimateTask {
             | HorizonSelection::HalfYearOrMore => HoursPermission::default(),
         };
         let rebuilt = Self::create(
-            EstimateContext::new(reference, saved.created_at),
+            EstimateContext::new(reference, saved.created_at).with_close(saved.close_at),
             saved.volatility,
             saved.horizon,
             permission,

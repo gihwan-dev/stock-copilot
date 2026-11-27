@@ -112,40 +112,68 @@ impl<S: CollectedItemReads, C: Clock> NewsToolReads for StoredNews<S, C> {
         query: &CollectedItemQuery,
     ) -> Result<Vec<NewsToolLine>, SystemPortError> {
         Ok(self
+            .cited_news(query)
+            .await?
+            .into_iter()
+            .map(|item| item.line)
+            .collect())
+    }
+    async fn disclosures(
+        &self,
+        query: &CollectedItemQuery,
+    ) -> Result<Vec<DisclosureToolLine>, SystemPortError> {
+        Ok(self
+            .cited_disclosures(query)
+            .await?
+            .into_iter()
+            .map(|item| item.line)
+            .collect())
+    }
+    async fn cited_news(
+        &self,
+        query: &CollectedItemQuery,
+    ) -> Result<Vec<application::CitedLine<NewsToolLine>>, SystemPortError> {
+        Ok(self
             .recent(CollectedKind::News, query)
             .await?
             .into_iter()
             .filter_map(|item| match &item.entry {
-                CollectedEntry::News(news) => Some(NewsToolLine {
-                    handle: item.handle.clone(),
-                    source: news.collected().source().clone(),
-                    published_at: published_or_collected(&item),
-                    collected_at: item.collected_at,
-                    title: news.collected().title().clone(),
-                    summary: news.collected().body().cloned(),
-                    symbols: symbols_of(&item),
+                CollectedEntry::News(news) => Some(application::CitedLine {
+                    digest: store_sqlite::citation_digest(&item.entry),
+                    line: NewsToolLine {
+                        handle: item.handle.clone(),
+                        source: news.collected().source().clone(),
+                        published_at: published_or_collected(&item),
+                        collected_at: item.collected_at,
+                        title: news.collected().title().clone(),
+                        summary: news.collected().body().cloned(),
+                        symbols: symbols_of(&item),
+                    },
                 }),
                 CollectedEntry::Disclosure(_) => None,
             })
             .collect())
     }
 
-    async fn disclosures(
+    async fn cited_disclosures(
         &self,
         query: &CollectedItemQuery,
-    ) -> Result<Vec<DisclosureToolLine>, SystemPortError> {
+    ) -> Result<Vec<application::CitedLine<DisclosureToolLine>>, SystemPortError> {
         Ok(self
             .recent(CollectedKind::Disclosure, query)
             .await?
             .into_iter()
             .filter_map(|item| match &item.entry {
-                CollectedEntry::Disclosure(filing) => Some(DisclosureToolLine {
-                    handle: item.handle.clone(),
-                    source: filing.key().source(),
-                    filed_at: published_or_collected(&item),
-                    collected_at: item.collected_at,
-                    title: filing.collected().title().clone(),
-                    symbols: symbols_of(&item),
+                CollectedEntry::Disclosure(filing) => Some(application::CitedLine {
+                    digest: store_sqlite::citation_digest(&item.entry),
+                    line: DisclosureToolLine {
+                        handle: item.handle.clone(),
+                        source: filing.key().source(),
+                        filed_at: published_or_collected(&item),
+                        collected_at: item.collected_at,
+                        title: filing.collected().title().clone(),
+                        symbols: symbols_of(&item),
+                    },
                 }),
                 CollectedEntry::News(_) => None,
             })

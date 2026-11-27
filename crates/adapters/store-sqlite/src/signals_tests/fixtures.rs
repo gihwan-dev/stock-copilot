@@ -536,3 +536,5 @@ pub(super) async fn seed_submission(
     signals.save_master(&bundle.master).await.expect("master");
     issued_id
 }
+
+mod estimate_pipeline;

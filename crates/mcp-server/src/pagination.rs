@@ -287,7 +287,7 @@ fn build_page_json<T: Serialize>(
     total: usize,
     next_cursor: Option<&str>,
     extra_fields: &Map<String, Value>,
-) -> Result<(Value, usize), ToolErrorPayload> {
+) -> Result<(Value, String), ToolErrorPayload> {
     let mut object = extra_fields.clone();
     let encoded_items = serde_json::to_value(slice).map_err(|_error| {
         ToolErrorPayload::retryable(
@@ -315,7 +315,13 @@ fn build_page_json<T: Serialize>(
             "failed to encode page response",
         )
     })?;
-    Ok((value, rendered.chars().count()))
+    Ok((value, rendered))
+}
+
+fn fits_page(tool: &ToolName, rendered: &str) -> bool {
+    rendered.chars().count() <= MAX_TOOL_RESPONSE_CHARS
+        && (!["search_news", "get_disclosures"].contains(&tool.as_str())
+            || application::ToolPayloadJson::try_new(rendered).is_ok())
 }
 
 fn finalize_fitted_page<T: Serialize, C: Clock>(
@@ -335,13 +341,13 @@ fn finalize_fitted_page<T: Serialize, C: Clock>(
     } else {
         None
     };
-    let (final_value, final_chars) = build_page_json(
+    let (final_value, rendered) = build_page_json(
         slice,
         total,
         actual_cursor.as_ref().map(OpaqueCursor::as_str),
         extra_fields,
     )?;
-    if final_chars > MAX_TOOL_RESPONSE_CHARS {
+    if !fits_page(context.tool_name, &rendered) {
         return Err(ToolErrorPayload::response_too_large());
     }
     Ok(final_value)
@@ -364,8 +370,8 @@ pub fn paginate_items<T: Serialize, C: Clock>(
         None => 0_usize,
     };
     if start >= total {
-        let (empty_value, char_count) = build_page_json::<T>(&[], total, None, extra_fields)?;
-        if char_count > MAX_TOOL_RESPONSE_CHARS {
+        let (empty_value, rendered) = build_page_json::<T>(&[], total, None, extra_fields)?;
+        if !fits_page(context.tool_name, &rendered) {
             return Err(ToolErrorPayload::response_too_large());
         }
         return Ok(empty_value);
@@ -385,8 +391,8 @@ pub fn paginate_items<T: Serialize, C: Clock>(
             ));
         };
         let check_cursor = (end < total).then_some(placeholder_cursor.as_str());
-        let (_candidate, char_count) = build_page_json(slice, total, check_cursor, extra_fields)?;
-        if char_count <= MAX_TOOL_RESPONSE_CHARS {
+        let (_candidate, rendered) = build_page_json(slice, total, check_cursor, extra_fields)?;
+        if fits_page(context.tool_name, &rendered) {
             return finalize_fitted_page(slice, total, end, context, extra_fields);
         }
         if count <= 1_usize {
@@ -506,5 +512,57 @@ mod tests {
             Some(ToolErrorCode::CursorExpired),
             "만료된 커서 거부"
         );
+    }
+
+    #[test]
+    fn korean_news_pages_remain_valid_complete_ledger_json_across_a_cursor() {
+        let clock = Arc::new(SteppedClock::new(ts(1_700_000_000)));
+        let store = CursorStore::try_new(clock, 600).expect("커서");
+        let run = AiRunId::try_new("kr").expect("실행");
+        let tool = ToolName::try_new("search_news").expect("도구");
+        let ctx = PaginationContext {
+            cursors: &store,
+            run_id: &run,
+            tool_name: &tool,
+            query_fingerprint: "q",
+        };
+        let items: Vec<_> = (0_usize..40_usize).map(|id| serde_json::json!({"handle":format!("n-{id}"),"title":{"untrusted_text":"가".repeat(600)}})).collect();
+        let all = serde_json::to_string(&items).expect("전체");
+        assert!(all.chars().count() < 30_000 && all.len() > 65_536);
+        let first = paginate_items(
+            &items,
+            &PageRequest::from_raw(None, None).expect("첫 페이지"),
+            &ctx,
+            &Map::new(),
+        )
+        .expect("결과");
+        let cursor = first
+            .get("next_cursor")
+            .and_then(serde_json::Value::as_str)
+            .expect("초과분 커서");
+        let second = paginate_items(
+            &items,
+            &PageRequest::from_raw(None, Some(cursor)).expect("다음 페이지"),
+            &ctx,
+            &Map::new(),
+        )
+        .expect("나머지");
+        let mut joined = Vec::new();
+        for page in [first, second] {
+            let text = serde_json::to_string(&page).expect("JSON");
+            let logged = application::ToolPayloadJson::try_new(&text).expect("원장 바이트 한도");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(logged.as_str()).expect("원장 페이지"),
+                page
+            );
+            joined.extend(
+                page.get("items")
+                    .and_then(serde_json::Value::as_array)
+                    .expect("목록")
+                    .iter()
+                    .cloned(),
+            );
+        }
+        assert_eq!(joined, items);
     }
 }

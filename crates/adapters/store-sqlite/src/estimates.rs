@@ -637,6 +637,51 @@ impl EstimateSubmissionRepository for EstimateStore<'_> {
             .write(move |tx| commit_submission_tx(tx, &owned_previous, &owned_next, &owned_records))
             .await
     }
+    async fn collected_citation(
+        &self,
+        run: &AiRunId,
+        handle: &application::CollectedItemHandle,
+    ) -> Result<Option<application::ObservedCollectedItem>, SystemPortError> {
+        crate::InformationStore::new(self.database)
+            .citation_in_run(run, handle)
+            .await
+    }
+
+    async fn commit_with_sources(
+        &self,
+        previous: &EstimateAssignments<AiRunId>,
+        next: &EstimateAssignments<AiRunId>,
+        records: &[EstimateSubmissionRecord<AiRunId, ReasoningEffort>],
+        sources: &application::SignalSourceFacts,
+    ) -> Result<EstimateCommitOutcome, SystemPortError> {
+        let [record] = records else {
+            return Err(SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::InvalidData,
+            ));
+        };
+        let expected = previous.clone();
+        let updated = next.clone();
+        let submitted = record.clone();
+        let payload = crate::signals::encode_sources(sources);
+        self.database
+            .write(move |tx| {
+                let outcome = commit_submission_tx(
+                    tx,
+                    &expected,
+                    &updated,
+                    std::slice::from_ref(&submitted),
+                )?;
+                if outcome == EstimateCommitOutcome::Committed {
+                    tx.execute(
+                        crate::sql::signals::UPSERT_SOURCES,
+                        params![submitted.task_id().as_estimate_id().as_str(), payload],
+                    )?;
+                }
+                Ok(outcome)
+            })
+            .await
+    }
 }
 
 impl EstimateResolutionRepository for EstimateStore<'_> {

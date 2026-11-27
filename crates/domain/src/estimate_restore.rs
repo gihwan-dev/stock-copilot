@@ -20,6 +20,7 @@ pub struct EstimateRestoreEvidence {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimateDisplayFacts {
+    pub close_at: Option<Timestamp>,
     pub reference_price: Price,
     pub reference_at: Timestamp,
     pub created_at: Timestamp,
@@ -32,6 +33,7 @@ pub struct EstimateDisplayFacts {
 impl EstimateDisplayFacts {
     fn from_task(task: &EstimateTask) -> Self {
         Self {
+            close_at: task.close_at(),
             reference_price: task.reference().price(),
             reference_at: task.reference().observed_at(),
             created_at: task.created_at(),
@@ -104,7 +106,11 @@ impl EstimateRestoreEvidence {
         original: &EstimateTask,
         current: &MasterInstrument,
     ) -> Result<StoredEstimateEvidence, EstimateRestoreError> {
-        let (rebuilt, _) = self.replay(current, MasterReplayMode::LiveOrderGate)?;
+        let (rebuilt, _) = self.replay(
+            current,
+            MasterReplayMode::LiveOrderGate,
+            original.close_at(),
+        )?;
         if &rebuilt != original {
             return Err(EstimateRestoreError::ChangedResult);
         }
@@ -120,6 +126,7 @@ impl EstimateRestoreEvidence {
         &self,
         current: &MasterInstrument,
         mode: MasterReplayMode,
+        close_at: Option<Timestamp>,
     ) -> Result<(EstimateTask, crate::QuoteInstrument), EstimateRestoreError> {
         let historical = MasterInstrument::try_new(self.master.clone())
             .map_err(EstimateRestoreError::HistoricalMaster)?;
@@ -154,7 +161,7 @@ impl EstimateRestoreEvidence {
         let volatility =
             Volatility::calculate(&self.candles).map_err(EstimateRestoreError::Volatility)?;
         let task = EstimateTask::create(
-            EstimateContext::new(reference, self.task_at),
+            EstimateContext::new(reference, self.task_at).with_close(close_at),
             volatility,
             self.horizon,
             HoursPermission::restore_from_saved_state(self.permission),
@@ -171,7 +178,9 @@ impl StoredEstimateEvidence {
         current: &MasterInstrument,
         mode: MasterReplayMode,
     ) -> Result<(EstimateTask, crate::QuoteInstrument), EstimateRestoreError> {
-        let (result, quote) = self.evidence.replay(current, mode)?;
+        let (result, quote) = self
+            .evidence
+            .replay(current, mode, self.expected.close_at)?;
         if self.evidence.reference_at.offset_seconds()
             != self.original.reference_at.offset_seconds()
             || self.evidence.task_at.offset_seconds() != self.original.task_at.offset_seconds()

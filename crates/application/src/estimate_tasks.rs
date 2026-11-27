@@ -144,6 +144,8 @@ pub struct EstimateTaskView {
     horizon: TradingDayHorizon,
     base_probability: BaseProbability,
     reference_price: Price,
+    quote_at: Timestamp,
+    close_at: Option<Timestamp>,
     asked_at: Timestamp,
     consumption: EstimateConsumption,
 }
@@ -163,6 +165,8 @@ impl EstimateTaskView {
             horizon: task.horizon(),
             base_probability: task.base_probability(),
             reference_price: reference.price(),
+            quote_at: reference.observed_at(),
+            close_at: task.close_at(),
             asked_at: task.created_at(),
             consumption: issued.consumption(),
         }
@@ -213,6 +217,14 @@ impl EstimateTaskView {
         self.reference_price
     }
 
+    #[must_use]
+    pub const fn close_at(&self) -> Option<Timestamp> {
+        self.close_at
+    }
+    #[must_use]
+    pub const fn quote_at(&self) -> Timestamp {
+        self.quote_at
+    }
     #[must_use]
     pub const fn asked_at(&self) -> Timestamp {
         self.asked_at

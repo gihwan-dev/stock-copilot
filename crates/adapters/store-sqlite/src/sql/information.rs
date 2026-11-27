@@ -24,3 +24,14 @@ pub(crate) const KNOWN_URL: &str = "SELECT url FROM information_items WHERE url 
 pub(crate) const NEWS_COLLECTED_TIMES: &str = "SELECT i.id, i.source, i.external_id, t.collected_payload FROM information_items AS i INNER JOIN information_times AS t ON t.item_id = i.id WHERE i.category = ?1";
 pub(crate) const DELETE_TIMES: &str = "DELETE FROM information_times WHERE item_id = ?1";
 pub(crate) const DELETE_ITEM: &str = "DELETE FROM information_items WHERE id = ?1";
+
+pub(crate) const CITED_RESULT_HANDLE: &str = "
+SELECT EXISTS(
+    SELECT 1
+    FROM tool_call_ledger AS call,
+         json_each(CASE WHEN json_valid(call.result_json) THEN call.result_json ELSE '{}' END, '$.items') AS item
+    WHERE call.run_id = ?1 AND call.tool_name = ?2 AND call.outcome = 'succeeded'
+      AND json_type(CASE WHEN json_valid(call.result_json) THEN call.result_json ELSE '{}' END, '$.items') = 'array'
+      AND json_extract(CASE WHEN item.type = 'object' THEN item.value ELSE '{}' END, '$.handle') = ?3
+      AND json_extract(CASE WHEN item.type = 'object' THEN item.value ELSE '{}' END, '$.citation_digest') = ?4
+)";

@@ -483,3 +483,5 @@ fn collected_url_catalog_knows_only_urls_the_app_collected() {
         .expect("조회");
     assert_eq!(unknown, None);
 }
+
+mod estimate_citations;

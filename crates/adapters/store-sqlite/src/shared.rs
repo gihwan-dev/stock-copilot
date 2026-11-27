@@ -788,6 +788,35 @@ impl application::EstimateSubmissionRepository for SqliteRepositories {
         )
         .await
     }
+    async fn collected_citation(
+        &self,
+        run: &AiRunId,
+        handle: &application::CollectedItemHandle,
+    ) -> Result<Option<application::ObservedCollectedItem>, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        InformationStore::new(database)
+            .citation_in_run(run, handle)
+            .await
+    }
+    async fn commit_with_sources(
+        &self,
+        previous: &domain::EstimateAssignments<AiRunId>,
+        next: &domain::EstimateAssignments<AiRunId>,
+        records: &[domain::EstimateSubmissionRecord<AiRunId, application::ReasoningEffort>],
+        sources: &SignalSourceFacts,
+    ) -> Result<application::EstimateCommitOutcome, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::EstimateSubmissionRepository::commit_with_sources(
+            &EstimateStore::new(database),
+            previous,
+            next,
+            records,
+            sources,
+        )
+        .await
+    }
 }
 
 impl application::ScorecardObservationRepository for SqliteRepositories {

@@ -239,6 +239,7 @@ impl<S: ResolutionSource> ResolutionData<S> {
             Nanosecond::new(0),
             start.offset_seconds(),
         )
+        .and_then(|at| at.in_exchange_zone(market))
         .map_err(|_error| incomplete(OutcomeUnavailable::Adjustment))?;
         let basis = AdjustmentBasis::new(basis_at);
         let adjustment = OutcomeAdjustment::from_actions(task, basis, &[]).map_err(incomplete)?;

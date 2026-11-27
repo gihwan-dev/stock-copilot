@@ -236,6 +236,44 @@ impl Timestamp {
             .and_then(Self::try_new)
     }
 
+    pub fn in_exchange_zone(self, market: crate::KnownMarket) -> Result<Self, TimeError> {
+        let offset = match market {
+            crate::KnownMarket::Kr => OffsetSeconds::new(32_400),
+            crate::KnownMarket::Us => {
+                let utc = self
+                    .0
+                    .checked_to_offset(UtcOffset::UTC)
+                    .ok_or(TimeError::OutOfRange)?;
+                let year = utc.year();
+                if year < 2_007_i32 {
+                    return Err(TimeError::OutOfRange);
+                }
+                let second_sunday = Date::from_calendar_date(year, Month::March, 1)
+                    .map_err(|_error| TimeError::OutOfRange)?
+                    .previous_day()
+                    .ok_or(TimeError::OutOfRange)?
+                    .nth_next_occurrence(time::Weekday::Sunday, 2);
+                let first_sunday = Date::from_calendar_date(year, Month::October, 31)
+                    .map_err(|_error| TimeError::OutOfRange)?
+                    .next_occurrence(time::Weekday::Sunday);
+                let begins = second_sunday
+                    .with_hms(7, 0, 0)
+                    .map_err(|_error| TimeError::OutOfRange)?
+                    .assume_utc();
+                let ends = first_sunday
+                    .with_hms(6, 0, 0)
+                    .map_err(|_error| TimeError::OutOfRange)?
+                    .assume_utc();
+                if (begins..ends).contains(&utc) {
+                    OffsetSeconds::new(-14_400)
+                } else {
+                    OffsetSeconds::new(-18_000)
+                }
+            }
+        };
+        Self::from_parts(self.utc_seconds(), self.nanosecond(), offset)
+    }
+
     fn try_new(value: OffsetDateTime) -> Result<Self, TimeError> {
         let utc = value
             .checked_to_offset(UtcOffset::UTC)

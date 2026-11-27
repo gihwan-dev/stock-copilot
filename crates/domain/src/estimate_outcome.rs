@@ -631,9 +631,10 @@ fn calendar_rows_at(
             return Err(OutcomeUnavailable::Calendar);
         }
         if let Some(prior) = previous {
-            if prior.next_business_day() != calendar.today()
-                || calendar.previous_business_day() != prior.today()
-            {
+            let linked = calendar.previous_business_day() == prior.today()
+                || (prior.today().sessions().is_empty()
+                    && calendar.previous_business_day() == prior.previous_business_day());
+            if prior.next_business_day() != calendar.today() || !linked {
                 return Err(OutcomeUnavailable::Calendar);
             }
         } else if calendar.today().date() != start.offset_calendar_date() {
@@ -2653,6 +2654,18 @@ mod tests {
         assert_eq!(
             OutcomeAdjustment::from_actions(&value, AdjustmentBasis::new(wrong), &[]),
             Err(OutcomeUnavailable::Adjustment)
+        );
+    }
+    #[test]
+    fn issued_on_a_holiday_the_next_calendar_points_back_to_the_prior_business_day() {
+        let original = task();
+        let holiday = crate::MarketSession::holiday(row(61).date(), &Market::Us);
+        let first = MarketCalendar::try_new(row(60), holiday.clone(), row(63)).expect("주말");
+        let monday = MarketCalendar::try_new(row(60), row(63), row(64)).expect("월요일");
+        assert_eq!(
+            super::calendar_rows_at(&original, instant(61, 900), &[first, monday])
+                .expect("거래일 연결"),
+            vec![holiday, row(63)]
         );
     }
 }
