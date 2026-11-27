@@ -16,7 +16,7 @@ const notices = {
 test("U-17 fixed notices: shared catalog holds the four texts, app info shows on settings and the chat head shows the data transfer notice", async () => {
   const bundle = await screenDom(`
     import { createElement as h } from "react";
-    import { render, cleanup, waitFor } from "@testing-library/react";
+    import { render, cleanup, waitFor, fireEvent } from "@testing-library/react";
     import { App } from APP_ENTRY;
     import { createAppQueryClient } from QUERY_ENTRY;
     import { mockCommands } from MOCK_IPC_ENTRY;
@@ -25,6 +25,7 @@ test("U-17 fixed notices: shared catalog holds the four texts, app info shows on
     ${fixtureSource}
     ${waitForText}
     window.cleanup = cleanup;
+    window.click = (element) => fireEvent.click(element);
     window.catalog = () => ({
       aiContent: text("notice.aiContent", "ko"),
       signalCard: text("notice.signalCard", "ko"),
@@ -65,8 +66,15 @@ test("U-17 fixed notices: shared catalog holds the four texts, app info shows on
     w.cleanup();
 
     const home = w.mount("/", w.ready);
-    const homeText = await w.waitText(home, notices.chatData);
-    assert.equal(homeText.includes(notices.appInfo), false);
+    w.click(await home.findByRole("button", { name: "채팅", exact: true }));
+    const disclosure = await home.findByRole("button", {
+      name: "대화에 쓰는 내 투자 자료는 AI 제공자 서버로 보내져요.",
+    });
+    assert.equal(disclosure.getAttribute("aria-expanded"), "false");
+    w.click(disclosure);
+    const chatText = await w.waitText(home, notices.chatData);
+    assert.equal(disclosure.getAttribute("aria-expanded"), "true");
+    assert.equal(chatText.includes(notices.appInfo), false);
     w.cleanup();
   } finally {
     bundle.close();
