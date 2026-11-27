@@ -304,3 +304,42 @@ fn news_settings_and_watchlist_follow_the_installed_database() {
         let _closed = shared.close().await;
     });
 }
+
+#[test]
+fn production_collected_reads_supply_the_persisted_news_and_disclosure_citation_digests() {
+    use application::{CollectedItemReads, CollectedKind};
+    let fixture = Fixture::new();
+    let shared = SharedDatabase::new();
+    let repositories = SqliteRepositories::new(shared.clone());
+    runtime().block_on(async {
+        let db =
+            Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("저장소");
+        assert!(shared.install(db).await.is_none());
+        seed_collected(&repositories).await;
+        for (kind, entry, expected) in [
+            (
+                CollectedKind::News,
+                news("AKR1"),
+                "266729d2adf9391c26d3f415257c3067580518929e5bf942e74688bb8d9b902c",
+            ),
+            (
+                CollectedKind::Disclosure,
+                disclosure(),
+                "6bd8ba9180c7652d2e1ffa3417dcd6b2ed8b7d5a553cbc309b263bd58a4cf07d",
+            ),
+        ] {
+            let rows = repositories
+                .collected_since(kind, moment(0))
+                .await
+                .expect("수집 항목");
+            let row = rows.iter().find(|item| item.entry == entry).expect("대상");
+            assert_eq!(
+                repositories
+                    .citation_digest(&row.entry)
+                    .expect("원문 검증값")
+                    .as_str(),
+                expected
+            );
+        }
+    });
+}

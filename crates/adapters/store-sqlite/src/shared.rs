@@ -916,6 +916,13 @@ impl application::CollectedRetention for SqliteRepositories {
 }
 
 impl application::CollectedItemReads for SqliteRepositories {
+    fn citation_digest(
+        &self,
+        entry: &application::CollectedEntry,
+    ) -> Option<application::CitationDigest> {
+        crate::information::citation_digest(entry)
+    }
+
     async fn collected_since(
         &self,
         kind: application::CollectedKind,

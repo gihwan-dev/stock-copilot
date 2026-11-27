@@ -152,7 +152,7 @@ mod information_tests;
 mod retention_tests;
 
 mod information;
-pub use information::{InformationStore, citation_digest};
+pub use information::InformationStore;
 
 #[cfg(test)]
 mod thesis_tests;
