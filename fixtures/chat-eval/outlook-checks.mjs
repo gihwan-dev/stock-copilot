@@ -61,9 +61,11 @@ export function outlookChecks(scenario, answer, calls) {
     if (news) checks.opposing_evidence = sentences.some((sentence) =>
       sentence.includes(news.source) && dated(sentence, news.published_at) && /수출.*(?:증가|늘|개선)/.test(sentence));
   } else {
-    const reportDate = research.summary?.untrusted_text?.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+    const reference = research.summary?.untrusted_text ?? "";
+    const reportDate = reference.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+    const domain = reference.match(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b/i)?.[0];
     checks.research_basis = sentences.some((sentence) =>
-      /경제통계/.test(sentence) && /수출.*(?:감소|줄|둔화)/.test(sentence) && dated(sentence, reportDate));
+      domain && sentence.includes(domain) && /수출.*(?:감소|줄|둔화)/.test(sentence) && dated(sentence, reportDate));
   }
   return checks;
 }
