@@ -25,6 +25,18 @@ export type AppShellProps = {
   readonly onListOpenChange?: (next: PanelState) => void;
 };
 
+export const ShellNavigation = (props: {
+  readonly navigation: ReactElement | undefined;
+}): ReactElement | null =>
+  props.navigation === undefined ? null : (
+    <nav
+      aria-label={text("nav.destinations", "ko")}
+      className="flex flex-none flex-col items-center gap-space-2 bg-surface p-space-1"
+    >
+      {props.navigation}
+    </nav>
+  );
+
 export type ChatProps = {
   readonly chat: ReactElement;
   readonly composer: ReactElement | null | undefined;

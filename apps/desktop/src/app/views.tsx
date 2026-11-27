@@ -25,17 +25,29 @@ import {
 import { coreUpdateClient, getDataStatus } from "../shared/ipc";
 import { queryKeys, text } from "../shared/lib";
 import { detach } from "../shared/platform";
-import { useNavigate, useSources, useSystemSettings } from "./context";
+import {
+  useNavigate,
+  useSources,
+  useSettingsOrigin,
+  useSystemSettings,
+} from "./context";
 import { SettingsSections } from "./settings";
 import { describeIpcFailure, useAppVersion } from "./query";
 
 export const ChatRouteView = (): ReactElement => (
-  <Page title={text("shell.chat", "ko")}>
-    <Disclosure title={text("notice.chatDataShort", "ko")}>
-      <Text>{text("notice.chatData", "ko")}</Text>
-    </Disclosure>
-    <ChatPanel context={undefined} />
-  </Page>
+  <ChatPanel context={undefined}>
+    {(conversation): ReactElement => (
+      <Page
+        title={text("shell.chat", "ko")}
+        layout="fill"
+        conversation={conversation}
+      >
+        <Disclosure title={text("notice.chatDataShort", "ko")}>
+          <Text>{text("notice.chatData", "ko")}</Text>
+        </Disclosure>
+      </Page>
+    )}
+  </ChatPanel>
 );
 
 export const LatestBriefingView = (): ReactElement => {
@@ -104,7 +116,6 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
 };
 
 export const HomeView = (): ReactElement => {
-  const go = useNavigate();
   const queryClient = useQueryClient();
   const retry = (): void => {
     detach({
@@ -114,16 +125,7 @@ export const HomeView = (): ReactElement => {
     });
   };
   return (
-    <Page
-      title={text("app.homeTitle", "ko")}
-      layout="fill"
-      actions={{
-        label: text("app.openSettings", "ko"),
-        onPress: (): void => {
-          go("/settings");
-        },
-      }}
-    >
+    <Page title={text("app.homeTitle", "ko")} layout="fill">
       <HomeBody retry={retry} />
     </Page>
   );
@@ -159,13 +161,15 @@ export const SettingsRouteView = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
   const system = useSystemSettings();
+  const origin = useSettingsOrigin();
   const tossEntry = useKeyEntry();
   return (
     <AppShell>
       <SettingsScreen
         tossEntry={tossEntry}
+        backTarget={origin === "/" ? "home" : "previous"}
         onBack={(): void => {
-          go("/");
+          go(origin);
         }}
         onOpenStatus={(): void => {
           go("/settings/status");

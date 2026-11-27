@@ -1,14 +1,16 @@
 import type { ReactElement } from "react";
 import {
   Card,
+  DataText,
   EmptyState,
   Page,
   Skeleton,
   Stack,
   Text,
 } from "../../../shared/ds";
-import type { ScreenSources } from "../../../shared/ipc";
-import { briefingExcerpt, briefingText } from "../messages";
+import { parseFreeText, type FreeText } from "../../../shared/lib";
+import type { BriefingSummary, ScreenSources } from "../../../shared/ipc";
+import { briefingText } from "../messages";
 import { useBriefings, useOpenSource } from "../model/briefings";
 import { BriefingView, type BriefingLayout } from "./BriefingView";
 
@@ -44,6 +46,78 @@ const Empty = (props: { readonly layout: BriefingLayout }): ReactElement => (
   </Card>
 );
 
+const excerpt = (body: FreeText): FreeText => {
+  if (body.length <= 180) return body;
+  const shortened = parseFreeText(
+    `${Array.from(body).slice(0, 179).join("").trimEnd()}…`,
+  );
+  return shortened.kind === "ok" ? shortened.value : body;
+};
+
+const Summary = (props: {
+  readonly latest: BriefingSummary;
+  readonly layout: BriefingLayout;
+  readonly open: () => void;
+}): ReactElement => (
+  <Card
+    title={briefingText(props.latest.kind, "ko")}
+    layout={props.layout}
+    actions={{
+      label: briefingText("openBriefing", "ko"),
+      onPress: props.open,
+    }}
+  >
+    {props.latest.outcome.kind === "completed" ? (
+      <DataText value={excerpt(props.latest.outcome.body)} />
+    ) : (
+      <Text>{briefingText(props.latest.outcome.reason, "ko")}</Text>
+    )}
+  </Card>
+);
+
+const otherSessions = (
+  latest: BriefingSummary,
+  past: readonly BriefingSummary[],
+): readonly BriefingSummary[] => {
+  return (["morning", "pre-us-market"] as const)
+    .filter((kind) => kind !== latest.kind)
+    .map((kind) => past.find((briefing) => briefing.kind === kind))
+    .filter((briefing) => briefing !== undefined);
+};
+
+const SessionCards = ({
+  latest,
+  past,
+  layout,
+  openSource,
+  openHistory,
+}: {
+  readonly latest: BriefingSummary;
+  readonly past: readonly BriefingSummary[];
+  readonly layout: BriefingLayout;
+  readonly openSource: ReturnType<typeof useOpenSource>;
+  readonly openHistory: () => void;
+}): ReactElement => {
+  return (
+    <Stack gap="space-4">
+      <BriefingView
+        layout={layout}
+        briefing={latest}
+        onOpenSource={openSource}
+        onOpenHistory={past.length === 0 ? undefined : openHistory}
+      />
+      {otherSessions(latest, past).map((briefing) => (
+        <BriefingView
+          key={briefing.id}
+          briefing={briefing}
+          onOpenSource={openSource}
+          onOpenHistory={undefined}
+        />
+      ))}
+    </Stack>
+  );
+};
+
 export const BriefingCard = (props: {
   readonly load: Load;
   readonly presentation?: "summary" | "full";
@@ -65,43 +139,16 @@ export const BriefingCard = (props: {
       if (latest === undefined) return <Empty layout={layout} />;
       if (props.presentation === "summary")
         return (
-          <Card
-            title={briefingText(latest.kind, "ko")}
-            layout={layout}
-            actions={{
-              label: briefingText("openBriefing", "ko"),
-              onPress: props.onOpenHistory,
-            }}
-          >
-            <Text>
-              {latest.outcome.kind === "completed"
-                ? briefingExcerpt(latest.outcome.body)
-                : briefingText(latest.outcome.reason, "ko")}
-            </Text>
-          </Card>
+          <Summary latest={latest} layout={layout} open={props.onOpenHistory} />
         );
-      const past = briefings.view.data.past;
-      const sessions = (["morning", "pre-us-market"] as const)
-        .filter((kind) => kind !== latest.kind)
-        .map((kind) => past.find((briefing) => briefing.kind === kind))
-        .filter((briefing) => briefing !== undefined);
       return (
-        <Stack gap="space-4">
-          <BriefingView
-            layout={layout}
-            briefing={latest}
-            onOpenSource={openSource}
-            onOpenHistory={past.length === 0 ? undefined : props.onOpenHistory}
-          />
-          {sessions.map((briefing) => (
-            <BriefingView
-              key={briefing.id}
-              briefing={briefing}
-              onOpenSource={openSource}
-              onOpenHistory={undefined}
-            />
-          ))}
-        </Stack>
+        <SessionCards
+          latest={latest}
+          past={briefings.view.data.past}
+          layout={layout}
+          openSource={openSource}
+          openHistory={props.onOpenHistory}
+        />
       );
     }
   }

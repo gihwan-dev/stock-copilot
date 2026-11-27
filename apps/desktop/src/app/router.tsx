@@ -105,8 +105,19 @@ export const AppRouter = (props: {
           : createMemoryHistory({ initialEntries: [props.initialPath] }),
     }),
   );
+  const [origin, setOrigin] = useState<AppRoutePath>("/");
   const go = useCallback<NavigateFn>(
     (path): void => {
+      const current = router.state.location.pathname;
+      if (
+        path === "/settings" &&
+        (current === "/" ||
+          current === "/briefing" ||
+          current === "/briefings" ||
+          current === "/transactions" ||
+          current === "/chat")
+      )
+        setOrigin(current);
       router.history.push(path);
     },
     [router],
@@ -116,7 +127,12 @@ export const AppRouter = (props: {
   }, [router]);
   useNavigationEvent(openDataStatus);
   return (
-    <ScreenProviders go={go} sources={props.sources} system={props.system}>
+    <ScreenProviders
+      origin={origin}
+      go={go}
+      sources={props.sources}
+      system={props.system}
+    >
       <RouterProvider router={router} />
     </ScreenProviders>
   );

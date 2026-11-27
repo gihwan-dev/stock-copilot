@@ -6,6 +6,7 @@ import type { IconName } from "./icon-paths";
 import type { ControlSize, Availability } from "./control-types";
 import { Icon } from "./Icon";
 type Props = {
+  readonly caption?: "wide";
   readonly icon: IconName;
   readonly label: UiText;
   readonly onClick?: () => void;
@@ -40,6 +41,10 @@ const small = (props: Props): ReactElement => (
     )}
   </BaseButton>
 );
+const normalClasses = {
+  icon: "inline-grid place-items-center flex-none rounded-md cursor-pointer bg-transparent text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-disabled disabled:cursor-not-allowed focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus size-control-height",
+  wide: "inline-grid place-items-center flex-none rounded-md cursor-pointer bg-transparent text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-disabled disabled:cursor-not-allowed focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus w-full min-h-toolbar-height px-space-1",
+} as const;
 const normal = (props: Props): ReactElement => (
   <BaseButton
     type="button"
@@ -54,7 +59,7 @@ const normal = (props: Props): ReactElement => (
     onClick={(): void => {
       if (props.onClick !== undefined) props.onClick();
     }}
-    className="inline-grid place-items-center flex-none rounded-md cursor-pointer bg-transparent text-ink-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-disabled disabled:cursor-not-allowed focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus size-control-height"
+    className={normalClasses[props.caption ?? "icon"]}
   >
     {props.pressed === "pressed" ? (
       <span className="bg-primary-soft text-primary rounded-md">
@@ -63,6 +68,11 @@ const normal = (props: Props): ReactElement => (
     ) : (
       <Icon name={props.icon} size="icon-md" />
     )}
+    {props.caption === "wide" ? (
+      <span className="hidden window-lg:block px-space-1 text-caption">
+        {props.label}
+      </span>
+    ) : null}
   </BaseButton>
 );
 

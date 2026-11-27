@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import type { UiText } from "../lib";
 import { Button } from "./Button";
 import type { Action } from "./control-types";
+import { ChatBody } from "./AppShell";
 import { Heading } from "./Heading";
 import type { LayoutChildren } from "./layout-children";
 
@@ -9,6 +10,10 @@ type Layout = "scroll" | "fill";
 
 type Props = LayoutChildren & {
   readonly title: UiText;
+  readonly conversation?: {
+    readonly messages: ReactElement;
+    readonly composer: ReactElement | null;
+  };
   readonly actions?: Action;
   readonly layout?: Layout;
 };
@@ -48,7 +53,15 @@ export const Page = (props: Props): ReactElement => {
         )}
       </header>
       <div className={bodyClasses[layout]}>
-        <div className={innerClasses[layout]}>{props.children}</div>
+        <div className={innerClasses[layout]}>
+          {props.children}
+          {props.conversation === undefined ? null : (
+            <ChatBody
+              chat={props.conversation.messages}
+              composer={props.conversation.composer}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ import { Divider } from "./Divider";
 import { ScrollArea } from "./ScrollArea";
 import {
   ChatFooter,
+  ShellNavigation,
   ChatHead,
   ListHead,
   RailContent,
@@ -86,7 +87,7 @@ const ShellSidebar = (props: {
     </>
   );
 };
-const ChatBody = (props: {
+export const ChatBody = (props: {
   readonly chat: ReactElement;
   readonly composer: ReactElement | null;
 }): ReactElement => {
@@ -105,6 +106,7 @@ const ChatBody = (props: {
     </>
   );
 };
+
 const ResizableArea = (props: {
   readonly main: ReactElement;
   readonly chat: ReactElement;
@@ -195,7 +197,6 @@ export const AppShell = (props: AppShellProps): ReactElement => {
     props.onListOpenChange,
   );
   const chatSlot = props.chat ?? null;
-  const statusSlot = props.status ?? null;
   const main = (
     <main className="relative flex-1 flex flex-col scroll-flex">
       <ShellChatBar chat={chatSlot} state={chatState} onChange={updateChat} />
@@ -215,18 +216,11 @@ export const AppShell = (props: AppShellProps): ReactElement => {
       }}
       className="relative flex flex-col flex-1 w-full scroll-flex"
     >
-      {statusSlot === null ? null : (
-        <div className="flex-none w-full">{statusSlot}</div>
+      {props.status == null ? null : (
+        <div className="flex-none w-full">{props.status}</div>
       )}
       <div className="relative flex flex-1 w-full scroll-flex">
-        {props.navigation === undefined ? null : (
-          <nav
-            aria-label={text("nav.destinations", "ko")}
-            className="flex flex-none flex-col items-center gap-space-2 bg-surface p-space-1"
-          >
-            {props.navigation}
-          </nav>
-        )}
+        <ShellNavigation navigation={props.navigation} />
         <div className="relative flex flex-1 scroll-flex">
           <ShellSidebar
             list={props.list}
