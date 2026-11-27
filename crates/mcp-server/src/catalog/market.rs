@@ -213,11 +213,11 @@ impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
         let primary = require_market(self.reads.market_overview().await);
         if primary.as_ref().is_ok_and(|view| {
             view.lines.iter().any(|line| {
-                matches!(line.item, OverviewItem::Kospi | OverviewItem::Kosdaq)
+                [OverviewItem::Kospi, OverviewItem::Kosdaq].contains(&line.item)
                     && line.change_rate.is_some()
             })
         }) {
-            return primary.map(|view| render_overview(&view));
+            return primary.map(|view| Value::Object(render_overview(&view)));
         }
         let sectors = require_market(self.reads.sectors(KnownMarket::Kr).await);
         let mut output = match primary {
@@ -230,15 +230,16 @@ impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
                     lines: Vec::new(),
                     sessions: Vec::new(),
                 });
-                empty["overview_error"] = error.to_json_value();
+                empty.insert(String::from("overview_error"), error.to_json_value());
                 empty
             }
         };
-        output["kr_sector_ranking"] = match sectors {
+        let ranking = match sectors {
             Ok(view) => render_sectors(&view, DEFAULT_LIST_LIMIT),
             Err(error) => error.to_json_value(),
         };
-        Ok(output)
+        output.insert(String::from("kr_sector_ranking"), ranking);
+        Ok(Value::Object(output))
     }
 
     async fn candles(&self, invocation: &ToolInvocation<'_>) -> Result<Value, ToolErrorPayload> {
@@ -457,7 +458,7 @@ const fn session_name(status: SessionStatus) -> &'static str {
 
 const NOT_PROVIDED: [OverviewItem; 2] = [OverviewItem::UsTreasury2Y, OverviewItem::UsTreasury10Y];
 
-fn render_overview(view: &MarketOverviewToolView) -> Value {
+fn render_overview(view: &MarketOverviewToolView) -> Map<String, Value> {
     let mut lines = view.lines.clone();
     lines.sort_by_key(|line| line.item);
     let line_values: Vec<Value> = lines
@@ -504,10 +505,10 @@ fn render_overview(view: &MarketOverviewToolView) -> Value {
             ])
         })
         .collect();
-    object(vec![
-        ("indicators", Value::Array(line_values)),
-        ("sessions", Value::Array(session_values)),
-        ("not_provided", Value::Array(not_provided)),
+    Map::from_iter([
+        (String::from("indicators"), Value::Array(line_values)),
+        (String::from("sessions"), Value::Array(session_values)),
+        (String::from("not_provided"), Value::Array(not_provided)),
     ])
 }
 

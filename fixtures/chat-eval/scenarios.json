@@ -2145,10 +2145,10 @@
       "news": [],
       "extra": {
         "request_web_research": {
-          "mode": "user_message",
+          "mode": "market_outlook",
           "collected_at": "2026-11-26T10:30:00+09:00",
           "summary": {
-            "untrusted_text": "11월 25일 합성 경제통계 발표에 따르면 신규 수출 주문이 감소했다."
+            "untrusted_text": "2026-11-25 합성 경제통계 발표에 따르면 신규 수출 주문이 감소했다."
           }
         }
       },
@@ -2189,7 +2189,9 @@
           {
             "name": "request_web_research",
             "args": {
-              "mode": "^user_message$"
+              "mode": "^market_outlook$",
+              "market": "^kr$",
+              "horizon": "^month$"
             },
             "isError": false
           }
@@ -2299,7 +2301,9 @@
           {
             "name": "request_web_research",
             "args": {
-              "mode": "^user_message$"
+              "mode": "^market_outlook$",
+              "market": "^kr$",
+              "horizon": "^month$"
             },
             "isError": true
           }

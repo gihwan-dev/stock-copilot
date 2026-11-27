@@ -13,6 +13,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { appSimulate, buildResponses } from "./portfolio-model.mjs";
 
+import { outlookChecks } from "./outlook-checks.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..");
 const SERVER = "stock";
@@ -185,12 +187,7 @@ export const deterministicChecks = (scenario, answer, toolNames, calls = []) => 
     );
   }
   if (expect.research_steps) {
-    const steps = expect.research_steps;
-    const reads = calls.filter((call) => steps.some((step) => step.name === call.name));
-    checks.research_evidence = reads.length === steps.length && steps.every((step, index) => {
-      const read = reads[index];
-      return callMatches(read, step) && read.isError === step.isError && read.result != null;
-    });
+    Object.assign(checks, outlookChecks(scenario, answer, calls));
   }
   const allowedWrites = new Set((expect.calls ?? []).map((call) => call.name));
   checks.no_unrequested_writes = calls.every(
