@@ -88,7 +88,8 @@ test("DS15 locks all rendering inputs independently", () => {
       ),
     ).components,
   );
-  assert.equal(settings.components.length, 47);
+  assert.equal(settings.components.length, 48);
+  assert.ok(settings.components.includes("ConversationTree"));
   assert.deepEqual(settings.themes, ["light", "dark"]);
 });
 

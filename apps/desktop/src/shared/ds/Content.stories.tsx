@@ -1,11 +1,12 @@
 import type { ReactElement } from "react";
 import { text, parseFreeText, emptyFreeText } from "../lib";
+import { ConversationTreeExample } from "./ConversationTreeExample.stories";
 import { Markdown } from "./Markdown";
 import { ChatInput, chatInputStressStories } from "./ChatInput";
 const example = parseFreeText(text("chat.example", "ko"));
 const content = example.kind === "ok" ? example.value : emptyFreeText;
 type Story = {
-  readonly component: "Markdown" | "ChatInput";
+  readonly component: "Markdown" | "ChatInput" | "ConversationTree";
   readonly state: "normal" | "denied" | "sending" | "stress";
   readonly themes: readonly ["light", "dark"];
   readonly render: () => ReactElement;
@@ -86,4 +87,17 @@ export const contentComponentStories: readonly Story[] = [
     ),
   },
   ...chatInputStressStories,
+  {
+    component: "ConversationTree",
+    state: "normal",
+    themes: ["light", "dark"],
+    render: (): ReactElement => (
+      <ConversationTreeExample
+        titles={[
+          text("catalog.marketChat", "ko"),
+          text("catalog.portfolioChat", "ko"),
+        ]}
+      />
+    ),
+  },
 ];

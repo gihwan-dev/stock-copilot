@@ -54,7 +54,7 @@ const SessionList = (
   props: Pick<Props, "entries" | "selected" | "select">,
 ): ReactElement => (
   <ScrollArea direction="vertical">
-    <ul className="flex flex-col gap-space-1 px-space-2">
+    <ul className="flex flex-col gap-space-1 @content-medium:px-space-2">
       {props.entries.map((entry) => (
         <li key={entry.id} className="scroll-flex">
           <Row
@@ -88,7 +88,7 @@ export const ConversationTree = (props: Props): ReactElement => {
       <Layout panel={panel}>
         <nav
           aria-label={props.heading}
-          className="flex flex-col scroll-flex col-span-3 p-space-2 border-b-hairline border-solid border-line bg-surface"
+          className="flex flex-col scroll-flex col-span-4 @content-medium:col-span-3 @content-medium:p-space-2 border-b-hairline border-solid border-line bg-surface"
         >
           <div className="flex flex-wrap items-center justify-between gap-space-1">
             <button
@@ -98,7 +98,7 @@ export const ConversationTree = (props: Props): ReactElement => {
               onClick={(): void => {
                 setPanel(panel === "open" ? "closed" : "open");
               }}
-              className="inline-flex items-center gap-space-1 px-space-2 font-semibold text-ink rounded-md hover:bg-surface-sunken focus-visible:outline-focus"
+              className="inline-flex flex-wrap items-center gap-space-1 @content-medium:px-space-2 font-semibold text-ink rounded-md hover:bg-surface-sunken focus-visible:outline-focus"
             >
               <Icon
                 name={panel === "open" ? "chevron-down" : "chevron-right"}
@@ -131,7 +131,7 @@ export const ConversationTree = (props: Props): ReactElement => {
           </div>
           {props.feedback}
         </nav>
-        <div className="flex flex-col flex-1 scroll-flex col-span-9">
+        <div className="flex flex-col flex-1 scroll-flex col-span-8 @content-medium:col-span-9">
           {props.children}
         </div>
       </Layout>

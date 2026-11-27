@@ -19,6 +19,7 @@ import { Skeleton } from "../Skeleton";
 import { Badge } from "../Badge";
 import { StatusBar } from "../StatusBar";
 import { Money } from "../Numbers";
+import { ConversationTreeExample } from "../ConversationTreeExample.stories";
 import { contentStressStories } from "./StressContent.stories";
 import { layoutStressStories } from "./StressLayout.stories";
 import { stressFixtures } from "./stress";
@@ -68,6 +69,7 @@ type Component =
   | "DataText"
   | "TimestampText"
   | "Markdown"
+  | "ConversationTree"
   | "ChatInput"
   | "StepScreen"
   | "ListRow";
@@ -229,6 +231,7 @@ const stories: readonly Omit<Story, "state" | "themes">[] = [
     component: "StatusBar",
     render: (): ReactElement => <StatusBar action={action}>{label}</StatusBar>,
   },
+  { component: "ConversationTree", render: (): ReactElement => <ConversationTreeExample titles={stressFixtures.paragraphs} suffix={stressFixtures.english} /> },
   ...contentStressStories,
   ...layoutStressStories,
 ];

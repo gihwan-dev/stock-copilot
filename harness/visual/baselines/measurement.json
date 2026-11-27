@@ -59,7 +59,8 @@
       "TimestampText",
       "ChartNumber",
       "Markdown",
-      "ChatInput"
+      "ChatInput",
+      "ConversationTree"
     ],
     "themes": ["light", "dark"]
   },
@@ -721,6 +722,20 @@
       "bytes": 5534,
       "first": "defe9ac34b7bbc99f38fb11ddde71957cb3a71d992b3a4144f1ea03810b8b3e2",
       "second": "defe9ac34b7bbc99f38fb11ddde71957cb3a71d992b3a4144f1ea03810b8b3e2"
+    },
+    {
+      "component": "ConversationTree",
+      "theme": "light",
+      "bytes": 10872,
+      "first": "76be4c3afc447a7ebf4beaf33663d0bd7c4847169f5cb88560bfff0df24db4d0",
+      "second": "76be4c3afc447a7ebf4beaf33663d0bd7c4847169f5cb88560bfff0df24db4d0"
+    },
+    {
+      "component": "ConversationTree",
+      "theme": "dark",
+      "bytes": 10958,
+      "first": "0e3fed64efee1bd9ed5ea95b0d826fb244fa711ed373bdcdebc15afd3b0f0c5f",
+      "second": "0e3fed64efee1bd9ed5ea95b0d826fb244fa711ed373bdcdebc15afd3b0f0c5f"
     }
   ]
 }

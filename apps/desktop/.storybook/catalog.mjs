@@ -31,8 +31,10 @@ const numericComponents = new Set([
   "PriceChange",
 ]);
 const Example = ({ render, theme }) => render(theme);
+const ownsViewport = (component) =>
+  component === "AppShell" || component === "ConversationTree";
 const Stage = ({ component, render, theme }) =>
-  component === "AppShell"
+  ownsViewport(component)
     ? createElement(
         "div",
         {
@@ -76,10 +78,9 @@ export const renderCatalog = (component, theme, sample) => {
   return createElement(
     "div",
     {
-      className:
-        component === "AppShell"
-          ? "h-full flex flex-col bg-surface text-ink"
-          : "h-full flex flex-col bg-surface text-ink p-space-4",
+      className: ownsViewport(component)
+        ? "h-full flex flex-col bg-surface text-ink"
+        : "h-full flex flex-col bg-surface text-ink p-space-4",
       "data-catalog-component": component,
       "data-catalog-theme": theme,
       "data-catalog-sample": sample,
@@ -88,10 +89,9 @@ export const renderCatalog = (component, theme, sample) => {
       "section",
       {
         key: `${component}-${sample}-${theme}`,
-        className:
-          component === "AppShell"
-            ? "flex-1 scroll-flex flex flex-col bg-surface"
-            : "flex-1 scroll-flex flex flex-col bg-surface px-space-4",
+        className: ownsViewport(component)
+          ? "flex-1 scroll-flex flex flex-col bg-surface"
+          : "flex-1 scroll-flex flex flex-col bg-surface px-space-4",
       },
       createElement(Stage, { component, render: story.render, theme }),
     ),

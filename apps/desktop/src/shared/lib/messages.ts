@@ -3,6 +3,9 @@ import type { UiText } from "./brand";
 export type Locale = "ko";
 
 const catalog = {
+  "catalog.newChat": { ko: "새 채팅" as UiText },
+  "catalog.marketChat": { ko: "이번 주 시장 전망" as UiText },
+  "catalog.portfolioChat": { ko: "보유 종목 점검" as UiText },
   "chat.example": {
     ko: "## 오늘의 소식\n\n[출처](https://example.test/article)\n\n![사진](https://example.test/image)\n\n```text\n긴코드와긴낱말의표시\n```" as UiText,
   },
