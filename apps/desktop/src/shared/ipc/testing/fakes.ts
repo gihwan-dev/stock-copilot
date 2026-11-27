@@ -197,3 +197,5 @@ export const answerChatSessionCommands = (): void => {
 export const returnDifferentChatSession = (): void => {
   mockCommands({ createChatSession: () => responses.createChatSession });
 };
+
+export const recordedMainChatTitle = responses.listChatSessions[0].title;

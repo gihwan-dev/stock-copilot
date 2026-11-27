@@ -32,7 +32,6 @@ import type {
   ChatFailureReason,
   ChatHistory,
   ChatHistoryEntry,
-  ChatSessionItem,
   ChatResubscribed,
   ChatRole,
   ChatSource,
@@ -228,22 +227,6 @@ export const parseChatId = (raw: Wire): Result<EntityId, IpcFailure> => {
   const parsed = idSchema.safeParse(raw);
   return parsed.success ? ok(parsed.data) : err({ kind: "invalid-response" });
 };
-
-const sessionItemSchema = z
-  .object({ session_id: idSchema, title: bodySchema.nullable() })
-  .transform((item): ChatSessionItem => ({
-    session: item.session_id,
-    title: item.title ?? undefined,
-  }));
-
-export const settleChatSessions = (
-  outcome: WireOutcome,
-): Result<readonly ChatSessionItem[], IpcFailure> =>
-  settleOutcome(outcome, z.array(sessionItemSchema));
-export const settleCreatedChatSession = (
-  outcome: WireOutcome,
-): Result<ChatSessionItem, IpcFailure> =>
-  settleOutcome(outcome, sessionItemSchema);
 
 export const settleChatHistory = (
   outcome: WireOutcome,

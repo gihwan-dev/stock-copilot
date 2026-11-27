@@ -1,3 +1,4 @@
+export { chatSessions, createChatSession } from "./chat-sessions";
 export type { IpcFailure } from "./call";
 export { coreUpdateClient, type UpdateClient } from "./update-client";
 export { getAllocation, getPortfolio } from "./portfolio-call";
@@ -101,8 +102,6 @@ export type { ChatListener, ChatTurnHandle } from "./call";
 export {
   cancelChatTurn,
   chatHistory,
-  chatSessions,
-  createChatSession,
   newChatSessionId,
   mainChatSession,
   newChatTurn,

@@ -7,15 +7,12 @@ import {
   parseChatStreamEvent,
   settleChatCancel,
   settleChatHistory,
-  settleChatSessions,
-  settleCreatedChatSession,
   settleChatResubscribe,
   settleChatTurn,
 } from "./chat-schema";
 import type {
   ChatCancelOutcome,
   ChatHistory,
-  ChatSessionItem,
   ChatResubscribed,
   ChatStreamEvent,
   ChatTurnSettled,
@@ -158,23 +155,6 @@ export const mainChatSession = (): Result<EntityId, IpcFailure> =>
 
 export const newChatSessionId = (): Result<EntityId, IpcFailure> =>
   freshId("session");
-
-export const chatSessions = (): Promise<
-  Result<readonly ChatSessionItem[], IpcFailure>
-> =>
-  settleCall(commands.listChatSessions(), (outcome) =>
-    settleChatSessions(wireOutcome(outcome)),
-  );
-
-export const createChatSession = (
-  session: EntityId,
-): Promise<Result<ChatSessionItem, IpcFailure>> =>
-  settleCall(commands.createChatSession({ session_id: session }), (outcome) => {
-    const result = settleCreatedChatSession(wireOutcome(outcome));
-    return result.kind === "ok" && result.value.session !== session
-      ? err({ kind: "invalid-response" })
-      : result;
-  });
 
 export const newChatTurn = (): Result<EntityId, IpcFailure> => freshId("turn");
 

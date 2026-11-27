@@ -1,8 +1,7 @@
+import { chatSessions, createChatSession } from "./chat-sessions";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { parseFreeText, parseTicker } from "../lib";
 import {
-  chatSessions,
-  createChatSession,
   mainChatSession,
   newChatSessionId,
   newChatTurn,
@@ -13,6 +12,7 @@ import { parseChatStreamEvent } from "./chat-schema";
 import { wire } from "./schema";
 import {
   answerChatSessionCommands,
+  recordedMainChatTitle,
   answerChatTurnStreaming,
   installChannelWindow,
   resetCommands,
@@ -205,7 +205,7 @@ test("session commands preserve titles, empty chats and the requested identity",
   await expect(chatSessions()).resolves.toStrictEqual({
     kind: "ok",
     value: [
-      { session: "main-chat", title: "삼성전자 현황 알려 줘" },
+      { session: "main-chat", title: recordedMainChatTitle },
       { session: "session-new", title: undefined },
     ],
   });
