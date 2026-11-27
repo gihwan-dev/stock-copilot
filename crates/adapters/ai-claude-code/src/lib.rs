@@ -14,6 +14,7 @@ mod provider;
 mod queue;
 mod quota;
 mod sandbox;
+mod search_evidence;
 
 pub use attachment::{RunMcpAttachment, SpawnedPidNotice};
 pub use chat_prompt::CHAT_SYSTEM_PROMPT;

@@ -438,3 +438,133 @@ fn held_instruments_are_research_targets_and_domestic_codes_search_by_master_nam
         "보유도 관심도 아닌 종목은 거부"
     );
 }
+
+fn public_text(value: &str) -> UntrustedText {
+    UntrustedText::try_new(value).expect("합성 자료")
+}
+
+fn observation(query: &str, year: i32) -> application::SearchObservation {
+    application::SearchObservation {
+        query: public_text(query),
+        date_kind: application::SourceDateKind::Observed,
+        url: domain::NormalizedUrl::try_new("https://public.example/report").expect("URL"),
+        date: domain::CalendarDate::from_parts(
+            domain::CalendarYear::new(year),
+            domain::MonthNumber::new(9),
+            domain::DayNumber::new(20),
+        )
+        .expect("관측일"),
+        title: public_text("대표 지수 종가 상승"),
+    }
+}
+
+fn search_event(query: &str, action: &str) -> AiEvent {
+    AiEvent::WebSearch {
+        query: public_text(query),
+        action: public_text(action),
+    }
+}
+
+const US_FORTNIGHT: &str = "US stock market SPY index performance past fortnight and outlook next fortnight dated economic releases";
+const KR_MONTH: &str = "Korean stock market KOSPI index performance past month and outlook next month dated economic releases";
+
+#[test]
+fn market_outlook_rejects_unverified_out_of_window_or_unrelated_evidence() {
+    let provider = Arc::new(ScriptedAiProvider::default());
+    let port = research(&provider, &seeded_store());
+    let request = WebResearchToolRequest::MarketOutlook {
+        market: application::OutlookMarket::Us,
+        horizon: application::OutlookHorizon::TwoWeeks,
+    };
+    let passed = AiEvent::IsolationChecked(IsolationCheck::Passed);
+    let completed = search_event(US_FORTNIGHT, "completed");
+    let fabricated = AiEvent::TextDelta(public_text("도구 없이 만든 요약"));
+    let dated = observation(US_FORTNIGHT, 2026);
+    for (events, observations) in [
+        (vec![passed.clone(), fabricated.clone()], vec![]),
+        (vec![passed.clone(), fabricated], vec![dated.clone()]),
+        (
+            vec![passed.clone(), completed.clone()],
+            vec![observation(US_FORTNIGHT, 2025)],
+        ),
+        (
+            vec![passed.clone(), completed.clone()],
+            vec![observation(US_FORTNIGHT, 2027)],
+        ),
+        (vec![passed.clone(), completed.clone()], vec![]),
+        (
+            vec![passed.clone(), search_event(US_FORTNIGHT, "failed")],
+            vec![dated.clone()],
+        ),
+        (vec![completed.clone()], vec![dated]),
+        (vec![passed, completed], vec![observation(KR_MONTH, 2026)]),
+    ] {
+        provider.script_run().push(Ok(
+            ScriptedAiEventStream::from_events(events).with_observations(observations)
+        ));
+        assert_eq!(
+            tauri::async_runtime::block_on(port.request_research(&run_id(), &request)),
+            Err(WebResearchToolFailure::CollectionFailed)
+        );
+    }
+}
+
+#[test]
+fn market_outlook_uses_only_public_query_and_dated_search_observations() {
+    use application::{OutlookHorizon, OutlookMarket};
+    let store = seeded_store();
+    tauri::async_runtime::block_on(store.append_entry(
+        &session(),
+        &StoredChatEntry::new(
+            ChatSequence::new(2),
+            at(),
+            turn(),
+            StoredChatContent::User(StoredUserMessage::from_store_result(
+                UserMessageId::try_new("private").expect("id"),
+                public_text("가상 계좌번호 123456789 보유 수량 37주인데 시장은?"),
+            )),
+        ),
+    ))
+    .expect("저장");
+    for (market, horizon, query) in [
+        (OutlookMarket::Us, OutlookHorizon::TwoWeeks, US_FORTNIGHT),
+        (OutlookMarket::Kr, OutlookHorizon::Month, KR_MONTH),
+    ] {
+        let provider = Arc::new(ScriptedAiProvider::default());
+        let turns = ChatTurnBook::new();
+        let _turn = turns.open(
+            &run_id(),
+            ChatTurnRef {
+                session: session(),
+                turn: turn(),
+            },
+        );
+        let port = research_with(&provider, &store, turns);
+        provider
+            .script_run()
+            .push(Ok(ScriptedAiEventStream::from_events(vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                search_event(query, "completed"),
+                AiEvent::TextDelta(public_text("근거 없는 요약")),
+            ])
+            .with_observations(vec![observation(query, 2026)])));
+        let result = tauri::async_runtime::block_on(port.request_research(
+            &run_id(),
+            &WebResearchToolRequest::MarketOutlook { market, horizon },
+        ))
+        .expect("조사");
+        assert_eq!(
+            result.summary.as_untrusted_str(),
+            "public.example | 관측일 2026-09-20 | 대표 지수 종가 상승"
+        );
+        assert_eq!(result.collected_at, at());
+        let calls = provider.calls();
+        let [AiProviderCall::Run(spec)] = calls.as_slice() else {
+            panic!("수집 실행 하나")
+        };
+        let RunInput::Collection(CollectionQuery::MarketOutlook(approved)) = spec.input() else {
+            panic!("제한된 질의")
+        };
+        assert_eq!(approved.text().as_str(), query);
+    }
+}

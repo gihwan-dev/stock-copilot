@@ -24,6 +24,7 @@ pub enum ScriptedStreamStep {
 #[derive(Debug)]
 pub struct ScriptedAiEventStream {
     steps: VecDeque<ScriptedStreamStep>,
+    observations: Vec<application::SearchObservation>,
     clock: Option<Arc<SteppedClock>>,
 }
 
@@ -32,6 +33,7 @@ impl ScriptedAiEventStream {
     pub fn new(steps: Vec<ScriptedStreamStep>) -> Self {
         Self {
             steps: steps.into(),
+            observations: Vec::new(),
             clock: None,
         }
     }
@@ -40,8 +42,15 @@ impl ScriptedAiEventStream {
     pub fn with_clock(steps: Vec<ScriptedStreamStep>, clock: Arc<SteppedClock>) -> Self {
         Self {
             steps: steps.into(),
+            observations: Vec::new(),
             clock: Some(clock),
         }
+    }
+
+    #[must_use]
+    pub fn with_observations(mut self, observations: Vec<application::SearchObservation>) -> Self {
+        self.observations = observations;
+        self
     }
 
     #[must_use]
@@ -51,6 +60,10 @@ impl ScriptedAiEventStream {
 }
 
 impl AiEventStream for ScriptedAiEventStream {
+    fn search_observations(&self) -> &[application::SearchObservation] {
+        &self.observations
+    }
+
     fn next(&mut self) -> impl Future<Output = Result<Option<AiEvent>, InformationError>> + Send {
         ready(match self.steps.pop_front() {
             None => Ok(None),

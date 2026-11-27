@@ -467,6 +467,7 @@ impl ClaudeCodeProvider {
             rx,
             finished: StreamState::Open,
             structured_output: None,
+            observations: Vec::new(),
             _cancel_guard: cancel_guard,
         })
     }
@@ -588,6 +589,7 @@ enum StreamItem {
 enum ChannelMessage {
     Event(AiEvent),
     Structured(serde_json::Value),
+    Observations(Vec<application::SearchObservation>),
     Control(StreamItem),
 }
 
@@ -601,6 +603,7 @@ pub struct ClaudeEventStream {
     rx: mpsc::Receiver<ChannelMessage>,
     finished: StreamState,
     structured_output: Option<serde_json::Value>,
+    observations: Vec<application::SearchObservation>,
     _cancel_guard: ChildCancelGuard,
 }
 
@@ -621,6 +624,9 @@ impl ClaudeEventStream {
 }
 
 impl AiEventStream for ClaudeEventStream {
+    fn search_observations(&self) -> &[application::SearchObservation] {
+        &self.observations
+    }
     async fn next(&mut self) -> Result<Option<AiEvent>, InformationError> {
         loop {
             if self.finished == StreamState::Closed {
@@ -628,6 +634,13 @@ impl AiEventStream for ClaudeEventStream {
             }
             match self.rx.recv().await {
                 Some(ChannelMessage::Event(event)) => return Ok(Some(event)),
+                Some(ChannelMessage::Observations(items)) => {
+                    self.observations.extend(
+                        items
+                            .into_iter()
+                            .take(20_usize.saturating_sub(self.observations.len())),
+                    );
+                }
                 Some(ChannelMessage::Structured(value)) => {
                     self.structured_output = Some(value);
                 }
@@ -972,18 +985,38 @@ fn decode_stdout_loop(
         ) {
             return stop;
         }
-        if let (DecodedLineKind::Result, PreflightZeroSeen::No, Some(value)) = (
-            decoder.last_line_kind(),
-            preflight_result,
-            decoder.last_structured_output(),
-        ) && sinks
-            .tx
-            .blocking_send(ChannelMessage::Structured(value.clone()))
-            .is_err()
-        {
-            return StopReason::ReceiverClosed;
+        if let Some(stop) = send_collection_outputs(decoder, preflight_result, sinks) {
+            return stop;
         }
     }
+}
+
+fn send_collection_outputs(
+    decoder: &ClaudeEventDecoder,
+    preflight_result: PreflightZeroSeen,
+    sinks: &StreamSinks<'_>,
+) -> Option<StopReason> {
+    let observations = decoder.line_observations();
+    if !observations.is_empty()
+        && sinks
+            .tx
+            .blocking_send(ChannelMessage::Observations(observations.to_vec()))
+            .is_err()
+    {
+        return Some(StopReason::ReceiverClosed);
+    }
+    if let (DecodedLineKind::Result, PreflightZeroSeen::No, Some(value)) = (
+        decoder.last_line_kind(),
+        preflight_result,
+        decoder.last_structured_output(),
+    ) && sinks
+        .tx
+        .blocking_send(ChannelMessage::Structured(value.clone()))
+        .is_err()
+    {
+        return Some(StopReason::ReceiverClosed);
+    }
+    None
 }
 
 fn is_echo_bufferable(event: &AiEvent) -> bool {
@@ -1237,6 +1270,10 @@ fn format_collection_query(query: &CollectionQuery) -> String {
                 labels.join(", ")
             )
         }
+        CollectionQuery::MarketOutlook(approved) => format!(
+            "Run WebSearch using this exact public query. Find dated sources, with the publication date in the search result title or metadata. Query: {}",
+            approved.text().as_str()
+        ),
         CollectionQuery::UserMessage(stored) => String::from(stored.text().as_untrusted_str()),
     }
 }

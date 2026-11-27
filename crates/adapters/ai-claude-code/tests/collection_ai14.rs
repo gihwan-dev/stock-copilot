@@ -128,7 +128,7 @@ mod tests {
         .expect("time")
     }
 
-    fn runner(prepared: &PreparedFakeAiCli, root: &Path) -> ClaudeWebCollectionRunner {
+    fn provider(prepared: &PreparedFakeAiCli, root: &Path) -> ClaudeCodeProvider {
         let config = ClaudeCodeConfig::new(
             prepared.executable_path().to_path_buf(),
             root.join("work"),
@@ -148,8 +148,12 @@ mod tests {
         .with_collection_json_schema(String::from(WEB_COLLECTION_JSON_SCHEMA))
         .with_cli_projects_dir(root.join("projects"))
         .with_preflight_reap_grace_ms(10_000_u64);
+        ClaudeCodeProvider::new(config)
+    }
+
+    fn runner(prepared: &PreparedFakeAiCli, root: &Path) -> ClaudeWebCollectionRunner {
         ClaudeWebCollectionRunner::new(
-            Arc::new(ClaudeCodeProvider::new(config)),
+            Arc::new(provider(prepared, root)),
             Arc::new(SteppedClock::new(at(1_700_000_000))),
         )
     }
@@ -187,6 +191,64 @@ mod tests {
             .expect("one")
             .argv
             .clone()
+    }
+
+    #[test]
+    fn market_outlook_stream_carries_only_dated_tool_results_for_the_public_query() {
+        use application::{
+            AiEventStream, AiProvider, AiRunId, ModelSelection, ReasoningEffort, RunInput,
+            RunPurpose, RunSpec,
+        };
+        use domain::{
+            WebSearchCandidateQuery, WebSearchInspection, WebSearchSensitiveContext,
+            inspect_web_search_query,
+        };
+        run_async(async {
+            let dir = TempDirGuard::new("outlook");
+            let candidate = WebSearchCandidateQuery::new("Korean stock market KOSPI week");
+            let WebSearchInspection::Approved(approved) =
+                inspect_web_search_query(&candidate, &WebSearchSensitiveContext::new())
+            else {
+                panic!("공개 질의")
+            };
+            let links = r#"Links: [{"title":"Index close","url":"https://news.example/close","observed_at":"2026-09-20"}]"#;
+            let answer = vec![
+                json!({"type":"assistant","message":{"content":[{"type":"tool_use","id":"web","name":"WebSearch","input":{"query":candidate.as_str()}}]}}).to_string(),
+                json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"web","content":[{"type":"text","text":links}]}]}}).to_string(),
+                result_with(Some(good_output())),
+            ];
+            let prepared = PreparedFakeAiCli::prepare(
+                dir.path(),
+                "fake-outlook",
+                &scenario(init_line(&json!([])), answer),
+            )
+            .expect("가상 CLI");
+            let spec = RunSpec::new(
+                AiRunId::try_new("outlook").expect("실행"),
+                RunInput::Collection(CollectionQuery::MarketOutlook(approved)),
+                ModelSelection::Fast,
+                ReasoningEffort::Low,
+                RunPurpose::WebCollection,
+            );
+            let mut stream = provider(&prepared, dir.path())
+                .run(spec)
+                .await
+                .expect("수집");
+            while stream.next().await.expect("스트림").is_some() {}
+            let [source] = stream.search_observations() else {
+                panic!("성공한 도구 결과 하나")
+            };
+            assert_eq!(source.query.as_untrusted_str(), candidate.as_str());
+            assert_eq!(source.url.as_str(), "https://news.example/close");
+            assert_eq!(source.title.as_untrusted_str(), "Index close");
+            assert_eq!(source.date_kind, application::SourceDateKind::Observed);
+            assert!(
+                sent_prompts(&prepared)
+                    .last()
+                    .expect("수집 프롬프트")
+                    .ends_with(candidate.as_str())
+            );
+        });
     }
 
     #[test]
