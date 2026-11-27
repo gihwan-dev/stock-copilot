@@ -46,6 +46,7 @@
     "TimestampText",
     "ChartNumber",
     "Markdown",
-    "ChatInput"
+    "ChatInput",
+    "ConversationTree"
   ]
 }
