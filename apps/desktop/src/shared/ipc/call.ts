@@ -142,7 +142,7 @@ const horizons = {
 const markets = { kr: "Kr", us: "Us" } as const;
 
 const freshId = (
-  prefix: "turn" | "run" | "message",
+  prefix: "session" | "turn" | "run" | "message",
 ): Result<EntityId, IpcFailure> =>
   parseChatId(
     wire(
@@ -152,6 +152,9 @@ const freshId = (
 
 export const mainChatSession = (): Result<EntityId, IpcFailure> =>
   parseChatId(wire("main-chat"));
+
+export const newChatSessionId = (): Result<EntityId, IpcFailure> =>
+  freshId("session");
 
 export const newChatTurn = (): Result<EntityId, IpcFailure> => freshId("turn");
 

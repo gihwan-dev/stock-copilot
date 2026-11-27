@@ -1,7 +1,9 @@
+import { chatSessions, createChatSession } from "./chat-sessions";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { parseFreeText, parseTicker } from "../lib";
 import {
   mainChatSession,
+  newChatSessionId,
   newChatTurn,
   startChatTurn,
   type ChatListener,
@@ -9,9 +11,12 @@ import {
 import { parseChatStreamEvent } from "./chat-schema";
 import { wire } from "./schema";
 import {
+  answerChatSessionCommands,
+  recordedMainChatTitle,
   answerChatTurnStreaming,
   installChannelWindow,
   resetCommands,
+  returnDifferentChatSession,
 } from "./testing/fakes";
 
 beforeEach(installChannelWindow);
@@ -187,6 +192,29 @@ test("end chunks, failures and unsafe source links are mapped or rejected", () =
     },
   });
   expect(broken).toStrictEqual({
+    kind: "err",
+    error: { kind: "invalid-response" },
+  });
+});
+
+test("session commands preserve titles, empty chats and the requested identity", async () => {
+  answerChatSessionCommands();
+  const session = newChatSessionId();
+  expect(session.kind).toBe("ok");
+  if (session.kind !== "ok") return;
+  await expect(chatSessions()).resolves.toStrictEqual({
+    kind: "ok",
+    value: [
+      { session: "main-chat", title: recordedMainChatTitle },
+      { session: "session-new", title: undefined },
+    ],
+  });
+  await expect(createChatSession(session.value)).resolves.toStrictEqual({
+    kind: "ok",
+    value: { session: session.value, title: undefined },
+  });
+  returnDifferentChatSession();
+  await expect(createChatSession(session.value)).resolves.toStrictEqual({
     kind: "err",
     error: { kind: "invalid-response" },
   });

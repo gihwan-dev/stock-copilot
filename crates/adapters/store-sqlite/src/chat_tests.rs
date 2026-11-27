@@ -398,3 +398,51 @@ fn chat_sql_constants_match_the_migration_and_prepare() {
         connection.prepare(statement).expect(statement);
     }
 }
+
+#[test]
+fn reopened_session_list_keeps_empty_sessions_and_titles_from_each_first_user_entry() {
+    let fixture = Fixture::new();
+    let path = DatabasePath::new(fixture.path());
+    let main = ChatSessionId::try_new("main-chat").expect("기존 기본 대화");
+    let empty = ChatSessionId::try_new("session-new").expect("빈 대화");
+    let rt = runtime();
+    rt.block_on(async {
+        let db = Database::open(&path, &key(), &clock()).expect("open");
+        let store = ChatStore::new(&db);
+        store
+            .ensure_session(&main, at(10))
+            .await
+            .expect("기본 대화");
+        store.ensure_session(&empty, at(20)).await.expect("빈 대화");
+        store
+            .append_entry(&main, &assistant_entry(1, ChatTurnStatus::Completed))
+            .await
+            .expect("안내");
+        store
+            .append_entry(&main, &user_entry(2, "first"))
+            .await
+            .expect("첫 질문");
+        store
+            .append_entry(&main, &user_entry(3, "second"))
+            .await
+            .expect("다음 질문");
+        db.close().await.expect("닫기");
+        let reopened = Database::open(&path, &key(), &clock()).expect("재시작");
+        let listed = ChatStore::new(&reopened)
+            .list_sessions()
+            .await
+            .expect("목록");
+        let [legacy, new] = listed.as_slice() else {
+            panic!("두 대화")
+        };
+        assert_eq!(legacy.id(), &main);
+        assert_eq!(
+            legacy.title().expect("제목").as_untrusted_str(),
+            "삼성전자 어때? 1:2"
+        );
+        assert_eq!(new.id(), &empty);
+        assert_eq!(new.title(), None);
+        assert_eq!(new.entry_count(), ChatSequence::new(0));
+        reopened.close().await.expect("닫기");
+    });
+}

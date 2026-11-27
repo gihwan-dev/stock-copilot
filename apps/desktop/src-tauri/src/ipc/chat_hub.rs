@@ -1,7 +1,7 @@
 use application::{
-    ChatChunk, ChatChunkSink, ChatRepository, ChatSessionId, ChatSessionRecord, ChatSignalState,
-    ChatSinkClosed, ChatStopSignal, ClassifiedError, SendChatMessage, SendChatOutcome,
-    SendChatRequest, SendWarmChatMessage, SystemPortError,
+    ChatChunk, ChatChunkSink, ChatRepository, ChatSessionId, ChatSessionRecord, ChatSessionSummary,
+    ChatSignalState, ChatSinkClosed, ChatStopSignal, ClassifiedError, Clock, SendChatMessage,
+    SendChatOutcome, SendChatRequest, SendWarmChatMessage, SystemPortError,
 };
 use std::collections::BTreeMap;
 use std::fmt;
@@ -15,10 +15,10 @@ use crate::ports::{PortTypes, Ports};
 
 use super::chat_dto::{
     ActiveChatTurnDto, ActiveTurnStateDto, CancelChatTurnRequest, CancelChatTurnResponse,
-    CancelOutcomeDto, ChatChunkDto, ChatChunkEvent, GetChatHistoryRequest, GetChatHistoryResponse,
-    ResubscribeChatTurnRequest, ResubscribeChatTurnResponse, SendChatMessageRequest,
-    SendChatMessageResponse, chunk_to_dto, into_domain_request, number_check_dto,
-    outcome_to_response, session_entries_to_dto,
+    CancelOutcomeDto, ChatChunkDto, ChatChunkEvent, ChatSessionItemDto, GetChatHistoryRequest,
+    GetChatHistoryResponse, ResubscribeChatTurnRequest, ResubscribeChatTurnResponse,
+    SendChatMessageRequest, SendChatMessageResponse, chunk_to_dto, into_domain_request,
+    number_check_dto, outcome_to_response, session_entries_to_dto,
 };
 use super::error::{IpcError, IpcErrorKind};
 
@@ -77,12 +77,12 @@ impl fmt::Debug for ChatStreamHub {
 }
 
 impl ChatStreamHub {
-    pub async fn register_turn(
+    pub(super) async fn start_turn(
         &self,
         session_id: String,
         turn_id: String,
         initial_subscriber: ChunkDelivery,
-    ) -> Arc<TurnStopSignal> {
+    ) -> Result<Arc<TurnStopSignal>, IpcError> {
         let stop = Arc::new(TurnStopSignal::new());
         let entry = TurnStreamState {
             session_id: session_id.clone(),
@@ -93,12 +93,18 @@ impl ChatStreamHub {
             subscribers: vec![initial_subscriber],
             stop: Arc::clone(&stop),
         };
-        self.turns.lock().await.insert(turn_id.clone(), entry);
+        let mut turns = self.turns.lock().await;
+        let std::collections::btree_map::Entry::Vacant(slot) = turns.entry(turn_id.clone()) else {
+            return Err(IpcError {
+                kind: IpcErrorKind::UserFixable,
+            });
+        };
+        slot.insert(entry);
         self.latest_by_session
             .lock()
             .await
             .insert(session_id, turn_id);
-        stop
+        Ok(stop)
     }
 
     pub async fn publish(&self, turn_id: &str, chunk: &ChatChunk) {
@@ -260,6 +266,12 @@ impl ChatChunkSink for HubChunkSink {
 }
 
 pub trait ChatBackend: Send + Sync {
+    fn sessions(&self) -> BoxFuture<'_, Result<Vec<ChatSessionSummary>, SystemPortError>>;
+    fn create(
+        &self,
+        session: ChatSessionId,
+    ) -> BoxFuture<'_, Result<ChatSessionRecord, SystemPortError>>;
+
     fn send_turn(
         &self,
         request: SendChatRequest,
@@ -303,6 +315,21 @@ impl<P: PortTypes> PortsChatBackend<P> {
 }
 
 impl<P: PortTypes> ChatBackend for PortsChatBackend<P> {
+    fn sessions(&self) -> BoxFuture<'_, Result<Vec<ChatSessionSummary>, SystemPortError>> {
+        Box::pin(self.chat_repository.list_sessions())
+    }
+
+    fn create(
+        &self,
+        session: ChatSessionId,
+    ) -> BoxFuture<'_, Result<ChatSessionRecord, SystemPortError>> {
+        Box::pin(async move {
+            self.chat_repository
+                .ensure_session(&session, self.clock.now())
+                .await
+        })
+    }
+
     fn send_turn(
         &self,
         request: SendChatRequest,
@@ -375,8 +402,8 @@ impl ChatIpcState {
         let turn_id = domain_request.turn_id().as_str().to_owned();
         let stop = self
             .hub
-            .register_turn(session_id, turn_id.clone(), delivery)
-            .await;
+            .start_turn(session_id, turn_id.clone(), delivery)
+            .await?;
         let sink = HubChunkSink::new(turn_id.clone(), Arc::clone(&self.hub));
         let _turn = self.turns.as_ref().map(|book| {
             book.open(
@@ -390,6 +417,36 @@ impl ChatIpcState {
         let outcome = self.backend.send_turn(domain_request, sink, stop).await;
         self.hub.mark_finished(&turn_id).await;
         Ok(outcome_to_response(&outcome))
+    }
+
+    pub async fn sessions(&self) -> Result<Vec<ChatSessionItemDto>, IpcError> {
+        let mut sessions = self
+            .backend
+            .sessions()
+            .await
+            .map_err(|error| IpcError::from(error.class()))?;
+        sessions.sort_by(|left, right| {
+            right
+                .updated_at()
+                .cmp(&left.updated_at())
+                .then_with(|| left.id().as_str().cmp(right.id().as_str()))
+        });
+        Ok(sessions.iter().map(ChatSessionItemDto::from).collect())
+    }
+
+    pub async fn create(
+        &self,
+        request: GetChatHistoryRequest,
+    ) -> Result<ChatSessionItemDto, IpcError> {
+        let session = ChatSessionId::try_new(&request.session_id).map_err(|_error| IpcError {
+            kind: IpcErrorKind::Bug,
+        })?;
+        let record = self
+            .backend
+            .create(session)
+            .await
+            .map_err(|error| IpcError::from(error.class()))?;
+        Ok(ChatSessionItemDto::from(record.summary()))
     }
 
     pub async fn get_history(

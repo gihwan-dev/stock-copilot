@@ -4,9 +4,9 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::chat_dto::{
-    CancelChatTurnRequest, CancelChatTurnResponse, ChatChunkEvent, GetChatHistoryRequest,
-    GetChatHistoryResponse, ResubscribeChatTurnRequest, ResubscribeChatTurnResponse,
-    SendChatMessageRequest, SendChatMessageResponse,
+    CancelChatTurnRequest, CancelChatTurnResponse, ChatChunkEvent, ChatSessionItemDto,
+    GetChatHistoryRequest, GetChatHistoryResponse, ResubscribeChatTurnRequest,
+    ResubscribeChatTurnResponse, SendChatMessageRequest, SendChatMessageResponse,
 };
 use super::chat_hub::{ChatIpcState, ChunkDelivery};
 use super::error::IpcError;
@@ -25,6 +25,23 @@ pub async fn send_chat_message<R: Runtime>(
     app.state::<ChatIpcState>()
         .send_message(request, channel_delivery(on_chunk))
         .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_chat_sessions<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Vec<ChatSessionItemDto>, IpcError> {
+    app.state::<ChatIpcState>().sessions().await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn create_chat_session<R: Runtime>(
+    app: AppHandle<R>,
+    request: GetChatHistoryRequest,
+) -> Result<ChatSessionItemDto, IpcError> {
+    app.state::<ChatIpcState>().create(request).await
 }
 
 #[tauri::command]
@@ -75,6 +92,19 @@ mod tests {
     use std::sync::{Arc, mpsc};
     use tauri::ipc::{Channel, InvokeResponseBody};
     use testkit_ports::chat_fakes::{ScriptedAiEventStream, ScriptedStreamStep};
+
+    impl super::super::chat_hub::ChatStreamHub {
+        async fn register_turn(
+            &self,
+            session: String,
+            turn: String,
+            subscriber: super::ChunkDelivery,
+        ) -> Arc<super::super::chat_hub::TurnStopSignal> {
+            self.start_turn(session, turn, subscriber)
+                .await
+                .expect("새 턴")
+        }
+    }
 
     const RESPONSE_DIRECTORY: &str = "ipc/responses";
 
@@ -370,5 +400,145 @@ mod tests {
             application::ChatSignalState::Cancelled,
             "코어 중단 신호 반영"
         );
+    }
+    #[test]
+    fn session_commands_persist_empty_chats_and_return_ordered_first_message_titles() {
+        let ports = crate::tests::support::ports();
+        let state = ChatIpcState::from_ports(&ports);
+        let lookup = |id: &str| GetChatHistoryRequest {
+            session_id: id.to_owned(),
+        };
+        tauri::async_runtime::block_on(async {
+            assert_eq!(state.sessions().await.expect("목록").len(), 0_usize);
+            assert_response_snapshot(
+                "create_chat_session",
+                &state.create(lookup("session-new")).await.expect("생성"),
+            );
+            let _legacy = state
+                .create(lookup("main-chat"))
+                .await
+                .expect("기존 기본 대화");
+            let mut send = sample_send_request("turn-main", "run-main", "msg-main");
+            send.session_id = String::from("main-chat");
+            ports
+                .ai_provider
+                .script_run()
+                .push(Ok(ScriptedAiEventStream::from_events(vec![
+                    AiEvent::IsolationChecked(IsolationCheck::Passed),
+                    AiEvent::TextDelta(text("기본 대화 답변")),
+                ])));
+            let (channel, _received) = channel_collector();
+            let _reply = state
+                .send_message(send, channel_delivery(channel))
+                .await
+                .expect("기본 대화 전송");
+            let listed = state.sessions().await.expect("목록");
+            let [main, empty] = listed.as_slice() else {
+                panic!("두 대화")
+            };
+            assert_response_snapshot("list_chat_sessions", &listed);
+            assert_eq!(empty.title, None);
+            assert_eq!(
+                state.create(lookup("main-chat")).await.expect("재시도"),
+                main.clone()
+            );
+            let legacy = state
+                .get_history(lookup("main-chat"))
+                .await
+                .expect("기본 이력");
+            assert_eq!(legacy.entries.len(), 2_usize);
+            let new = state
+                .get_history(lookup("session-new"))
+                .await
+                .expect("빈 이력");
+            assert_eq!(new.entries.len(), 0_usize);
+            assert_eq!(new.active_turn, None);
+        });
+    }
+
+    async fn assert_session_replay(
+        state: &ChatIpcState,
+        session: &str,
+        turn: &str,
+        expected: &str,
+    ) {
+        let history = state
+            .get_history(GetChatHistoryRequest {
+                session_id: session.to_owned(),
+            })
+            .await
+            .expect("이력");
+        assert_eq!(history.active_turn.expect("활성 턴").turn_id, turn);
+        let (channel, received) = channel_collector();
+        let replay = state
+            .resubscribe(
+                ResubscribeChatTurnRequest {
+                    turn_id: turn.to_owned(),
+                    after_sequence: 0,
+                },
+                channel_delivery(channel),
+            )
+            .await
+            .expect("재구독");
+        assert_eq!(replay.replayed_count, 1_u32);
+        assert!(received.try_recv().expect("재전송").contains(expected));
+    }
+
+    #[test]
+    fn concurrent_session_streams_replay_and_cancel_only_the_selected_turn() {
+        let state = ChatIpcState::from_ports(&crate::tests::support::ports());
+        let hub = state.hub();
+        tauri::async_runtime::block_on(async {
+            let (left_channel, _) = channel_collector();
+            let (right_channel, _) = channel_collector();
+            let left = hub
+                .register_turn(
+                    "main-chat".to_owned(),
+                    "turn-a".to_owned(),
+                    channel_delivery(left_channel),
+                )
+                .await;
+            let right = hub
+                .register_turn(
+                    "session-new".to_owned(),
+                    "turn-b".to_owned(),
+                    channel_delivery(right_channel),
+                )
+                .await;
+            let (duplicate, _) = channel_collector();
+            let error = hub
+                .start_turn(
+                    "session-new".to_owned(),
+                    "turn-a".to_owned(),
+                    channel_delivery(duplicate),
+                )
+                .await
+                .expect_err("중복 턴");
+            assert_eq!(error.kind, super::super::error::IpcErrorKind::UserFixable);
+            hub.publish("turn-a", &ChatChunk::TextDelta(text("왼쪽")))
+                .await;
+            hub.publish("turn-b", &ChatChunk::TextDelta(text("오른쪽")))
+                .await;
+            for (session, turn, expected) in [
+                ("main-chat", "turn-a", "왼쪽"),
+                ("session-new", "turn-b", "오른쪽"),
+            ] {
+                assert_session_replay(&state, session, turn, expected).await;
+            }
+            let _cancel = state
+                .cancel(CancelChatTurnRequest {
+                    turn_id: "turn-b".to_owned(),
+                })
+                .await
+                .expect("취소");
+            assert_eq!(
+                application::ChatStopSignal::state(left.as_ref()),
+                application::ChatSignalState::Active
+            );
+            assert_eq!(
+                application::ChatStopSignal::state(right.as_ref()),
+                application::ChatSignalState::Cancelled
+            );
+        });
     }
 }

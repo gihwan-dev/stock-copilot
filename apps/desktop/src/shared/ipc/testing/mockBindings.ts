@@ -33,6 +33,14 @@ export const commands = {
     typedError<GetChatHistoryResponse_Serialize, IpcError>(
       __TAURI_INVOKE("get_chat_history", { request }),
     ),
+  listChatSessions: () =>
+    typedError<ChatSessionItemDto_Serialize[], IpcError>(
+      __TAURI_INVOKE("list_chat_sessions"),
+    ),
+  createChatSession: (request: GetChatHistoryRequest) =>
+    typedError<ChatSessionItemDto_Serialize, IpcError>(
+      __TAURI_INVOKE("create_chat_session", { request }),
+    ),
   resubscribeChatTurn: (
     request: ResubscribeChatTurnRequest,
     onChunk: Channel<ChatChunkEvent_Deserialize>,
@@ -636,6 +644,19 @@ export type ChatScreenContextDto_Serialize = {
   symbol: string | null;
   market: ChatMarketDto | null;
   horizon: ChatHorizonDto | null;
+};
+
+export type ChatSessionItemDto =
+  ChatSessionItemDto_Serialize | ChatSessionItemDto_Deserialize;
+
+export type ChatSessionItemDto_Deserialize = {
+  session_id: string;
+  title?: string | null;
+};
+
+export type ChatSessionItemDto_Serialize = {
+  session_id: string;
+  title: string | null;
 };
 
 export type ChatSourceDto = ChatSourceDto_Serialize | ChatSourceDto_Deserialize;
@@ -3214,6 +3235,11 @@ export type MockCommandHandlers = {
   }) =>
     | GetChatHistoryResponse_Serialize
     | Promise<GetChatHistoryResponse_Serialize>;
+  listChatSessions: () =>
+    ChatSessionItemDto_Serialize[] | Promise<ChatSessionItemDto_Serialize[]>;
+  createChatSession: (args: {
+    request: GetChatHistoryRequest;
+  }) => ChatSessionItemDto_Serialize | Promise<ChatSessionItemDto_Serialize>;
   resubscribeChatTurn: (args: {
     request: ResubscribeChatTurnRequest;
     onChunk: Channel<ChatChunkEvent_Deserialize>;
@@ -3428,6 +3454,18 @@ export function mockCommands(
           return mockCommandHandler(
             mockHandlers.getChatHistory,
             "get_chat_history",
+            args,
+          );
+        case "list_chat_sessions":
+          return mockCommandHandler(
+            mockHandlers.listChatSessions,
+            "list_chat_sessions",
+            args,
+          );
+        case "create_chat_session":
+          return mockCommandHandler(
+            mockHandlers.createChatSession,
+            "create_chat_session",
             args,
           );
         case "resubscribe_chat_turn":

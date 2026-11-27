@@ -269,6 +269,23 @@ pub struct StoredChatEntryDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct ChatSessionItemDto {
+    pub session_id: String,
+    pub title: Option<String>,
+}
+
+impl From<&application::ChatSessionSummary> for ChatSessionItemDto {
+    fn from(summary: &application::ChatSessionSummary) -> Self {
+        Self {
+            session_id: summary.id().as_str().to_owned(),
+            title: summary
+                .title()
+                .map(|title| title.as_untrusted_str().to_owned()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct GetChatHistoryResponse {
     pub session_id: String,
     pub entries: Vec<StoredChatEntryDto>,
