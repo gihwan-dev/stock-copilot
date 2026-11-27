@@ -5,7 +5,7 @@ import { screenDom } from "./screen-dom.mjs";
 test("U04 App boots with mockCommands, renders ready and error states without rejecting queryFn, and navigates", async () => {
   const bundle = await screenDom(`
     import { createElement as h } from "react";
-    import { render, fireEvent, waitFor, cleanup } from "@testing-library/react";
+    import { render, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
     import { clearMocks } from "@tauri-apps/api/mocks";
     import { App } from APP_ENTRY;
     import { createAppQueryClient } from QUERY_ENTRY;
@@ -18,6 +18,7 @@ test("U04 App boots with mockCommands, renders ready and error states without re
     window.mockCommands = mockCommands;
     window.responses = responses;
     window.waitFor = waitFor;
+    window.within = within;
     window.click = (el) => fireEvent.click(el);
     window.mountScreen = (initialPath = "/") => {
       const client = createAppQueryClient();
@@ -29,6 +30,7 @@ test("U04 App boots with mockCommands, renders ready and error states without re
     const w = bundle.open();
 
     w.mockCommands({
+      listChatSessions: () => [],
       getChatHistory: () => ({
         session_id: "main-chat",
         entries: [],
@@ -47,8 +49,11 @@ test("U04 App boots with mockCommands, renders ready and error states without re
     assert.ok(
       first.view.container.querySelector('aside[aria-label="종목 목록"]'),
     );
+    const navigation = w.within(
+      first.view.getByRole("navigation", { name: "화면 이동" }),
+    );
     const destination = (name) =>
-      first.view.getByRole("button", { name, exact: true });
+      navigation.getByRole("button", { name, exact: true });
     assert.equal(first.view.container.querySelector("textarea"), null);
     w.click(destination("브리핑"));
     await w.waitFor(() =>
