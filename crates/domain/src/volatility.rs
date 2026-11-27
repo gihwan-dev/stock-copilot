@@ -50,16 +50,30 @@ impl Volatility {
         if !(2..=10_000).contains(&remaining.len()) {
             return Err(VolatilityError::SampleCount);
         }
+        let (adjustment_basis, as_of) = Self::validate_series(candles)?;
+        let daily = crate::volatility_arithmetic::calculate(candles)?;
+        Ok(Self {
+            daily,
+            instrument: first.instrument().clone(),
+            as_of,
+            adjustment_basis,
+            samples: VolatilitySamples(remaining.len()),
+        })
+    }
+    pub(crate) fn validate_series(
+        candles: &[Candle],
+    ) -> Result<(AdjustmentBasis, CalendarDate), VolatilityError> {
+        let first = candles.first().ok_or(VolatilityError::SampleCount)?;
         let adjustment_basis = match first.adjustment() {
             PriceAdjustment::Raw => return Err(VolatilityError::Unadjusted),
             PriceAdjustment::Adjusted(basis) => basis,
         };
         let mut as_of = first.time().date();
         for candle in candles {
+            as_of = candle.time().date();
             if candle.status() != CandleStatus::Finalized {
                 return Err(VolatilityError::Unfinalized);
             }
-            as_of = candle.time().date();
             if candle.time().period() != CandlePeriod::Daily {
                 return Err(VolatilityError::NotDaily);
             }
@@ -77,14 +91,7 @@ impl Volatility {
                 return Err(VolatilityError::Unordered);
             }
         }
-        let daily = crate::volatility_arithmetic::calculate(candles)?;
-        Ok(Self {
-            daily,
-            instrument: first.instrument().clone(),
-            as_of,
-            adjustment_basis,
-            samples: VolatilitySamples(remaining.len()),
-        })
+        Ok((adjustment_basis, as_of))
     }
     #[must_use]
     pub const fn daily(&self) -> DailyVolatility {
