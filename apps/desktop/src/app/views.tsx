@@ -1,12 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Outlet, useMatchRoute } from "@tanstack/react-router";
-import { useState, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { AboutSection } from "../features/about";
 import { BriefingCard, BriefingHistoryScreen } from "../features/briefing";
-import { ChatSession } from "../features/chat";
-import { InstrumentDetail, InstrumentList } from "../features/instruments";
+import { ChatPanel } from "../features/chat";
 import { PortfolioOverview } from "../features/portfolio";
-import { SelfCheckBar } from "../features/self-check";
 import { useKeyEntry } from "../features/onboarding";
 import { SettingsScreen } from "../features/settings";
 import { RiskEditors } from "../features/settings-risk";
@@ -14,79 +11,45 @@ import { ScorecardPanel } from "../features/scorecard";
 import { SignalCards } from "../features/signal";
 import { StatusScreen } from "../features/status";
 import { TransactionsScreen } from "../features/transactions";
-import { UpdateBar, UpdateCard } from "../features/updates";
+import { UpdateCard } from "../features/updates";
 import {
   AppShell,
   Card,
+  Disclosure,
+  Text,
   EmptyState,
   Page,
   Skeleton,
   Stack,
 } from "../shared/ds";
 import { coreUpdateClient, getDataStatus } from "../shared/ipc";
-import { queryKeys, text, type EntityId } from "../shared/lib";
+import { queryKeys, text } from "../shared/lib";
 import { detach } from "../shared/platform";
 import { useNavigate, useSources, useSystemSettings } from "./context";
 import { SettingsSections } from "./settings";
 import { describeIpcFailure, useAppVersion } from "./query";
 
-const chatNotice = {
-  summary: text("notice.chatDataShort", "ko"),
-  detail: text("notice.chatData", "ko"),
-};
+export const ChatRouteView = (): ReactElement => (
+  <Page title={text("shell.chat", "ko")}>
+    <Disclosure title={text("notice.chatDataShort", "ko")}>
+      <Text>{text("notice.chatData", "ko")}</Text>
+    </Disclosure>
+    <ChatPanel context={undefined} />
+  </Page>
+);
 
-export const ShellLayout = (): ReactElement => {
-  const go = useNavigate();
+export const LatestBriefingView = (): ReactElement => {
   const sources = useSources();
-  const [shown, setShown] = useState<EntityId | undefined>(undefined);
-  const matchRoute = useMatchRoute();
-  const list = <InstrumentList sources={sources} onSelect={setShown} />;
-  const status = (
-    <>
-      <UpdateBar client={coreUpdateClient} />
-      <SelfCheckBar
-        load={sources.selfCheck}
-        onOpenSettings={(): void => {
-          setShown(undefined);
-          go("/settings");
-        }}
-      />
-    </>
-  );
-  const page =
-    shown === undefined ? (
-      <Outlet />
-    ) : (
-      <InstrumentDetail
-        key={shown}
-        sources={sources}
-        instrument={shown}
-        onClose={(): void => {
-          setShown(undefined);
-        }}
-      />
-    );
+  const go = useNavigate();
   return (
-    <ChatSession context={undefined}>
-      {(parts): ReactElement => (
-        <AppShell
-          main={
-            shown === undefined &&
-            (matchRoute({ to: "/" }) !== false ||
-              matchRoute({ to: "/transactions" }) !== false)
-              ? "fill"
-              : "scroll"
-          }
-          list={list}
-          chat={parts.messages}
-          chatComposer={parts.composer}
-          chatNotice={chatNotice}
-          status={status}
-        >
-          {page}
-        </AppShell>
-      )}
-    </ChatSession>
+    <Page title={text("nav.briefing", "ko")}>
+      <BriefingCard
+        load={sources.briefings}
+        onOpenHistory={(): void => {
+          go("/briefings");
+        }}
+      />
+    </Page>
   );
 };
 
@@ -127,9 +90,10 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
             bottom: (
               <BriefingCard
                 layout="fill"
+                presentation="summary"
                 load={sources.briefings}
                 onOpenHistory={(): void => {
-                  go("/briefings");
+                  go("/briefing");
                 }}
               />
             ),

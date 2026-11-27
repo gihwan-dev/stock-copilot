@@ -75,15 +75,28 @@ test("J-07 briefing card and past briefing screen show loading, empty, error and
     await w.waitText(invalid, "브리핑을 불러오지 못했어요");
     w.cleanup();
 
-    const ready = w.mount(w.ipc);
+    const preMarket = {
+      ...w.recorded.latest,
+      id: { ...w.recorded.latest.id, kind: "PreUsMarket" },
+      body: "미국장 전 브리핑 본문",
+    };
+    const ready = w.mount(w.ipc, {
+      latest: w.recorded.latest,
+      past: [preMarket, ...w.recorded.past],
+    });
     const card = await w.waitText(ready, "밤사이 미국장은 올랐습니다");
     assert.ok(card.includes("아침 브리핑"));
-    assert.ok(card.includes("연합 기사"));
-    assert.ok(card.includes("뉴스"));
-    assert.ok(card.includes("웹 요약"));
-    assert.ok(card.includes("미검증 웹 값"));
-    assert.ok(card.includes("매매 권유가 아니에요"));
-    assert.equal(card.includes("마감 리뷰"), false);
+    assert.equal(card.includes("미국장 전 브리핑 본문"), false);
+    w.click(ready.getByRole("button", { name: "브리핑 보기" }));
+    const detail = await w.waitText(ready, "연합 기사");
+    assert.ok(detail.includes("미국장 전 점검"));
+    assert.ok(detail.includes("미국장 전 브리핑 본문"));
+    assert.ok(detail.includes("연합 기사"));
+    assert.ok(detail.includes("뉴스"));
+    assert.ok(detail.includes("웹 요약"));
+    assert.ok(detail.includes("미검증 웹 값"));
+    assert.ok(detail.includes("매매 권유가 아니에요"));
+    assert.equal(detail.includes("마감 리뷰"), false);
     w.click(ready.getByRole("button", { name: "지난 브리핑 보기" }));
     const history = await w.waitText(ready, "이번 브리핑은 만들지 못했어요");
     assert.ok(history.includes("마감 리뷰"));
@@ -93,7 +106,11 @@ test("J-07 briefing card and past briefing screen show loading, empty, error and
     await w.waitText(ready, "밤사이 미국장은 올랐습니다");
     w.cleanup();
 
-    const noPast = w.mount(w.ipc, { latest: w.recorded.latest, past: [] }, "/");
+    const noPast = w.mount(
+      w.ipc,
+      { latest: w.recorded.latest, past: [] },
+      "/briefing",
+    );
     await w.waitText(noPast, "밤사이 미국장은 올랐습니다");
     assert.equal(
       noPast.queryByRole("button", { name: "지난 브리핑 보기" }),

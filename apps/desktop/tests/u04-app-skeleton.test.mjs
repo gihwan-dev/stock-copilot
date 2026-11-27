@@ -11,6 +11,8 @@ test("U04 App boots with mockCommands, renders ready and error states without re
     import { createAppQueryClient } from QUERY_ENTRY;
     import { mockCommands } from MOCK_IPC_ENTRY;
     import { responses } from RESPONSES_ENTRY;
+    import userEvent from "@testing-library/user-event";
+    window.user = userEvent.setup();
     window.cleanup = cleanup;
     window.clearMocks = clearMocks;
     window.mockCommands = mockCommands;
@@ -27,6 +29,11 @@ test("U04 App boots with mockCommands, renders ready and error states without re
     const w = bundle.open();
 
     w.mockCommands({
+      getChatHistory: () => ({
+        session_id: "main-chat",
+        entries: [],
+        active_turn: null,
+      }),
       getPortfolio: () => {
         throw { kind: "no-data" };
       },
@@ -40,9 +47,28 @@ test("U04 App boots with mockCommands, renders ready and error states without re
     assert.ok(
       first.view.container.querySelector('aside[aria-label="종목 목록"]'),
     );
-    assert.ok(
-      first.view.container.querySelector('aside[aria-label="AI 채팅"]'),
+    const destination = (name) =>
+      first.view.getByRole("button", { name, exact: true });
+    assert.equal(first.view.container.querySelector("textarea"), null);
+    w.click(destination("브리핑"));
+    await w.waitFor(() =>
+      assert.ok(first.view.getByRole("heading", { name: "브리핑" })),
     );
+    destination("채팅").focus();
+    await w.user.keyboard("{Enter}");
+    await w.waitFor(() =>
+      assert.ok(first.view.getByText("무엇이든 물어보세요")),
+    );
+    assert.equal(
+      first.view.container.querySelectorAll("main textarea").length,
+      1,
+    );
+    assert.equal(destination("채팅").getAttribute("aria-pressed"), "true");
+    w.click(destination("대시보드"));
+    await w.waitFor(() =>
+      assert.ok(first.view.getByRole("heading", { name: "내 현황" })),
+    );
+    assert.equal(first.view.container.querySelector("textarea"), null);
     const queryState = first.client.getQueryState(["app-version"]);
     assert.equal(queryState.status, "success");
     assert.equal(queryState.data.kind, "ok");

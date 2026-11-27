@@ -219,24 +219,34 @@ export const AppShell = (props: AppShellProps): ReactElement => {
         <div className="flex-none w-full">{statusSlot}</div>
       )}
       <div className="relative flex flex-1 w-full scroll-flex">
-        <ShellSidebar
-          list={props.list}
-          rail={props.rail}
-          state={listState}
-          onChange={updateList}
-        />
-        {chatSlot === null ? (
-          main
-        ) : (
-          <ShellChat
-            main={main}
-            chat={chatSlot}
-            composer={props.chatComposer}
-            notice={props.chatNotice}
-            state={chatState}
-            onChange={updateChat}
-          />
+        {props.navigation === undefined ? null : (
+          <nav
+            aria-label={text("nav.destinations", "ko")}
+            className="flex flex-none flex-col items-center gap-space-2 bg-surface p-space-1"
+          >
+            {props.navigation}
+          </nav>
         )}
+        <div className="relative flex flex-1 scroll-flex">
+          <ShellSidebar
+            list={props.list}
+            rail={props.rail}
+            state={listState}
+            onChange={updateList}
+          />
+          {chatSlot === null ? (
+            main
+          ) : (
+            <ShellChat
+              main={main}
+              chat={chatSlot}
+              composer={props.chatComposer}
+              notice={props.chatNotice}
+              state={chatState}
+              onChange={updateChat}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
