@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   queryOptions,
   useMutation,
@@ -12,36 +13,54 @@ import {
   openExternal,
   resubscribeChatTurn,
   startChatTurn,
-  type ChatHistory,
   type ChatListener,
   type ChatScreenContext,
   type ChatTurnStatus,
   type IpcFailure,
 } from "../../../shared/ipc";
 import {
+  emptyFreeText,
   err,
+  ok,
   queryKeys,
   type EntityId,
   type ExternalUrl,
   type FreeText,
   type Result,
 } from "../../../shared/lib";
+import { detach } from "../../../shared/platform";
+import { fromHistory, resumableTurn, type Transcript } from "./transcript";
+
+export type ConversationState = {
+  readonly transcript: Transcript;
+  readonly draft: FreeText;
+  readonly resume: EntityId | undefined;
+};
+
+type HistoryReply = Result<ConversationState, IpcFailure>;
 
 export type HistoryView =
   | { readonly status: "loading" }
   | { readonly status: "error"; readonly failure: IpcFailure }
-  | { readonly status: "ready"; readonly history: ChatHistory };
+  | { readonly status: "ready"; readonly conversation: ConversationState };
 
-const loadHistory = (): Promise<Result<ChatHistory, IpcFailure>> => {
+const loadHistory = async (): Promise<HistoryReply> => {
   const session = mainChatSession();
-  return session.kind === "err"
-    ? Promise.resolve(session)
-    : chatHistory(session.value);
+  if (session.kind === "err") return session;
+  const result = await chatHistory(session.value);
+  if (result.kind === "err") return result;
+  return ok({
+    transcript: fromHistory(result.value),
+    resume: resumableTurn(result.value),
+    draft: emptyFreeText,
+  });
 };
 
 const historyOptions = queryOptions({
   queryKey: queryKeys.chatHistory,
   queryFn: loadHistory,
+  staleTime: Infinity,
+  gcTime: Infinity,
 });
 
 export const useChatHistory = (): HistoryView => {
@@ -49,13 +68,51 @@ export const useChatHistory = (): HistoryView => {
   if (query.data === undefined) return { status: "loading" };
   if (query.data.kind === "err")
     return { status: "error", failure: query.data.error };
-  return { status: "ready", history: query.data.value };
+  return { status: "ready", conversation: query.data.value };
 };
 
 export const useReloadChatHistory = (): (() => void) => {
   const client = useQueryClient();
   return (): void => {
-    client.removeQueries({ queryKey: queryKeys.chatHistory });
+    detach({
+      kind: "invalidate-queries",
+      client,
+      keys: [queryKeys.chatHistory],
+    });
+  };
+};
+
+type ConversationActions = {
+  readonly draft: FreeText;
+  readonly setDraft: (draft: FreeText) => void;
+  readonly update: (change: (current: Transcript) => Transcript) => void;
+};
+
+export const useConversation = (initialDraft: FreeText): ConversationActions => {
+  const client = useQueryClient();
+  const [draft, setDraft] = useState(initialDraft);
+  const changeState = (
+    change: (current: ConversationState) => ConversationState,
+  ): void => {
+    const query = client.getQueryCache().find<HistoryReply>({
+      queryKey: queryKeys.chatHistory,
+    });
+    if (query === undefined) return;
+    const reply = query.state.data;
+    if (reply?.kind === "ok") query.setState({ data: ok(change(reply.value)) });
+  };
+  return {
+    draft,
+    setDraft: (next): void => {
+      setDraft(next);
+      changeState((current) => ({ ...current, draft: next }));
+    },
+    update: (change): void => {
+      changeState((current) => ({
+        ...current,
+        transcript: change(current.transcript),
+      }));
+    },
   };
 };
 
@@ -68,7 +125,7 @@ export const useChatResume = (
       queryKey: [...queryKeys.chatResume, turn] as const,
       queryFn: () => resubscribeChatTurn(turn, listener),
       staleTime: Infinity,
-      gcTime: 0,
+      gcTime: Infinity,
     }),
   );
   return query.data === undefined ? "resuming" : "resumed";
