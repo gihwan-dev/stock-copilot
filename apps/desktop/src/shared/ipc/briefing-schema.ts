@@ -3,7 +3,9 @@ import {
   chatIdSchema,
   externalUrlSchema,
   freeTextSchema,
+  parseEntityId,
   parseTimestamp,
+  text,
   type EntityId,
   type Result,
 } from "../lib";
@@ -21,6 +23,7 @@ import {
   type Wire,
   type WireOutcome,
 } from "./schema";
+import { uiFreeText } from "./wire-values";
 
 const kindCodes = {
   Morning: "morning",
@@ -47,10 +50,66 @@ const timestampSchema = z.unknown().transform((value, context) => {
   return z.NEVER;
 });
 
+const newsOrigins = {
+  Hankyung: "source.hankyung",
+  Maekyung: "source.maekyung",
+  Yonhap: "source.yonhap",
+  Edaily: "source.edaily",
+  SegyeFinance: "source.segye-finance",
+  BankOfKorea: "source.bank-of-korea",
+  FederalReserve: "source.federal-reserve",
+  GoogleNews: "source.google-news",
+  YahooFinance: "source.yahoo-finance",
+} as const;
+
+const disclosureOrigins = {
+  Kind: "source.kind-disclosure",
+  Dart: "source.dart-disclosure-api",
+  SecEdgar: "source.sec-edgar",
+} as const;
+
+const originSchema = z
+  .union([
+    z.literal("Web").transform(() => "source.web-search" as const),
+    z
+      .strictObject({
+        News: z.enum([
+          "Hankyung",
+          "Maekyung",
+          "Yonhap",
+          "Edaily",
+          "SegyeFinance",
+          "BankOfKorea",
+          "FederalReserve",
+          "GoogleNews",
+          "YahooFinance",
+        ]),
+      })
+      .transform((raw) => newsOrigins[raw.News]),
+    z
+      .strictObject({ Disclosure: z.enum(["Kind", "Dart", "SecEdgar"]) })
+      .transform((raw) => disclosureOrigins[raw.Disclosure]),
+  ])
+  .transform((key) => uiFreeText(text(key, "ko")));
+
+const sourceTimeSchema = z.union([
+  z.null().transform((): undefined => undefined),
+  timestampSchema,
+]);
+
 const sourceSchema = z.strictObject({
   title: freeTextSchema,
   url: linkSchema,
   kind: z.enum(["web", "news", "disclosure"]),
+  cite: z
+    .unknown()
+    .transform((value) => {
+      const parsed = parseEntityId(value);
+      return parsed.kind === "ok" ? parsed.value : undefined;
+    })
+    .optional(),
+  origin: originSchema.optional(),
+  observed_at: sourceTimeSchema.optional(),
 });
 
 const idSchema = z.strictObject({
@@ -104,6 +163,9 @@ const briefingSchema = z
                   title: source.title,
                   url: source.url,
                   kind: source.kind,
+                  cite: source.cite ?? makeId(wire([String(index + 1)])),
+                  publisher: source.origin,
+                  observedAt: source.observed_at,
                 },
               ];
         },
