@@ -437,13 +437,13 @@ fn schedule_at(
         .map_err(OutcomeUnavailable::from)
 }
 #[derive(Clone, Copy)]
-enum Touch {
+pub(crate) enum Touch {
     Neither,
     Target,
     Stop,
     Both,
 }
-fn touch(candle: &Candle, boundaries: &OutcomeBoundaries) -> Touch {
+pub(crate) fn touch(candle: &Candle, boundaries: &OutcomeBoundaries) -> Touch {
     let values = candle.values();
     match (
         boundaries.target_order(values.high()).is_ge(),

@@ -311,6 +311,8 @@ pub use policy_settings::{
 mod base_probability;
 mod estimate_task;
 pub use base_probability::{BaseProbability, EstimateDistance};
+mod base_probability_backtest;
+pub use base_probability_backtest::{BacktestError, BacktestHorizon, BaseProbabilityBacktest};
 pub use estimate_task::{EstimateContext, EstimateTask, NoEstimateTask, SavedEstimateTask};
 
 mod estimate_outcome;
