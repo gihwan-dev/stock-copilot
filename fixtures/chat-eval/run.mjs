@@ -184,6 +184,14 @@ export const deterministicChecks = (scenario, answer, toolNames, calls = []) => 
       calls.some((call) => callMatches(call, expected)),
     );
   }
+  if (expect.research_steps) {
+    const steps = expect.research_steps;
+    const reads = calls.filter((call) => steps.some((step) => step.name === call.name));
+    checks.research_evidence = reads.length === steps.length && steps.every((step, index) => {
+      const read = reads[index];
+      return callMatches(read, step) && read.isError === step.isError && read.result != null;
+    });
+  }
   const allowedWrites = new Set((expect.calls ?? []).map((call) => call.name));
   checks.no_unrequested_writes = calls.every(
     (call) => !WRITE_TOOLS.has(call.name) || allowedWrites.has(call.name),
@@ -935,6 +943,8 @@ const selfTest = async () => {
   process.stdout.write(`self-test 통과 (시나리오 ${scenarios.length}개)\n`);
 };
 
-const options = parseArgs(process.argv.slice(2));
-if (options.selfTest) await selfTest();
-else await evaluate(options);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.selfTest) await selfTest();
+  else await evaluate(options);
+}

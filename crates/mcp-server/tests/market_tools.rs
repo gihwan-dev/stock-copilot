@@ -485,4 +485,100 @@ mod tests {
             }
         });
     }
+
+    #[test]
+    fn overview_recovers_sector_evidence_after_missing_index_data() {
+        runtime().block_on(async {
+            let reads = ranking_and_sector_reads();
+            let reply = call(&registry_with(&reads), "get_market_overview", json!({}))
+                .await
+                .expect("업종 자료");
+            assert_eq!(
+                reads.calls(),
+                vec![
+                    MarketReadCall::Overview,
+                    MarketReadCall::Sectors(KnownMarket::Kr)
+                ]
+            );
+            assert_eq!(reply["overview_error"]["code"], json!("data_unavailable"));
+            assert_eq!(
+                reply["kr_sector_ranking"]["items"][0]["change_rate"],
+                json!("0.02")
+            );
+            assert_eq!(
+                reply["kr_sector_ranking"]["collected_at"],
+                json!("2025-11-25T01:00:00+09:00")
+            );
+        });
+    }
+
+    #[test]
+    fn overview_reports_missing_data_after_both_reads() {
+        runtime().block_on(async {
+            let reads = Arc::new(FixedMarketToolReads::default());
+            assert_eq!(
+                call(&registry_with(&reads), "get_market_overview", json!({})).await,
+                Err(ToolErrorCode::DataUnavailable)
+            );
+            assert_eq!(
+                reads.calls(),
+                vec![
+                    MarketReadCall::Overview,
+                    MarketReadCall::Sectors(KnownMarket::Kr)
+                ]
+            );
+        });
+    }
+
+    #[test]
+    fn domestic_index_changes_preserve_opposing_evidence_without_sector_read() {
+        runtime().block_on(async {
+            let mut kosdaq = overview_line(OverviewItem::Kosdaq, ValueProvenance::Official);
+            kosdaq.change_rate = Some(ratio("-0.01"));
+            let reads = Arc::new(FixedMarketToolReads::default().with_overview(Ok(Some(
+                MarketOverviewToolView {
+                    lines: vec![
+                        overview_line(OverviewItem::Kospi, ValueProvenance::Official),
+                        kosdaq,
+                    ],
+                    sessions: vec![],
+                },
+            ))));
+            let reply = call(&registry_with(&reads), "get_market_overview", json!({}))
+                .await
+                .expect("시장 자료");
+            assert_eq!(reads.calls(), vec![MarketReadCall::Overview]);
+            assert_eq!(reply["indicators"][0]["change_rate"], json!("0.004"));
+            assert_eq!(reply["indicators"][1]["change_rate"], json!("-0.01"));
+        });
+    }
+
+    #[test]
+    fn index_level_survives_an_empty_sector_read() {
+        runtime().block_on(async {
+            let mut line = overview_line(OverviewItem::Kospi, ValueProvenance::Official);
+            line.change_rate = None;
+            let reads = Arc::new(FixedMarketToolReads::default().with_overview(Ok(Some(
+                MarketOverviewToolView {
+                    lines: vec![line],
+                    sessions: vec![],
+                },
+            ))));
+            let reply = call(&registry_with(&reads), "get_market_overview", json!({}))
+                .await
+                .expect("부분 자료");
+            assert_eq!(
+                reads.calls(),
+                vec![
+                    MarketReadCall::Overview,
+                    MarketReadCall::Sectors(KnownMarket::Kr)
+                ]
+            );
+            assert_eq!(reply["indicators"][0]["value"], json!("5900.12"));
+            assert_eq!(
+                reply["kr_sector_ranking"]["code"],
+                json!("data_unavailable")
+            );
+        });
+    }
 }

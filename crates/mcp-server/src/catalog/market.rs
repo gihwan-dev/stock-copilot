@@ -183,10 +183,7 @@ impl<M: MarketToolReads + 'static, C: Clock + 'static> McpTool for MarketTool<M,
                     ]))
                 }
                 MarketToolKind::Candles => self.candles(&invocation).await,
-                MarketToolKind::Overview => {
-                    let view = require_market(self.reads.market_overview().await)?;
-                    Ok(render_overview(&view))
-                }
+                MarketToolKind::Overview => self.overview().await,
                 MarketToolKind::Rankings => {
                     let kind = parse_ranking_kind(args.get("kind"))?;
                     let market = parse_market(args.get("market"))?;
@@ -212,6 +209,38 @@ impl<M: MarketToolReads + 'static, C: Clock + 'static> McpTool for MarketTool<M,
 }
 
 impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
+    async fn overview(&self) -> Result<Value, ToolErrorPayload> {
+        let primary = require_market(self.reads.market_overview().await);
+        if primary.as_ref().is_ok_and(|view| {
+            view.lines.iter().any(|line| {
+                matches!(line.item, OverviewItem::Kospi | OverviewItem::Kosdaq)
+                    && line.change_rate.is_some()
+            })
+        }) {
+            return primary.map(|view| render_overview(&view));
+        }
+        let sectors = require_market(self.reads.sectors(KnownMarket::Kr).await);
+        let mut output = match primary {
+            Ok(view) => render_overview(&view),
+            Err(error) => {
+                if !sectors.as_ref().is_ok_and(|view| !view.lines.is_empty()) {
+                    return Err(error);
+                }
+                let mut empty = render_overview(&MarketOverviewToolView {
+                    lines: Vec::new(),
+                    sessions: Vec::new(),
+                });
+                empty["overview_error"] = error.to_json_value();
+                empty
+            }
+        };
+        output["kr_sector_ranking"] = match sectors {
+            Ok(view) => render_sectors(&view, DEFAULT_LIST_LIMIT),
+            Err(error) => error.to_json_value(),
+        };
+        Ok(output)
+    }
+
     async fn candles(&self, invocation: &ToolInvocation<'_>) -> Result<Value, ToolErrorPayload> {
         let args = invocation.arguments;
         let symbol = parse_symbol(args.get("symbol"))?;
