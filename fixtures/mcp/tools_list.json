@@ -21,7 +21,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Recent finalized daily candles for one symbol from the brokerage, prices not adjusted for splits, newest first, paginated with limit and cursor. Includes the collection time.",
+    "description": "Recent finalized daily candles for one symbol from the brokerage, newest first, paginated with limit and cursor. Prices are adjusted for splits and other corporate actions when adjusted is true and are raw brokerage prices when it is false. Includes the collection time.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -157,7 +157,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "KOSPI, KOSDAQ, Korean 3Y and 10Y government bond yields, USD/KRW and KR/US market session status, plus S&P 500, Nasdaq 100, gold, crude oil and the dollar approximated by US ETF prices in USD. Each value states whether it is official or an ETF-based approximation and when it was collected. Values that could not be read are left out.",
+    "description": "KOSPI, KOSDAQ, Korean 3Y and 10Y government bond yields, USD/KRW and KR/US market session status, plus S&P 500, Nasdaq 100, gold, crude oil and the dollar approximated by US ETF prices in USD. Each value states whether it is official or an ETF-based approximation and when it was collected. Values that could not be read are left out. US Treasury yields have no source and are listed under not_provided instead of a value.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {},

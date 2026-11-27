@@ -554,3 +554,78 @@ fn tool_read_lines_name_the_tool_endpoint_and_kind_only() {
         "{unconnected}"
     );
 }
+
+fn candle_adjustments(broker: &ScriptedBrokerRead) -> Vec<domain::PriceAdjustment> {
+    broker
+        .calls()
+        .into_iter()
+        .filter_map(|call| {
+            if let BrokerReadCall::Candles(_, _, _, adjustment) = call {
+                Some(adjustment)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn candles_tool_reads_the_adjusted_path_and_says_so() {
+    let fixture = fixture();
+    let candles = testkit_ports::estimate_fixtures::sample_daily_candles(10).expect("candles");
+    fixture.broker.script_candles().push(Ok(candles));
+    let window = CandleWindow::try_new(3).expect("window");
+    let priced = run(fixture
+        .tools
+        .priced_candles(&symbol("000660"), KnownMarket::Kr, window))
+    .expect("candles")
+    .expect("view");
+    assert_eq!(priced.basis, application::CandlePriceBasis::Adjusted);
+    assert_eq!(priced.view.lines.len(), 3);
+    let adjustments = candle_adjustments(&fixture.broker);
+    assert_eq!(adjustments.len(), 1);
+    assert_eq!(
+        adjustments[0],
+        domain::PriceAdjustment::Adjusted(domain::AdjustmentBasis::new(now()))
+    );
+}
+
+#[test]
+fn candles_tool_falls_back_to_raw_prices_when_adjusted_history_is_missing() {
+    let fixture = fixture();
+    fixture.broker.script_candles().push(Err(PortError::new(
+        ReadEndpoint::Candles,
+        HttpStatus::Success,
+        PortErrorKind::Unsupported(BrokerCapability::AdjustedHistory),
+    )));
+    let candles = testkit_ports::estimate_fixtures::sample_daily_candles(10).expect("candles");
+    fixture.broker.script_candles().push(Ok(candles));
+    let window = CandleWindow::try_new(4).expect("window");
+    let priced = run(fixture
+        .tools
+        .priced_candles(&symbol("000660"), KnownMarket::Kr, window))
+    .expect("candles")
+    .expect("view");
+    assert_eq!(priced.basis, application::CandlePriceBasis::Unadjusted);
+    assert_eq!(priced.view.lines.len(), 4);
+    let adjustments = candle_adjustments(&fixture.broker);
+    assert_eq!(adjustments.len(), 2);
+    assert_eq!(adjustments[1], domain::PriceAdjustment::Raw);
+}
+
+#[test]
+fn candles_tool_reports_other_adjusted_failures_without_a_raw_retry() {
+    let fixture = fixture();
+    fixture
+        .broker
+        .script_candles()
+        .push(Err(server_error(ReadEndpoint::Candles)));
+    let window = CandleWindow::try_new(3).expect("window");
+    assert_eq!(
+        run(fixture
+            .tools
+            .priced_candles(&symbol("000660"), KnownMarket::Kr, window)),
+        Err(MarketToolError::Unavailable)
+    );
+    assert_eq!(candle_adjustments(&fixture.broker).len(), 1);
+}

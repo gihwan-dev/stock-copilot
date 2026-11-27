@@ -288,9 +288,6 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     pub(crate) fn market_now(&self) -> Timestamp {
         self.clock.now()
     }
-    pub(crate) fn market_sessions(&self) -> &[domain::MarketSession] {
-        &self.candle_sessions
-    }
     #[must_use]
     pub fn capabilities() -> application::BrokerCapabilities {
         application::BrokerCapabilities::new(

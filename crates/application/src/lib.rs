@@ -411,6 +411,7 @@ pub use market_overview::{
 };
 
 mod market_tool_reads;
+pub use market_tool_reads::{CandlePriceBasis, PricedCandlesView};
 pub use market_tool_reads::{
     CandleToolLine, CandleWindow, CandleWindowError, CandlesToolView, InvestorFlowToolLine,
     InvestorFlowToolView, MarketOverviewToolView, MarketToolError, MarketToolName, MarketToolReads,

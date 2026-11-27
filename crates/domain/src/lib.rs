@@ -644,6 +644,10 @@ pub use limit_price_policy::{
 mod index_benchmark;
 mod limit_price_revision;
 pub use index_benchmark::{finalize_index_day, index_benchmark_series};
+mod indicator_day;
+pub use indicator_day::{
+    IndicatorDayAge, IndicatorDayError, indicator_day_age, settle_indicator_day,
+};
 
 mod sector_selection;
 pub use sector_selection::{
