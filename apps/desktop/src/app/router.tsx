@@ -16,11 +16,13 @@ import {
   type NavigateFn,
   type SystemSettingsPresence,
 } from "./context";
+import { ShellLayout } from "./shell";
 import {
   BriefingsRouteView,
+  ChatRouteView,
+  LatestBriefingView,
   HomeView,
   SettingsRouteView,
-  ShellLayout,
   StatusView,
   TransactionsView,
 } from "./views";
@@ -53,6 +55,18 @@ const briefingsRoute = createRoute({
   component: BriefingsRouteView,
 });
 
+const latestBriefingRoute = createRoute({
+  getParentRoute: () => shellLayoutRoute,
+  path: "/briefing",
+  component: LatestBriefingView,
+});
+
+const chatRoute = createRoute({
+  getParentRoute: () => shellLayoutRoute,
+  path: "/chat",
+  component: ChatRouteView,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
@@ -66,7 +80,13 @@ const statusRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  shellLayoutRoute.addChildren([homeRoute, transactionsRoute, briefingsRoute]),
+  shellLayoutRoute.addChildren([
+    homeRoute,
+    transactionsRoute,
+    latestBriefingRoute,
+    briefingsRoute,
+    chatRoute,
+  ]),
   settingsRoute,
   statusRoute,
 ]);

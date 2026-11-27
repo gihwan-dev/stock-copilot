@@ -136,6 +136,26 @@ export const scenarios = {
       }),
     act: openDetail,
   },
+  "briefing-latest": {
+    path: "/briefing",
+    setup: () => base({ sources: filled() }),
+    act: (helpers) => helpers.waitText("크게 보기"),
+  },
+  "chat-ready": {
+    path: "/chat",
+    setup: () =>
+      base({
+        sources: filled(),
+        commands: {
+          getChatHistory: () => ({
+            session_id: "main-chat",
+            entries: [],
+            active_turn: null,
+          }),
+        },
+      }),
+    act: (helpers) => helpers.waitText("무엇이든 물어보세요"),
+  },
   "briefings-ready": {
     path: "/briefings",
     setup: () => base({ sources: filled() }),

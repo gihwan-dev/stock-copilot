@@ -94,7 +94,7 @@ test("U-29 sidebar lists holdings and watchlist with today's move in four states
   try {
     const w = bundle.open();
     const loading = w.mount(w.scenarios.listLoading());
-    const loadingText = await w.waitText(loading, "AI 채팅");
+    const loadingText = await w.waitText(loading, "내 현황");
     assert.equal(loadingText.includes("표시할 종목이 없어요"), false);
     assert.equal(loadingText.includes("종목 목록을 불러오지 못했어요"), false);
     assert.equal(loadingText.includes("상세 보기"), false);
@@ -121,7 +121,7 @@ test("U-29 sidebar lists holdings and watchlist with today's move in four states
   }
 });
 
-test("U-13 pressing an instrument opens quote, chart and holding in the body while the list and chat stay", async () => {
+test("U-13 pressing an instrument opens quote, chart and holding in the body while the list and chat destination stay", async () => {
   const bundle = await screenDom(bundleSource);
   try {
     const w = bundle.open();
@@ -136,11 +136,12 @@ test("U-13 pressing an instrument opens quote, chart and holding in the body whi
       "오늘 등락",
       "내 보유",
       "854,400",
-      "AI 채팅",
+
       "예시바이오",
     ]) {
       assert.ok(text.includes(label), label);
     }
+    assert.ok(view.getByRole("button", { name: "채팅", exact: true }));
     w.click(view.getAllByRole("button", { name: "닫기" })[0]);
     await w.waitText(view, "내 현황");
     w.cleanup();

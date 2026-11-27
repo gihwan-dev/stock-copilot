@@ -1,4 +1,4 @@
-import type { Locale, UiText } from "../../shared/lib";
+import type { FreeText, Locale, UiText } from "../../shared/lib";
 
 const catalog = {
   morning: { ko: "아침 브리핑" as UiText },
@@ -6,6 +6,7 @@ const catalog = {
   "pre-us-market": { ko: "미국장 전 점검" as UiText },
   historyTitle: { ko: "지난 브리핑" as UiText },
   openHistory: { ko: "지난 브리핑 보기" as UiText },
+  openBriefing: { ko: "브리핑 보기" as UiText },
   openReader: { ko: "크게 보기" as UiText },
   closeReader: { ko: "닫기" as UiText },
   backToHome: { ko: "현황으로" as UiText },
@@ -46,3 +47,8 @@ export type BriefingMessageKey = keyof typeof catalog;
 
 export const briefingText = (key: BriefingMessageKey, locale: Locale): UiText =>
   catalog[key][locale];
+
+export const briefingExcerpt = (body: FreeText): UiText =>
+  (body.length > 180
+    ? `${body.slice(0, 179).trimEnd()}…`
+    : body.slice()) as UiText;

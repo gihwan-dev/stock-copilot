@@ -8,6 +8,7 @@ import { Text } from "./Text";
 export type PanelState = "open" | "closed";
 
 export type AppShellProps = {
+  readonly navigation?: ReactElement;
   readonly list?: ReactElement | null;
   readonly rail?: ReactElement | null;
   readonly chat?: ReactElement | null;

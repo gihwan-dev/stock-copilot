@@ -101,3 +101,33 @@ test("screen audit: every route and state fills the window at every size and the
     [],
   );
 });
+
+test("minimum window supports keyboard travel between dashboard, briefing reader and chat", async () => {
+  await withAuditServer(async ({ browser, url }) => {
+    const context = await browser.newContext({ viewport: sizes.minimum });
+    try {
+      const tab = await context.newPage();
+      await tab.goto(`${url}?s=home-ready`);
+      const nav = tab.getByRole("navigation", { name: "화면 이동" });
+      const dashboard = nav.getByRole("button", { name: "대시보드" });
+      await dashboard.focus();
+      await tab.keyboard.press("Tab");
+      await tab.keyboard.press("Enter");
+      const reader = tab.getByRole("button", { name: "크게 보기" }).first();
+      await reader.click();
+      await tab.getByRole("dialog").waitFor();
+      await tab.keyboard.press("Escape");
+      await tab.getByRole("dialog").waitFor({ state: "hidden" });
+      await nav.getByRole("button", { name: "채팅" }).click();
+      await tab
+        .getByText("보유 종목을 확인했습니다.", { exact: true })
+        .waitFor();
+      assert.equal(await tab.locator("main textarea").count(), 1);
+      await dashboard.click();
+      await tab.getByRole("heading", { name: "내 현황" }).waitFor();
+      assert.equal(await tab.locator("main textarea").count(), 0);
+    } finally {
+      await context.close();
+    }
+  });
+});
