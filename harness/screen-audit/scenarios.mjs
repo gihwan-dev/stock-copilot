@@ -141,6 +141,39 @@ export const scenarios = {
     setup: () => base({ sources: filled() }),
     act: (helpers) => helpers.waitText("크게 보기"),
   },
+  "chat-long": {
+    path: "/chat",
+    setup: () => {
+      const history = recorded().getChatHistory();
+      const entries = Array.from({ length: 36 }, (_, index) =>
+        history.entries.map((entry) => ({
+          ...entry,
+          turn_id: `turn-${index + 1}`,
+          text: `대화 ${index + 1} — ${entry.text}`,
+        })),
+      ).flat();
+      return base({
+        sources: filled(),
+        commands: {
+          getChatHistory: () => ({ ...history, entries, active_turn: null }),
+          sendChatMessage: ({ request, onChunk }) => {
+            onChunk.onmessage({
+              turn_id: request.turn_id,
+              sequence: 1,
+              chunk: { TextDelta: { text: "스크롤 확인용 새 응답입니다." } },
+            });
+            return {
+              ...recorded().sendChatMessage(),
+              turn_id: request.turn_id,
+              session_id: request.session_id,
+              run_id: request.run_id,
+            };
+          },
+        },
+      });
+    },
+    act: (helpers) => helpers.waitText("대화 36 — 보유 종목을 확인했습니다."),
+  },
   "chat-ready": {
     path: "/chat",
     setup: () =>

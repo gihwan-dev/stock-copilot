@@ -212,14 +212,16 @@ export const ChatSession = (props: Props): ReactElement => {
 };
 
 export const ChatPanel = (props: {
+  readonly children?: (parts: ChatParts) => ReactElement;
   readonly context: ChatScreenContext | undefined;
 }): ReactElement => (
   <ChatSession context={props.context}>
-    {(parts): ReactElement => (
-      <Stack gap="space-4">
-        {parts.messages}
-        {parts.composer ?? <Stack gap="space-1">{[]}</Stack>}
-      </Stack>
-    )}
+    {props.children ??
+      ((parts): ReactElement => (
+        <Stack gap="space-4">
+          {parts.messages}
+          {parts.composer ?? <Stack gap="space-1">{[]}</Stack>}
+        </Stack>
+      ))}
   </ChatSession>
 );

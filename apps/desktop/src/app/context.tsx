@@ -8,6 +8,9 @@ export type SystemSettingsPresence = "shown" | "hidden";
 
 const NavigationContext = createContext<NavigateFn>((): void => undefined);
 
+const SettingsOriginContext = createContext<AppRoutePath>("/");
+export const useSettingsOrigin = (): AppRoutePath => use(SettingsOriginContext);
+
 const SourcesContext = createContext<ScreenSources>(pendingScreenSources);
 
 const SystemSettingsContext = createContext<SystemSettingsPresence>("hidden");
@@ -20,6 +23,7 @@ export const useSystemSettings = (): SystemSettingsPresence =>
   use(SystemSettingsContext);
 
 export const ScreenProviders = (props: {
+  readonly origin: AppRoutePath;
   readonly go: NavigateFn;
   readonly sources: ScreenSources;
   readonly system: SystemSettingsPresence;
@@ -28,7 +32,9 @@ export const ScreenProviders = (props: {
   <NavigationContext value={props.go}>
     <SourcesContext value={props.sources}>
       <SystemSettingsContext value={props.system}>
-        {props.children}
+        <SettingsOriginContext value={props.origin}>
+          {props.children}
+        </SettingsOriginContext>
       </SystemSettingsContext>
     </SourcesContext>
   </NavigationContext>

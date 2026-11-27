@@ -2,6 +2,7 @@ import type { Locale, UiText } from "../../shared/lib";
 
 const catalog = {
   title: { ko: "설정" as UiText },
+  back: { ko: "이전 화면으로" as UiText },
   backToHome: { ko: "현황으로" as UiText },
   basicSection: { ko: "기본 설정" as UiText },
   tossTitle: { ko: "토스 연결" as UiText },

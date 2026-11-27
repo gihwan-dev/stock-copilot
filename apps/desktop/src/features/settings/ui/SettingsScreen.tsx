@@ -26,6 +26,7 @@ export type { TossEntry } from "./BasicRows";
 
 type Props = {
   readonly tossEntry: TossEntry;
+  readonly backTarget?: "home" | "previous";
   readonly onBack: () => void;
   readonly onOpenStatus: () => void;
   readonly advanced: readonly ReactElement[];
@@ -86,7 +87,10 @@ export const SettingsScreen = (props: Props): ReactElement => {
     <Page
       title={settingsText("title", "ko")}
       actions={{
-        label: settingsText("backToHome", "ko"),
+        label: settingsText(
+          props.backTarget === "previous" ? "back" : "backToHome",
+          "ko",
+        ),
         onPress: props.onBack,
       }}
     >

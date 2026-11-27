@@ -1,4 +1,4 @@
-import type { FreeText, Locale, UiText } from "../../shared/lib";
+import type { Locale, UiText } from "../../shared/lib";
 
 const catalog = {
   morning: { ko: "아침 브리핑" as UiText },
@@ -47,8 +47,3 @@ export type BriefingMessageKey = keyof typeof catalog;
 
 export const briefingText = (key: BriefingMessageKey, locale: Locale): UiText =>
   catalog[key][locale];
-
-export const briefingExcerpt = (body: FreeText): UiText =>
-  (body.length > 180
-    ? `${body.slice(0, 179).trimEnd()}…`
-    : body.slice()) as UiText;
