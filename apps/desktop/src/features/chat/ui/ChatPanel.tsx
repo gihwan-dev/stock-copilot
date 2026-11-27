@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import {
   Button,
   ChatInput,
@@ -9,12 +9,10 @@ import {
   Text,
 } from "../../../shared/ds";
 import type {
-  ChatHistory,
   ChatListener,
   ChatScreenContext,
 } from "../../../shared/ipc";
 import {
-  emptyFreeText,
   parseFreeText,
   type EntityId,
   type FreeText,
@@ -22,6 +20,8 @@ import {
 import { chatText, type ChatMessageKey } from "../messages";
 import {
   useCancelChat,
+  useConversation,
+  type ConversationState,
   useChatHistory,
   useChatResume,
   useReloadChatHistory,
@@ -30,8 +30,6 @@ import {
 import {
   applyEvent,
   beginExchange,
-  fromHistory,
-  resumableTurn,
   settleExchange,
   type Transcript,
 } from "../model/transcript";
@@ -131,17 +129,12 @@ const StopButton = (props: { readonly live: EntityId }): ReactElement => {
 };
 
 const Conversation = (props: {
-  readonly history: ChatHistory;
+  readonly conversation: ConversationState;
   readonly context: ChatScreenContext | undefined;
   readonly render: (parts: ChatParts) => ReactElement;
 }): ReactElement => {
-  const [transcript, setTranscript] = useState(() =>
-    fromHistory(props.history),
-  );
-  const [draft, setDraft] = useState<FreeText>(emptyFreeText);
-  const update: Update = (change): void => {
-    setTranscript(change);
-  };
+  const { transcript, resume } = props.conversation;
+  const { draft, update, setDraft } = useConversation(props.conversation.draft);
   const send = useSendChat(
     {
       begin: (turn, message): void => {
@@ -154,7 +147,6 @@ const Conversation = (props: {
     },
     props.context,
   );
-  const resume = resumableTurn(props.history);
   const live = streamingTurn(transcript);
   const parts = props.render({
     messages: <Exchanges transcript={transcript} onPick={setDraft} />,
@@ -209,7 +201,7 @@ export const ChatSession = (props: Props): ReactElement => {
     case "ready":
       return (
         <Conversation
-          history={view.history}
+          conversation={view.conversation}
           context={props.context}
           render={props.children}
         />
