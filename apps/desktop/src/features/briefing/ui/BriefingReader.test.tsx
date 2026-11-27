@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { Card, Dialog } from "../../../shared/ds";
+import { Card, Markdown } from "../../../shared/ds";
 import type { BriefingSummary } from "../../../shared/ipc";
 import {
   parseEntityId,
@@ -8,13 +8,16 @@ import {
   type ExternalUrl,
 } from "../../../shared/lib";
 import { briefingText } from "../messages";
-import { Reader } from "./BriefingReader";
-import { ReadingCard } from "./BriefingView";
+import { Body } from "./BriefingReader";
+import { BriefingView } from "./BriefingView";
 
+const lead = "🌅".repeat(177);
+const citation = "123";
+const tail = `[${citation}] closing paragraph`;
 const briefing = (): BriefingSummary => {
   const id = parseEntityId("morning-2026-11-25");
   const at = parseTimestamp("2026-11-25T08:20:00+09:00");
-  const body = parseFreeText("body");
+  const body = parseFreeText(lead + tail);
   if (id.kind === "err" || at.kind === "err" || body.kind === "err")
     return expect.unreachable();
   return {
@@ -25,62 +28,41 @@ const briefing = (): BriefingSummary => {
   };
 };
 
-const reader = (
-  onClose: () => void,
-  onOpenHistory: (() => void) | undefined,
-): ReturnType<typeof Reader> =>
-  Reader({
+test("the dashboard excerpt ends before a partial citation and uses the preview scale", () => {
+  const body = Body({
     briefing: briefing(),
     onOpenSource: vi.fn<(url: ExternalUrl) => void>(),
-    onOpenHistory,
-    onClose,
+    presentation: "excerpt",
   });
-
-test("reader is an open wide dialog titled with the briefing kind", () => {
-  const element = reader(vi.fn<() => void>(), undefined);
-  expect(element.type).toBe(Dialog);
-  expect(element.props.open).toBe("open");
-  expect(element.props.wide).toBe("wide");
-  expect(element.props.title).toBe(briefingText("morning", "ko"));
+  expect(body).toMatchObject({
+    type: Markdown,
+    props: { content: lead + "…", scale: "body" },
+  });
 });
 
-test("escape, the close mark and the close button all close the reader", () => {
-  const onClose = vi.fn<() => void>();
-  const props = reader(onClose, undefined).props;
-  expect(props.onClose?.("escape")).toBeUndefined();
-  expect(props.onClose?.("close-button")).toBeUndefined();
-  expect(props.actions?.cancel?.label).toBe(briefingText("closeReader", "ko"));
-  expect(props.actions?.cancel?.onPress()).toBeUndefined();
-  expect(onClose).toHaveBeenCalledTimes(3);
-  expect(props.actions?.confirm).toBeUndefined();
-});
-
-test("reader leads to past briefings when there are some", () => {
-  const onOpenHistory = vi.fn<() => void>();
-  const props = reader(vi.fn<() => void>(), onOpenHistory).props;
-  expect(props.actions?.confirm?.label).toBe(briefingText("openHistory", "ko"));
-  expect(props.actions?.confirm?.onPress()).toBeUndefined();
-  expect(onOpenHistory).toHaveBeenCalledTimes(1);
+test("the full briefing keeps the complete citation and final paragraph at reading size", () => {
+  const full = Body({
+    briefing: briefing(),
+    onOpenSource: vi.fn<(url: ExternalUrl) => void>(),
+    presentation: "full",
+  });
+  expect(full.props).toHaveProperty("children.0.type", Markdown);
+  expect(full.props).toHaveProperty("children.0.props.content", lead + tail);
+  expect(full.props).toHaveProperty("children.0.props.scale", "reading");
 });
 
 test.each(["morning" as const, "pre-us-market" as const])(
-  "the %s card header opens the reader",
+  "the %s session is a titled card without an expand action",
   (kind) => {
-    const changeReader = vi.fn<(next: "open" | "closed") => void>();
-    const card = ReadingCard({
-      view: {
-        briefing: { ...briefing(), kind },
-        onOpenSource: vi.fn<(url: ExternalUrl) => void>(),
-        onOpenHistory: undefined,
-        layout: "fill",
-      },
-      reader: "closed",
-      changeReader,
+    const card = BriefingView({
+      briefing: { ...briefing(), kind },
+      onOpenSource: vi.fn<(url: ExternalUrl) => void>(),
+      onOpenHistory: undefined,
     });
-    expect(card.type).toBe(Card);
-    expect(card.props.layout).toBe("fill");
-    expect(card.props.actions?.label).toBe(briefingText("openReader", "ko"));
-    expect(card.props.actions?.onPress()).toBeUndefined();
-    expect(changeReader).toHaveBeenCalledWith("open");
+    expect(card).toMatchObject({
+      type: Card,
+      props: { title: briefingText(kind, "ko") },
+    });
+    expect(card.props).not.toHaveProperty("actions");
   },
 );

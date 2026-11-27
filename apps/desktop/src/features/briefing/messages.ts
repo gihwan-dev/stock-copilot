@@ -7,8 +7,6 @@ const catalog = {
   historyTitle: { ko: "지난 브리핑" as UiText },
   openHistory: { ko: "지난 브리핑 보기" as UiText },
   openBriefing: { ko: "브리핑 보기" as UiText },
-  openReader: { ko: "크게 보기" as UiText },
-  closeReader: { ko: "닫기" as UiText },
   backToHome: { ko: "현황으로" as UiText },
   finishedAt: { ko: "만든 시각" as UiText },
   sources: { ko: "출처" as UiText },

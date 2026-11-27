@@ -108,17 +108,68 @@ test("minimum window supports keyboard travel between dashboard, briefing reader
     try {
       const tab = await context.newPage();
       tab.setDefaultTimeout(15000);
-      await tab.goto(`${url}?s=home-ready`);
+      await tab.goto(`${url}?s=briefing-latest`);
+      await tab.waitForFunction(() => globalThis.auditState === "ready");
       const nav = tab.getByRole("navigation", { name: "화면 이동" });
       const dashboard = nav.getByRole("button", { name: "대시보드" });
+      await dashboard.click();
+      const morning = tab
+        .locator("main .markdown-content")
+        .filter({ hasText: "밤사이 지표" });
+      const morningTail = "오늘 아침 점검을 마칩니다.";
+      const fontSize = (body) =>
+        body
+          .locator("p")
+          .first()
+          .evaluate((p) =>
+            Number.parseFloat(globalThis.getComputedStyle(p).fontSize),
+          );
+      const previewSize = await fontSize(morning);
+      const excerpt = await morning.innerText();
+      assert.match(excerpt, /…$/u);
+      assert.ok(!excerpt.includes(morningTail));
       await dashboard.focus();
       await tab.keyboard.press("Tab");
       await tab.keyboard.press("Enter");
-      const reader = tab.getByRole("button", { name: "크게 보기" }).first();
-      await reader.click();
-      await tab.getByRole("dialog").waitFor();
-      await tab.keyboard.press("Escape");
-      await tab.getByRole("dialog").waitFor({ state: "hidden" });
+      await morning.getByText(morningTail, { exact: true }).waitFor();
+      const readingSize = await fontSize(morning);
+      assert.ok(
+        readingSize > previewSize,
+        `본문 ${readingSize}px, 미리보기 ${previewSize}px`,
+      );
+      const preMarket = tab
+        .locator("main .markdown-content")
+        .filter({ hasText: "미국장 전 점검을 마칩니다." });
+      assert.equal(await fontSize(preMarket), readingSize);
+      const expand = tab.getByRole("button", { name: "크게 보기" });
+      assert.equal(await expand.count(), 0);
+      assert.equal(await tab.getByRole("dialog").count(), 0);
+      assert.equal(await morning.getByRole("link", { name: "[1]" }).count(), 1);
+      assert.ok((await morning.innerText()).includes("[2]"));
+      assert.equal(await morning.getByRole("link", { name: "[2]" }).count(), 0);
+      const history = tab.getByRole("button", { name: "지난 브리핑 보기" });
+      await history.focus();
+      await tab.keyboard.press("Enter");
+      await tab
+        .getByRole("heading", { name: "지난 브리핑", exact: true })
+        .waitFor();
+      assert.equal(await fontSize(preMarket), readingSize);
+      assert.equal(await morning.count(), 0);
+      assert.equal(await expand.count(), 0);
+      assert.equal(await tab.getByRole("dialog").count(), 0);
+      await tab.getByText("연합 기사", { exact: true }).waitFor();
+      await tab.getByText("원문 없음", { exact: true }).waitFor();
+      await tab.getByText("2026-11-24 22:30", { exact: true }).waitFor();
+      assert.equal(
+        await tab.getByText("자료 확인 시각", { exact: true }).count(),
+        2,
+      );
+      assert.equal(
+        await tab.getByText("2026-11-24 22:15", { exact: true }).count(),
+        2,
+      );
+      await tab.getByRole("button", { name: "현황으로" }).click();
+      await morning.waitFor();
       await nav.getByRole("button", { name: "채팅" }).click();
       await tab
         .getByText("보유 종목을 확인했습니다.", { exact: true })
