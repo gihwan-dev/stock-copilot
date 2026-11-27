@@ -93,17 +93,15 @@ mod tests {
     use tauri::ipc::{Channel, InvokeResponseBody};
     use testkit_ports::chat_fakes::{ScriptedAiEventStream, ScriptedStreamStep};
 
-    impl super::super::chat_hub::ChatStreamHub {
-        async fn register_turn(
-            &self,
-            session: String,
-            turn: String,
-            subscriber: super::ChunkDelivery,
-        ) -> Arc<super::super::chat_hub::TurnStopSignal> {
-            self.start_turn(session, turn, subscriber)
-                .await
-                .expect("새 턴")
-        }
+    async fn register_turn(
+        hub: &super::super::chat_hub::ChatStreamHub,
+        session: String,
+        turn: String,
+        subscriber: super::ChunkDelivery,
+    ) -> Arc<super::super::chat_hub::TurnStopSignal> {
+        hub.start_turn(session, turn, subscriber)
+            .await
+            .expect("새 턴")
     }
 
     const RESPONSE_DIRECTORY: &str = "ipc/responses";
@@ -321,7 +319,8 @@ mod tests {
         let state = ChatIpcState::from_ports(&crate::tests::support::ports());
         let hub = state.hub();
         let (first_channel, first_received) = channel_collector();
-        let _stop = tauri::async_runtime::block_on(hub.register_turn(
+        let _stop = tauri::async_runtime::block_on(register_turn(
+            &hub,
             String::from("session-reload"),
             String::from("turn-live"),
             channel_delivery(first_channel),
@@ -381,7 +380,8 @@ mod tests {
         let state = ChatIpcState::from_ports(&crate::tests::support::ports());
         let hub = state.hub();
         let (channel, _received) = channel_collector();
-        let stop = tauri::async_runtime::block_on(hub.register_turn(
+        let stop = tauri::async_runtime::block_on(register_turn(
+            &hub,
             String::from("session-cancel"),
             String::from("turn-cancel"),
             channel_delivery(channel),
@@ -491,20 +491,20 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let (left_channel, _) = channel_collector();
             let (right_channel, _) = channel_collector();
-            let left = hub
-                .register_turn(
-                    "main-chat".to_owned(),
-                    "turn-a".to_owned(),
-                    channel_delivery(left_channel),
-                )
-                .await;
-            let right = hub
-                .register_turn(
-                    "session-new".to_owned(),
-                    "turn-b".to_owned(),
-                    channel_delivery(right_channel),
-                )
-                .await;
+            let left = register_turn(
+                &hub,
+                "main-chat".to_owned(),
+                "turn-a".to_owned(),
+                channel_delivery(left_channel),
+            )
+            .await;
+            let right = register_turn(
+                &hub,
+                "session-new".to_owned(),
+                "turn-b".to_owned(),
+                channel_delivery(right_channel),
+            )
+            .await;
             let (duplicate, _) = channel_collector();
             let error = hub
                 .start_turn(
