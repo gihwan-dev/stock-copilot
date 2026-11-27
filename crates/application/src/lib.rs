@@ -727,6 +727,8 @@ pub use collect_feed::{
 
 mod briefing_context;
 pub use briefing_context::HoldingsBriefingContext;
+mod briefing_market;
+pub use briefing_market::{MarketBriefingContext, market_briefing_facts};
 
 mod headline_grouping;
 pub use headline_grouping::{

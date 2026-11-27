@@ -332,10 +332,21 @@ impl<R: Runtime, P: PortTypes> BriefingPort for AppStoredJobs<R, P> {
     ) -> Result<BriefingRunResult, JobError> {
         let ports = self.ports()?;
         let accounts = ports.saved_accounts.current();
-        let context = HoldingsBriefingContext {
+        let holdings = HoldingsBriefingContext {
             portfolios: ports.portfolios.as_ref(),
             news: ports.news.as_ref(),
             accounts: &accounts,
+        };
+        let market = self
+            .app
+            .try_state::<crate::broker_link::BrokerMarketTools>()
+            .map_or_else(
+                crate::broker_link::BrokerMarketTools::unconnected,
+                |state| state.inner().clone(),
+            );
+        let context = application::MarketBriefingContext {
+            inner: &holdings,
+            market: &market,
         };
         let report = RunBriefing {
             ai: ports.ai_provider.as_ref(),

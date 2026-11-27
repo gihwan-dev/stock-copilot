@@ -114,8 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let toss = product_toss(&shared_clock, &events, &repositories)?;
     let (turns, app_commands) = (ChatTurnBook::new(), Arc::new(AppCommandSlot::default()));
-    let directory = InstrumentDirectory::default();
-    let estimate_runs = EstimateRunBook::new();
+    let (directory, estimate_runs) = (InstrumentDirectory::default(), EstimateRunBook::new());
     let ai = assemble_ai(
         discover_ai_setup(
             &context.config().identifier,
@@ -141,6 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .manage(notification_handle)
         .manage(diagnostics)
+        .manage(market_tools(&toss, &shared_clock, &directory))
         .manage(directory)
         .manage(intraday)
         .manage(turns)
