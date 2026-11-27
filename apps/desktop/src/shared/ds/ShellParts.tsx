@@ -67,7 +67,7 @@ export const ListHead = (props: {
   <div className="flex items-center justify-between gap-space-2 px-space-3 py-space-2 border-b-hairline border-solid border-line flex-none window-md:hidden">
     <Text variant="label">{text("shell.stockList", "ko")}</Text>
     <IconButton
-      icon="panel-left-close"
+      icon="panel-right-close"
       label={text("shell.closeList", "ko")}
       size="control-height-sm"
       onClick={props.onClose}
@@ -186,7 +186,7 @@ export const RailContent = (props: {
   return (
     <>
       <IconButton
-        icon={isOpen ? "panel-left-close" : "panel-left-open"}
+        icon={isOpen ? "panel-right-close" : "panel-right-open"}
         label={
           isOpen ? text("shell.closeList", "ko") : text("shell.openList", "ko")
         }
@@ -195,7 +195,7 @@ export const RailContent = (props: {
           props.onChange(isOpen ? "closed" : "open");
         }}
         size="control-height-sm"
-        tooltipSide="right"
+        tooltipSide="left"
       />
       {props.rail === null ? null : (
         <ScrollArea direction="vertical">
