@@ -1,125 +1,100 @@
-import type { ReactElement } from "react";
-import {
-  Badge,
-  Card,
-  DataText,
-  Inline,
-  Markdown,
-  Stack,
-  Text,
-  TimestampText,
-} from "../../../shared/ds";
-import type {
-  BriefingSourceKind,
-  BriefingSourceView,
-  BriefingSummary,
-} from "../../../shared/ipc";
+import { useState, type ComponentProps, type ReactElement } from "react";
+import { Button, Card, Inline, Stack } from "../../../shared/ds";
+import type { BriefingSummary } from "../../../shared/ipc";
 import type { ExternalUrl } from "../../../shared/lib";
-import { briefingText, type BriefingMessageKey } from "../messages";
-import { linkVerdict } from "../model/briefings";
+import { briefingText } from "../messages";
+import { Body, Reader, Stamp } from "./BriefingReader";
 
-const sourceKeys = {
-  web: "sourceWeb",
-  news: "sourceNews",
-  disclosure: "sourceDisclosure",
-} as const satisfies Record<BriefingSourceKind, BriefingMessageKey>;
-
-const SourceRow = (props: {
-  readonly source: BriefingSourceView;
+const CardStamp = (props: {
+  readonly briefing: BriefingSummary;
+  readonly history: (() => void) | undefined;
 }): ReactElement => (
-  <Inline gap="space-2" align="center" wrap="wrap">
-    <Badge tone={props.source.kind === "web" ? "alert" : "neutral"}>
-      {briefingText(sourceKeys[props.source.kind], "ko")}
-    </Badge>
-    <DataText value={props.source.title} variant="body-sm" />
+  <Inline gap="space-2" align="center" justify="between" wrap="wrap">
+    {[
+      <Stamp key="stamp" briefing={props.briefing} />,
+      ...(props.history === undefined
+        ? []
+        : [
+            <Button
+              key="history"
+              variant="ghost"
+              size="control-height-sm"
+              onClick={props.history}
+            >
+              {briefingText("openHistory", "ko")}
+            </Button>,
+          ]),
+    ]}
   </Inline>
-);
-
-const Sources = (props: {
-  readonly sources: readonly BriefingSourceView[];
-}): ReactElement =>
-  props.sources.length === 0 ? (
-    <Badge tone="alert">{briefingText("noSources", "ko")}</Badge>
-  ) : (
-    <Stack gap="space-1">
-      <Text variant="label">{briefingText("sources", "ko")}</Text>
-      {props.sources.map((source): ReactElement => (
-        <SourceRow key={source.id} source={source} />
-      ))}
-    </Stack>
-  );
-
-const Body = (props: {
-  readonly briefing: BriefingSummary;
-  readonly onOpenSource: (url: ExternalUrl) => void;
-}): ReactElement => {
-  const outcome = props.briefing.outcome;
-  switch (outcome.kind) {
-    case "completed":
-      return (
-        <Stack gap="space-3">
-          <Markdown
-            content={outcome.body}
-            linkAllowed={(url) => linkVerdict(props.briefing, url)}
-            onOpenLink={props.onOpenSource}
-          />
-          <Sources sources={outcome.sources} />
-          <Text variant="caption" tone="ink-subtle">
-            {briefingText("aiNotice", "ko")}
-          </Text>
-        </Stack>
-      );
-    case "failed":
-      return (
-        <Stack gap="space-1">
-          <Text variant="body-sm">{briefingText("failedTitle", "ko")}</Text>
-          <Text variant="caption" tone="ink-muted">
-            {briefingText(outcome.reason, "ko")}
-          </Text>
-        </Stack>
-      );
-  }
-};
-
-const Content = (props: {
-  readonly briefing: BriefingSummary;
-  readonly onOpenSource: (url: ExternalUrl) => void;
-}): ReactElement => (
-  <Stack gap="space-3">
-    <Inline gap="space-2" align="center" wrap="wrap">
-      <Text variant="caption" tone="ink-muted">
-        {briefingText("finishedAt", "ko")}
-      </Text>
-      <TimestampText value={props.briefing.finishedAt} />
-    </Inline>
-    <Body briefing={props.briefing} onOpenSource={props.onOpenSource} />
-  </Stack>
 );
 
 export type BriefingLayout = "flow" | "fill";
 
-export const BriefingView = (props: {
+type BriefingViewProps = {
   readonly briefing: BriefingSummary;
   readonly onOpenSource: (url: ExternalUrl) => void;
   readonly onOpenHistory: (() => void) | undefined;
   readonly layout?: BriefingLayout;
-}): ReactElement =>
-  props.onOpenHistory === undefined ? (
-    <Card
-      title={briefingText(props.briefing.kind, "ko")}
-      layout={props.layout ?? "flow"}
-    >
-      <Content briefing={props.briefing} onOpenSource={props.onOpenSource} />
-    </Card>
-  ) : (
+};
+type ReaderState = "open" | "closed";
+
+export const ReadingCard = ({
+  view: props,
+  reader,
+  changeReader,
+}: {
+  readonly view: BriefingViewProps;
+  readonly reader: ReaderState;
+  readonly changeReader: (next: ReaderState) => void;
+}): ReactElement<ComponentProps<typeof Card>> => {
+  const close = (): void => {
+    changeReader("closed");
+  };
+  const history = props.onOpenHistory;
+  return (
     <Card
       title={briefingText(props.briefing.kind, "ko")}
       layout={props.layout ?? "flow"}
       actions={{
-        label: briefingText("openHistory", "ko"),
-        onPress: props.onOpenHistory,
+        label: briefingText("openReader", "ko"),
+        onPress: () => {
+          changeReader("open");
+        },
       }}
     >
-      <Content briefing={props.briefing} onOpenSource={props.onOpenSource} />
+      <Stack gap="space-3">
+        <CardStamp briefing={props.briefing} history={history} />
+        <Body
+          briefing={props.briefing}
+          onOpenSource={props.onOpenSource}
+          scale="body"
+        />
+        {reader === "open"
+          ? [
+              <Reader
+                key="reader"
+                briefing={props.briefing}
+                onOpenSource={props.onOpenSource}
+                onOpenHistory={
+                  history === undefined
+                    ? undefined
+                    : (): void => {
+                        close();
+                        history();
+                      }
+                }
+                onClose={close}
+              />,
+            ]
+          : []}
+      </Stack>
     </Card>
   );
+};
+
+export const BriefingView = (props: BriefingViewProps): ReactElement => {
+  const [reader, setReader] = useState<ReaderState>("closed");
+  return (
+    <ReadingCard view={props} reader={reader} changeReader={setReader} />
+  );
+};

@@ -1177,12 +1177,18 @@ export type UiBriefingSource_Deserialize = {
   title: string;
   url?: string | null;
   kind: UiBriefingSourceKind;
+  cite: string;
+  origin: UiInformationSource;
+  observed_at?: string | null;
 };
 
 export type UiBriefingSource_Serialize = {
   title: string;
   url: string | null;
   kind: UiBriefingSourceKind;
+  cite: string;
+  origin: UiInformationSource;
+  observed_at: string | null;
 };
 
 export type UiBriefingStatus = "completed" | "failed";

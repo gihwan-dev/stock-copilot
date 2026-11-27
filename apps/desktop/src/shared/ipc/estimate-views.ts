@@ -143,6 +143,9 @@ export type BriefingSourceView = {
   readonly title: FreeText;
   readonly url: ExternalUrl | undefined;
   readonly kind: BriefingSourceKind;
+  readonly cite?: EntityId | undefined;
+  readonly publisher?: FreeText | undefined;
+  readonly observedAt?: Timestamp | undefined;
 };
 
 export type BriefingOutcome =

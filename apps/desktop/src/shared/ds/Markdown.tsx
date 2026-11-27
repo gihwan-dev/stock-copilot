@@ -5,7 +5,9 @@ import {
   type ReactNode,
   type ComponentProps,
 } from "react";
-import ReactMarkdown, { type Options } from "react-markdown";
+import ReactMarkdown, { type ExtraProps, type Options } from "react-markdown";
+import { citationPlugin, type MarkdownCitation } from "./markdown-citations";
+import { MarkdownAction } from "./MarkdownAction";
 import remarkGfm from "remark-gfm";
 import { ScrollArea } from "./ScrollArea";
 import {
@@ -15,18 +17,14 @@ import {
   type ExternalUrl,
   type FreeText,
 } from "../lib";
-type ContentNode = {
-  readonly type: string;
-  readonly value?: string;
-  readonly tagName?: string;
-  readonly properties?: Readonly<Record<string, unknown>> & {
-    readonly alt?: unknown;
-    readonly src?: unknown;
-  };
-  readonly children?: readonly ContentNode[];
-};
+type Conversion = NonNullable<
+  NonNullable<Options["remarkRehypeOptions"]>["unknownHandler"]
+>;
+export type MarkdownParent = Readonly<NonNullable<Parameters<Conversion>[2]>>;
+type HtmlElement = Readonly<NonNullable<ExtraProps["node"]>>;
+type ContentNode = Readonly<HtmlElement["children"][0]>;
 type LinkContent = {
-  readonly node?: { readonly children: readonly ContentNode[] } | undefined;
+  readonly node?: HtmlElement | undefined;
   readonly href?: ComponentProps<"a">["href"];
   readonly children?: ReactNode;
 };
@@ -39,6 +37,8 @@ type Props = {
   readonly content: FreeText;
   readonly linkAllowed: (url: ExternalUrl) => "allow" | "deny";
   readonly onOpenLink: (url: ExternalUrl) => void;
+  readonly citations?: readonly MarkdownCitation[];
+  readonly scale?: "body" | "reading";
   readonly flavor?: "basic" | "gfm";
   readonly appearance?: "plain" | "question";
 };
@@ -54,15 +54,13 @@ const MarkdownImage = ({ src, alt }: ImageContent): ReactElement => {
     props !== undefined &&
     url.kind === "ok" &&
     props.linkAllowed(url.value) === "allow" ? (
-    <button
-      type="button"
-      className="inline-block markdown-link text-left text-primary focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
-      onClick={(): void => {
+    <MarkdownAction
+      onOpen={(): void => {
         props.onOpenLink(url.value);
       }}
     >
-      {imageText}
-    </button>
+      <span>{imageText}</span>
+    </MarkdownAction>
   ) : (
     <span>{imageText}</span>
   );
@@ -86,30 +84,38 @@ const hasContent = (node: ContentNode): "present" | "empty" => {
   if (node.type === "text") return valuePresent(node.value);
   if (node.type !== "element") return "empty";
   if (node.tagName === "img")
-    return valuePresent(imageLabel(node.properties?.alt, node.properties?.src));
+    return valuePresent(imageLabel(node.properties.alt, node.properties.src));
   return hasChildren(node.children);
 };
+const citationNumber = (node: LinkContent["node"]): unknown =>
+  node?.properties["dataCitation"];
 const MarkdownLink = ({ href, children, node }: LinkContent): ReactElement => {
   const props = use(MarkdownContext);
   const url = parseExternalUrl(href);
+  if (
+    hasChildren(node?.children) === "empty" ||
+    props === undefined ||
+    url.kind === "err" ||
+    props.linkAllowed(url.value) === "deny"
+  )
+    return (
+      <LinkContext value="inside">
+        <span>{children}</span>
+      </LinkContext>
+    );
+  const citation = props.citations?.find(
+    (entry) => entry.number === citationNumber(node),
+  );
   return (
     <LinkContext value="inside">
-      {hasChildren(node?.children) === "present" &&
-      props !== undefined &&
-      url.kind === "ok" &&
-      props.linkAllowed(url.value) === "allow" ? (
-        <button
-          type="button"
-          className="inline-block markdown-link text-left text-primary focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
-          onClick={(): void => {
-            props.onOpenLink(url.value);
-          }}
-        >
-          {children}
-        </button>
-      ) : (
-        <span>{children}</span>
-      )}
+      <MarkdownAction
+        citation={citation?.title}
+        onOpen={(): void => {
+          props.onOpenLink(url.value);
+        }}
+      >
+        <>{children}</>
+      </MarkdownAction>
     </LinkContext>
   );
 };
@@ -132,26 +138,16 @@ const MarkdownParagraph = ({ children }: BlockContent): ReactElement =>
 const MarkdownH1 = ({ children }: BlockContent): ReactElement => (
   <h1 className="text-title-lg my-space-4">{children}</h1>
 );
-type HeadingContent = BlockContent & {
-  readonly node?:
-    { readonly properties?: ContentNode["properties"] } | undefined;
-};
-const MarkdownH2 = ({ children, node }: HeadingContent): ReactElement | null =>
-  node?.properties?.["id"] === "footnote-label" ? null : (
+const MarkdownH2 = ({ children, node }: LinkContent): ReactElement | null =>
+  node?.properties.id === "footnote-label" ? null : (
     <h2 className="text-title-md my-space-4">{children}</h2>
   );
-const MarkdownH3 = ({ children }: BlockContent): ReactElement => (
-  <h3 className="text-title-sm my-space-3">{children}</h3>
-);
-const MarkdownH4 = ({ children }: BlockContent): ReactElement => (
-  <h4 className="text-title-sm my-space-3">{children}</h4>
-);
-const MarkdownH5 = ({ children }: BlockContent): ReactElement => (
-  <h5 className="text-title-sm my-space-3">{children}</h5>
-);
-const MarkdownH6 = ({ children }: BlockContent): ReactElement => (
-  <h6 className="text-title-sm my-space-3">{children}</h6>
-);
+const smallHeading = (
+  Tag: "h3" | "h4" | "h5" | "h6",
+): ((props: BlockContent) => ReactElement) =>
+  function MarkdownHeading({ children }: BlockContent): ReactElement {
+    return <Tag className="text-title-sm my-space-3">{children}</Tag>;
+  };
 const MarkdownUl = ({ children }: BlockContent): ReactElement => (
   <ul className="markdown-bullets my-space-3">{children}</ul>
 );
@@ -194,7 +190,6 @@ const MarkdownTd = ({ children }: BlockContent): ReactElement => (
     {children}
   </td>
 );
-const MarkdownTask = (): null => null;
 const components = {
   a: MarkdownLink,
   img: MarkdownImage,
@@ -202,10 +197,10 @@ const components = {
   p: MarkdownParagraph,
   h1: MarkdownH1,
   h2: MarkdownH2,
-  h3: MarkdownH3,
-  h4: MarkdownH4,
-  h5: MarkdownH5,
-  h6: MarkdownH6,
+  h3: smallHeading("h3"),
+  h4: smallHeading("h4"),
+  h5: smallHeading("h5"),
+  h6: smallHeading("h6"),
   ul: MarkdownUl,
   ol: MarkdownOl,
   blockquote: MarkdownQuote,
@@ -213,32 +208,41 @@ const components = {
   "tabl\u0065": MarkdownTable,
   th: MarkdownTh,
   td: MarkdownTd,
-  input: MarkdownTask,
+  input: (): null => null,
 };
-const basicPlugins: Options["remarkPlugins"] = [];
-const gfmPlugins: Options["remarkPlugins"] = [remarkGfm];
-const Body = (props: {
-  readonly content: FreeText;
-  readonly flavor: "basic" | "gfm";
-}): ReactElement => (
-  <ReactMarkdown
-    skipHtml
-    components={components}
-    remarkPlugins={props.flavor === "gfm" ? gfmPlugins : basicPlugins}
-  >
-    {props.content}
-  </ReactMarkdown>
-);
-export const Markdown = (props: Props): ReactElement => (
-  <MarkdownContext value={props}>
-    {props.appearance === "question" ? (
-      <div className="markdown-content max-w-full rounded-lg bg-surface-sunken px-space-3 py-space-2 text-body text-ink">
-        <Body content={props.content} flavor={props.flavor ?? "basic"} />
-      </div>
-    ) : (
-      <div className="markdown-content text-body text-ink">
-        <Body content={props.content} flavor={props.flavor ?? "basic"} />
-      </div>
-    )}
-  </MarkdownContext>
-);
+export const Markdown = (props: Props): ReactElement => {
+  const plugins = props.flavor === "gfm" ? [remarkGfm] : [];
+  const citations = props.citations ?? [];
+  const body = (
+    <ReactMarkdown
+      skipHtml
+      components={components}
+      remarkPlugins={
+        citations.length === 0
+          ? plugins
+          : [...plugins, citationPlugin(citations)]
+      }
+    >
+      {props.content}
+    </ReactMarkdown>
+  );
+  return (
+    <MarkdownContext value={props}>
+      {props.appearance === "question" ? (
+        <div className="markdown-content max-w-full rounded-lg bg-surface-sunken px-space-3 py-space-2 text-body text-ink">
+          {body}
+        </div>
+      ) : (
+        <div
+          className={
+            props.scale === "reading"
+              ? "markdown-content text-size-lg text-ink"
+              : "markdown-content text-body text-ink"
+          }
+        >
+          {body}
+        </div>
+      )}
+    </MarkdownContext>
+  );
+};

@@ -11,7 +11,7 @@ use specta::Type;
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::error::{IpcError, IpcErrorKind};
-use super::event::UiBriefingId;
+use super::event::{UiBriefingId, UiInformationSource};
 use super::state::BoxFuture;
 
 const KST_OFFSET: i32 = 32_400;
@@ -67,6 +67,9 @@ pub struct UiBriefingSource {
     pub title: String,
     pub url: Option<String>,
     pub kind: UiBriefingSourceKind,
+    pub cite: String,
+    pub origin: UiInformationSource,
+    pub observed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -157,7 +160,7 @@ const fn map_failure(failure: BriefingFailure) -> UiBriefingFailure {
     }
 }
 
-fn map_source(source: &BriefingSource) -> UiBriefingSource {
+fn map_source(index: usize, source: &BriefingSource) -> UiBriefingSource {
     UiBriefingSource {
         title: source.title.as_untrusted_str().to_owned(),
         url: source.url.as_ref().map(|url| url.as_str().to_owned()),
@@ -166,6 +169,9 @@ fn map_source(source: &BriefingSource) -> UiBriefingSource {
             InformationSource::News(_) => UiBriefingSourceKind::News,
             InformationSource::Disclosure(_) => UiBriefingSourceKind::Disclosure,
         },
+        cite: index.saturating_add(1).to_string(),
+        origin: source.origin.clone().into(),
+        observed_at: kst_iso(source.observed_at),
     }
 }
 
@@ -179,7 +185,11 @@ fn map_record(record: &BriefingRecord) -> Option<UiBriefing> {
             UiBriefingStatus::Completed,
             UiBriefingFailure::None,
             body.as_untrusted_str().to_owned(),
-            origins.iter().map(map_source).collect(),
+            origins
+                .iter()
+                .enumerate()
+                .map(|(index, source)| map_source(index, source))
+                .collect(),
         ),
         BriefingOutcome::Failed(failure) => (
             UiBriefingStatus::Failed,
