@@ -584,8 +584,15 @@ fn adjusted_history_uses_the_registered_master_identity() {
         .expect("일봉")
         .expect("결과");
     assert_eq!(result.basis, application::CandlePriceBasis::Adjusted);
-    assert!(matches!(fixture.broker.calls().as_slice(),
-        [BrokerReadCall::Candles(actual, _, _, domain::PriceAdjustment::Adjusted(_))] if actual == &expected));
+    let calls = fixture.broker.calls();
+    let [BrokerReadCall::Candles(actual, _, _, adjustment)] = calls.as_slice() else {
+        panic!("수정주가 조회 한 번을 기대함");
+    };
+    assert_eq!(actual, &expected);
+    assert_eq!(
+        *adjustment,
+        domain::PriceAdjustment::Adjusted(domain::AdjustmentBasis::new(now()))
+    );
 }
 
 #[test]
