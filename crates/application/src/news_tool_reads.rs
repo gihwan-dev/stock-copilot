@@ -106,6 +106,30 @@ pub struct DisclosureToolLine {
     pub symbols: Vec<Symbol>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationDigest(String);
+
+impl CitationDigest {
+    #[must_use]
+    pub fn try_new(raw: &str) -> Option<Self> {
+        (raw.len() == 64
+            && raw
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
+        .then(|| Self(raw.to_owned()))
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitedLine<T> {
+    pub line: T,
+    pub digest: Option<CitationDigest>,
+}
+
 pub trait NewsToolReads: Send + Sync {
     fn search_news(
         &self,
@@ -116,4 +140,32 @@ pub trait NewsToolReads: Send + Sync {
         &self,
         query: &CollectedItemQuery,
     ) -> impl Future<Output = Result<Vec<DisclosureToolLine>, SystemPortError>> + Send;
+
+    fn cited_news(
+        &self,
+        query: &CollectedItemQuery,
+    ) -> impl Future<Output = Result<Vec<CitedLine<NewsToolLine>>, SystemPortError>> + Send {
+        async {
+            Ok(self
+                .search_news(query)
+                .await?
+                .into_iter()
+                .map(|line| CitedLine { line, digest: None })
+                .collect())
+        }
+    }
+    fn cited_disclosures(
+        &self,
+        query: &CollectedItemQuery,
+    ) -> impl Future<Output = Result<Vec<CitedLine<DisclosureToolLine>>, SystemPortError>> + Send
+    {
+        async {
+            Ok(self
+                .disclosures(query)
+                .await?
+                .into_iter()
+                .map(|line| CitedLine { line, digest: None })
+                .collect())
+        }
+    }
 }

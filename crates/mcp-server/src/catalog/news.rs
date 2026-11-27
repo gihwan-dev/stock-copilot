@@ -101,7 +101,7 @@ impl<N: NewsToolReads, C: Clock> NewsTool<N, C> {
             NewsToolKind::SearchNews => {
                 let lines = self
                     .reads
-                    .search_news(&query)
+                    .cited_news(&query)
                     .await
                     .map_err(|error| upstream_error(&error))?;
                 render_news(lines)?
@@ -109,7 +109,7 @@ impl<N: NewsToolReads, C: Clock> NewsTool<N, C> {
             NewsToolKind::Disclosures => {
                 let lines = self
                     .reads
-                    .disclosures(&query)
+                    .cited_disclosures(&query)
                     .await
                     .map_err(|error| upstream_error(&error))?;
                 render_disclosures(lines)?
@@ -218,20 +218,29 @@ fn symbol_values(symbols: &[Symbol]) -> Value {
     )
 }
 
-fn render_news(mut lines: Vec<NewsToolLine>) -> Result<Vec<Value>, ToolErrorPayload> {
+fn render_news(
+    mut lines: Vec<application::CitedLine<NewsToolLine>>,
+) -> Result<Vec<Value>, ToolErrorPayload> {
     lines.sort_by(|left, right| {
-        newest_first(left.published_at, right.published_at)
-            .then_with(|| left.handle.cmp(&right.handle))
+        newest_first(left.line.published_at, right.line.published_at)
+            .then_with(|| left.line.handle.cmp(&right.line.handle))
     });
     lines
         .iter()
-        .map(|line| {
+        .map(|item| {
+            let line = &item.line;
             let summary = match line.summary.as_ref() {
                 Some(text) => untrusted(text, SUMMARY_CHARS)?,
                 None => Value::Null,
             };
             Ok(object(vec![
                 ("handle", Value::String(line.handle.as_str().to_owned())),
+                (
+                    "citation_digest",
+                    item.digest.as_ref().map_or(Value::Null, |digest| {
+                        Value::String(digest.as_str().to_owned())
+                    }),
+                ),
                 (
                     "source",
                     Value::String(news_source_name(&line.source).to_owned()),
@@ -246,15 +255,25 @@ fn render_news(mut lines: Vec<NewsToolLine>) -> Result<Vec<Value>, ToolErrorPayl
         .collect()
 }
 
-fn render_disclosures(mut lines: Vec<DisclosureToolLine>) -> Result<Vec<Value>, ToolErrorPayload> {
+fn render_disclosures(
+    mut lines: Vec<application::CitedLine<DisclosureToolLine>>,
+) -> Result<Vec<Value>, ToolErrorPayload> {
     lines.sort_by(|left, right| {
-        newest_first(left.filed_at, right.filed_at).then_with(|| left.handle.cmp(&right.handle))
+        newest_first(left.line.filed_at, right.line.filed_at)
+            .then_with(|| left.line.handle.cmp(&right.line.handle))
     });
     lines
         .iter()
-        .map(|line| {
+        .map(|item| {
+            let line = &item.line;
             Ok(object(vec![
                 ("handle", Value::String(line.handle.as_str().to_owned())),
+                (
+                    "citation_digest",
+                    item.digest.as_ref().map_or(Value::Null, |digest| {
+                        Value::String(digest.as_str().to_owned())
+                    }),
+                ),
                 (
                     "source",
                     Value::String(disclosure_source_name(&line.source).to_owned()),

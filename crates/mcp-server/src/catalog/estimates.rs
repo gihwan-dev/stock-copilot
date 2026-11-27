@@ -103,7 +103,19 @@ fn render_task(view: &EstimateTaskView) -> Value {
             Value::String(view.base_probability().to_string()),
         ),
         ("reference_price", money(&view.reference_price().as_money())),
-        ("reference_time", timestamp(view.asked_at())),
+        (
+            "reference_time",
+            timestamp(view.close_at().unwrap_or_else(|| view.quote_at())),
+        ),
+        (
+            "reference_source",
+            json!(if view.close_at().is_some() {
+                "finalized_regular_close"
+            } else {
+                "trade"
+            }),
+        ),
+        ("asked_at", timestamp(view.asked_at())),
         ("status", Value::String(consumption.to_owned())),
     ])
 }
@@ -423,7 +435,7 @@ where
         (
             EstimateToolKind::Submit,
             SUBMIT_ESTIMATE_TOOL,
-            "Submit a probability estimate for one task: task_id, integer p from 1 to 99, rationale, strongest counterargument, and sources as tool:<request id> of successful calls in this run. This records an estimate only; it never creates an order. The app decides any signal.",
+            "Submit a probability estimate for one task: task_id, integer p from 1 to 99, rationale, strongest counterargument, and sources. Cite each news item or filing you relied on by its handle from search_news or get_disclosures in this run (for example n-12 or d-3); only items the app stored count, and a signal needs at least one of them. This records an estimate only; it never creates an order. The app decides any signal.",
             ToolAccessKind::StateChanging,
             submit_estimate_schema(),
         ),

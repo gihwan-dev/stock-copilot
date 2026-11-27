@@ -164,7 +164,7 @@ pub(super) fn decode_master(payload: &str) -> rusqlite::Result<MasterInstrument>
     MasterInstrument::try_new(row).map_err(invalid)
 }
 
-pub(super) fn encode_sources(facts: &SignalSourceFacts) -> String {
+pub(crate) fn encode_sources(facts: &SignalSourceFacts) -> String {
     let mut out = Encoder::new();
     out.push("sources_v1");
     out.push_usize(facts.items.len());
@@ -257,6 +257,7 @@ fn take_estimate_restore_evidence(
 fn put_stored_estimate_evidence(out: &mut Encoder, value: &StoredEstimateEvidence) {
     put_estimate_restore_evidence(out, &value.evidence);
     put_estimate_restore_evidence(out, &value.original);
+    crate::estimates::codec::put_close_at(out, value.expected.close_at);
     put_price(out, value.expected.reference_price);
     put_timestamp(out, value.expected.reference_at);
     put_timestamp(out, value.expected.created_at);
@@ -271,6 +272,7 @@ fn take_stored_estimate_evidence(
 ) -> rusqlite::Result<StoredEstimateEvidence> {
     let evidence = take_estimate_restore_evidence(input)?;
     let original = take_estimate_restore_evidence(input)?;
+    let close_at = crate::estimates::codec::take_close_at(input)?;
     let reference_price = take_price(input)?;
     let reference_at = take_timestamp(input)?;
     let created_at = take_timestamp(input)?;
@@ -282,6 +284,7 @@ fn take_stored_estimate_evidence(
         evidence,
         original,
         expected: EstimateDisplayFacts {
+            close_at,
             reference_price,
             reference_at,
             created_at,

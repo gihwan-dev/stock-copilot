@@ -185,6 +185,8 @@ pub use proposal_range::{
     ProposalPriceRange, ProposalRangeError, ProposalVolatility, TradingDayHorizon,
 };
 
+mod prevailing_price;
+pub use prevailing_price::closed_estimate_reference;
 mod proposal_facts;
 pub use proposal::ExecutionToken;
 pub use proposal_facts::{

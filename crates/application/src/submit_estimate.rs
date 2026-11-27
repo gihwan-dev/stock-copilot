@@ -43,6 +43,31 @@ pub trait EstimateSubmissionRepository: Send + Sync {
         next: &EstimateAssignments<AiRunId>,
         records: &[EstimateSubmissionRecord<AiRunId, ReasoningEffort>],
     ) -> impl Future<Output = Result<EstimateCommitOutcome, SystemPortError>> + Send;
+    fn collected_citation(
+        &self,
+        _run: &AiRunId,
+        _handle: &crate::CollectedItemHandle,
+    ) -> impl Future<Output = Result<Option<crate::ObservedCollectedItem>, SystemPortError>> + Send
+    {
+        std::future::ready(Ok(None))
+    }
+    fn commit_with_sources(
+        &self,
+        previous: &EstimateAssignments<AiRunId>,
+        next: &EstimateAssignments<AiRunId>,
+        records: &[EstimateSubmissionRecord<AiRunId, ReasoningEffort>],
+        sources: &crate::SignalSourceFacts,
+    ) -> impl Future<Output = Result<EstimateCommitOutcome, SystemPortError>> + Send {
+        async move {
+            if !sources.items.is_empty() || !sources.disclosures.is_empty() {
+                return Err(SystemPortError::new(
+                    crate::SystemPort::Repository,
+                    crate::SystemFailure::InvalidData,
+                ));
+            }
+            self.commit_submission(previous, next, records).await
+        }
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubmitEstimateError {
@@ -65,6 +90,14 @@ impl<'a, Repository: EstimateSubmissionRepository> SubmitEstimate<'a, Repository
         &self,
         run: &AiRunId,
         requests: Vec<EstimateSubmissionInput>,
+    ) -> Result<Vec<DeliveryReport>, SubmitEstimateError> {
+        self.execute_with_sources(run, requests, None).await
+    }
+    pub(crate) async fn execute_with_sources(
+        &self,
+        run: &AiRunId,
+        requests: Vec<EstimateSubmissionInput>,
+        sources: Option<&crate::SignalSourceFacts>,
     ) -> Result<Vec<DeliveryReport>, SubmitEstimateError> {
         if requests.is_empty() {
             return Ok(Vec::new());
@@ -96,27 +129,39 @@ impl<'a, Repository: EstimateSubmissionRepository> SubmitEstimate<'a, Repository
                 .map_err(SubmitEstimateError::Record)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        match self
-            .repository
-            .commit_submission(&previous, &next, &records)
-            .await
-            .map_err(SubmitEstimateError::Storage)?
-        {
-            EstimateCommitOutcome::Conflict => Err(SubmitEstimateError::ConcurrentUpdate),
-            EstimateCommitOutcome::Committed => Ok(records
-                .iter()
-                .map(|record| {
-                    self.events.publish(DomainEvent::EstimateSubmitted(
-                        record
-                            .submission()
-                            .task_key()
-                            .task()
-                            .volatility()
-                            .instrument()
-                            .clone(),
-                    ))
-                })
-                .collect()),
+        let committed = match sources {
+            Some(facts) => {
+                self.repository
+                    .commit_with_sources(&previous, &next, &records, facts)
+                    .await
+            }
+            None => {
+                self.repository
+                    .commit_submission(&previous, &next, &records)
+                    .await
+            }
         }
+        .map_err(SubmitEstimateError::Storage)?;
+        match committed {
+            EstimateCommitOutcome::Conflict => Err(SubmitEstimateError::ConcurrentUpdate),
+            EstimateCommitOutcome::Committed => {
+                Ok(records.iter().map(|record| self.publish(record)).collect())
+            }
+        }
+    }
+
+    fn publish(
+        &self,
+        record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+    ) -> DeliveryReport {
+        let instrument = record
+            .submission()
+            .task_key()
+            .task()
+            .volatility()
+            .instrument()
+            .clone();
+        self.events
+            .publish(DomainEvent::EstimateSubmitted(instrument))
     }
 }

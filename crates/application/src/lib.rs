@@ -420,8 +420,8 @@ pub use market_tool_reads::{
 };
 mod news_tool_reads;
 pub use news_tool_reads::{
-    CollectedItemHandle, CollectedItemQuery, DisclosureToolLine, LookbackDays, NewsKeyword,
-    NewsToolLine, NewsToolReads, ToolQueryTextError,
+    CitationDigest, CitedLine, CollectedItemHandle, CollectedItemQuery, DisclosureToolLine,
+    LookbackDays, NewsKeyword, NewsToolLine, NewsToolReads, ToolQueryTextError,
 };
 mod article_tool;
 pub use article_tool::{
@@ -497,8 +497,8 @@ pub use prompt_file::{
 
 mod submit_estimate_tool;
 pub use submit_estimate_tool::{
-    EstimateRunContext, EstimateToolArguments, SubmitEstimateTool, SubmitEstimateToolError,
-    ToolCallHistory,
+    EstimateRunContext, EstimateSource, EstimateToolArguments, SubmitEstimateTool,
+    SubmitEstimateToolError, ToolCallHistory,
 };
 
 mod transaction_observation;
@@ -747,8 +747,8 @@ pub use intraday_review::{IntradayReviewOutcome, IntradayReviewSubject, RunIntra
 
 mod single_estimate;
 pub use single_estimate::{
-    EstimateRunIdentity, EstimateRunRegistry, EstimateTaskMaterialSource, EstimateTaskMaterials,
-    EstimateTrigger, RunSingleEstimate, estimate_prompt_source,
+    EstimateRunIdentity, EstimateRunRegistry, EstimateSkip, EstimateTaskMaterialSource,
+    EstimateTaskMaterials, EstimateTrigger, RunSingleEstimate, estimate_prompt_source,
 };
 
 mod job_schedule_store;

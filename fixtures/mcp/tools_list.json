@@ -521,7 +521,7 @@
       "openWorldHint": false,
       "readOnlyHint": false
     },
-    "description": "Submit a probability estimate for one task: task_id, integer p from 1 to 99, rationale, strongest counterargument, and sources as tool:<request id> of successful calls in this run. This records an estimate only; it never creates an order. The app decides any signal.",
+    "description": "Submit a probability estimate for one task: task_id, integer p from 1 to 99, rationale, strongest counterargument, and sources. Cite each news item or filing you relied on by its handle from search_news or get_disclosures in this run (for example n-12 or d-3); only items the app stored count, and a signal needs at least one of them. This records an estimate only; it never creates an order. The app decides any signal.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -543,7 +543,7 @@
         "sources": {
           "items": {
             "maxLength": 128,
-            "pattern": "^tool:",
+            "pattern": "^(tool:.+|[nd]-[0-9]+)$",
             "type": "string"
           },
           "maxItems": 8,

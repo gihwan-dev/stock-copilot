@@ -424,7 +424,7 @@ const ESTIMATE_MODEL_PROVIDER: &str = "claude-code";
 const ESTIMATE_MODEL_NAME: &str = "default";
 const ESTIMATE_CLI_VERSION: &str = "cli";
 const ESTIMATE_PROMPT_ID: &str = "estimate";
-const ESTIMATE_PROMPT_VERSION: &str = "v1";
+const ESTIMATE_PROMPT_VERSION: &str = "v2";
 
 fn estimate_identity() -> Option<application::EstimateRunIdentity> {
     use application::PromptHasher as _;

@@ -226,3 +226,67 @@ fn matches_candles(call: &testkit_ports::scripted::BrokerReadCall, now: domain::
         | testkit_ports::scripted::BrokerReadCall::CommissionRate(..) => false,
     }
 }
+
+#[test]
+fn overnight_materials_use_the_final_close_even_when_the_quote_is_missing() {
+    let master = sample_master().expect("마스터");
+    let target = TrackingTarget::for_holding(master.row().instrument_id.clone());
+    let now = sample_day(62)
+        .expect("시각")
+        .checked_sub(
+            domain::TimeSpan::try_new(domain::SpanSeconds::new(28_800), domain::Nanosecond::new(0))
+                .expect("시간"),
+        )
+        .expect("한국 01시");
+    let directory = InstrumentDirectory::default();
+    directory.replace(std::slice::from_ref(&master));
+    let source = materials(directory, AccountSlot::with(vec![AccountId::new(7)]));
+    source.broker.script_quotes().push(Ok(Vec::new()));
+    let candles = sample_daily_candles(62)
+        .expect("완료 일봉")
+        .into_iter()
+        .map(|old| {
+            domain::Candle::try_new(
+                old.instrument().clone(),
+                old.time(),
+                domain::PriceAdjustment::Adjusted(domain::AdjustmentBasis::new(now)),
+                old.values(),
+                domain::CandleObservation::new(now, old.status()),
+            )
+            .expect("기준일 일봉")
+        })
+        .collect();
+    source.broker.script_candles().push(Ok(candles));
+    source.settings.script_profile().push(MemoryReply::Memory);
+    source
+        .broker
+        .script_commission_rate()
+        .push(Err(PortError::new(
+            application::ReadEndpoint::CommissionRate,
+            application::HttpStatus::NotReceived,
+            application::PortErrorKind::Unavailable {
+                cause: application::UnavailableCause::Network,
+                retry: application::RetryDelay::Unknown,
+            },
+        )));
+    let found = block(source.materials(&target, now))
+        .expect("재료")
+        .expect("야간 과제");
+    let local = sample_local(now).expect("현지");
+    assert_eq!(
+        found.context.reference(),
+        &master
+            .price_observation(price("102"), local)
+            .expect("마지막 세션 종가")
+    );
+    assert!(found.context.close_at().is_some_and(|close| close < now));
+    let task = domain::EstimateTask::create(
+        found.context,
+        found.volatility,
+        found.profile.horizon(),
+        found.profile.hours_permission(),
+        found.profile.risk_appetite(),
+    )
+    .expect("확률 추정 과제");
+    assert_eq!(task.created_at(), now);
+}

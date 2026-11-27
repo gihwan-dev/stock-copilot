@@ -10,7 +10,8 @@ use application::{
     SignalInvalidationRepository, SignalMutation, SignalRepository, SignalSnapshot,
     SignalSourceFacts, SystemPortError, WriteCompleted,
 };
-use codec::{decode_sources, encode_master, encode_sources};
+pub(crate) use codec::encode_sources;
+use codec::{decode_sources, encode_master};
 use domain::{
     AccountId, Draft, DraftRestoreEvidence, HistoricalSignal, HistoricalSignalOccurrence,
     InstrumentId, IssuedEstimateTaskId, MasterInstrument, Proposal, ProposalId,

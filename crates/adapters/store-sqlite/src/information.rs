@@ -105,6 +105,35 @@ fn key_from_entry(entry: &CollectedEntry) -> rusqlite::Result<InformationKey> {
         CollectedEntry::Disclosure(item) => Ok(InformationKey::Disclosure(item.key().clone())),
     }
 }
+#[must_use]
+pub fn citation_digest(entry: &CollectedEntry) -> Option<application::CitationDigest> {
+    use sha2::{Digest, Sha256};
+    let key = key_from_entry(entry).ok()?;
+    let (category, source, external_id) = key_parts(&key);
+    let item = content(entry);
+    let mut hash = Sha256::new();
+    for field in [
+        category,
+        source,
+        external_id,
+        item.url().as_str(),
+        item.title().as_untrusted_str(),
+    ]
+    .into_iter()
+    .chain(item.body().map(UntrustedText::as_untrusted_str))
+    {
+        hash.update(u64::try_from(field.len()).ok()?.to_be_bytes());
+        hash.update(field.as_bytes());
+    }
+    let hex = hash
+        .finalize()
+        .iter()
+        .flat_map(|byte| [byte >> 4_u8, byte & 0x0f_u8])
+        .filter_map(|nibble| char::from_digit(u32::from(nibble), 16))
+        .collect::<String>();
+    application::CitationDigest::try_new(&hex)
+}
+
 fn content(entry: &CollectedEntry) -> &domain::CollectedItem {
     match entry {
         CollectedEntry::News(item) => item.collected(),
@@ -584,16 +613,54 @@ impl CollectedItemReads for InformationStore<'_> {
             return Ok(None);
         };
         self.database
+            .read(move |connection| observed_by_id(connection, kind, id))
+            .await
+    }
+}
+
+fn observed_by_id(
+    connection: &Connection,
+    kind: CollectedKind,
+    id: i64,
+) -> rusqlite::Result<Option<ObservedCollectedItem>> {
+    let row = connection
+        .query_row(
+            sql::OBSERVED_BY_ID,
+            params![id, category_tag(kind)],
+            decode_observed,
+        )
+        .optional()?;
+    row.map(|found| observed(connection, kind, found))
+        .transpose()
+}
+
+impl InformationStore<'_> {
+    pub(crate) async fn citation_in_run(
+        &self,
+        run: &application::AiRunId,
+        handle: &CollectedItemHandle,
+    ) -> Result<Option<ObservedCollectedItem>, SystemPortError> {
+        let Some((kind, id)) = parse_handle(handle) else {
+            return Ok(None);
+        };
+        let tool = match kind {
+            CollectedKind::News => "search_news",
+            CollectedKind::Disclosure => "get_disclosures",
+        };
+        let run_id = run.as_str().to_owned();
+        let handle_text = handle.as_str().to_owned();
+        self.database
             .read(move |connection| {
-                let row = connection
-                    .query_row(
-                        sql::OBSERVED_BY_ID,
-                        params![id, category_tag(kind)],
-                        decode_observed,
-                    )
-                    .optional()?;
-                row.map(|found| observed(connection, kind, found))
-                    .transpose()
+                let Some(observed) = observed_by_id(connection, kind, id)? else {
+                    return Ok(None);
+                };
+                let digest = citation_digest(&observed.entry).ok_or_else(|| invalid(()))?;
+                let shown: bool = connection.query_row(
+                    sql::CITED_RESULT_HANDLE,
+                    params![run_id, tool, handle_text, digest.as_str()],
+                    |row| row.get(0),
+                )?;
+                Ok(shown.then_some(observed))
             })
             .await
     }

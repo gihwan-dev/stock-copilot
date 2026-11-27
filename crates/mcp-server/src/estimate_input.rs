@@ -1,4 +1,4 @@
-use application::EstimateToolArguments;
+use application::{CollectedItemHandle, EstimateSource, EstimateToolArguments};
 use domain::{AiProbabilityInput, CalibrationEstimateId, ToolReference, UntrustedText};
 use rmcp::model::JsonObject;
 use serde::Deserialize;
@@ -44,7 +44,11 @@ pub fn submit_estimate_schema() -> JsonObject {
         json!({
             "type": "array",
             "maxItems": MAX_ESTIMATE_SOURCES,
-            "items": {"type": "string", "pattern": "^tool:", "maxLength": 128_u64}
+            "items": {
+                "type": "string",
+                "pattern": "^(tool:.+|[nd]-[0-9]+)$",
+                "maxLength": 128_u64
+            }
         }),
     );
     build_object_schema(
@@ -55,7 +59,7 @@ pub fn submit_estimate_schema() -> JsonObject {
 
 pub fn parse_submit_estimate_arguments(
     arguments: &JsonObject,
-) -> Result<EstimateToolArguments, ToolErrorPayload> {
+) -> Result<EstimateToolArguments<EstimateSource>, ToolErrorPayload> {
     let dto: SubmitEstimateDto =
         serde_json::from_value(Value::Object(arguments.clone())).map_err(|_error| {
             ToolErrorPayload::invalid_input(
@@ -87,12 +91,15 @@ pub fn parse_submit_estimate_arguments(
         .sources
         .iter()
         .map(|source| {
-            ToolReference::try_new(source).map_err(|_error| {
-                ToolErrorPayload::invalid_input(
-                    Some("sources"),
-                    "sources must be tool: references from this run",
-                )
-            })
+            if collected_handle(source) {
+                CollectedItemHandle::try_new(source).map(EstimateSource::Collected).ok()
+            } else {
+                ToolReference::try_new(source).map(EstimateSource::Tool).ok()
+            }
+            .ok_or_else(|| ToolErrorPayload::invalid_input(
+                Some("sources"),
+                "sources must be handles from search_news or get_disclosures or tool: references from this run",
+            ))
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(EstimateToolArguments {
@@ -102,6 +109,15 @@ pub fn parse_submit_estimate_arguments(
         counterargument,
         sources,
     })
+}
+
+fn collected_handle(source: &str) -> bool {
+    source
+        .strip_prefix("n-")
+        .or_else(|| source.strip_prefix("d-"))
+        .is_some_and(|digits| {
+            !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+        })
 }
 
 fn narrative(value: &str, field: &'static str) -> Result<UntrustedText, ToolErrorPayload> {

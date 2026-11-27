@@ -71,6 +71,14 @@ impl<'input> Decoder<'input> {
         self.0 = rest.get(size..).ok_or_else(|| invalid(()))?;
         Ok(value)
     }
+    pub(crate) fn take_tag(&mut self, tag: &str) -> rusqlite::Result<bool> {
+        let mut lookahead = Self(self.0);
+        if lookahead.next()? != tag {
+            return Ok(false);
+        }
+        self.0 = lookahead.0;
+        Ok(true)
+    }
     pub(crate) fn next_usize(&mut self) -> rusqlite::Result<usize> {
         self.next()?.parse::<usize>().map_err(invalid)
     }
@@ -243,9 +251,23 @@ fn take_volatility(input: &mut Decoder<'_>) -> rusqlite::Result<Volatility> {
     })
     .map_err(invalid)
 }
+pub(crate) fn put_close_at(out: &mut Encoder, close_at: Option<Timestamp>) {
+    if let Some(close) = close_at {
+        out.push("estimate-close-v1");
+        put_timestamp(out, close);
+    }
+}
+pub(crate) fn take_close_at(input: &mut Decoder<'_>) -> rusqlite::Result<Option<Timestamp>> {
+    if input.take_tag("estimate-close-v1")? {
+        take_timestamp(input).map(Some)
+    } else {
+        Ok(None)
+    }
+}
 pub(super) fn put_estimate_task(out: &mut Encoder, value: &EstimateTask) {
     let saved = value.saved_state();
     out.push(saved.symbol.as_str());
+    put_close_at(out, saved.close_at);
     put_known_market(out, saved.market);
     put_price(out, saved.reference_price);
     put_timestamp(out, saved.reference_at);
@@ -261,6 +283,7 @@ pub(super) fn take_saved_estimate_task(
     input: &mut Decoder<'_>,
 ) -> rusqlite::Result<SavedEstimateTask> {
     let symbol = Symbol::try_new(input.next()?).map_err(invalid)?;
+    let close_at = take_close_at(input)?;
     let market = take_known_market(input)?;
     let reference_price = take_price(input)?;
     let reference_at = take_timestamp(input)?;
@@ -272,6 +295,7 @@ pub(super) fn take_saved_estimate_task(
     let stop = take_ratio(input)?;
     let base_probability = take_ratio(input)?;
     Ok(SavedEstimateTask {
+        close_at,
         symbol,
         market,
         reference_price,

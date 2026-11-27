@@ -5,9 +5,10 @@ use std::sync::Arc;
 use application::resolve_estimates::EstimateResolutionRepository;
 use application::{
     AiRunId, BrokerRead, DraftProposalData, DraftProposalInputs, EstimateRepository,
-    EvaluateSignalInputs, FxRateQuery, MarketDataRepository, MarketInfo, PortfolioRepository,
-    ReasoningEffort, RetryDelay, SettingsRepository, SignalEvaluationData, SignalQuantityCosts,
-    SignalRestorationBasis, StoredSignal, SystemFailure, SystemPort, SystemPortError,
+    EvaluateSignalInputs, EvaluateSignalOutcome, FxRateQuery, MarketDataRepository, MarketInfo,
+    PortfolioRepository, ReasoningEffort, RetryDelay, SettingsRepository, SignalEvaluationData,
+    SignalQuantityCosts, SignalRestorationBasis, StoredSignal, SystemFailure, SystemPort,
+    SystemPortError,
 };
 use domain::{
     AccountId, AdjustmentBasis, Calibration, CalibrationKey, CalibrationLedgerHead,
@@ -54,20 +55,22 @@ pub fn task_candle_window(created_at: Timestamp) -> Option<TimeInterval> {
 
 #[must_use]
 pub fn settled_daily(candles: Vec<Candle>, created_at: Timestamp) -> Vec<Candle> {
-    let today = created_at.offset_calendar_date();
     candles
         .into_iter()
-        .filter(|candle| candle.status() == CandleStatus::Finalized && candle.time().date() < today)
+        .filter(|candle| {
+            candle.status() == CandleStatus::Finalized
+                && candle.time().date() < created_at.offset_calendar_date()
+        })
         .collect()
 }
 
-pub async fn task_candles<B: BrokerRead>(
+pub async fn daily_series<B: BrokerRead>(
     broker: &B,
     instrument: &QuoteInstrument,
     created_at: Timestamp,
 ) -> Result<Vec<Candle>, SystemPortError> {
     let window = task_candle_window(created_at).ok_or_else(unavailable)?;
-    let candles = broker
+    broker
         .candles(
             instrument,
             window,
@@ -75,8 +78,30 @@ pub async fn task_candles<B: BrokerRead>(
             PriceAdjustment::Adjusted(AdjustmentBasis::new(created_at)),
         )
         .await
-        .map_err(port_unavailable)?;
-    Ok(settled_daily(candles, created_at))
+        .map_err(port_unavailable)
+}
+
+pub async fn task_candles<B: BrokerRead>(
+    broker: &B,
+    instrument: &QuoteInstrument,
+    created_at: Timestamp,
+) -> Result<Vec<Candle>, SystemPortError> {
+    Ok(settled_daily(
+        daily_series(broker, instrument, created_at).await?,
+        created_at,
+    ))
+}
+
+#[derive(Debug, Clone, Copy)]
+enum QuotePurpose {
+    Signal,
+    Order,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PricePurpose {
+    Signal(Result<Option<PriceObservation>, SystemPortError>),
+    Proposal,
 }
 
 struct SectorSnapshot {
@@ -277,6 +302,7 @@ where
         &self,
         master: &MasterInstrument,
         quote: &QuoteInstrument,
+        use_for: QuotePurpose,
     ) -> Result<Option<PriceObservation>, SystemPortError> {
         let quotes = self
             .parts
@@ -284,13 +310,27 @@ where
             .quotes(std::slice::from_ref(quote))
             .await
             .map_err(port_unavailable)?;
-        let Some(Ok(found)) = quotes.into_iter().next().map(|observed| observed.result) else {
+        let Some(Ok(found)) = quotes
+            .into_iter()
+            .find(|entry| &entry.instrument == quote)
+            .map(|observed| observed.result)
+        else {
             return Ok(None);
         };
         let Some(price) = found.last_price() else {
             return Ok(None);
         };
-        let at = found.timestamp().unwrap_or_else(|| found.collected_at());
+        let at = match use_for {
+            QuotePurpose::Order => found.timestamp().unwrap_or_else(|| found.collected_at()),
+            QuotePurpose::Signal => {
+                let Some(trade_at) = found.timestamp() else {
+                    return Ok(None);
+                };
+                trade_at
+                    .in_exchange_zone(*quote.market())
+                    .map_err(port_unavailable)?
+            }
+        };
         Ok(master.price_observation(price, at).ok())
     }
 
@@ -375,11 +415,49 @@ where
         Ok((security, self.classifications(&all, now).await?))
     }
 
-    pub async fn evaluation(
+    async fn quantity_costs(
+        &self,
+        market: KnownMarket,
+        commission: Option<domain::CommissionRateFact>,
+    ) -> Option<SignalQuantityCosts> {
+        Some(SignalQuantityCosts {
+            commission: commission?,
+            fx: self.order_fx(market).await,
+        })
+    }
+
+    async fn evaluation_price(
+        &self,
+        target: (&MasterInstrument, &QuoteInstrument),
+        calendars: &[domain::MarketCalendar],
+        now: Timestamp,
+        purpose: PricePurpose,
+    ) -> Result<Option<PriceObservation>, SystemPortError> {
+        let (master, quote) = target;
+        let closed = calendars
+            .iter()
+            .find(|day| day.state_at(now) != domain::MarketState::Unknown)
+            .filter(|day| day.state_at(now) == domain::MarketState::Closed);
+        Ok(match (purpose, closed) {
+            (PricePurpose::Signal(_), Some(day)) => {
+                let candles = daily_series(self.parts.broker.as_ref(), quote, now).await?;
+                domain::closed_estimate_reference(master, now, day, &candles)
+                    .map(|estimate| estimate.reference().clone())
+            }
+            (PricePurpose::Signal(observed), None) => observed?,
+            (PricePurpose::Proposal, _) => {
+                self.target_price(master, quote, QuotePurpose::Order)
+                    .await?
+            }
+        })
+    }
+
+    async fn evaluation(
         &self,
         task: &EstimateTask,
         key: &CalibrationKey,
-        now: Timestamp,
+        instant: Timestamp,
+        purpose: PricePurpose,
     ) -> Result<(EvaluateSignalInputs, MasterInstrument), SystemPortError> {
         let instrument = task.volatility().instrument();
         let master = self
@@ -389,6 +467,7 @@ where
             .ok_or_else(unavailable)?;
         let quote = master.quote_instrument().map_err(port_unavailable)?;
         let market = market_of(task)?;
+        let now = instant.in_exchange_zone(market).map_err(port_unavailable)?;
         let account = self.account()?;
         let (calibration, calibration_head) = self.calibration(key).await?;
         let holdings = self.holdings(&account).await?;
@@ -414,13 +493,10 @@ where
                 (&holdings, &calendars, commission.as_ref()),
             )
             .await?;
-        let quantity_costs = match commission {
-            Some(value) => Some(SignalQuantityCosts {
-                fx: self.order_fx(market).await,
-                commission: value,
-            }),
-            None => None,
-        };
+        let quantity_costs = self.quantity_costs(market, commission).await;
+        let target_price = self
+            .evaluation_price((&master, &quote), &calendars, now, purpose)
+            .await?;
         let inputs = EvaluateSignalInputs {
             calibration,
             calibration_head,
@@ -431,7 +507,7 @@ where
             policy: Policy::new(profile),
             assignments,
             security,
-            target_price: self.target_price(&master, &quote).await?,
+            target_price,
             calendars,
             quantity_costs,
             restoration,
@@ -500,7 +576,12 @@ where
             .ok_or_else(unavailable)?;
         let task = record.submission().task_key().task();
         let (evaluation, master) = self
-            .evaluation(task, record.submission().calibration_key(), now)
+            .evaluation(
+                task,
+                record.submission().calibration_key(),
+                now,
+                PricePurpose::Proposal,
+            )
             .await?;
         let quote = master.quote_instrument().map_err(port_unavailable)?;
         let book = self
@@ -561,7 +642,12 @@ impl<T: application::EstimateSubmissionRepository> SubmissionLookup for T {
     }
 }
 
-impl<B, S, F> SignalEvaluationData for ProductSignalData<B, S, F>
+struct ObservedSignalData<'a, B, S, F> {
+    data: &'a ProductSignalData<B, S, F>,
+    price: Result<Option<PriceObservation>, SystemPortError>,
+}
+
+impl<B, S, F> SignalEvaluationData for ObservedSignalData<'_, B, S, F>
 where
     B: BrokerRead + MarketInfo,
     S: EstimateResolutionRepository
@@ -576,13 +662,15 @@ where
         record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
         now: Timestamp,
     ) -> Result<EvaluateSignalInputs, SystemPortError> {
-        self.evaluation(
-            record.submission().task_key().task(),
-            record.submission().calibration_key(),
-            now,
-        )
-        .await
-        .map(|(inputs, _master)| inputs)
+        self.data
+            .evaluation(
+                record.submission().task_key().task(),
+                record.submission().calibration_key(),
+                now,
+                PricePurpose::Signal(self.price.clone()),
+            )
+            .await
+            .map(|(inputs, _master)| inputs)
     }
 }
 
@@ -729,6 +817,34 @@ impl<B, S, F, C> std::fmt::Debug for ProductSignalPipeline<B, S, F, C> {
     }
 }
 
+const fn signal_reason(reason: domain::NoSignalReason) -> &'static str {
+    use domain::{NoSignalReason, SignalUnavailable};
+    match reason {
+        NoSignalReason::ConditionsUnmet => "conditions_unmet",
+        NoSignalReason::UnheldLowProbability => "unheld_low_probability",
+        NoSignalReason::Excluded => "excluded",
+        NoSignalReason::MissingSource => "missing_source",
+        NoSignalReason::PolicyViolation => "policy_violation",
+        NoSignalReason::Expired => "expired",
+        NoSignalReason::Unavailable(unavailable_reason) => match unavailable_reason {
+            SignalUnavailable::UnknownClassification => "unknown_classification",
+            SignalUnavailable::HoldingsQueryFailed => "holdings_unavailable",
+            SignalUnavailable::IncompleteHoldings => "incomplete_holdings",
+            SignalUnavailable::CashObservationFailed(_) => "cash_unavailable",
+            SignalUnavailable::NegativeCash(_) => "negative_cash",
+            SignalUnavailable::Calendar => "calendar_unavailable",
+            SignalUnavailable::StaleHolding => "stale_holding",
+            SignalUnavailable::SubmissionFromFuture => "submission_from_future",
+            SignalUnavailable::MissingTargetPrice => "missing_target_price",
+            SignalUnavailable::StaleTargetPrice => "stale_target_price",
+            SignalUnavailable::InvalidTargetPrice => "invalid_target_price",
+            SignalUnavailable::MissingCalibration => "missing_calibration",
+            SignalUnavailable::StaleCalibration => "stale_calibration",
+            SignalUnavailable::CalibrationCombinationMismatch => "calibration_mismatch",
+        },
+    }
+}
+
 fn next_regular_open(calendar: &domain::MarketCalendar, now: Timestamp) -> Option<Timestamp> {
     [calendar.today(), calendar.next_business_day()]
         .into_iter()
@@ -757,13 +873,51 @@ where
     C: application::Clock + 'static,
 {
     async fn evaluate(&self, instrument: &InstrumentId) -> Option<()> {
+        let price = match self.data.parts.directory.master(instrument) {
+            Some(master) => match master.quote_instrument() {
+                Ok(quote) => {
+                    self.data
+                        .target_price(&master, &quote, QuotePurpose::Signal)
+                        .await
+                }
+                Err(_error) => Err(unavailable()),
+            },
+            None => Err(unavailable()),
+        };
+        let observed = ObservedSignalData {
+            data: &self.data,
+            price,
+        };
         let now = self.clock.now();
         let occurrence = occurrence_id(instrument, now)?;
-        application::EvaluateSignals::new(self.store.as_ref(), &self.data, &self.events)
-            .execute(instrument, now, occurrence)
-            .await
-            .ok()
-            .map(|_outcome| ())
+        let result =
+            application::EvaluateSignals::new(self.store.as_ref(), &observed, &self.events)
+                .execute(instrument, now, occurrence)
+                .await;
+        let detail = match &result {
+            Ok(EvaluateSignalOutcome::Applied {
+                reason: Some(reason),
+                ..
+            }) => signal_reason(*reason),
+            Ok(EvaluateSignalOutcome::Applied { reason: None, .. }) => "signal",
+            Ok(EvaluateSignalOutcome::NoSubmission) => "no_submission",
+            Ok(EvaluateSignalOutcome::SubmissionDiscarded) => "discarded",
+            Ok(EvaluateSignalOutcome::Unavailable { .. }) => "inputs_unavailable",
+            Err(_error) => "evaluation_failed",
+        };
+        crate::estimate_flow::record_estimate_note("signal_evaluation", detail, 1);
+        match result {
+            Ok(EvaluateSignalOutcome::Applied { reason: None, .. }) => Some(()),
+            Ok(
+                EvaluateSignalOutcome::Applied {
+                    reason: Some(_), ..
+                }
+                | EvaluateSignalOutcome::NoSubmission
+                | EvaluateSignalOutcome::SubmissionDiscarded
+                | EvaluateSignalOutcome::Unavailable { .. },
+            )
+            | Err(_) => None,
+        }
     }
 
     async fn draft(&self, instrument: &InstrumentId) -> Option<application::DraftProposalOutcome> {
