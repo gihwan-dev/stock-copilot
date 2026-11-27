@@ -90,6 +90,44 @@ mod tests {
     }
 
     #[test]
+    fn candle_cursor_rejects_a_change_in_price_basis() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("런타임");
+        let cursors = make_cursor_store(Arc::new(SteppedClock::new(at(1_764_000_000_i64))));
+        let run_id = AiRunId::try_new("candle-pages").expect("실행");
+        let name = ToolName::try_new("get_candles").expect("도구");
+        let read = |basis, args: Value| {
+            let mut view = candles();
+            let mut earlier = view.lines[0].clone();
+            earlier.opened_at = at(1_763_827_200_i64);
+            view.lines.push(earlier);
+            let reads = Arc::new(
+                FixedMarketToolReads::default()
+                    .with_candles(Ok(Some(view)))
+                    .with_candle_basis(basis),
+            );
+            let mut registry = ToolRegistry::new();
+            register_market_tools(&mut registry, &reads, &cursors).expect("등록");
+            let (_, tool) = registry.get(&name).expect("도구");
+            runtime.block_on(tool.invoke(ToolInvocation {
+                run_id: &run_id,
+                arguments: args.as_object().expect("인자"),
+            }))
+        };
+        let query = json!({ "symbol":"000660", "days":5, "limit":1 });
+        let first = read(CandlePriceBasis::Unadjusted, query.clone()).expect("첫 페이지");
+        let mut next = query;
+        next["cursor"] = first["next_cursor"].clone();
+        assert!(next["cursor"].is_string());
+        assert_eq!(
+            read(CandlePriceBasis::Adjusted, next).unwrap_err().code(),
+            mcp_server::ToolErrorCode::InvalidCursor
+        );
+    }
+
+    #[test]
     fn overview_lists_us_treasury_yields_as_not_provided() {
         let view = MarketOverviewToolView {
             lines: vec![OverviewToolLine {

@@ -247,10 +247,14 @@ impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
             })
             .collect();
         let fingerprint = format!(
-            "{}|{}|{}",
+            "{}|{}|{}|{}",
             symbol.as_str(),
             market_code(market),
-            window.as_u16()
+            window.as_u16(),
+            match priced.basis {
+                CandlePriceBasis::Adjusted => "adjusted",
+                CandlePriceBasis::Unadjusted => "raw",
+            }
         );
         let context = PaginationContext {
             cursors: &self.cursors,

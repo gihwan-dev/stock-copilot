@@ -144,6 +144,9 @@ impl<Inner: BriefingContextSource, Market: MarketToolReads> BriefingContextSourc
         now: Timestamp,
     ) -> Result<BriefingContext, SystemPortError> {
         let mut context = self.inner.context(kind, now).await?;
+        if kind == BriefingKind::ClosingReview {
+            return Ok(context);
+        }
         if let Ok(Some(view)) = self.market.market_overview().await {
             context
                 .code_facts

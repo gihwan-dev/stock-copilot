@@ -7,6 +7,7 @@
 1. **`get_candles`는 수정주가 경로를 쓴다.** 도구 일봉은 추정 판정(`platform::resolution`)·신호(`signal_flow`)가 쓰는 엄격한 수정주가 일봉(`BrokerRead::candles` + `PriceAdjustment::Adjusted`)을 그대로 쓴다. 이 경로는 종목 마스터의 가격 제한 정보로 이웃한 두 봉의 움직임을 검사하므로(±30%), 분할 전후가 섞인 원시 가격은 통과하지 못한다.
    - 수정주가 경로가 `Unsupported(AdjustedHistory)`(마스터에 종목이 없거나 가격 제한을 알 수 없는 날) 또는 응답 검증 실패로 끝나면 관대한 과거 경로(`history_daily_candles`, 원시 가격)로 한 번 더 읽는다. 네트워크·한도·접근 거부 같은 다른 실패는 그대로 도구 오류로 알린다.
    - 응답에 `adjusted`(참/거짓)를 넣는다. 수정주가 경로로 읽었으면 참, 원시 가격으로 대신 읽었으면 거짓이다. 도구 설명도 그렇게 바꾼다.
+   - 앱은 시장과 심볼에 대응하는 마스터 종목 식별자를 전달한다. 다음 페이지를 읽을 때 가격 기준이 바뀌면 커서를 거부해 같은 시계열에 원시 가격과 수정주가가 섞이지 않게 한다.
    - 확정된 봉(`Finalized`)만 돌려준다. 장중의 당일 봉은 빠진다.
    - 투자자 동향의 원화 추정(순매수 주식 수 × 그 날 종가)은 주식 수와 맞도록 원시 가격 일봉을 계속 쓴다.
    - 응용 계층은 `MarketToolReads::priced_candles`(기본 구현은 `Unadjusted`)와 `CandlePriceBasis`, `PricedCandlesView`를 더한다. 기존 `candles`와 `CandlesToolView`는 그대로다.

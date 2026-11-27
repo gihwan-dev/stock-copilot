@@ -570,6 +570,25 @@ fn candle_adjustments(broker: &ScriptedBrokerRead) -> Vec<domain::PriceAdjustmen
 }
 
 #[test]
+fn adjusted_history_uses_the_registered_master_identity() {
+    let fixture = fixture();
+    let master = testkit_ports::estimate_fixtures::sample_master().expect("종목");
+    let directory = crate::holdings_link::InstrumentDirectory::default();
+    directory.replace(std::slice::from_ref(&master));
+    let tools = fixture.tools.with_names(directory);
+    let candles = testkit_ports::estimate_fixtures::sample_daily_candles(10).expect("일봉");
+    fixture.broker.script_candles().push(Ok(candles));
+    let expected = master.quote_instrument().expect("식별자");
+    let window = CandleWindow::try_new(3).expect("조회 기간");
+    let result = run(tools.priced_candles(expected.symbol(), *expected.market(), window))
+        .expect("일봉")
+        .expect("결과");
+    assert_eq!(result.basis, application::CandlePriceBasis::Adjusted);
+    assert!(matches!(fixture.broker.calls().as_slice(),
+        [BrokerReadCall::Candles(actual, _, _, domain::PriceAdjustment::Adjusted(_))] if actual == &expected));
+}
+
+#[test]
 fn candles_tool_reads_the_adjusted_path_and_says_so() {
     let fixture = fixture();
     let candles = testkit_ports::estimate_fixtures::sample_daily_candles(10).expect("candles");

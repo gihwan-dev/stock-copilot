@@ -152,6 +152,19 @@ mod tests {
     }
 
     #[test]
+    fn closing_review_keeps_the_holdings_context_without_fetching_market_data() {
+        let market = FixedMarketToolReads::default().with_overview(Ok(Some(overview())));
+        let context = run(MarketBriefingContext {
+            inner: &Inner,
+            market: &market,
+        }
+        .context(BriefingKind::ClosingReview, at()))
+        .expect("문맥");
+        assert_eq!(texts(&context.code_facts), vec!["기존 사실"]);
+        assert!(market.calls().is_empty());
+    }
+
+    #[test]
     fn the_wrapper_appends_market_facts_and_stays_silent_when_reads_fail() {
         let connected = FixedMarketToolReads::default().with_overview(Ok(Some(overview())));
         let context = run(MarketBriefingContext {

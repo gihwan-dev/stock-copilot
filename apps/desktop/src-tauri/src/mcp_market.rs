@@ -446,7 +446,11 @@ impl BrokerMarketTools {
         let (Some(source), Some(clock)) = (self.quotes.as_ref(), self.clock.as_ref()) else {
             return Err(not_connected(tool));
         };
-        let Some(instrument) = tool_instrument(symbol, market) else {
+        let instrument = self.names.as_ref().and_then(|directory| {
+            let id = directory.instrument_of(market, symbol)?;
+            directory.master(&id)?.quote_instrument().ok()
+        });
+        let Some(instrument) = instrument.or_else(|| tool_instrument(symbol, market)) else {
             return Ok(None);
         };
         let now = clock.now();
