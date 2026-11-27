@@ -267,13 +267,11 @@ mod tests {
         })
     }
     fn calendar(previous: Value, today: Value, next: Value) -> Value {
-        json!({
-            "result": {
-                "previousBusinessDay": previous,
-                "today": today,
-                "nextBusinessDay": next
-            }
-        })
+        let mut page = json!({ "result": {} });
+        page["result"]["previousBusinessDay"] = previous;
+        page["result"]["today"] = today;
+        page["result"]["nextBusinessDay"] = next;
+        page
     }
     fn holiday_calendar() -> Value {
         calendar(

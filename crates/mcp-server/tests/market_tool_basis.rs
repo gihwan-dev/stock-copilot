@@ -28,13 +28,13 @@ mod tests {
         Money::parse(&NumericInput::try_new(text).expect("입력"), Currency::Krw).expect("금액")
     }
 
-    fn call(reads: FixedMarketToolReads, name: &str, args: &Value) -> Value {
+    fn call(fixed: FixedMarketToolReads, name: &str, args: &Value) -> Value {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("런타임")
             .block_on(async {
-                let reads = Arc::new(reads);
+                let reads = Arc::new(fixed);
                 let cursors = make_cursor_store(Arc::new(SteppedClock::new(at(1_764_000_000_i64))));
                 let mut registry = ToolRegistry::new();
                 register_market_tools(&mut registry, &reads, &cursors).expect("등록");
