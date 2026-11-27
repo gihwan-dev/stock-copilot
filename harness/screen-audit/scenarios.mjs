@@ -1,5 +1,6 @@
 import { getBriefings } from "../../apps/desktop/src/shared/ipc/index.ts";
 import { fx, makeSettingsClient, recorded } from "./fixtures.mjs";
+import { chatThreads } from "./chat-threads.mjs";
 import * as data from "./scenario-data.mjs";
 
 const base = (overrides = {}) => ({
@@ -172,6 +173,14 @@ export const scenarios = {
     path: "/briefing",
     setup: briefingSessions,
     act: (helpers) => helpers.waitText("미국장 전 점검을 마칩니다."),
+  },
+  "chat-threads": {
+    path: "/chat",
+    setup: () => base({
+      sources: filled(),
+      commands: chatThreads(() => new Promise((resolve) => setTimeout(resolve, 300))),
+    }),
+    act: (helpers) => helpers.waitText("저장된 예시 답변입니다."),
   },
   "chat-long": {
     path: "/chat",

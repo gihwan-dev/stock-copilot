@@ -9,6 +9,8 @@ export type AppRoutePath =
 
 export const queryKeys = {
   appVersion: ["app-version"] as const,
+  chatSessions: ["chat-history", "directory"] as const,
+  chatSelection: ["chat-history", "selection"] as const,
   chatHistory: ["chat-history"] as const,
   chatResume: ["chat-resume"] as const,
   portfolio: ["portfolio"] as const,

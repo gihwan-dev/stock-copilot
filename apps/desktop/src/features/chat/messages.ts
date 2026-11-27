@@ -3,6 +3,14 @@ import type { UiText } from "../../shared/lib";
 type Locale = "ko";
 
 const catalog = {
+  "chat.directory": { ko: "채팅" as UiText },
+  "chat.create": { ko: "새 채팅" as UiText },
+  "chat.defaultSession": { ko: "기본 대화" as UiText },
+  "chat.untitled": { ko: "제목 없는 대화" as UiText },
+  "chat.listFailed": { ko: "대화 목록을 불러오지 못했어요." as UiText },
+  "chat.createFailed": {
+    ko: "대화를 만들지 못했어요. 다시 시도해 주세요." as UiText,
+  },
   "chat.emptyTitle": { ko: "무엇이든 물어보세요" as UiText },
   "chat.emptyBody": {
     ko: "보고 있는 종목과 기간을 함께 보내요." as UiText,
