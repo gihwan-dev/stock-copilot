@@ -63,7 +63,6 @@ const Summary = (props: {
       <Body
         briefing={props.latest}
         onOpenSource={props.openSource}
-        scale="body"
         presentation="excerpt"
       />
     ) : (

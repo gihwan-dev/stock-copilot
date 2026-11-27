@@ -45,6 +45,38 @@ const openDetail = async (helpers) => {
   await helpers.pause(200);
 };
 
+const briefingSessions = () => {
+  const { latest, past } = recorded().getBriefings();
+  const morning = {
+    ...latest,
+    body: [
+      "밤사이 지표를 확인했습니다 [1]. 원문이 없는 요약도 있습니다 [2].",
+      "이번 주 발표 일정과 지난 거래일 종가를 함께 살펴봅니다. ".repeat(5),
+      "오늘 아침 점검을 마칩니다.",
+    ].join("\n\n"),
+  };
+  const preMarket = {
+    ...latest,
+    id: { date: "2026-11-24", kind: "PreUsMarket" },
+    finished_at: "2026-11-24T22:30:00+09:00",
+    body: [
+      "개장 전 지표를 확인했습니다 [1].",
+      "지표 발표 순서와 개장 전에 확인할 일정을 정리했습니다. ".repeat(6),
+      "미국장 전 점검을 마칩니다.",
+    ].join("\n\n"),
+    sources: latest.sources.map((source) => ({
+      ...source,
+      observed_at: "2026-11-24T22:15:00+09:00",
+    })),
+  };
+  return base({
+    sources: filled(),
+    commands: {
+      getBriefings: () => ({ latest: morning, past: [preMarket, ...past] }),
+    },
+  });
+};
+
 export const scenarios = {
   "onboarding-loading": {
     path: "/",
@@ -138,8 +170,8 @@ export const scenarios = {
   },
   "briefing-latest": {
     path: "/briefing",
-    setup: () => base({ sources: filled() }),
-    act: (helpers) => helpers.waitText("크게 보기"),
+    setup: briefingSessions,
+    act: (helpers) => helpers.waitText("미국장 전 점검을 마칩니다."),
   },
   "chat-long": {
     path: "/chat",
@@ -191,7 +223,8 @@ export const scenarios = {
   },
   "briefings-ready": {
     path: "/briefings",
-    setup: () => base({ sources: filled() }),
+    setup: briefingSessions,
+    act: (helpers) => helpers.waitText("미국장 전 점검을 마칩니다."),
   },
   "briefings-empty": {
     path: "/briefings",

@@ -1,9 +1,9 @@
-import { useState, type ComponentProps, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { Button, Card, Inline, Stack } from "../../../shared/ds";
 import type { BriefingSummary } from "../../../shared/ipc";
 import type { ExternalUrl } from "../../../shared/lib";
 import { briefingText } from "../messages";
-import { Body, Reader, Stamp } from "./BriefingReader";
+import { Body, Stamp } from "./BriefingReader";
 
 const CardStamp = (props: {
   readonly briefing: BriefingSummary;
@@ -36,65 +36,19 @@ type BriefingViewProps = {
   readonly onOpenHistory: (() => void) | undefined;
   readonly layout?: BriefingLayout;
 };
-type ReaderState = "open" | "closed";
 
-export const ReadingCard = ({
-  view: props,
-  reader,
-  changeReader,
-}: {
-  readonly view: BriefingViewProps;
-  readonly reader: ReaderState;
-  readonly changeReader: (next: ReaderState) => void;
-}): ReactElement<ComponentProps<typeof Card>> => {
-  const close = (): void => {
-    changeReader("closed");
-  };
-  const history = props.onOpenHistory;
-  return (
-    <Card
-      title={briefingText(props.briefing.kind, "ko")}
-      layout={props.layout ?? "flow"}
-      actions={{
-        label: briefingText("openReader", "ko"),
-        onPress: () => {
-          changeReader("open");
-        },
-      }}
-    >
-      <Stack gap="space-3">
-        <CardStamp briefing={props.briefing} history={history} />
-        <Body
-          briefing={props.briefing}
-          onOpenSource={props.onOpenSource}
-          scale="body"
-        />
-        {reader === "open"
-          ? [
-              <Reader
-                key="reader"
-                briefing={props.briefing}
-                onOpenSource={props.onOpenSource}
-                onOpenHistory={
-                  history === undefined
-                    ? undefined
-                    : (): void => {
-                        close();
-                        history();
-                      }
-                }
-                onClose={close}
-              />,
-            ]
-          : []}
-      </Stack>
-    </Card>
-  );
-};
-
-export const BriefingView = (props: BriefingViewProps): ReactElement => {
-  const [reader, setReader] = useState<ReaderState>("closed");
-  return (
-    <ReadingCard view={props} reader={reader} changeReader={setReader} />
-  );
-};
+export const BriefingView = (props: BriefingViewProps): ReactElement => (
+  <Card
+    title={briefingText(props.briefing.kind, "ko")}
+    layout={props.layout ?? "flow"}
+  >
+    <Stack gap="space-3">
+      <CardStamp briefing={props.briefing} history={props.onOpenHistory} />
+      <Body
+        briefing={props.briefing}
+        onOpenSource={props.onOpenSource}
+        presentation="full"
+      />
+    </Stack>
+  </Card>
+);

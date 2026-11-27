@@ -1,6 +1,5 @@
-import type { ComponentProps, ReactElement } from "react";
+import type { ReactElement } from "react";
 import {
-  Dialog,
   Inline,
   Markdown,
   Stack,
@@ -18,8 +17,6 @@ import { briefingText } from "../messages";
 import { linkVerdict } from "../model/briefings";
 import { Sources } from "./BriefingSources";
 
-type Scale = "body" | "reading";
-
 const excerpt = (body: FreeText): FreeText => {
   const characters = Array.from(body);
   if (characters.length <= 180) return body;
@@ -34,8 +31,7 @@ const excerpt = (body: FreeText): FreeText => {
 export const Body = (props: {
   readonly briefing: BriefingSummary;
   readonly onOpenSource: (url: ExternalUrl) => void;
-  readonly scale: Scale;
-  readonly presentation?: "excerpt";
+  readonly presentation: "excerpt" | "full";
 }): ReactElement => {
   const outcome = props.briefing.outcome;
   switch (outcome.kind) {
@@ -50,7 +46,7 @@ export const Body = (props: {
           citations={briefingCitations(outcome.sources)}
           linkAllowed={(url) => linkVerdict(props.briefing, url)}
           onOpenLink={props.onOpenSource}
-          scale={props.scale}
+          scale={props.presentation === "excerpt" ? "body" : "reading"}
         />
       );
       if (props.presentation === "excerpt") return markdown;
@@ -88,44 +84,4 @@ export const Stamp = (props: {
     </Text>
     <TimestampText value={props.briefing.finishedAt} />
   </Inline>
-);
-
-export const Reader = (props: {
-  readonly briefing: BriefingSummary;
-  readonly onOpenSource: (url: ExternalUrl) => void;
-  readonly onOpenHistory: (() => void) | undefined;
-  readonly onClose: () => void;
-}): ReactElement<ComponentProps<typeof Dialog>> => (
-  <Dialog
-    open="open"
-    title={briefingText(props.briefing.kind, "ko")}
-    wide="wide"
-    onClose={props.onClose}
-    actions={
-      props.onOpenHistory === undefined
-        ? {
-            cancel: {
-              label: briefingText("closeReader", "ko"),
-              onPress: props.onClose,
-            },
-          }
-        : {
-            confirm: {
-              label: briefingText("openHistory", "ko"),
-              onPress: props.onOpenHistory,
-            },
-            cancel: {
-              label: briefingText("closeReader", "ko"),
-              onPress: props.onClose,
-            },
-          }
-    }
-  >
-    <Stamp briefing={props.briefing} />
-    <Body
-      briefing={props.briefing}
-      onOpenSource={props.onOpenSource}
-      scale="reading"
-    />
-  </Dialog>
 );
