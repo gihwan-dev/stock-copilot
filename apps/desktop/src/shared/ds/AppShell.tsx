@@ -216,7 +216,7 @@ export const AppShell = (props: AppShellProps): ReactElement => {
       }}
       className="relative flex flex-col flex-1 w-full scroll-flex"
     >
-      {props.status == null ? null : (
+      {(props.status ?? null) === null ? null : (
         <div className="flex-none w-full">{props.status}</div>
       )}
       <div className="relative flex flex-1 w-full scroll-flex">
