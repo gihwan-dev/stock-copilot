@@ -344,8 +344,9 @@ impl<R: Runtime, P: PortTypes> BriefingPort for AppStoredJobs<R, P> {
                 crate::broker_link::BrokerMarketTools::unconnected,
                 |state| state.inner().clone(),
             );
+        let filings = holdings.with_disclosures(&self.repositories);
         let context = application::MarketBriefingContext {
-            inner: &holdings,
+            inner: &filings,
             market: &market,
         };
         let report = RunBriefing {

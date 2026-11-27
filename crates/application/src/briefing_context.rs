@@ -1,8 +1,10 @@
 use crate::{
-    BriefingContext, BriefingContextSource, BriefingSource, NewsRepository, PortfolioRepository,
-    SystemPortError,
+    BriefingContext, BriefingContextSource, BriefingSource, DisclosureRepository, NewsRepository,
+    PortfolioRepository, SystemPortError,
 };
-use domain::{AccountId, BriefingKind, InstrumentId, Symbol, SyncOutcome, Timestamp};
+use domain::{
+    AccountId, BriefingKind, CollectedItem, InstrumentId, Symbol, SyncOutcome, Timestamp,
+};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 
@@ -22,6 +24,16 @@ impl<Portfolios, News> Debug for HoldingsBriefingContext<'_, Portfolios, News> {
 impl<Portfolios: PortfolioRepository, News: NewsRepository>
     HoldingsBriefingContext<'_, Portfolios, News>
 {
+    pub fn with_disclosures<'a, D: DisclosureRepository>(
+        &'a self,
+        disclosures: &'a D,
+    ) -> impl BriefingContextSource + 'a {
+        FilingContext {
+            holdings: self,
+            disclosures,
+        }
+    }
+
     async fn held_symbols(&self) -> Result<Vec<Symbol>, SystemPortError> {
         let mut seen = BTreeSet::new();
         for account in self.accounts {
@@ -55,20 +67,62 @@ impl<Portfolios: PortfolioRepository, News: NewsRepository> BriefingContextSourc
                 continue;
             };
             let items = self.news.for_instrument(&instrument).await?;
-            evidence.extend(items.iter().take(5).map(|item| {
-                let collected = item.collected();
-                BriefingSource {
-                    title: collected.title().clone(),
-                    url: Some(collected.url().clone()),
-                    origin: collected.source().clone(),
-                    observed_at: now,
-                }
-            }));
+            evidence.extend(
+                items
+                    .iter()
+                    .take(5)
+                    .map(|item| source(item.collected(), now)),
+            );
         }
         Ok(BriefingContext {
             instruments,
             evidence,
             code_facts: Vec::new(),
         })
+    }
+}
+
+fn source(item: &CollectedItem, now: Timestamp) -> BriefingSource {
+    BriefingSource {
+        title: item.title().clone(),
+        url: Some(item.url().clone()),
+        origin: item.source().clone(),
+        observed_at: now,
+    }
+}
+
+struct FilingContext<'a, H, D> {
+    holdings: &'a H,
+    disclosures: &'a D,
+}
+
+impl<H: BriefingContextSource, D: DisclosureRepository> BriefingContextSource
+    for FilingContext<'_, H, D>
+{
+    async fn context(
+        &self,
+        kind: BriefingKind,
+        now: Timestamp,
+    ) -> Result<BriefingContext, SystemPortError> {
+        let mut context = self.holdings.context(kind, now).await?;
+        let mut receipts = BTreeSet::new();
+        for symbol in &context.instruments {
+            let Ok(instrument) = InstrumentId::try_new(symbol.as_str()) else {
+                continue;
+            };
+            let Ok(disclosures) = self
+                .disclosures
+                .disclosures_for_instrument(&instrument)
+                .await
+            else {
+                continue;
+            };
+            for item in disclosures.iter().rev().take(5) {
+                if receipts.insert(item.key().clone()) {
+                    context.evidence.push(source(item.collected(), now));
+                }
+            }
+        }
+        Ok(context)
     }
 }

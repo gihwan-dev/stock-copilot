@@ -123,6 +123,65 @@ mod tests {
         }
     }
 
+    struct Filings(domain::Disclosure);
+
+    impl application::DisclosureRepository for Filings {
+        async fn store_disclosure(
+            &self,
+            _: &domain::Disclosure,
+        ) -> Result<WriteCompleted, SystemPortError> {
+            Ok(WriteCompleted)
+        }
+        async fn disclosure(
+            &self,
+            _: &domain::DisclosureKey,
+        ) -> Result<Option<domain::Disclosure>, SystemPortError> {
+            Ok(Some(self.0.clone()))
+        }
+        async fn disclosures_for_instrument(
+            &self,
+            _: &InstrumentId,
+        ) -> Result<Vec<domain::Disclosure>, SystemPortError> {
+            Ok(vec![self.0.clone()])
+        }
+    }
+
+    #[test]
+    fn scheduled_context_appends_one_source_for_a_filing_linked_to_two_holdings() {
+        let mut portfolios = Portfolios::default();
+        let _saved = portfolios.0.insert(
+            AccountId::new(1),
+            SyncOutcome::Complete(portfolio(&["AAPL", "MSFT"])),
+        );
+        let receipt = domain::DartReceiptNo::try_new("20261113000001").expect("접수번호");
+        let url =
+            NormalizedUrl::try_new("https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20261113000001")
+                .expect("원문");
+        let title = UntrustedText::try_new("실적 공시").expect("제목");
+        let filing = domain::Disclosure::new(
+            domain::ReceiptNo::Dart(receipt),
+            url.clone(),
+            title.clone(),
+            None,
+        );
+        let context = run(HoldingsBriefingContext {
+            portfolios: &portfolios,
+            news: &News(None),
+            accounts: &[AccountId::new(1)],
+        }
+        .with_disclosures(&Filings(filing))
+        .context(BriefingKind::Morning, at()))
+        .expect("문맥");
+        assert_eq!(context.evidence.len(), 11);
+        let source = context.evidence.last().expect("공시");
+        assert_eq!(
+            source.origin,
+            InformationSource::Disclosure(domain::DisclosureSource::Dart)
+        );
+        assert_eq!(source.url.as_ref(), Some(&url));
+        assert_eq!(source.title, title);
+    }
+
     #[test]
     fn context_lists_unique_held_symbols_across_accounts_with_capped_news_sources() {
         let mut portfolios = Portfolios::default();
