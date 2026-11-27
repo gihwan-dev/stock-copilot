@@ -116,13 +116,15 @@ mod tests {
                 arguments: args.as_object().expect("인자"),
             }))
         };
-        let query = json!({ "symbol":"000660", "days":5, "limit":1 });
+        let query = json!({ "symbol": "000660", "days": 5_u64, "limit": 1_u64 });
         let first = read(CandlePriceBasis::Unadjusted, query.clone()).expect("첫 페이지");
         let mut next = query;
         next["cursor"] = first["next_cursor"].clone();
         assert!(next["cursor"].is_string());
         assert_eq!(
-            read(CandlePriceBasis::Adjusted, next).unwrap_err().code(),
+            read(CandlePriceBasis::Adjusted, next)
+                .expect_err("가격 기준이 달라진 커서")
+                .code(),
             mcp_server::ToolErrorCode::InvalidCursor
         );
     }

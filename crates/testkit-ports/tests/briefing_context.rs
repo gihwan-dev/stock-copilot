@@ -126,23 +126,24 @@ mod tests {
     struct Filings(domain::Disclosure);
 
     impl application::DisclosureRepository for Filings {
-        async fn store_disclosure(
+        fn store_disclosure(
             &self,
             _: &domain::Disclosure,
-        ) -> Result<WriteCompleted, SystemPortError> {
-            Ok(WriteCompleted)
+        ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+            std::future::ready(Ok(WriteCompleted))
         }
-        async fn disclosure(
+        fn disclosure(
             &self,
             _: &domain::DisclosureKey,
-        ) -> Result<Option<domain::Disclosure>, SystemPortError> {
-            Ok(Some(self.0.clone()))
+        ) -> impl Future<Output = Result<Option<domain::Disclosure>, SystemPortError>> + Send
+        {
+            std::future::ready(Ok(Some(self.0.clone())))
         }
-        async fn disclosures_for_instrument(
+        fn disclosures_for_instrument(
             &self,
             _: &InstrumentId,
-        ) -> Result<Vec<domain::Disclosure>, SystemPortError> {
-            Ok(vec![self.0.clone()])
+        ) -> impl Future<Output = Result<Vec<domain::Disclosure>, SystemPortError>> + Send {
+            std::future::ready(Ok(vec![self.0.clone()]))
         }
     }
 
