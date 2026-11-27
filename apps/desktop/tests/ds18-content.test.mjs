@@ -189,7 +189,7 @@ test("DS18 ending Enter is consumed while Shift Enter remains native", async () 
 });
 test("DS18 stories render both themes with mixed markdown and long draft", async () => {
   const w = fixture.open();
-  assert.equal(w.stories.length, 6);
+  assert.equal(w.stories.length, 7);
   for (let i = 0; i < w.stories.length; i++)
     for (const theme of ["light", "dark"]) {
       await w.act(() => w.story(i, theme));
@@ -207,6 +207,16 @@ test("DS18 stories render both themes with mixed markdown and long draft", async
       if (story.component === "ChatInput") {
         assert.ok(w.input().classList.contains("chat-input"));
         if (story.state === "stress") assert.ok(w.input().value.length > 1000);
+      }
+      if (story.component === "ConversationTree") {
+        const rows = w.document.querySelectorAll("nav li button");
+        assert.deepEqual(
+          Array.from(rows, (button) => button.textContent),
+          ["이번 주 시장 전망", "보유 종목 점검"],
+        );
+        assert.equal(rows[0].getAttribute("aria-current"), "page");
+        await w.act(() => w.fire.click(rows[1]));
+        assert.equal(rows[1].getAttribute("aria-current"), "page");
       }
     }
 });
