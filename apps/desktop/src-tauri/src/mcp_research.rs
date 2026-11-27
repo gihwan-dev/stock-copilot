@@ -154,6 +154,36 @@ async fn completed_search(
     completed_query.ok_or(failed)
 }
 
+fn match_news_dates(
+    observations: &mut [application::SearchObservation],
+    news: &[application::ObservedCollectedItem],
+) {
+    for item in observations
+        .iter_mut()
+        .filter(|item| item.source_date.is_none())
+    {
+        let published = news
+            .iter()
+            .filter_map(|row| match (&row.entry, row.published_at) {
+                (
+                    application::CollectedEntry::News(article),
+                    application::PublicationTime::Known(time),
+                ) if article.collected().url() == &item.url => {
+                    Some((time, article.collected().title()))
+                }
+                _ => None,
+            })
+            .min_by_key(|(time, _)| *time);
+        if let Some((time, title)) = published {
+            item.source_date = Some((
+                application::SourceDateKind::Published,
+                time.offset_calendar_date(),
+            ));
+            item.title = title.clone();
+        }
+    }
+}
+
 fn outcome(
     observations: &[application::SearchObservation],
     query: &UntrustedText,
@@ -163,8 +193,10 @@ fn outcome(
     let failed = WebResearchToolFailure::CollectionFailed;
     let mut lines = Vec::new();
     for item in observations {
-        let age = item
-            .date
+        let Some((kind, date)) = item.source_date else {
+            continue;
+        };
+        let age = date
             .days_until(collected_at.offset_calendar_date())
             .map_err(|_error| failed)?;
         if &item.query != query || !(0..=max_age_days).contains(age.as_i64()) {
@@ -174,20 +206,26 @@ fn outcome(
             continue;
         };
         let host = rest.split(['/', '?', '#']).next().ok_or(failed)?;
-        let date_label = match item.date_kind {
+        let date_label = match kind {
             application::SourceDateKind::Published => "보도일",
             application::SourceDateKind::Observed => "관측일",
             application::SourceDateKind::Updated => "페이지 갱신일",
         };
         lines.push(format!(
             "{host} | {date_label} {:04}-{:02}-{:02} | {}",
-            item.date.year().as_i32(),
-            item.date.month().as_u8(),
-            item.date.day().as_u8(),
+            date.year().as_i32(),
+            date.month().as_u8(),
+            date.day().as_u8(),
             item.title.as_untrusted_str()
         ));
     }
     if lines.is_empty() {
+        if observations
+            .iter()
+            .any(|item| &item.query == query && item.source_date.is_none())
+        {
+            return Err(WebResearchToolFailure::SourceDateUnverified);
+        }
         return Err(failed);
     }
     let summary = UntrustedText::try_new(&lines.join("\n")).map_err(|_error| failed)?;
@@ -199,7 +237,11 @@ fn outcome(
 
 impl<S, A, C> AppWebResearch<S, A, C>
 where
-    S: WatchlistRepository + AuditLog + ChatRepository + ChatRunLedger,
+    S: WatchlistRepository
+        + AuditLog
+        + ChatRepository
+        + ChatRunLedger
+        + application::CollectedItemReads,
     A: AiProvider,
     C: Clock,
 {
@@ -275,12 +317,26 @@ where
         let failed = WebResearchToolFailure::CollectionFailed;
         let mut stream = self.collector.run(spec).await.map_err(|_error| failed)?;
         let completed = completed_search(&mut stream, &candidate).await?;
-        outcome(
-            stream.search_observations(),
-            &completed,
-            max_age_days,
-            self.clock.now(),
-        )
+        let collected_at = self.clock.now();
+        let mut observations = stream.search_observations().to_vec();
+        if observations
+            .iter()
+            .any(|item| item.query == completed && item.source_date.is_none())
+        {
+            let since = crate::mcp_sources::lookback_start(
+                collected_at,
+                u64::try_from(max_age_days).map_err(|_error| failed)?,
+            )
+            .map_err(unavailable)?;
+            if let Ok(news) = self
+                .store
+                .collected_since(application::CollectedKind::News, since)
+                .await
+            {
+                match_news_dates(&mut observations, &news);
+            }
+        }
+        outcome(&observations, &completed, max_age_days, collected_at)
     }
 
     async fn targets(&self) -> Result<Vec<Symbol>, SystemPortError> {
@@ -377,7 +433,11 @@ where
 
 impl<S, A, C> WebResearchToolPort for AppWebResearch<S, A, C>
 where
-    S: WatchlistRepository + AuditLog + ChatRepository + ChatRunLedger,
+    S: WatchlistRepository
+        + AuditLog
+        + ChatRepository
+        + ChatRunLedger
+        + application::CollectedItemReads,
     A: AiProvider,
     C: Clock,
 {

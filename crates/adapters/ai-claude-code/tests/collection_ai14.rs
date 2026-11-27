@@ -193,8 +193,10 @@ mod tests {
             .clone()
     }
 
-    #[test]
-    fn market_outlook_stream_carries_only_dated_tool_results_for_the_public_query() {
+    async fn outlook_replay(
+        structured: Value,
+        visible: &str,
+    ) -> Vec<application::SearchObservation> {
         use application::{
             AiEventStream, AiProvider, AiRunId, ModelSelection, ReasoningEffort, RunInput,
             RunPurpose, RunSpec,
@@ -203,51 +205,90 @@ mod tests {
             WebSearchCandidateQuery, WebSearchInspection, WebSearchSensitiveContext,
             inspect_web_search_query,
         };
+        let dir = TempDirGuard::new("outlook");
+        let candidate = WebSearchCandidateQuery::new("Korean stock market KOSPI week");
+        let WebSearchInspection::Approved(approved) =
+            inspect_web_search_query(&candidate, &WebSearchSensitiveContext::new())
+        else {
+            panic!("공개 질의")
+        };
+        let answer = vec![
+            json!({"type":"assistant","message":{"content":[{"type":"tool_use","id":"web","name":"WebSearch","input":{"query":candidate.as_str()}}]}}).to_string(),
+            json!({"type":"user","parent_tool_use_id":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"web","content":visible}]},"tool_use_result":structured}).to_string(),
+            result_with(Some(good_output())),
+        ];
+        let prepared = PreparedFakeAiCli::prepare(
+            dir.path(),
+            "fake-outlook",
+            &scenario(init_line(&json!([])), answer),
+        )
+        .expect("가상 CLI");
+        let spec = RunSpec::new(
+            AiRunId::try_new("outlook").expect("실행"),
+            RunInput::Collection(CollectionQuery::MarketOutlook(approved)),
+            ModelSelection::Fast,
+            ReasoningEffort::Low,
+            RunPurpose::WebCollection,
+        );
+        let mut stream = provider(&prepared, dir.path())
+            .run(spec)
+            .await
+            .expect("수집");
+        while stream.next().await.expect("스트림").is_some() {}
+        assert!(
+            sent_prompts(&prepared)
+                .last()
+                .expect("수집 프롬프트")
+                .ends_with(candidate.as_str())
+        );
+        stream.search_observations().to_vec()
+    }
+
+    #[test]
+    fn market_outlook_stream_carries_only_dated_tool_results_for_the_public_query() {
         run_async(async {
-            let dir = TempDirGuard::new("outlook");
-            let candidate = WebSearchCandidateQuery::new("Korean stock market KOSPI week");
-            let WebSearchInspection::Approved(approved) =
-                inspect_web_search_query(&candidate, &WebSearchSensitiveContext::new())
-            else {
-                panic!("공개 질의")
-            };
-            let links = r#"Links: [{"title":"Index close","url":"https://news.example/close","observed_at":"2026-09-20"}]"#;
-            let answer = vec![
-                json!({"type":"assistant","message":{"content":[{"type":"tool_use","id":"web","name":"WebSearch","input":{"query":candidate.as_str()}}]}}).to_string(),
-                json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"web","content":[{"type":"text","text":links}]}]}}).to_string(),
-                result_with(Some(good_output())),
-            ];
-            let prepared = PreparedFakeAiCli::prepare(
-                dir.path(),
-                "fake-outlook",
-                &scenario(init_line(&json!([])), answer),
-            )
-            .expect("가상 CLI");
-            let spec = RunSpec::new(
-                AiRunId::try_new("outlook").expect("실행"),
-                RunInput::Collection(CollectionQuery::MarketOutlook(approved)),
-                ModelSelection::Fast,
-                ReasoningEffort::Low,
-                RunPurpose::WebCollection,
+            let row =
+                json!({"title":"Index close as of 2026-09-20","url":"https://news.example/close"});
+            let visible = format!(
+                "Web search results for query: \"Korean stock market KOSPI week\"\n\nLinks: [{row}]"
             );
-            let mut stream = provider(&prepared, dir.path())
-                .run(spec)
-                .await
-                .expect("수집");
-            while stream.next().await.expect("스트림").is_some() {}
-            let [source] = stream.search_observations() else {
-                panic!("성공한 도구 결과 하나")
+            let group = json!({"tool_use_id":"srvtoolu_1","content":[row]});
+            let query = "Korean stock market KOSPI week";
+            for fake in [
+                Value::Null,
+                json!({"query":query,"results":[visible]}),
+                json!({"query":"other","results":[group]}),
+            ] {
+                assert_eq!(outlook_replay(fake, &visible).await.len(), 0_usize);
+            }
+            let observations =
+                outlook_replay(json!({"query":query,"results":[group,visible]}), &visible).await;
+            let [item] = observations.as_slice() else {
+                panic!("검증된 출처 하나")
             };
-            assert_eq!(source.query.as_untrusted_str(), candidate.as_str());
-            assert_eq!(source.url.as_str(), "https://news.example/close");
-            assert_eq!(source.title.as_untrusted_str(), "Index close");
-            assert_eq!(source.date_kind, application::SourceDateKind::Observed);
-            assert!(
-                sent_prompts(&prepared)
-                    .last()
-                    .expect("수집 프롬프트")
-                    .ends_with(candidate.as_str())
+            assert_eq!(item.query.as_untrusted_str(), query);
+            assert_eq!(item.url.as_str(), "https://news.example/close");
+            assert_eq!(
+                item.title.as_untrusted_str(),
+                "Index close as of 2026-09-20"
             );
+        });
+    }
+
+    #[test]
+    fn undated_cli_link_cannot_borrow_a_date_from_the_visible_body() {
+        run_async(async {
+            let row = json!({"title":"Public close","url":"https://news.example/close"});
+            let group = json!({"tool_use_id":"srvtoolu_1","content":[row]});
+            let dated_text = r#"Links: [{"title":"Close as of 2026-09-20","url":"https://news.example/close","published_at":"2026-09-20"}]"#;
+            let structured =
+                json!({"query":"Korean stock market KOSPI week","results":[dated_text,group]});
+            let observations = outlook_replay(structured, dated_text).await;
+            let [item] = observations.as_slice() else {
+                panic!("실제 검색 링크 하나")
+            };
+            assert_eq!(item.source_date, None);
+            assert_eq!(item.title.as_untrusted_str(), "Public close");
         });
     }
 

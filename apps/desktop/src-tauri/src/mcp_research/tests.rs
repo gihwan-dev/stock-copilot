@@ -31,6 +31,25 @@ struct Store {
     audits: RwLock<Vec<AuditEntry>>,
     chat: MemoryChatRepository,
     ledger: MemoryChatRunLedger,
+    news: Vec<application::ObservedCollectedItem>,
+}
+
+impl application::CollectedItemReads for Store {
+    fn collected_since(
+        &self,
+        _kind: application::CollectedKind,
+        _since: Timestamp,
+    ) -> impl Future<Output = Result<Vec<application::ObservedCollectedItem>, SystemPortError>> + Send
+    {
+        ready(Ok(self.news.clone()))
+    }
+    fn collected_item(
+        &self,
+        _handle: &application::CollectedItemHandle,
+    ) -> impl Future<Output = Result<Option<application::ObservedCollectedItem>, SystemPortError>> + Send
+    {
+        ready(Ok(None))
+    }
 }
 
 impl ChatRepository for Store {
@@ -446,14 +465,17 @@ fn public_text(value: &str) -> UntrustedText {
 fn observation(query: &str, year: i32) -> application::SearchObservation {
     application::SearchObservation {
         query: public_text(query),
-        date_kind: application::SourceDateKind::Observed,
+
         url: domain::NormalizedUrl::try_new("https://public.example/report").expect("URL"),
-        date: domain::CalendarDate::from_parts(
-            domain::CalendarYear::new(year),
-            domain::MonthNumber::new(9),
-            domain::DayNumber::new(20),
-        )
-        .expect("관측일"),
+        source_date: Some((
+            application::SourceDateKind::Observed,
+            domain::CalendarDate::from_parts(
+                domain::CalendarYear::new(year),
+                domain::MonthNumber::new(9),
+                domain::DayNumber::new(20),
+            )
+            .expect("관측일"),
+        )),
         title: public_text("대표 지수 종가 상승"),
     }
 }
@@ -566,5 +588,82 @@ fn market_outlook_uses_only_public_query_and_dated_search_observations() {
             panic!("제한된 질의")
         };
         assert_eq!(approved.text().as_str(), query);
+    }
+}
+
+fn stored_article(
+    url: &str,
+    published: application::PublicationTime,
+) -> application::ObservedCollectedItem {
+    use application::{CollectedEntry, CollectedItemHandle, ObservedCollectedItem};
+    ObservedCollectedItem {
+        handle: CollectedItemHandle::try_new("n-1").expect("기사"),
+        entry: CollectedEntry::News(domain::NewsItem::new(
+            domain::NewsSource::Hankyung,
+            domain::NormalizedUrl::try_new(url).expect("주소"),
+            public_text("저장된 뉴스 제목"),
+            None,
+        )),
+        published_at: published,
+        collected_at: at(),
+        instruments: Vec::new(),
+    }
+}
+
+#[test]
+fn undated_market_link_uses_only_the_matching_stored_article_publication_time() {
+    use application::{OutlookHorizon, OutlookMarket, PublicationTime};
+    let undated = application::SearchObservation {
+        source_date: None,
+        ..observation(US_FORTNIGHT, 2026)
+    };
+    for (url, published, expected) in [
+        (
+            "https://public.example/report",
+            PublicationTime::Known(at()),
+            Some("public.example | 보도일 2026-09-21 | 저장된 뉴스 제목"),
+        ),
+        (
+            "https://public.example/report",
+            PublicationTime::NotProvided,
+            None,
+        ),
+        (
+            "https://public.example/other",
+            PublicationTime::Known(at()),
+            None,
+        ),
+    ] {
+        let row = stored_article(url, published);
+        let provider = Arc::new(ScriptedAiProvider::default());
+        let store = Arc::new(Store {
+            news: vec![row],
+            ..Store::default()
+        });
+        let port = research(&provider, &store);
+        provider
+            .script_run()
+            .push(Ok(ScriptedAiEventStream::from_events(vec![
+                AiEvent::IsolationChecked(IsolationCheck::Passed),
+                search_event(US_FORTNIGHT, "completed"),
+            ])
+            .with_observations(vec![undated.clone()])));
+        let result = tauri::async_runtime::block_on(port.request_research(
+            &run_id(),
+            &WebResearchToolRequest::MarketOutlook {
+                market: OutlookMarket::Us,
+                horizon: OutlookHorizon::TwoWeeks,
+            },
+        ));
+        match expected {
+            Some(summary) => assert_eq!(
+                result.expect("발행 시각 확인").summary.as_untrusted_str(),
+                summary
+            ),
+            None => assert_eq!(
+                result.err(),
+                Some(WebResearchToolFailure::SourceDateUnverified)
+            ),
+        }
     }
 }

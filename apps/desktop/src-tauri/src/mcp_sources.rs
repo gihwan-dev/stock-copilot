@@ -27,7 +27,11 @@ const fn repository_unavailable() -> SystemPortError {
 }
 
 fn since(now: Timestamp, query: &CollectedItemQuery) -> Result<Timestamp, SystemPortError> {
-    let seconds = u64::from(query.lookback.as_u16()).saturating_mul(SECONDS_PER_DAY);
+    lookback_start(now, u64::from(query.lookback.as_u16()))
+}
+
+pub(super) fn lookback_start(now: Timestamp, days: u64) -> Result<Timestamp, SystemPortError> {
+    let seconds = days.saturating_mul(SECONDS_PER_DAY);
     TimeSpan::try_new(SpanSeconds::new(seconds), Nanosecond::new(0))
         .ok()
         .and_then(|span| now.checked_sub(span).ok())

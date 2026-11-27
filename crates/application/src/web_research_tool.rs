@@ -14,8 +14,7 @@ pub enum SourceDateKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchObservation {
     pub query: UntrustedText,
-    pub date: domain::CalendarDate,
-    pub date_kind: SourceDateKind,
+    pub source_date: Option<(SourceDateKind, domain::CalendarDate)>,
     pub url: domain::NormalizedUrl,
     pub title: UntrustedText,
 }
@@ -72,6 +71,7 @@ pub enum WebResearchToolFailure {
     ModeNotAllowed,
     UserMessageMissing,
     CollectionFailed,
+    SourceDateUnverified,
     Unavailable(SystemPortError),
 }
 

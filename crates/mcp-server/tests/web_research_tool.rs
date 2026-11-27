@@ -219,12 +219,15 @@ mod tests {
     #[test]
     fn market_outlook_only_accepts_fixed_market_and_horizon() {
         runtime().block_on(async {
-            for market in ["kr", "us"] {
-                for horizon in ["day","week","two_weeks","month","quarter"] {
-                    let fixture = fixture(Ok(outcome("시장")));
-                    let result = call(&fixture.registry, "outlook", json!({"mode":"market_outlook","market":market,"horizon":horizon})).await.expect("제한된 시장과 기간");
-                    assert_eq!(result["mode"], "market_outlook");
-                }
+            let periods = ["day", "week", "two_weeks", "month", "quarter"];
+            let combinations = ["kr", "us"].into_iter().flat_map(|market| {
+                periods.map(|horizon| (market, horizon))
+            });
+            for (market, horizon) in combinations {
+                let fixture = fixture(Ok(outcome("시장")));
+                let args = json!({ "mode": "market_outlook", "market": market, "horizon": horizon });
+                let result = call(&fixture.registry, "outlook", args).await.expect("제한된 시장과 기간");
+                assert_eq!(result["mode"], "market_outlook");
             }
             let fixture = fixture(Ok(outcome("시장")));
             for args in [
