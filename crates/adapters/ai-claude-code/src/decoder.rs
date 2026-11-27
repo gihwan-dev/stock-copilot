@@ -72,9 +72,14 @@ pub struct ClaudeEventDecoder {
     turn_delta_state: TurnDeltaState,
     pending_tools: BTreeMap<String, PendingTool>,
     pending_web_searches: BTreeMap<String, PendingWebSearch>,
+    observations: Vec<application::SearchObservation>,
 }
 
 impl ClaudeEventDecoder {
+    pub(crate) fn line_observations(&self) -> &[application::SearchObservation] {
+        &self.observations
+    }
+
     #[must_use]
     pub fn new(expectation: IsolationExpectation) -> Self {
         Self {
@@ -90,6 +95,7 @@ impl ClaudeEventDecoder {
             turn_delta_state: TurnDeltaState::NoneYet,
             pending_tools: BTreeMap::new(),
             pending_web_searches: BTreeMap::new(),
+            observations: Vec::new(),
         }
     }
 
@@ -118,6 +124,7 @@ impl ClaudeEventDecoder {
     }
 
     pub fn decode_line(&mut self, line: &str) -> Result<Vec<AiEvent>, StreamDecodeError> {
+        self.observations.clear();
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.trim().is_empty() {
             return Err(StreamDecodeError::EmptyLine);
@@ -527,6 +534,15 @@ impl ClaudeEventDecoder {
             return Ok(());
         }
         if let Some(pending_search) = self.pending_web_searches.remove(tool_use_id) {
+            if status == ToolStatus::Succeeded
+                && let Some(value) = item.get("content")
+            {
+                crate::search_evidence::extract(
+                    value,
+                    &pending_search.query,
+                    &mut self.observations,
+                );
+            }
             let action = match status {
                 ToolStatus::Succeeded | ToolStatus::Running => untrusted("completed")?,
                 ToolStatus::Failed => untrusted("failed")?,

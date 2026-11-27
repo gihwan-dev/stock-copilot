@@ -135,6 +135,9 @@ pub enum AiEvent {
     Unknown(UntrustedText),
 }
 pub trait AiEventStream: Send {
+    fn search_observations(&self) -> &[crate::SearchObservation] {
+        &[]
+    }
     fn next(&mut self) -> impl Future<Output = Result<Option<AiEvent>, InformationError>> + Send;
 }
 pub trait AiProvider: Send + Sync {

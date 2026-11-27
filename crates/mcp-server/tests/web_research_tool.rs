@@ -97,7 +97,7 @@ mod tests {
         let (spec, _tool) = fixture.registry.get(&name).expect("등록된 도구");
         let props = spec.input_schema()["properties"].as_object().expect("속성");
         let keys: Vec<&str> = props.keys().map(String::as_str).collect();
-        assert_eq!(keys, vec!["mode", "symbols", "topics"]);
+        assert_eq!(keys, vec!["horizon", "market", "mode", "symbols", "topics"]);
         assert!(props["mode"]["enum"].is_array(), "mode는 열거형");
         assert!(
             props["topics"]["items"]["enum"].is_array(),
@@ -213,6 +213,31 @@ mod tests {
                 Err(ToolErrorCode::InvalidInput),
                 "사용자 문장 모드는 다른 인자를 받지 않는다"
             );
+        });
+    }
+
+    #[test]
+    fn market_outlook_only_accepts_fixed_market_and_horizon() {
+        runtime().block_on(async {
+            for market in ["kr", "us"] {
+                for horizon in ["day","week","two_weeks","month","quarter"] {
+                    let fixture = fixture(Ok(outcome("시장")));
+                    let result = call(&fixture.registry, "outlook", json!({"mode":"market_outlook","market":market,"horizon":horizon})).await.expect("제한된 시장과 기간");
+                    assert_eq!(result["mode"], "market_outlook");
+                }
+            }
+            let fixture = fixture(Ok(outcome("시장")));
+            for args in [
+                json!({"mode":"market_outlook","market":"kr","horizon":"week","query":"synthetic private message"}),
+                json!({"mode":"market_outlook","market":"synthetic private message","horizon":"week"}),
+                json!({"mode":"market_outlook","market":"us","horizon":"ongoing"}),
+                json!({"mode":"market_outlook","market":"us"}),
+                json!({"mode":"user_message","market":"kr","horizon":"week"}),
+                json!({"mode":"code_topics","symbols":["AAPL"],"topics":["guidance"],"market":"kr"})
+            ] {
+                assert_eq!(call(&fixture.registry,"outlook",args).await, Err(ToolErrorCode::InvalidInput));
+            }
+            assert_eq!(fixture.port.calls().len(), 0_usize);
         });
     }
 

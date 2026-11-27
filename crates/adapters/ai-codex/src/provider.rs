@@ -718,6 +718,10 @@ fn collection_prompt(query: &CollectionQuery) -> String {
                 labels.join(", ")
             )
         }
+        CollectionQuery::MarketOutlook(approved) => format!(
+            "Run WebSearch using this exact public query. Find dated sources, with the publication date in the search result title or metadata. Query: {}",
+            approved.text().as_str()
+        ),
         CollectionQuery::UserMessage(stored) => String::from(stored.text().as_untrusted_str()),
     }
 }

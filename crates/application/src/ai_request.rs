@@ -109,6 +109,7 @@ impl StoredUserMessage {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CollectionQuery {
+    MarketOutlook(domain::ApprovedWebSearchQuery),
     CodeTopics {
         instruments: Vec<Symbol>,
         topics: Vec<CollectionTopic>,

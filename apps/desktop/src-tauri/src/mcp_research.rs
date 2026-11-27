@@ -114,6 +114,89 @@ const fn unavailable(error: SystemPortError) -> WebResearchToolFailure {
     WebResearchToolFailure::Unavailable(error)
 }
 
+async fn completed_search(
+    stream: &mut impl AiEventStream,
+    candidate: &domain::WebSearchCandidateQuery,
+) -> Result<UntrustedText, WebResearchToolFailure> {
+    let failed = WebResearchToolFailure::CollectionFailed;
+    if stream.next().await.map_err(|_error| failed)?
+        != Some(AiEvent::IsolationChecked(IsolationCheck::Passed))
+    {
+        return Err(failed);
+    }
+    let mut completed_query = None;
+    while let Some(event) = stream.next().await.map_err(|_error| failed)? {
+        match event {
+            AiEvent::WebSearch { query, action }
+                if action.as_untrusted_str() == "completed"
+                    && query.as_untrusted_str() == candidate.as_str() =>
+            {
+                completed_query = Some(query);
+            }
+            AiEvent::WebSearch { action, .. } if action.as_untrusted_str() == "failed" => {
+                return Err(failed);
+            }
+            AiEvent::IsolationChecked(_)
+            | AiEvent::ToolCall { .. }
+            | AiEvent::RateLimited { .. }
+            | AiEvent::McpUnavailable
+            | AiEvent::Quota(application::AiUsage::Waiting(_)) => return Err(failed),
+            AiEvent::WebSearch { .. }
+            | AiEvent::TextDelta(_)
+            | AiEvent::Unknown(_)
+            | AiEvent::TokenUsage(_)
+            | AiEvent::ActualModel(_)
+            | AiEvent::ModelRerouted(_)
+            | AiEvent::Quota(application::AiUsage::Available(_) | application::AiUsage::Unknown) => {
+            }
+        }
+    }
+    completed_query.ok_or(failed)
+}
+
+fn outcome(
+    observations: &[application::SearchObservation],
+    query: &UntrustedText,
+    max_age_days: i64,
+    collected_at: domain::Timestamp,
+) -> Result<WebResearchToolOutcome, WebResearchToolFailure> {
+    let failed = WebResearchToolFailure::CollectionFailed;
+    let mut lines = Vec::new();
+    for item in observations {
+        let age = item
+            .date
+            .days_until(collected_at.offset_calendar_date())
+            .map_err(|_error| failed)?;
+        if &item.query != query || !(0..=max_age_days).contains(age.as_i64()) {
+            continue;
+        }
+        let Some((_, rest)) = item.url.as_str().split_once("://") else {
+            continue;
+        };
+        let host = rest.split(['/', '?', '#']).next().ok_or(failed)?;
+        let date_label = match item.date_kind {
+            application::SourceDateKind::Published => "보도일",
+            application::SourceDateKind::Observed => "관측일",
+            application::SourceDateKind::Updated => "페이지 갱신일",
+        };
+        lines.push(format!(
+            "{host} | {date_label} {:04}-{:02}-{:02} | {}",
+            item.date.year().as_i32(),
+            item.date.month().as_u8(),
+            item.date.day().as_u8(),
+            item.title.as_untrusted_str()
+        ));
+    }
+    if lines.is_empty() {
+        return Err(failed);
+    }
+    let summary = UntrustedText::try_new(&lines.join("\n")).map_err(|_error| failed)?;
+    Ok(WebResearchToolOutcome {
+        summary,
+        collected_at,
+    })
+}
+
 impl<S, A, C> AppWebResearch<S, A, C>
 where
     S: WatchlistRepository + AuditLog + ChatRepository + ChatRunLedger,
@@ -152,6 +235,52 @@ where
             summary: findings.summary().clone(),
             collected_at: self.clock.now(),
         })
+    }
+
+    async fn market_outlook(
+        &self,
+        run: &AiRunId,
+        market: application::OutlookMarket,
+        horizon: application::OutlookHorizon,
+    ) -> Result<WebResearchToolOutcome, WebResearchToolFailure> {
+        let market_name = match market {
+            application::OutlookMarket::Kr => "Korean stock market KOSPI",
+            application::OutlookMarket::Us => "US stock market SPY",
+        };
+        let (period, max_age_days) = match horizon {
+            application::OutlookHorizon::Day => ("day", 1),
+            application::OutlookHorizon::Week => ("week", 7),
+            application::OutlookHorizon::TwoWeeks => ("fortnight", 14),
+            application::OutlookHorizon::Month => ("month", 31),
+            application::OutlookHorizon::Quarter => ("quarter", 92),
+        };
+        let candidate = domain::WebSearchCandidateQuery::new(&format!(
+            "{market_name} index performance past {period} and outlook next {period} dated economic releases"
+        ));
+        let guard = WebSearchGuard::new(self.clock.as_ref(), self.store.as_ref());
+        let inspection = guard
+            .inspect_code_query(&candidate, &WebSearchSensitiveContext::new())
+            .await
+            .map_err(|application::WebSearchGuardError::AuditFailed(error)| unavailable(error))?;
+        let WebSearchInspection::Approved(query) = inspection else {
+            return Err(WebResearchToolFailure::QueryRejected);
+        };
+        let spec = RunSpec::new(
+            self.collection_run(run)?,
+            RunInput::Collection(CollectionQuery::MarketOutlook(query)),
+            ModelSelection::Fast,
+            ReasoningEffort::Low,
+            RunPurpose::WebCollection,
+        );
+        let failed = WebResearchToolFailure::CollectionFailed;
+        let mut stream = self.collector.run(spec).await.map_err(|_error| failed)?;
+        let completed = completed_search(&mut stream, &candidate).await?;
+        outcome(
+            stream.search_observations(),
+            &completed,
+            max_age_days,
+            self.clock.now(),
+        )
     }
 
     async fn targets(&self) -> Result<Vec<Symbol>, SystemPortError> {
@@ -263,6 +392,9 @@ where
     ) -> Result<WebResearchToolOutcome, WebResearchToolFailure> {
         let (symbols, topics) = match request {
             WebResearchToolRequest::CodeTopics { symbols, topics } => (symbols, topics),
+            WebResearchToolRequest::MarketOutlook { market, horizon } => {
+                return self.market_outlook(run, *market, *horizon).await;
+            }
             WebResearchToolRequest::StoredUserMessage => return self.user_message(run).await,
         };
         let known: BTreeSet<Symbol> = self

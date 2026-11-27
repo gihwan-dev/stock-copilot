@@ -444,8 +444,8 @@ pub use portfolio_tool_reads::{
     TransactionToolLine, TransactionsToolView,
 };
 pub use web_research_tool::{
-    ResearchTopic, WebResearchToolFailure, WebResearchToolOutcome, WebResearchToolPort,
-    WebResearchToolRequest,
+    OutlookHorizon, OutlookMarket, ResearchTopic, SearchObservation, SourceDateKind,
+    WebResearchToolFailure, WebResearchToolOutcome, WebResearchToolPort, WebResearchToolRequest,
 };
 mod portfolio_views;
 pub use portfolio_views::{
