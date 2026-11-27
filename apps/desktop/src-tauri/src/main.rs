@@ -116,13 +116,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (turns, app_commands) = (ChatTurnBook::new(), Arc::new(AppCommandSlot::default()));
     let directory = InstrumentDirectory::default();
     let estimate_runs = EstimateRunBook::new();
+    let market = market_tools(&toss, &shared_clock, &directory);
     let ai = assemble_ai(
         discover_ai_setup(
             &context.config().identifier,
             bundled_bridge(),
             (turns.clone(), Arc::clone(&app_commands)),
         )
-        .with_market(market_tools(&toss, &shared_clock, &directory))
+        .with_market(market.clone())
         .with_portfolio(catalog_portfolio(&toss, &repositories, &directory))
         .with_estimate_runs(estimate_runs.clone()),
         &shared_clock,
@@ -142,6 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(notification_handle)
         .manage(diagnostics)
         .manage(directory)
+        .manage(market)
         .manage(intraday)
         .manage(turns)
         .manage(app_commands)

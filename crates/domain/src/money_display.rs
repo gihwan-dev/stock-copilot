@@ -108,6 +108,11 @@ pub fn display_change(change: &MoneyChange, precision: DisplayPrecision) -> Disp
 }
 
 #[must_use]
+pub fn display_number(ratio: &crate::Ratio, precision: DisplayPrecision) -> DisplayDigits {
+    display_digits(Amount::new(ratio.as_decimal()), precision)
+}
+
+#[must_use]
 pub fn display_percent(ratio: &crate::Ratio, precision: DisplayPrecision) -> DisplayDigits {
     display_digits(percent_of(Amount::new(ratio.as_decimal())), precision)
 }
