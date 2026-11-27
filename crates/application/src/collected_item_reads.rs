@@ -29,6 +29,10 @@ pub trait CollectedTimes: Send + Sync {
 }
 
 pub trait CollectedItemReads: Send + Sync {
+    fn citation_digest(&self, _entry: &CollectedEntry) -> Option<crate::CitationDigest> {
+        None
+    }
+
     fn collected_since(
         &self,
         kind: CollectedKind,

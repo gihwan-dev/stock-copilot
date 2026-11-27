@@ -106,7 +106,7 @@ fn key_from_entry(entry: &CollectedEntry) -> rusqlite::Result<InformationKey> {
     }
 }
 #[must_use]
-pub fn citation_digest(entry: &CollectedEntry) -> Option<application::CitationDigest> {
+pub(super) fn citation_digest(entry: &CollectedEntry) -> Option<application::CitationDigest> {
     use sha2::{Digest, Sha256};
     let key = key_from_entry(entry).ok()?;
     let (category, source, external_id) = key_parts(&key);
@@ -582,6 +582,10 @@ impl application::CollectedUrlCatalog for InformationStore<'_> {
 }
 
 impl CollectedItemReads for InformationStore<'_> {
+    fn citation_digest(&self, entry: &CollectedEntry) -> Option<application::CitationDigest> {
+        citation_digest(entry)
+    }
+
     async fn collected_since(
         &self,
         kind: CollectedKind,

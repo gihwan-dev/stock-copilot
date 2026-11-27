@@ -139,7 +139,7 @@ impl<S: CollectedItemReads, C: Clock> NewsToolReads for StoredNews<S, C> {
             .into_iter()
             .filter_map(|item| match &item.entry {
                 CollectedEntry::News(news) => Some(application::CitedLine {
-                    digest: store_sqlite::citation_digest(&item.entry),
+                    digest: self.store.citation_digest(&item.entry),
                     line: NewsToolLine {
                         handle: item.handle.clone(),
                         source: news.collected().source().clone(),
@@ -165,7 +165,7 @@ impl<S: CollectedItemReads, C: Clock> NewsToolReads for StoredNews<S, C> {
             .into_iter()
             .filter_map(|item| match &item.entry {
                 CollectedEntry::Disclosure(filing) => Some(application::CitedLine {
-                    digest: store_sqlite::citation_digest(&item.entry),
+                    digest: self.store.citation_digest(&item.entry),
                     line: DisclosureToolLine {
                         handle: item.handle.clone(),
                         source: filing.key().source(),
