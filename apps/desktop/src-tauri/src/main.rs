@@ -464,6 +464,23 @@ impl src_tauri::broker_link::ToolQuoteSource for ToolCandleFeed {
     ) -> BoxFuture<'_, Result<Vec<domain::Candle>, application::PortError>> {
         Box::pin(async move { self.0.history_daily_candles(&instrument, window).await })
     }
+
+    fn adjusted_daily_candles(
+        &self,
+        instrument: domain::QuoteInstrument,
+        window: domain::TimeInterval,
+    ) -> BoxFuture<'_, Result<Vec<domain::Candle>, application::PortError>> {
+        Box::pin(async move {
+            application::BrokerRead::candles(
+                &*self.0,
+                &instrument,
+                window,
+                domain::CandlePeriod::Daily,
+                domain::PriceAdjustment::Adjusted(domain::AdjustmentBasis::new(window.end())),
+            )
+            .await
+        })
+    }
 }
 
 fn market_tools(

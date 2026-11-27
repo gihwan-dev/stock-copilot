@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use application::{
-    CandleToolLine, CandleWindow, Clock, MarketOverviewToolView, MarketToolReads, OverviewItem,
-    OverviewUnit, RankingToolKind, RankingsToolView, SectorsToolView, SessionStatus, ToolName,
-    ValueProvenance,
+    CandlePriceBasis, CandleToolLine, CandleWindow, Clock, MarketOverviewToolView, MarketToolReads,
+    OverviewItem, OverviewUnit, RankingToolKind, RankingsToolView, SectorsToolView, SessionStatus,
+    ToolName, ValueProvenance,
 };
 use domain::{KnownMarket, Symbol};
 use serde_json::{Map, Value, json};
@@ -60,10 +60,10 @@ impl MarketToolKind {
                 "Latest brokerage price for one listed symbol with the time it was collected."
             }
             Self::Candles => {
-                "Recent finalized daily candles for one symbol from the brokerage, prices not adjusted for splits, newest first, paginated with limit and cursor. Includes the collection time."
+                "Recent finalized daily candles for one symbol from the brokerage, newest first, paginated with limit and cursor. Prices are adjusted for splits and other corporate actions when adjusted is true and are raw brokerage prices when it is false. Includes the collection time."
             }
             Self::Overview => {
-                "KOSPI, KOSDAQ, Korean 3Y and 10Y government bond yields, USD/KRW and KR/US market session status, plus S&P 500, Nasdaq 100, gold, crude oil and the dollar approximated by US ETF prices in USD. Each value states whether it is official or an ETF-based approximation and when it was collected. Values that could not be read are left out."
+                "KOSPI, KOSDAQ, Korean 3Y and 10Y government bond yields, USD/KRW and KR/US market session status, plus S&P 500, Nasdaq 100, gold, crude oil and the dollar approximated by US ETF prices in USD. Each value states whether it is official or an ETF-based approximation and when it was collected. Values that could not be read are left out. US Treasury yields have no source and are listed under not_provided instead of a value."
             }
             Self::Rankings => {
                 "Today's brokerage rankings by trading amount or price change for KR or US, or domestic foreign or institution net buying in KRW, with the collection time."
@@ -221,7 +221,12 @@ impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
             args.get("limit").and_then(Value::as_u64),
             args.get("cursor").and_then(Value::as_str),
         )?;
-        let view = require_market(self.reads.candles(&symbol, market, window.clone()).await)?;
+        let priced = require_market(
+            self.reads
+                .priced_candles(&symbol, market, window.clone())
+                .await,
+        )?;
+        let view = priced.view;
         let mut lines: Vec<&CandleToolLine> = view.lines.iter().collect();
         lines.sort_by(|left, right| {
             let left_at = *left.opened_at.utc_seconds().as_i64();
@@ -253,18 +258,33 @@ impl<M: MarketToolReads, C: Clock> MarketTool<M, C> {
             tool_name: self.spec.name(),
             query_fingerprint: &fingerprint,
         };
-        let mut extra = Map::new();
-        extra.insert(
-            String::from("symbol"),
-            Value::String(view.symbol.as_str().to_owned()),
-        );
-        extra.insert(
-            String::from("market"),
-            Value::String(market_code(view.market).to_owned()),
-        );
-        extra.insert(String::from("collected_at"), timestamp(view.collected_at));
+        let extra = candle_extra(&view, priced.basis);
         paginate_items(&items, &page, &context, &extra)
     }
+}
+
+fn candle_extra(
+    view: &application::CandlesToolView,
+    basis: CandlePriceBasis,
+) -> Map<String, Value> {
+    let mut extra = Map::new();
+    extra.insert(
+        String::from("symbol"),
+        Value::String(view.symbol.as_str().to_owned()),
+    );
+    extra.insert(
+        String::from("market"),
+        Value::String(market_code(view.market).to_owned()),
+    );
+    extra.insert(String::from("collected_at"), timestamp(view.collected_at));
+    extra.insert(
+        String::from("adjusted"),
+        Value::Bool(match basis {
+            CandlePriceBasis::Adjusted => true,
+            CandlePriceBasis::Unadjusted => false,
+        }),
+    );
+    extra
 }
 
 fn parse_symbol(raw: Option<&Value>) -> Result<Symbol, ToolErrorPayload> {
@@ -402,6 +422,8 @@ const fn session_name(status: SessionStatus) -> &'static str {
     }
 }
 
+const NOT_PROVIDED: [OverviewItem; 2] = [OverviewItem::UsTreasury2Y, OverviewItem::UsTreasury10Y];
+
 fn render_overview(view: &MarketOverviewToolView) -> Value {
     let mut lines = view.lines.clone();
     lines.sort_by_key(|line| line.item);
@@ -439,9 +461,20 @@ fn render_overview(view: &MarketOverviewToolView) -> Value {
             ])
         })
         .collect();
+    let not_provided: Vec<Value> = NOT_PROVIDED
+        .iter()
+        .filter(|item| lines.iter().all(|line| line.item != **item))
+        .map(|item| {
+            object(vec![
+                ("item", Value::String(overview_item_name(*item).to_owned())),
+                ("reason", Value::String(String::from("no_source"))),
+            ])
+        })
+        .collect();
     object(vec![
         ("indicators", Value::Array(line_values)),
         ("sessions", Value::Array(session_values)),
+        ("not_provided", Value::Array(not_provided)),
     ])
 }
 

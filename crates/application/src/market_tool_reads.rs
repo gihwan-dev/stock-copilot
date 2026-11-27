@@ -108,6 +108,18 @@ pub struct CandlesToolView {
     pub lines: Vec<CandleToolLine>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandlePriceBasis {
+    Adjusted,
+    Unadjusted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PricedCandlesView {
+    pub basis: CandlePriceBasis,
+    pub view: CandlesToolView,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OverviewItem {
     Kospi,
@@ -234,6 +246,23 @@ pub trait MarketToolReads: Send + Sync {
         market: KnownMarket,
         window: CandleWindow,
     ) -> impl Future<Output = Result<Option<CandlesToolView>, MarketToolError>> + Send;
+
+    fn priced_candles(
+        &self,
+        symbol: &Symbol,
+        market: KnownMarket,
+        window: CandleWindow,
+    ) -> impl Future<Output = Result<Option<PricedCandlesView>, MarketToolError>> + Send {
+        let pending = self.candles(symbol, market, window);
+        async move {
+            pending.await.map(|found| {
+                found.map(|view| PricedCandlesView {
+                    basis: CandlePriceBasis::Unadjusted,
+                    view,
+                })
+            })
+        }
+    }
 
     fn market_overview(
         &self,

@@ -1,14 +1,15 @@
 use application::{
     AiRunId, AllocationToolView, ArticleBody, ArticleFetchFailure, ArticleLocation,
-    ArticleToolPort, BodyReadingSetting, CandleWindow, CandlesToolView, CollectedItemHandle,
-    CollectedItemQuery, DisclosureToolLine, EstimateAssignmentRepository, EstimateCommitOutcome,
-    EstimateRunContext, EstimateRunContextSource, InvestorFlowToolView, MarketOverviewToolView,
-    MarketToolError, MarketToolReads, NewsToolLine, NewsToolReads, PerformancePeriod,
-    PerformanceToolView, PortfolioToolReads, PortfolioToolView, ProfileSource, QuoteToolView,
-    RankingToolKind, RankingsToolView, ScorecardObservationRepository, SectorsToolView,
-    SystemFailure, SystemPort, SystemPortError, ThesisRepository, ThesisRunMetadata,
-    ThesisToolPort, TransactionsToolView, WebResearchToolFailure, WebResearchToolOutcome,
-    WebResearchToolPort, WebResearchToolRequest, WriteCompleted,
+    ArticleToolPort, BodyReadingSetting, CandlePriceBasis, CandleWindow, CandlesToolView,
+    CollectedItemHandle, CollectedItemQuery, DisclosureToolLine, EstimateAssignmentRepository,
+    EstimateCommitOutcome, EstimateRunContext, EstimateRunContextSource, InvestorFlowToolView,
+    MarketOverviewToolView, MarketToolError, MarketToolReads, NewsToolLine, NewsToolReads,
+    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView,
+    PricedCandlesView, ProfileSource, QuoteToolView, RankingToolKind, RankingsToolView,
+    ScorecardObservationRepository, SectorsToolView, SystemFailure, SystemPort, SystemPortError,
+    ThesisRepository, ThesisRunMetadata, ThesisToolPort, TransactionsToolView,
+    WebResearchToolFailure, WebResearchToolOutcome, WebResearchToolPort, WebResearchToolRequest,
+    WriteCompleted,
 };
 
 use domain::{
@@ -124,6 +125,7 @@ pub enum MarketReadCall {
 pub struct FixedMarketToolReads {
     quote: Result<Option<QuoteToolView>, MarketToolError>,
     candles: Result<Option<CandlesToolView>, MarketToolError>,
+    candle_basis: CandlePriceBasis,
     overview: Result<Option<MarketOverviewToolView>, MarketToolError>,
     rankings: Result<Option<RankingsToolView>, MarketToolError>,
     sectors: Result<Option<SectorsToolView>, MarketToolError>,
@@ -136,6 +138,7 @@ impl Default for FixedMarketToolReads {
         Self {
             quote: Ok(None),
             candles: Ok(None),
+            candle_basis: CandlePriceBasis::Unadjusted,
             overview: Ok(None),
             rankings: Ok(None),
             sectors: Ok(None),
@@ -155,6 +158,12 @@ impl FixedMarketToolReads {
     #[must_use]
     pub fn with_candles(mut self, reply: ReadReply<CandlesToolView>) -> Self {
         self.candles = reply.map_err(MarketToolError::from);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_candle_basis(mut self, basis: CandlePriceBasis) -> Self {
+        self.candle_basis = basis;
         self
     }
 
@@ -221,6 +230,21 @@ impl MarketToolReads for FixedMarketToolReads {
     ) -> impl Future<Output = Result<Option<CandlesToolView>, MarketToolError>> + Send {
         self.record(MarketReadCall::Candles(symbol.clone(), market, window));
         ready(self.candles.clone())
+    }
+
+    fn priced_candles(
+        &self,
+        symbol: &Symbol,
+        market: KnownMarket,
+        window: CandleWindow,
+    ) -> impl Future<Output = Result<Option<PricedCandlesView>, MarketToolError>> + Send {
+        self.record(MarketReadCall::Candles(symbol.clone(), market, window));
+        let basis = self.candle_basis;
+        ready(
+            self.candles
+                .clone()
+                .map(|found| found.map(|view| PricedCandlesView { basis, view })),
+        )
     }
 
     fn market_overview(

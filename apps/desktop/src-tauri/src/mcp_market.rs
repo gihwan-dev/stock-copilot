@@ -11,13 +11,15 @@ use application::{
     SectorsToolView, SessionStatus, SessionToolLine, ToolReadDiagnosis, ToolReadResult,
     ValueProvenance,
 };
+use application::{BrokerCapability, CandlePriceBasis, PortErrorKind, PricedCandlesView};
 use domain::{
-    AdjustmentBasis, CalendarDate, Candle, CandlePeriod, DisplayInstrumentName, FxPair, FxRate,
-    FxRateKind, IndicatorCode, IndicatorUnit, InvestorClass, InvestorFlow, InvestorTradingRankings,
-    KnownMarket, MarketCalendar, MarketIndicatorQuote, MarketState, Nanosecond, OffsetSeconds,
-    Price, PriceAdjustment, QuoteInstrument, RankingBasis, RankingCautionFilter, RankingChange,
-    RankingDuration, RankingKind, RankingLimit, Ratio, SectorAmount, SectorRanking, SpanSeconds,
-    StockRanking, Symbol, TimeInterval, TimeSpan, Timestamp,
+    AdjustmentBasis, CalendarDate, Candle, CandlePeriod, CandleStatus, DisplayInstrumentName,
+    FxPair, FxRate, FxRateKind, IndicatorCode, IndicatorUnit, InvestorClass, InvestorFlow,
+    InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorQuote, MarketState,
+    Nanosecond, OffsetSeconds, Price, PriceAdjustment, QuoteInstrument, RankingBasis,
+    RankingCautionFilter, RankingChange, RankingDuration, RankingKind, RankingLimit, Ratio,
+    SectorAmount, SectorRanking, SpanSeconds, StockRanking, Symbol, TimeInterval, TimeSpan,
+    Timestamp,
 };
 
 use crate::broker_link::tool_instrument;
@@ -34,6 +36,11 @@ pub trait ToolQuoteSource: Send + Sync {
         instrument: QuoteInstrument,
         window: TimeInterval,
     ) -> BoxFuture<'_, Result<Vec<Candle>, PortError>>;
+    fn adjusted_daily_candles(
+        &self,
+        instrument: QuoteInstrument,
+        window: TimeInterval,
+    ) -> BoxFuture<'_, Result<Vec<Candle>, PortError>>;
 }
 
 impl<B: BrokerRead + 'static> ToolQuoteSource for B {
@@ -45,6 +52,23 @@ impl<B: BrokerRead + 'static> ToolQuoteSource for B {
     }
 
     fn daily_candles(
+        &self,
+        instrument: QuoteInstrument,
+        window: TimeInterval,
+    ) -> BoxFuture<'_, Result<Vec<Candle>, PortError>> {
+        Box::pin(async move {
+            BrokerRead::candles(
+                self,
+                &instrument,
+                window,
+                CandlePeriod::Daily,
+                PriceAdjustment::Raw,
+            )
+            .await
+        })
+    }
+
+    fn adjusted_daily_candles(
         &self,
         instrument: QuoteInstrument,
         window: TimeInterval,
@@ -225,6 +249,36 @@ fn indicator_line(quote: &MarketIndicatorQuote) -> Option<OverviewToolLine> {
     })
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AdjustedFailure {
+    ReadRaw,
+    Report,
+}
+
+const fn adjusted_failure(error: PortError) -> AdjustedFailure {
+    match error.kind() {
+        PortErrorKind::Unsupported(BrokerCapability::AdjustedHistory)
+        | PortErrorKind::InvalidResponse(_) => AdjustedFailure::ReadRaw,
+        PortErrorKind::Unsupported(_)
+        | PortErrorKind::NotFound(_)
+        | PortErrorKind::AccessDenied(_)
+        | PortErrorKind::InvalidRequest(_)
+        | PortErrorKind::Unavailable { .. }
+        | PortErrorKind::MasterNotReady(_) => AdjustedFailure::Report,
+    }
+}
+
+fn candle_line(candle: &Candle) -> CandleToolLine {
+    CandleToolLine {
+        opened_at: candle.time().timestamp(),
+        open: candle.values().open().as_money(),
+        high: candle.values().high().as_money(),
+        low: candle.values().low().as_money(),
+        close: candle.values().close().as_money(),
+        volume: Some(candle.values().volume()),
+    }
+}
+
 fn price_ratio(price: Price) -> Ratio {
     Ratio::of_amount(price.as_money().amount())
 }
@@ -387,7 +441,7 @@ impl BrokerMarketTools {
         symbol: &Symbol,
         market: KnownMarket,
         window: CandleWindow,
-    ) -> Result<Option<CandlesToolView>, MarketToolError> {
+    ) -> Result<Option<PricedCandlesView>, MarketToolError> {
         let tool = MarketToolName::Candles;
         let (Some(source), Some(clock)) = (self.quotes.as_ref(), self.clock.as_ref()) else {
             return Err(not_connected(tool));
@@ -404,29 +458,39 @@ impl BrokerMarketTools {
                 .saturating_add(HOLIDAY_MARGIN_DAYS),
         )
         .ok_or(MarketToolError::InvalidResponse)?;
-        let candles = source
-            .daily_candles(instrument, interval)
+        let (basis, candles) = match source
+            .adjusted_daily_candles(instrument.clone(), interval)
             .await
-            .map_err(|error| failed(tool, error))?;
+        {
+            Ok(candles) => (CandlePriceBasis::Adjusted, candles),
+            Err(error) if adjusted_failure(error) == AdjustedFailure::ReadRaw => (
+                CandlePriceBasis::Unadjusted,
+                source
+                    .daily_candles(instrument, interval)
+                    .await
+                    .map_err(|failure| failed(tool, failure))?,
+            ),
+            Err(error) => return Err(failed(tool, error)),
+        };
+        let finalized: Vec<&Candle> = candles
+            .iter()
+            .filter(|candle| candle.status() == CandleStatus::Finalized)
+            .collect();
         let keep = usize::from(window.as_u16());
-        let skip = candles.len().saturating_sub(keep);
-        let lines = candles
+        let skip = finalized.len().saturating_sub(keep);
+        let lines = finalized
             .iter()
             .skip(skip)
-            .map(|candle| CandleToolLine {
-                opened_at: candle.time().timestamp(),
-                open: candle.values().open().as_money(),
-                high: candle.values().high().as_money(),
-                low: candle.values().low().as_money(),
-                close: candle.values().close().as_money(),
-                volume: Some(candle.values().volume()),
-            })
+            .map(|candle| candle_line(candle))
             .collect();
-        Ok(Some(CandlesToolView {
-            symbol: symbol.clone(),
-            market,
-            collected_at: now,
-            lines,
+        Ok(Some(PricedCandlesView {
+            basis,
+            view: CandlesToolView {
+                symbol: symbol.clone(),
+                market,
+                collected_at: now,
+                lines,
+            },
         }))
     }
 
@@ -694,6 +758,16 @@ impl MarketToolReads for BrokerMarketTools {
         market: KnownMarket,
         window: CandleWindow,
     ) -> impl Future<Output = Result<Option<CandlesToolView>, MarketToolError>> + Send {
+        let pending = self.read_candles(symbol, market, window);
+        async move { pending.await.map(|found| found.map(|priced| priced.view)) }
+    }
+
+    fn priced_candles(
+        &self,
+        symbol: &Symbol,
+        market: KnownMarket,
+        window: CandleWindow,
+    ) -> impl Future<Output = Result<Option<PricedCandlesView>, MarketToolError>> + Send {
         self.read_candles(symbol, market, window)
     }
 

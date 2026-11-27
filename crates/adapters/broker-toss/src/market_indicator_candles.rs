@@ -1,9 +1,10 @@
+use crate::account_read::SessionSupply;
 use crate::{QueryKey, ReadRequest, ReadRoute, RouteId, TokenRenewal, TossAccountRead};
 use application::{Clock, PortError, ReadEndpoint, RequestRejection, SecretStore};
 use domain::{
-    CandlePeriod, IndicatorCandleRow, IndicatorCode, IndicatorUnit, Market, MarketIndicatorCandle,
-    MarketState, MasterCode, Nanosecond, NumericInput, OffsetSeconds, SpanSeconds, TimeInterval,
-    TimeSpan, Timestamp,
+    CalendarDate, CandlePeriod, IndicatorCandleRow, IndicatorCode, IndicatorDayAge, IndicatorUnit,
+    KnownMarket, Market, MarketIndicatorCandle, MarketSession, MarketState, MasterCode, Nanosecond,
+    NumericInput, OffsetSeconds, SpanSeconds, TimeInterval, TimeSpan, Timestamp,
 };
 use std::collections::BTreeMap;
 
@@ -116,8 +117,8 @@ pub(crate) async fn fetch<S: SecretStore, T: Clock, R: TokenRenewal>(
         }
         if previous.is_some_and(|stamp| stamp <= window.start()) || decoded.next_before.is_none() {
             let candles = result.into_values().collect::<Vec<_>>();
-            validate_gaps(reader, period, &candles)?;
-            return Ok(candles);
+            validate_gaps(reader, period, &candles).await?;
+            return settle(reader, candles).await;
         }
         let next = decoded.next_before.ok_or_else(invalid)?;
         let next_time = crate::market_read::timestamp(&next, ENDPOINT)?;
@@ -129,7 +130,56 @@ pub(crate) async fn fetch<S: SecretStore, T: Clock, R: TokenRenewal>(
     }
     Err(invalid())
 }
-fn validate_gaps<S: SecretStore, T: Clock, R: TokenRenewal>(
+fn known_kr_session<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    date: CalendarDate,
+) -> Result<Option<MarketSession>, PortError> {
+    let known = reader.known_sessions();
+    let mut matching = known
+        .iter()
+        .filter(|session| session.market() == Market::Kr && session.date() == date);
+    let session = matching.next().cloned();
+    if matching.next().is_some() {
+        return Err(invalid());
+    }
+    Ok(session)
+}
+async fn kr_session<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    date: CalendarDate,
+) -> Result<MarketSession, PortError> {
+    if let Some(session) = known_kr_session(reader, date)? {
+        return Ok(session);
+    }
+    if reader.session_supply() == SessionSupply::Live {
+        let calendar = crate::market_calendar::fetch_on(reader, KnownMarket::Kr, date).await?;
+        reader.remember_sessions(&calendar);
+        if let Some(session) = known_kr_session(reader, date)? {
+            return Ok(session);
+        }
+    }
+    Err(missing_calendar())
+}
+async fn settle<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    candles: Vec<MarketIndicatorCandle>,
+) -> Result<Vec<MarketIndicatorCandle>, PortError> {
+    if reader.session_supply() != SessionSupply::Live {
+        return Ok(candles);
+    }
+    let mut settled = Vec::with_capacity(candles.len());
+    for candle in candles {
+        let session = match domain::indicator_day_age(&candle).map_err(|_error| invalid())? {
+            IndicatorDayAge::Current(date) => Some(kr_session(reader, date).await?),
+            IndicatorDayAge::Passed | IndicatorDayAge::Intraday => None,
+        };
+        settled.push(
+            domain::settle_indicator_day(candle, session.as_ref()).map_err(|_error| invalid())?,
+        );
+    }
+    Ok(settled)
+}
+async fn validate_gaps<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     period: CandlePeriod,
     candles: &[MarketIndicatorCandle],
@@ -138,13 +188,13 @@ fn validate_gaps<S: SecretStore, T: Clock, R: TokenRenewal>(
         let earlier = left.observation().server_at().ok_or_else(invalid)?;
         let later = right.observation().server_at().ok_or_else(invalid)?;
         match period {
-            CandlePeriod::Minute => validate_minute_spacing(reader, earlier, later)?,
-            CandlePeriod::Daily => validate_daily_gap(reader, earlier, later)?,
+            CandlePeriod::Minute => validate_minute_spacing(reader, earlier, later).await?,
+            CandlePeriod::Daily => validate_daily_gap(reader, earlier, later).await?,
         }
     }
     Ok(())
 }
-fn validate_minute_spacing<S: SecretStore, T: Clock, R: TokenRenewal>(
+async fn validate_minute_spacing<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     earlier: Timestamp,
     later: Timestamp,
@@ -165,7 +215,7 @@ fn validate_minute_spacing<S: SecretStore, T: Clock, R: TokenRenewal>(
     if *seconds.as_u64() % 60 != 0 || *nanos.as_u32() != 0 {
         return Err(invalid());
     }
-    validate_minute_gap(reader, earlier, next, later)
+    validate_minute_gap(reader, earlier, next, later).await
 }
 fn missing_calendar() -> PortError {
     PortError::new(
@@ -174,7 +224,7 @@ fn missing_calendar() -> PortError {
         application::PortErrorKind::Unsupported(application::BrokerCapability::IndicatorCandles),
     )
 }
-fn validate_minute_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
+async fn validate_minute_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     earlier: Timestamp,
     first_missing: Timestamp,
@@ -188,14 +238,7 @@ fn validate_minute_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
     let mut extended = None;
     for _day in 0..GAP_LIMIT {
         let date = cursor.date_at_offset(offset).map_err(|_error| invalid())?;
-        let mut matching = reader
-            .market_sessions()
-            .iter()
-            .filter(|session| session.market() == Market::Kr && session.date() == date);
-        let session = matching.next().ok_or_else(missing_calendar)?;
-        if matching.next().is_some() {
-            return Err(invalid());
-        }
+        let session = kr_session(reader, date).await?;
         for segment in session.sessions() {
             let interval = segment.session().interval();
             if interval.start() >= later || interval.end() <= first_missing {
@@ -221,7 +264,7 @@ fn validate_minute_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
     }
     Err(invalid())
 }
-fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
+async fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     earlier: Timestamp,
     later: Timestamp,
@@ -240,12 +283,9 @@ fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
         if date >= later_date {
             return Ok(());
         }
-        let mut matching = reader
-            .market_sessions()
-            .iter()
-            .filter(|session| session.market() == Market::Kr && session.date() == date);
-        let session = matching.next().ok_or_else(missing_calendar)?;
-        if matching.next().is_some() || !session.sessions().is_empty() {
+        let weekend_skip = reader.session_supply() == SessionSupply::Live
+            && date.week_part() == domain::WeekPart::Weekend;
+        if !weekend_skip && !kr_session(reader, date).await?.sessions().is_empty() {
             return Err(invalid());
         }
         next = next
