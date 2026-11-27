@@ -1947,6 +1947,374 @@
         "judge": "짧은 질문. 조회한 수급(외국인 최근 2거래일 연속 순매수 약 1,842억·963억 원, 그 전날은 순매도)을 근거로 '네, 최근 이틀 사고 있습니다'처럼 결론부터. 삼성전자 비중이 이미 약 50%로 종목당 한도 20%를 크게 넘으므로 수급을 이유로 더 사라고 하면 감점, 오히려 줄일 기회라는 판단이 맞다.",
         "kind": "short"
       }
+    },
+    {
+      "id": "outlook-kr",
+      "title": "국내 지수와 20거래일 ETF 흐름이 모두 상승한다",
+      "message": "앞으로 시장이 오를지 내릴지 알려 줘.",
+      "instruments": {
+        "069500": {
+          "name": "KODEX 200",
+          "price": 35200,
+          "market": "KR"
+        }
+      },
+      "candles": {
+        "069500": {
+          "change": 0.16,
+          "noise": 0,
+          "days": 20
+        }
+      },
+      "market": {
+        "kospi": {
+          "value": 2700,
+          "change": 0.01
+        }
+      },
+      "expect": {
+        "kind": "short",
+        "no_trades": true,
+        "research_steps": [
+          {
+            "name": "get_market_overview",
+            "args": {},
+            "isError": false
+          },
+          {
+            "name": "get_candles",
+            "args": {
+              "symbol": "^069500$",
+              "market": "^KR$"
+            },
+            "isError": false
+          }
+        ],
+        "mention": [
+          "한국|국내|코스피",
+          "한 달|1개월|한달",
+          "상승|강세|상방",
+          "KODEX|코덱스|코스피200|코스피 200"
+        ],
+        "avoid": [
+          "판단할 수 없",
+          "판단하기 어렵"
+        ],
+        "judge": "국내 지수와 20거래일 ETF 흐름이 모두 상승한다. 기본 시장과 기간을 명시하고 상승 쪽에 무게를 둔다. 실제로 받은 자료와 날짜·출처, 반대 근거나 변경 조건을 검토한다."
+      }
+    },
+    {
+      "id": "outlook-us",
+      "title": "미국 2주 전망",
+      "message": "미국 시장 향후 2주 방향은?",
+      "instruments": {
+        "SPY": {
+          "name": "SPDR S&P 500 ETF",
+          "price": 580,
+          "market": "US"
+        }
+      },
+      "candles": {
+        "SPY": {
+          "change": -0.19,
+          "noise": 0,
+          "days": 20
+        }
+      },
+      "market": {
+        "sp500": {
+          "value": 580,
+          "change": -0.012
+        }
+      },
+      "expect": {
+        "kind": "short",
+        "no_trades": true,
+        "research_steps": [
+          {
+            "name": "get_market_overview",
+            "args": {},
+            "isError": false
+          },
+          {
+            "name": "get_candles",
+            "args": {
+              "symbol": "^SPY$",
+              "market": "^US$"
+            },
+            "isError": false
+          }
+        ],
+        "mention": [
+          "미국|S&P",
+          "2주|두 주",
+          "하락|약세|하방",
+          "SPY|ETF"
+        ],
+        "avoid": [
+          "판단할 수 없",
+          "판단하기 어렵"
+        ],
+        "judge": "미국 2주 전망. 달러 표시 SPY 하락 일봉을 인용해 하방 우위를 설명한다. 실제로 받은 자료와 날짜·출처, 반대 근거나 변경 조건을 검토한다."
+      }
+    },
+    {
+      "id": "outlook-mixed",
+      "title": "오늘 상승과 최근 하락이 충돌한다",
+      "message": "앞으로 시장이 오를지 내릴지 알려 줘.",
+      "instruments": {
+        "069500": {
+          "name": "KODEX 200",
+          "price": 35200,
+          "market": "KR"
+        }
+      },
+      "candles": {
+        "069500": {
+          "change": -0.13,
+          "noise": 0,
+          "days": 20
+        }
+      },
+      "market": {
+        "kospi": {
+          "value": 2670,
+          "change": 0.018
+        }
+      },
+      "news": [
+        {
+          "title": "수출 주문 증가",
+          "summary": "신규 수출 주문이 늘었다."
+        }
+      ],
+      "expect": {
+        "kind": "short",
+        "no_trades": true,
+        "research_steps": [
+          {
+            "name": "get_market_overview",
+            "args": {},
+            "isError": false
+          },
+          {
+            "name": "get_candles",
+            "args": {
+              "symbol": "^069500$",
+              "market": "^KR$"
+            },
+            "isError": false
+          },
+          {
+            "name": "search_news",
+            "args": {},
+            "isError": false
+          }
+        ],
+        "mention": [
+          "반등|상승",
+          "약세|하락|하방",
+          "수출"
+        ],
+        "avoid": [
+          "판단할 수 없",
+          "판단하기 어렵"
+        ],
+        "judge": "오늘 상승과 최근 하락이 충돌한다. 반대 근거인 수출 개선 보도를 고려하고 방향의 강약을 설명한다. 실제로 받은 자료와 날짜·출처, 반대 근거나 변경 조건을 검토한다."
+      }
+    },
+    {
+      "id": "outlook-recovered",
+      "title": "개요와 일봉 실패 뒤 웹 조사에서만 얻은 25일 수출 주문 감소가 하방 위험이다",
+      "message": "앞으로 시장이 오를지 내릴지 알려 줘.",
+      "instruments": {
+        "069500": {
+          "name": "KODEX 200",
+          "price": 35200,
+          "market": "KR"
+        }
+      },
+      "candles": {
+        "069500": {
+          "change": 0,
+          "noise": 0,
+          "days": 20
+        }
+      },
+      "market": {},
+      "news": [],
+      "extra": {
+        "request_web_research": {
+          "mode": "user_message",
+          "collected_at": "2026-11-26T10:30:00+09:00",
+          "summary": {
+            "untrusted_text": "11월 25일 합성 경제통계 발표에 따르면 신규 수출 주문이 감소했다."
+          }
+        }
+      },
+      "failures": {
+        "get_market_overview": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "get_candles": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        }
+      },
+      "expect": {
+        "kind": "short",
+        "no_trades": true,
+        "research_steps": [
+          {
+            "name": "get_market_overview",
+            "args": {},
+            "isError": true
+          },
+          {
+            "name": "get_candles",
+            "args": {
+              "symbol": "^069500$",
+              "market": "^KR$"
+            },
+            "isError": true
+          },
+          {
+            "name": "search_news",
+            "args": {},
+            "isError": false
+          },
+          {
+            "name": "request_web_research",
+            "args": {
+              "mode": "^user_message$"
+            },
+            "isError": false
+          }
+        ],
+        "mention": [
+          "수출",
+          "둔화|감소",
+          "약세|하락|하방",
+          "25일|11-25|11.25"
+        ],
+        "avoid": [
+          "판단할 수 없",
+          "판단하기 어렵"
+        ],
+        "judge": "개요와 일봉 실패 뒤 웹 조사에서만 얻은 25일 수출 주문 감소가 하방 위험이다. 자료 하나뿐인 약한 판단임을 밝힌다. 실제로 받은 자료와 날짜·출처, 반대 근거나 변경 조건을 검토한다."
+      }
+    },
+    {
+      "id": "outlook-empty",
+      "title": "개요·일봉·뉴스·원문 조사 모두 실패한다",
+      "message": "앞으로 시장이 오를지 내릴지 알려 줘.",
+      "instruments": {
+        "069500": {
+          "name": "KODEX 200",
+          "price": 35200,
+          "market": "KR"
+        }
+      },
+      "candles": {
+        "069500": {
+          "change": 0,
+          "noise": 0,
+          "days": 20
+        }
+      },
+      "market": {},
+      "news": [],
+      "failures": {
+        "get_market_overview": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "get_candles": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "search_news": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "request_web_research": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "get_quote": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "get_disclosures": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "get_rankings": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "get_investor_flow": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        },
+        "get_sectors": {
+          "code": "data_unavailable",
+          "message": "no public observation",
+          "retryable": false
+        }
+      },
+      "expect": {
+        "kind": "short",
+        "no_trades": true,
+        "research_steps": [
+          {
+            "name": "get_market_overview",
+            "args": {},
+            "isError": true
+          },
+          {
+            "name": "get_candles",
+            "args": {
+              "symbol": "^069500$",
+              "market": "^KR$"
+            },
+            "isError": true
+          },
+          {
+            "name": "search_news",
+            "args": {},
+            "isError": true
+          },
+          {
+            "name": "request_web_research",
+            "args": {
+              "mode": "^user_message$"
+            },
+            "isError": true
+          }
+        ],
+        "mention": [
+          "지수|시세|시장 개요",
+          "일봉|ETF|가격 흐름",
+          "뉴스|기사|보도|조사"
+        ],
+        "avoid": [
+          "[0-9.]+\\s*%",
+          "(상승|하락|횡보)(세|할 가능성이 높|이 우세)"
+        ],
+        "judge": "개요·일봉·뉴스·원문 조사 모두 실패한다. 어떤 자료를 확보하지 못했는지 구체적으로 답하고 전망이나 숫자를 만들지 않는다. 실제로 받은 자료와 날짜·출처, 반대 근거나 변경 조건을 검토한다."
+      }
     }
   ]
 }
