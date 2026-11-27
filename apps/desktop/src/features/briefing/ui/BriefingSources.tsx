@@ -31,7 +31,11 @@ const SourceTitle = (props: {
       {[
         <DataText key="title" value={props.source.title} variant="body-sm" />,
         ...(url === undefined
-          ? []
+          ? [
+              <Text key="no-original" variant="caption" tone="ink-subtle">
+                {briefingText("noOriginal", "ko")}
+              </Text>,
+            ]
           : [
               <Button
                 key="open"

@@ -17,6 +17,7 @@ const catalog = {
   sourceWeb: { ko: "미검증 웹 값" as UiText },
   sourceNews: { ko: "뉴스" as UiText },
   sourceDisclosure: { ko: "공시" as UiText },
+  noOriginal: { ko: "원문 없음" as UiText },
   openSource: { ko: "원문 열기" as UiText },
   aiNotice: {
     ko: "AI가 모은 자료를 요약한 글이에요. 매매 권유가 아니에요." as UiText,
