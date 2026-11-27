@@ -117,11 +117,14 @@ impl<H: BriefingContextSource, D: DisclosureRepository> BriefingContextSource
             else {
                 continue;
             };
-            for item in disclosures.iter().rev().take(5) {
-                if receipts.insert(item.key().clone()) {
-                    context.evidence.push(source(item.collected(), now));
-                }
-            }
+            context.evidence.extend(
+                disclosures
+                    .iter()
+                    .rev()
+                    .take(5)
+                    .filter(|item| receipts.insert(item.key().clone()))
+                    .map(|item| source(item.collected(), now)),
+            );
         }
         Ok(context)
     }
