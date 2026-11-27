@@ -8,12 +8,16 @@ const mount = `
   import { createElement as h } from "react";
   import { QueryClientProvider } from "@tanstack/react-query";
   import { render, fireEvent, waitFor, cleanup } from "@testing-library/react";
-  import { mockCommands } from MOCK_IPC_ENTRY;
+  import { mockCommands, events } from MOCK_IPC_ENTRY;
+  import { useCoreEvent } from PLATFORM_ENTRY;
+  function Panel() { useCoreEvent(); return h(ChatPanel); }
   import { createAppQueryClient } from QUERY_ENTRY;
   import { ChatPanel } from ${JSON.stringify(join(desktopRoot, "src/features/chat/index.ts"))};
   let client = createAppQueryClient();
-  Object.assign(window, { fireEvent, waitFor, cleanup, mockCommands, fresh: () => { client = createAppQueryClient(); },
-    mount: () => render(h(QueryClientProvider, {client}, h(ChatPanel))) });
+  Object.assign(window, { fireEvent, waitFor, cleanup, mockCommands, invalidate: () => client.invalidateQueries(),
+    emit: (payload) => events.uiEvent.emit(payload),
+    fresh: () => { client = createAppQueryClient(); },
+    mount: () => render(h(QueryClientProvider, {client}, h(Panel))) });
 `;
 
 test("navigation restores ordered turns, a pending reply and the draft", async () => {
@@ -57,6 +61,8 @@ test("navigation restores ordered turns, a pending reply and the draft", async (
     finish = undefined;
     await w.waitFor(() => assert.ok(view.container.textContent.includes("fixture-reply")));
     await send("fixture-two");
+    await w.invalidate();
+    await w.waitFor(() => assert.ok(box().readOnly));
     view.unmount();
     view = w.mount();
     await ready();
@@ -69,6 +75,7 @@ test("navigation restores ordered turns, a pending reply and the draft", async (
     assert.deepEqual(view.container.textContent.match(/fixture-(?:one|two|reply)/g),
       ["fixture-one", "fixture-reply", "fixture-two", "fixture-reply"]);
     type("fixture-draft");
+    await w.invalidate();
     view.unmount();
     view = w.mount();
     await ready();
@@ -80,6 +87,58 @@ test("navigation restores ordered turns, a pending reply and the draft", async (
     assert.ok(box().value === "");
     assert.deepEqual(view.container.textContent.match(/fixture-(?:one|two|reply)/g),
       ["fixture-one", "fixture-reply", "fixture-two", "fixture-reply"]);
+    type("fixture-replaced-draft");
+    entries.length = 0;
+    await w.emit("StoredDataChanged");
+    await w.waitFor(() => assert.ok(box() && !box().value && !view.container.textContent.includes("fixture-one")));
+  } finally {
+    bundle.close();
+  }
+});
+
+test("only a storage replacement reopens a restored running turn", async () => {
+  const bundle = await screenDom(mount);
+  try {
+    const w = bundle.open();
+    const subscribers = [];
+    let historyReads = 0;
+    w.mockCommands({
+      getChatHistory: () => {
+        historyReads += 1;
+        return {
+          session_id: "main-chat",
+          entries: [{
+            turn_id: "persisted-turn", sequence: 1, at_unix_seconds: "1",
+            role: "User", text: "fixture-question", status: null, cards: [], sources: [],
+          }],
+          active_turn: { turn_id: "persisted-turn", last_sequence: 0, state: "Running" },
+        };
+      },
+      resubscribeChatTurn: ({ request, onChunk }) => {
+        subscribers.push(onChunk);
+        return { turn_id: request.turn_id, replayed_count: 0, state: "Running" };
+      },
+    });
+    let view = w.mount();
+    const emit = (subscriber, sequence, text) => subscriber.onmessage({
+      turn_id: "persisted-turn", sequence, chunk: { TextDelta: { text } },
+    });
+    await w.waitFor(() => assert.equal(subscribers.length, 1));
+    emit(subscribers[0], 1, "fixture-first");
+    await w.emit({ AiApprovalRequested: "fixture-approval" });
+    await w.invalidate();
+    view.unmount();
+    view = w.mount();
+    await w.waitFor(() => assert.ok(view.container.textContent.includes("fixture-first")));
+    assert.equal(subscribers.length, 1);
+    assert.equal(historyReads, 1);
+    await w.emit("StoredDataChanged");
+    await w.waitFor(() => assert.equal(subscribers.length, 2));
+    emit(subscribers[0], 2, "fixture-obsolete");
+    emit(subscribers[1], 1, "fixture-current");
+    await w.waitFor(() => assert.ok(view.container.textContent.includes("fixture-current")));
+    assert.ok(!view.container.textContent.includes("fixture-obsolete"));
+    assert.ok(!view.container.textContent.includes("fixture-first"));
   } finally {
     bundle.close();
   }

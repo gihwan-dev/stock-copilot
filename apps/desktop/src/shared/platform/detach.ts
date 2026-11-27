@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { listenUiEvent, type CoreUiEvent } from "../ipc";
-import type { AppQueryKey } from "../lib";
+import { queryKeys, type AppQueryKey } from "../lib";
 
 export type DetachedTask =
   | {
@@ -9,7 +9,7 @@ export type DetachedTask =
       readonly keys: readonly AppQueryKey[];
     }
   | {
-      readonly kind: "invalidate-all";
+      readonly kind: "invalidate-all" | "reset-chat";
       readonly client: Readonly<QueryClient>;
     };
 
@@ -17,6 +17,13 @@ const ignoreFailure = (): void => undefined;
 
 export const detach = (task: DetachedTask): void => {
   switch (task.kind) {
+    case "reset-chat": {
+      task.client.removeQueries({ queryKey: queryKeys.chatResume });
+      task.client
+        .resetQueries({ queryKey: queryKeys.chatHistory })
+        .then(ignoreFailure, ignoreFailure);
+      return;
+    }
     case "invalidate-all": {
       task.client.invalidateQueries().then(ignoreFailure, ignoreFailure);
       return;
