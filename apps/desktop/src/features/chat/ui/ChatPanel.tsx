@@ -62,10 +62,11 @@ const listenerFor =
   };
 
 const Resume = (props: {
+  readonly loadId: EntityId;
   readonly turn: EntityId;
   readonly update: Update;
 }): ReactElement => {
-  const state = useChatResume(props.turn, listenerFor(props.update));
+  const state = useChatResume(props.loadId, props.turn, listenerFor(props.update));
   return <Stack gap="space-1">{state === "resuming" ? [] : []}</Stack>;
 };
 
@@ -134,7 +135,7 @@ const Conversation = (props: {
   readonly render: (parts: ChatParts) => ReactElement;
 }): ReactElement => {
   const { transcript, resume } = props.conversation;
-  const { draft, update, setDraft } = useConversation(props.conversation.draft);
+  const { draft, update, setDraft } = useConversation(props.conversation);
   const send = useSendChat(
     {
       begin: (turn, message): void => {
@@ -168,7 +169,7 @@ const Conversation = (props: {
   ) : (
     <>
       {parts}
-      <Resume turn={resume} update={update} />
+      <Resume loadId={props.conversation.loadId} turn={resume} update={update} />
     </>
   );
 };
@@ -201,6 +202,7 @@ export const ChatSession = (props: Props): ReactElement => {
     case "ready":
       return (
         <Conversation
+          key={view.conversation.loadId}
           conversation={view.conversation}
           context={props.context}
           render={props.children}

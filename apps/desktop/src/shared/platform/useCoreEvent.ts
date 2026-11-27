@@ -40,6 +40,9 @@ export const useCoreEvent = (): void => {
     () =>
       subscribeCoreEvents((event): void => {
         const plan = invalidationForCoreEvent(event);
+        if (event.kind === "StoredDataChanged") {
+          detach({ kind: "reset-chat", client });
+        }
         if (plan.scope === "all") {
           detach({ kind: "invalidate-all", client });
         } else if (plan.keys.length > 0) {

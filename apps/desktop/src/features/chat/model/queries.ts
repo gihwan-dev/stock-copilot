@@ -32,6 +32,7 @@ import { detach } from "../../../shared/platform";
 import { fromHistory, resumableTurn, type Transcript } from "./transcript";
 
 export type ConversationState = {
+  readonly loadId: EntityId;
   readonly transcript: Transcript;
   readonly draft: FreeText;
   readonly resume: EntityId | undefined;
@@ -49,7 +50,10 @@ const loadHistory = async (): Promise<HistoryReply> => {
   if (session.kind === "err") return session;
   const result = await chatHistory(session.value);
   if (result.kind === "err") return result;
+  const loadId = newChatTurn();
+  if (loadId.kind === "err") return loadId;
   return ok({
+    loadId: loadId.value,
     transcript: fromHistory(result.value),
     resume: resumableTurn(result.value),
     draft: emptyFreeText,
@@ -59,7 +63,7 @@ const loadHistory = async (): Promise<HistoryReply> => {
 const historyOptions = queryOptions({
   queryKey: queryKeys.chatHistory,
   queryFn: loadHistory,
-  staleTime: Infinity,
+  staleTime: (query) => query.state.data?.kind === "ok" ? "static" : 0,
   gcTime: Infinity,
 });
 
@@ -88,9 +92,9 @@ type ConversationActions = {
   readonly update: (change: (current: Transcript) => Transcript) => void;
 };
 
-export const useConversation = (initialDraft: FreeText): ConversationActions => {
+export const useConversation = (conversation: ConversationState): ConversationActions => {
   const client = useQueryClient();
-  const [draft, setDraft] = useState(initialDraft);
+  const [draft, setDraft] = useState(conversation.draft);
   const changeState = (
     change: (current: ConversationState) => ConversationState,
   ): void => {
@@ -99,7 +103,8 @@ export const useConversation = (initialDraft: FreeText): ConversationActions => 
     });
     if (query === undefined) return;
     const reply = query.state.data;
-    if (reply?.kind === "ok") query.setState({ data: ok(change(reply.value)) });
+    if (reply?.kind === "ok" && reply.value.loadId === conversation.loadId)
+      query.setState({ data: ok(change(reply.value)) });
   };
   return {
     draft,
@@ -117,14 +122,15 @@ export const useConversation = (initialDraft: FreeText): ConversationActions => 
 };
 
 export const useChatResume = (
+  loadId: EntityId,
   turn: EntityId,
   listener: ChatListener,
 ): "resuming" | "resumed" => {
   const query = useQuery(
     queryOptions({
-      queryKey: [...queryKeys.chatResume, turn] as const,
+      queryKey: [...queryKeys.chatResume, loadId, turn] as const,
       queryFn: () => resubscribeChatTurn(turn, listener),
-      staleTime: Infinity,
+      staleTime: "static",
       gcTime: Infinity,
     }),
   );
