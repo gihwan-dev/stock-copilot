@@ -8,9 +8,10 @@ import {
   Stack,
   Text,
 } from "../../../shared/ds";
-import type {
-  ChatListener,
-  ChatScreenContext,
+import {
+  mainChatSession,
+  type ChatListener,
+  type ChatScreenContext,
 } from "../../../shared/ipc";
 import {
   parseFreeText,
@@ -42,6 +43,7 @@ export type ChatParts = {
 };
 
 type Props = {
+  readonly session?: EntityId | undefined;
   readonly context: ChatScreenContext | undefined;
   readonly children: (parts: ChatParts) => ReactElement;
 };
@@ -66,7 +68,11 @@ const Resume = (props: {
   readonly turn: EntityId;
   readonly update: Update;
 }): ReactElement => {
-  const state = useChatResume(props.loadId, props.turn, listenerFor(props.update));
+  const state = useChatResume(
+    props.loadId,
+    props.turn,
+    listenerFor(props.update),
+  );
   return <Stack gap="space-1">{state === "resuming" ? [] : []}</Stack>;
 };
 
@@ -137,6 +143,7 @@ const Conversation = (props: {
   const { transcript, resume } = props.conversation;
   const { draft, update, setDraft } = useConversation(props.conversation);
   const send = useSendChat(
+    props.conversation.session,
     {
       begin: (turn, message): void => {
         update((current) => beginExchange(current, turn, message));
@@ -169,7 +176,11 @@ const Conversation = (props: {
   ) : (
     <>
       {parts}
-      <Resume loadId={props.conversation.loadId} turn={resume} update={update} />
+      <Resume
+        loadId={props.conversation.loadId}
+        turn={resume}
+        update={update}
+      />
     </>
   );
 };
@@ -184,7 +195,10 @@ const Loading = (): ReactElement => (
 );
 
 export const ChatSession = (props: Props): ReactElement => {
-  const view = useChatHistory();
+  const main = mainChatSession();
+  const session =
+    props.session ?? (main.kind === "ok" ? main.value : undefined);
+  const view = useChatHistory(session);
   const reload = useReloadChatHistory();
   switch (view.status) {
     case "loading":
@@ -212,10 +226,11 @@ export const ChatSession = (props: Props): ReactElement => {
 };
 
 export const ChatPanel = (props: {
+  readonly session?: EntityId | undefined;
   readonly children?: (parts: ChatParts) => ReactElement;
   readonly context: ChatScreenContext | undefined;
 }): ReactElement => (
-  <ChatSession context={props.context}>
+  <ChatSession context={props.context} session={props.session}>
     {props.children ??
       ((parts): ReactElement => (
         <Stack gap="space-4">

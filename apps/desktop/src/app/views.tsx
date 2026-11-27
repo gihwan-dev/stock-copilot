@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { AboutSection } from "../features/about";
 import { BriefingCard, BriefingHistoryScreen } from "../features/briefing";
-import { ChatPanel } from "../features/chat";
+import { ChatWorkspace } from "../features/chat";
 import { PortfolioOverview } from "../features/portfolio";
 import { useKeyEntry } from "../features/onboarding";
 import { SettingsScreen } from "../features/settings";
@@ -35,7 +35,7 @@ import { SettingsSections } from "./settings";
 import { describeIpcFailure, useAppVersion } from "./query";
 
 export const ChatRouteView = (): ReactElement => (
-  <ChatPanel context={undefined}>
+  <ChatWorkspace>
     {(conversation): ReactElement => (
       <Page
         title={text("shell.chat", "ko")}
@@ -47,7 +47,7 @@ export const ChatRouteView = (): ReactElement => (
         </Disclosure>
       </Page>
     )}
-  </ChatPanel>
+  </ChatWorkspace>
 );
 
 export const LatestBriefingView = (): ReactElement => {
