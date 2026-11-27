@@ -26,10 +26,9 @@ import {
   type PanelState,
 } from "./ShellParts";
 export type { PanelState } from "./ShellParts";
-const listPanelClasses = {
-  closed:
-    "hidden window-md:flex flex-none w-sidebar-width flex-col bg-surface scroll-flex",
-  open: "flex flex-col bg-surface scroll-flex absolute top-space-1 bottom-space-1 left-sidebar-collapsed z-panel shadow-popover rounded-md w-sidebar-width max-w-full window-md:static window-md:z-auto window-md:shadow-none",
+const listSlotClasses = {
+  closed: "hidden window-md:flex relative flex-none w-sidebar-width",
+  open: "relative flex flex-none w-sidebar-width",
 } as const;
 const chatPanelClasses = {
   closed:
@@ -61,29 +60,31 @@ const ShellSidebar = (props: {
   if (props.list === undefined || props.list === null) return null;
   return (
     <>
+      <Divider direction="vertical" />
       <ShellRail
         rail={props.rail ?? null}
         state={props.state}
         onChange={props.onChange}
       />
-      <aside
-        aria-label={text("shell.stockList", "ko")}
-        className={listPanelClasses[props.state]}
-      >
-        {props.state === "open" ? (
-          <ListHead
-            onClose={(): void => {
-              props.onChange("closed");
-            }}
-          />
-        ) : null}
-        <ScrollArea direction="vertical">
-          <div className="p-space-3 flex flex-col gap-space-2">
-            {props.list}
-          </div>
-        </ScrollArea>
-      </aside>
-      <Divider direction="vertical" />
+      <div className={listSlotClasses[props.state]}>
+        <aside
+          aria-label={text("shell.stockList", "ko")}
+          className="absolute w-full top-space-1 bottom-space-1 z-panel flex flex-col bg-surface scroll-flex shadow-popover rounded-md window-md:static window-md:z-auto window-md:shadow-none"
+        >
+          {props.state === "open" ? (
+            <ListHead
+              onClose={(): void => {
+                props.onChange("closed");
+              }}
+            />
+          ) : null}
+          <ScrollArea direction="vertical">
+            <div className="p-space-3 flex flex-col gap-space-2">
+              {props.list}
+            </div>
+          </ScrollArea>
+        </aside>
+      </div>
     </>
   );
 };
@@ -222,12 +223,6 @@ export const AppShell = (props: AppShellProps): ReactElement => {
       <div className="relative flex flex-1 w-full scroll-flex">
         <ShellNavigation navigation={props.navigation} />
         <div className="relative flex flex-1 scroll-flex">
-          <ShellSidebar
-            list={props.list}
-            rail={props.rail}
-            state={listState}
-            onChange={updateList}
-          />
           {chatSlot === null ? (
             main
           ) : (
@@ -241,6 +236,12 @@ export const AppShell = (props: AppShellProps): ReactElement => {
             />
           )}
         </div>
+        <ShellSidebar
+          list={props.list}
+          rail={props.rail}
+          state={listState}
+          onChange={updateList}
+        />
       </div>
     </div>
   );

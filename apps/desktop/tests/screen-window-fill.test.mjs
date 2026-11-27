@@ -173,3 +173,55 @@ test("minimum window supports keyboard travel between dashboard, briefing reader
     }
   });
 });
+
+test("stock list stays right of main and leaves the composer accessible when opened from the rail", async () => {
+  await withAuditServer(async ({ browser, url }) => {
+    const tab = await browser.newPage({ viewport: sizes.wide });
+    try {
+      tab.setDefaultTimeout(15000);
+      await tab.goto(`${url}?s=home-ready`);
+      const nav = tab.getByRole("navigation", { name: "화면 이동" });
+      const main = tab.getByRole("main");
+      const list = tab
+        .getByRole("complementary", { name: "종목 목록" })
+        .filter({ hasText: "예시바이오" });
+      await list.waitFor();
+      const rightOf = async (right, left) => {
+        const a = await left.boundingBox(),
+          b = await right.boundingBox();
+        assert.ok(a && b && b.x >= a.x + a.width - 1, JSON.stringify({ a, b }));
+      };
+      await rightOf(main, nav);
+      await rightOf(list, main);
+      await list.getByRole("button", { name: "상세 보기" }).first().click();
+      await main.getByText("일봉 차트", { exact: true }).first().waitFor();
+      await main
+        .getByRole("button", { name: "닫기", exact: true })
+        .first()
+        .click();
+      await main.getByRole("heading", { name: "내 현황" }).waitFor();
+      await nav.getByRole("button", { name: "채팅" }).click();
+      const input = main.getByRole("textbox", { name: "메시지" });
+      await input.waitFor();
+      await tab.setViewportSize(sizes.minimum);
+      const toggle = tab.getByRole("button", { name: "종목 목록 펼치기" });
+      await toggle.waitFor();
+      await rightOf(toggle, main);
+      await toggle.focus();
+      await tab.keyboard.press("Enter");
+      await list.waitFor();
+      await rightOf(list, main);
+      await rightOf(main, nav);
+      await rightOf(list, input);
+      await input.click({ trial: true });
+      await tab.keyboard.press("Escape");
+      await list.waitFor({ state: "hidden" });
+      await toggle.click();
+      await list.getByRole("button", { name: "종목 목록 닫기" }).click();
+      await toggle.waitFor();
+      assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+    } finally {
+      await tab.close();
+    }
+  });
+});

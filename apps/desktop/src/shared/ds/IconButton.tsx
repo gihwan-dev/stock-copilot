@@ -14,7 +14,7 @@ type Props = {
   readonly pressed?: "pressed" | "released";
   readonly expanded?: "open" | "closed";
   readonly disabled?: Availability;
-  readonly tooltipSide?: "top" | "right";
+  readonly tooltipSide?: "top" | "right" | "left";
 };
 const small = (props: Props): ReactElement => (
   <BaseButton
