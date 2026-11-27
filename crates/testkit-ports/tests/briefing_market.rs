@@ -161,7 +161,7 @@ mod tests {
         .context(BriefingKind::ClosingReview, at()))
         .expect("문맥");
         assert_eq!(texts(&context.code_facts), vec!["기존 사실"]);
-        assert!(market.calls().is_empty());
+        assert_eq!(market.calls(), []);
     }
 
     #[test]
