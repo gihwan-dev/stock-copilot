@@ -305,6 +305,11 @@ fn failure_payload(failure: WebResearchToolFailure) -> ToolErrorPayload {
             Some("mode"),
             "there is no stored user message to research",
         ),
+        WebResearchToolFailure::SourceDateUnverified => ToolErrorPayload::non_retryable(
+            ToolErrorCode::DataUnavailable,
+            None,
+            "Search returned links. Their publication or observation dates could not be verified. Base the outlook on dated price or news data.",
+        ),
         WebResearchToolFailure::CollectionFailed => ToolErrorPayload::retryable(
             ToolErrorCode::UpstreamUnavailable,
             None,

@@ -78,7 +78,9 @@ fn dated_source(record: &Value, title: &str) -> Option<(SourceDateKind, Calendar
         ("관측일 ", SourceDateKind::Observed),
         ("보도일 ", SourceDateKind::Published),
     ] {
-        if let Some((_, rest)) = title.to_ascii_lowercase().split_once(marker) {
+        if let Some((prefix, rest)) = title.to_ascii_lowercase().split_once(marker)
+            && !prefix.ends_with(char::is_alphanumeric)
+        {
             let date = rest
                 .split(|character: char| !character.is_ascii_digit() && character != '-')
                 .next()?;
@@ -99,62 +101,49 @@ fn observation(record: &Value, query: &UntrustedText) -> Option<SearchObservatio
         return None;
     }
     let url = NormalizedUrl::try_new(record.get("url")?.as_str()?).ok()?;
-    let (date_kind, date) = dated_source(record, title)?;
+    let source_date = dated_source(record, title);
+    if source_date.is_none()
+        && ["published_at", "observed_at", "page_age"]
+            .iter()
+            .any(|key| record.get(key).is_some_and(|value| !value.is_null()))
+    {
+        return None;
+    }
     Some(SearchObservation {
         query: query.clone(),
         url,
-        date,
-        date_kind,
+        source_date,
         title: UntrustedText::try_new(title).ok()?,
     })
 }
 
-pub(super) fn extract(value: &Value, query: &UntrustedText, out: &mut Vec<SearchObservation>) {
-    if out.len() >= 20 {
-        return;
+pub(super) fn extract(output: &Value, query: &UntrustedText) -> Vec<SearchObservation> {
+    if output.get("query").and_then(Value::as_str) != Some(query.as_untrusted_str()) {
+        return Vec::new();
     }
-    match value {
-        Value::Array(items) => {
-            for item in items.iter().take(40) {
-                extract(item, query, out);
-            }
-        }
-        Value::Object(item) if item.get("type").and_then(Value::as_str) == Some("text") => {
-            if let Some(text) = item.get("text").and_then(Value::as_str) {
-                links(text, query, out);
-            }
-        }
-        Value::Object(_) => {
-            if let Some(item) = observation(value, query) {
-                out.push(item);
-            }
-        }
-        Value::String(text) => links(text, query, out),
-        Value::Null | Value::Bool(_) | Value::Number(_) => {}
-    }
-}
-
-fn links(text: &str, query: &UntrustedText, out: &mut Vec<SearchObservation>) {
-    for line in text
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("Links:"))
-    {
-        let Ok(Value::Array(rows)) = serde_json::from_str(line.trim()) else {
-            continue;
-        };
-        out.extend(
-            rows.iter()
-                .filter_map(|row| observation(row, query))
-                .take(20_usize.saturating_sub(out.len())),
-        );
-    }
+    let Some(groups) = output.get("results").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    groups
+        .iter()
+        .filter(|group| {
+            group
+                .get("tool_use_id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| !id.is_empty())
+        })
+        .filter_map(|group| group.get("content").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|row| observation(row, query))
+        .take(20)
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{ClaudeEventDecoder, IsolationExpectation};
     use application::{RunKind, SourceDateKind};
-    use serde_json::json;
+    use serde_json::{Value, json};
     use std::collections::BTreeSet;
 
     #[test]
@@ -184,37 +173,35 @@ mod tests {
         };
         let report = json!({"title":"Public market close","url":"https://news.example/close","page_age":"April 30, 2025"});
         let links = format!("Results\nLinks: [{report}]");
-        for (content, is_error, expected) in [
-            (json!([{"type":"text","text":links}]), false, 1),
-            (json!([report]), false, 1),
-            (json!("found 3 items"), false, 0),
-            (json!([report]), true, 0),
+        let group = json!({"tool_use_id":"inner-search","content":[report]});
+        let output = json!({"query":"KOSPI index today","results":[group]});
+        for (structured, is_error, expected) in [
+            (&output, false, 1),
+            (&output, true, 0),
+            (&Value::Null, false, 0),
+            (&json!({"query":"other","results":[group]}), false, 0),
             (
-                json!([{"title":"2026-09-21 forecast","url":"https://news.example/old"}]),
+                &json!({"query":"KOSPI index today","results":[links]}),
                 false,
                 0,
             ),
             (
-                json!([{"title":"Public close","url":"https://news.example/close","observed_at":"2025-02-29"}]),
-                false,
-                0,
-            ),
-            (
-                json!([{"title":"Public close","url":"file:///secret","published_at":"2026-01-01"}]),
+                &json!({"query":"KOSPI index today","results":[{"content":[report]}]}),
                 false,
                 0,
             ),
         ] {
             let mut decoder = start();
-            decoder.decode_line(&json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_web_01","is_error":is_error,"content":content}]}}).to_string()).expect("도구 결과");
+            decoder.decode_line(&json!({"type":"user","tool_use_result":structured,"message":{"content":[{"type":"tool_result","tool_use_id":"toolu_web_01","is_error":is_error,"content":links}]}}).to_string()).expect("도구 결과");
             let items = decoder.line_observations();
             assert_eq!(items.len(), expected);
             if let Some(item) = items.first() {
                 assert_eq!(item.query.as_untrusted_str(), "KOSPI index today");
-                assert_eq!(item.date_kind, SourceDateKind::Updated);
-                assert_eq!(item.date.year().as_i32(), &2025_i32);
-                assert_eq!(item.date.month().as_u8(), &4);
-                assert_eq!(item.date.day().as_u8(), &30);
+                let (kind, date) = item.source_date.expect("페이지 갱신일");
+                assert_eq!(kind, SourceDateKind::Updated);
+                assert_eq!(date.year().as_i32(), &2025_i32);
+                assert_eq!(date.month().as_u8(), &4);
+                assert_eq!(date.day().as_u8(), &30);
             }
         }
         let mut decoder = start();
@@ -250,26 +237,26 @@ mod date_tests {
             ("published_at", json!("February 29, 2025")),
             ("published_at", json!("September 111, 2025")),
             ("published_at", json!("unknown")),
-            ("published_at", json!(null)),
         ] {
             let mut bad = row.clone();
             bad[field] = value;
             assert!(observation(&bad, &query).is_none(), "{bad}");
         }
-        for (key, date, kind) in [
+        for (key, source_text, kind) in [
             ("published_at", "2024-02-29", SourceDateKind::Published),
             ("observed_at", "2024-02-29", SourceDateKind::Observed),
             ("page_age", "February 29, 2024", SourceDateKind::Updated),
         ] {
             let item = observation(
-                &json!({"title":"public report","url":"https://public.example/report",key:date}),
+                &json!({"title":"public report","url":"https://public.example/report",key:source_text}),
                 &query,
             )
             .expect("날짜가 있는 출처");
-            assert_eq!(item.date_kind, kind);
-            assert_eq!(item.date.year().as_i32(), &2024_i32);
-            assert_eq!(item.date.month().as_u8(), &2);
-            assert_eq!(item.date.day().as_u8(), &29);
+            let (reported_kind, date) = item.source_date.expect("날짜");
+            assert_eq!(reported_kind, kind);
+            assert_eq!(date.year().as_i32(), &2024_i32);
+            assert_eq!(date.month().as_u8(), &2);
+            assert_eq!(date.day().as_u8(), &29);
             assert_eq!(item.query, query);
             assert_eq!(item.url.as_str(), "https://public.example/report");
             assert_eq!(item.title.as_untrusted_str(), "public report");
@@ -285,7 +272,10 @@ mod date_tests {
                 &query,
             )
             .expect("제목 속 명시한 날짜");
-            assert_eq!(item.date_kind, kind);
+            assert_eq!(
+                item.source_date.map(|(reported_kind, _)| reported_kind),
+                Some(kind)
+            );
         }
     }
 }

@@ -490,8 +490,14 @@ impl ClaudeEventDecoder {
                 FieldName::Content,
             )))?;
         let mut events = Vec::new();
+        let structured = match content.as_slice() {
+            [_] if object.get("parent_tool_use_id").is_none_or(Value::is_null) => {
+                object.get("tool_use_result")
+            }
+            _ => None,
+        };
         for block in content {
-            self.handle_user_block(block, &mut events)?;
+            self.handle_user_block(block, structured, &mut events)?;
         }
         Ok(events)
     }
@@ -499,6 +505,7 @@ impl ClaudeEventDecoder {
     fn handle_user_block(
         &mut self,
         block: &Value,
+        structured: Option<&Value>,
         events: &mut Vec<AiEvent>,
     ) -> Result<(), StreamDecodeError> {
         let item =
@@ -535,13 +542,9 @@ impl ClaudeEventDecoder {
         }
         if let Some(pending_search) = self.pending_web_searches.remove(tool_use_id) {
             if status == ToolStatus::Succeeded
-                && let Some(value) = item.get("content")
+                && let Some(output) = structured
             {
-                crate::search_evidence::extract(
-                    value,
-                    &pending_search.query,
-                    &mut self.observations,
-                );
+                self.observations = crate::search_evidence::extract(output, &pending_search.query);
             }
             let action = match status {
                 ToolStatus::Succeeded | ToolStatus::Running => untrusted("completed")?,
