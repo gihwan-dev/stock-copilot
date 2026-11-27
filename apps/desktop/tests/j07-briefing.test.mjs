@@ -27,10 +27,13 @@ test("J-07 briefing card and past briefing screen show loading, empty, error and
     };
     window.cleanup = cleanup;
     window.clearMocks = clearMocks;
+    window.waitFor = waitFor;
     window.click = (element) => fireEvent.click(element);
+    window.opened = [];
     window.mount = (briefings, wire, initialPath) => {
       mockCommands({
         appVersion: () => responses.appVersion,
+        openExternal: ({request}) => { window.opened.push(request.url); return {status:"opened"}; },
         getBriefings: () => wire ?? responses.getBriefings,
       });
       return render(
@@ -116,6 +119,40 @@ test("J-07 briefing card and past briefing screen show loading, empty, error and
       noPast.queryByRole("button", { name: "지난 브리핑 보기" }),
       null,
     );
+    w.cleanup();
+
+    const lead = "근거 [1] 원문 없는 출처 [2] ";
+    const citationCase = w.mount(w.ipc, {
+      latest: {
+        ...w.recorded.latest,
+        body: lead.padEnd(177, "가") + "[123] 뒷부분",
+      },
+      past: [],
+    });
+    for (const screen of ["summary", "full"]) {
+      if (screen === "full")
+        await citationCase.findByText("원문 없음", { exact: true });
+      const link = await citationCase.findByRole("link", { name: "[1]" });
+      assert.equal(citationCase.queryByRole("link", { name: "[2]" }), null);
+      const rendered = citationCase.container.textContent;
+      assert.ok(rendered.includes("[2]"));
+      if (screen === "summary") {
+        assert.ok(rendered.includes("가…"));
+        assert.equal(rendered.includes("[1…"), false);
+      } else {
+        assert.ok(rendered.includes("[123] 뒷부분"));
+      }
+      w.click(link);
+      const count = screen === "summary" ? 1 : 2;
+      await w.waitFor(() =>
+        assert.deepEqual(
+          Array.from(w.opened),
+          Array(count).fill("https://example.com/a"),
+        ),
+      );
+      if (screen === "summary")
+        w.click(citationCase.getByRole("button", { name: "브리핑 보기" }));
+    }
     w.cleanup();
 
     const historyEmpty = w.mount(

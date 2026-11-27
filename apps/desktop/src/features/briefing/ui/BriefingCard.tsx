@@ -1,17 +1,16 @@
 import type { ReactElement } from "react";
 import {
   Card,
-  DataText,
   EmptyState,
   Page,
   Skeleton,
   Stack,
   Text,
 } from "../../../shared/ds";
-import { parseFreeText, type FreeText } from "../../../shared/lib";
 import type { BriefingSummary, ScreenSources } from "../../../shared/ipc";
 import { briefingText } from "../messages";
 import { useBriefings, useOpenSource } from "../model/briefings";
+import { Body } from "./BriefingReader";
 import { BriefingView, type BriefingLayout } from "./BriefingView";
 
 type Load = ScreenSources["briefings"];
@@ -46,17 +45,10 @@ const Empty = (props: { readonly layout: BriefingLayout }): ReactElement => (
   </Card>
 );
 
-const excerpt = (body: FreeText): FreeText => {
-  if (body.length <= 180) return body;
-  const shortened = parseFreeText(
-    `${Array.from(body).slice(0, 179).join("").trimEnd()}…`,
-  );
-  return shortened.kind === "ok" ? shortened.value : body;
-};
-
 const Summary = (props: {
   readonly latest: BriefingSummary;
   readonly layout: BriefingLayout;
+  readonly openSource: ReturnType<typeof useOpenSource>;
   readonly open: () => void;
 }): ReactElement => (
   <Card
@@ -68,7 +60,12 @@ const Summary = (props: {
     }}
   >
     {props.latest.outcome.kind === "completed" ? (
-      <DataText value={excerpt(props.latest.outcome.body)} />
+      <Body
+        briefing={props.latest}
+        onOpenSource={props.openSource}
+        scale="body"
+        presentation="excerpt"
+      />
     ) : (
       <Text>{briefingText(props.latest.outcome.reason, "ko")}</Text>
     )}
@@ -139,7 +136,12 @@ export const BriefingCard = (props: {
       if (latest === undefined) return <Empty layout={layout} />;
       if (props.presentation === "summary")
         return (
-          <Summary latest={latest} layout={layout} open={props.onOpenHistory} />
+          <Summary
+            latest={latest}
+            layout={layout}
+            openSource={openSource}
+            open={props.onOpenHistory}
+          />
         );
       return (
         <SessionCards

@@ -9,30 +9,54 @@ import {
 } from "../../../shared/ds";
 import { briefingCitations } from "../model/citations";
 import type { BriefingSummary } from "../../../shared/ipc";
-import type { ExternalUrl } from "../../../shared/lib";
+import {
+  parseFreeText,
+  type FreeText,
+  type ExternalUrl,
+} from "../../../shared/lib";
 import { briefingText } from "../messages";
 import { linkVerdict } from "../model/briefings";
 import { Sources } from "./BriefingSources";
 
 type Scale = "body" | "reading";
 
+const excerpt = (body: FreeText): FreeText => {
+  const characters = Array.from(body);
+  if (characters.length <= 180) return body;
+  const head = characters.slice(0, 179).join("");
+  const complete = /^\d*\]/u.test(characters.slice(179).join(""))
+    ? head.replace(/\[\d*$/u, "")
+    : head;
+  const shortened = parseFreeText(`${complete.trimEnd()}…`);
+  return shortened.kind === "ok" ? shortened.value : body;
+};
+
 export const Body = (props: {
   readonly briefing: BriefingSummary;
   readonly onOpenSource: (url: ExternalUrl) => void;
   readonly scale: Scale;
+  readonly presentation?: "excerpt";
 }): ReactElement => {
   const outcome = props.briefing.outcome;
   switch (outcome.kind) {
-    case "completed":
+    case "completed": {
+      const markdown = (
+        <Markdown
+          content={
+            props.presentation === "excerpt"
+              ? excerpt(outcome.body)
+              : outcome.body
+          }
+          citations={briefingCitations(outcome.sources)}
+          linkAllowed={(url) => linkVerdict(props.briefing, url)}
+          onOpenLink={props.onOpenSource}
+          scale={props.scale}
+        />
+      );
+      if (props.presentation === "excerpt") return markdown;
       return (
         <Stack gap="space-3">
-          <Markdown
-            content={outcome.body}
-            citations={briefingCitations(outcome.sources)}
-            linkAllowed={(url) => linkVerdict(props.briefing, url)}
-            onOpenLink={props.onOpenSource}
-            scale={props.scale}
-          />
+          {markdown}
           <Sources
             sources={outcome.sources}
             onOpenSource={props.onOpenSource}
@@ -42,6 +66,7 @@ export const Body = (props: {
           </Text>
         </Stack>
       );
+    }
     case "failed":
       return (
         <Stack gap="space-1">
