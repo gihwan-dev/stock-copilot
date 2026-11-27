@@ -32,6 +32,14 @@ export const commands = {
     typedError<GetChatHistoryResponse_Serialize, IpcError>(
       __TAURI_INVOKE("get_chat_history", { request }),
     ),
+  listChatSessions: () =>
+    typedError<ChatSessionItemDto_Serialize[], IpcError>(
+      __TAURI_INVOKE("list_chat_sessions"),
+    ),
+  createChatSession: (request: GetChatHistoryRequest) =>
+    typedError<ChatSessionItemDto_Serialize, IpcError>(
+      __TAURI_INVOKE("create_chat_session", { request }),
+    ),
   resubscribeChatTurn: (
     request: ResubscribeChatTurnRequest,
     onChunk: Channel<ChatChunkEvent_Deserialize>,
@@ -635,6 +643,19 @@ export type ChatScreenContextDto_Serialize = {
   symbol: string | null;
   market: ChatMarketDto | null;
   horizon: ChatHorizonDto | null;
+};
+
+export type ChatSessionItemDto =
+  ChatSessionItemDto_Serialize | ChatSessionItemDto_Deserialize;
+
+export type ChatSessionItemDto_Deserialize = {
+  session_id: string;
+  title?: string | null;
+};
+
+export type ChatSessionItemDto_Serialize = {
+  session_id: string;
+  title: string | null;
 };
 
 export type ChatSourceDto = ChatSourceDto_Serialize | ChatSourceDto_Deserialize;

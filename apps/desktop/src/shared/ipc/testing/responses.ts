@@ -5,6 +5,7 @@ export const responses = {
   cancelChatTurn: { outcome: "NotRunning", turn_id: "turn-1" },
   checkTossConnection: { state: "connected" },
   copyText: { status: "copied" },
+  createChatSession: { session_id: "session-new", title: null },
   deleteAllData: { status: "deleted" },
   exportData: { status: "exported" },
   getAccountSelection: {
@@ -497,6 +498,10 @@ export const responses = {
     { kind: "retryable" },
     { kind: "bug" },
     { kind: "no-data" },
+  ],
+  listChatSessions: [
+    { session_id: "main-chat", title: "삼성전자 현황 알려 줘" },
+    { session_id: "session-new", title: null },
   ],
   openExternal: { status: "opened" },
   removeWatchlist: { outcome: "applied", reason: null },

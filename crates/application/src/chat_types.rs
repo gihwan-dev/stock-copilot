@@ -549,6 +549,7 @@ pub struct ChatSessionSummary {
     created_at: Timestamp,
     updated_at: Timestamp,
     entry_count: ChatSequence,
+    title: Option<UntrustedText>,
 }
 
 impl ChatSessionSummary {
@@ -564,6 +565,7 @@ impl ChatSessionSummary {
             created_at,
             updated_at,
             entry_count,
+            title: None,
         }
     }
 
@@ -583,6 +585,26 @@ impl ChatSessionSummary {
     }
 
     #[must_use]
+    pub fn with_first_user(mut self, message: Option<&StoredUserMessage>) -> Self {
+        self.title = message.and_then(|user| {
+            let mut words = user.text().as_untrusted_str().split_whitespace();
+            let first = words.next()?;
+            let preview: String = first
+                .chars()
+                .chain(words.flat_map(|word| std::iter::once(' ').chain(word.chars())))
+                .take(48)
+                .collect();
+            UntrustedText::try_new(preview.trim_end()).ok()
+        });
+        self
+    }
+
+    #[must_use]
+    pub const fn title(&self) -> Option<&UntrustedText> {
+        self.title.as_ref()
+    }
+
+    #[must_use]
     pub const fn entry_count(&self) -> ChatSequence {
         self.entry_count
     }
@@ -596,8 +618,15 @@ pub struct ChatSessionRecord {
 
 impl ChatSessionRecord {
     #[must_use]
-    pub const fn new(summary: ChatSessionSummary, entries: Vec<StoredChatEntry>) -> Self {
-        Self { summary, entries }
+    pub fn new(summary: ChatSessionSummary, entries: Vec<StoredChatEntry>) -> Self {
+        let first = entries.iter().find_map(|entry| match entry.content() {
+            StoredChatContent::User(user) => Some(user),
+            StoredChatContent::Assistant(_) => None,
+        });
+        Self {
+            summary: summary.with_first_user(first),
+            entries,
+        }
     }
 
     #[must_use]

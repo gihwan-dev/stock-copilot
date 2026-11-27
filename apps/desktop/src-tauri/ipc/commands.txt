@@ -4,6 +4,7 @@ backup_now
 cancel_chat_turn
 check_toss_connection
 copy_text
+create_chat_session
 delete_all_data
 export_data
 get_account_selection
@@ -29,6 +30,7 @@ get_status
 get_thesis
 get_transactions
 get_update_status
+list_chat_sessions
 open_external
 remove_watchlist
 request_order_approval

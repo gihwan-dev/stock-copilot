@@ -1,5 +1,10 @@
 import type { Count, EntityId, ExternalUrl, FreeText, Ticker } from "../lib";
 
+export interface ChatSessionItem {
+  readonly session: EntityId;
+  readonly title: FreeText | undefined;
+}
+
 export type ChatChangeTopic =
   | "change-schedule"
   | "change-profile"

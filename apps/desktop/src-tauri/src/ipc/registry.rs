@@ -20,6 +20,8 @@ fn product_commands<R: Runtime>() -> Commands<R> {
         autostart::set_auto_start::<tauri::Wry>,
         chat::send_chat_message::<tauri::Wry>,
         chat::get_chat_history::<tauri::Wry>,
+        chat::list_chat_sessions::<tauri::Wry>,
+        chat::create_chat_session::<tauri::Wry>,
         chat::resubscribe_chat_turn::<tauri::Wry>,
         chat::cancel_chat_turn::<tauri::Wry>,
         open_external::open_external::<tauri::Wry>,

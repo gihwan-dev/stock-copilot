@@ -2,7 +2,7 @@ pub(crate) const CREATE: &str = "CREATE TABLE chat_sessions (\n    session_id TE
 pub(crate) const SESSION: &str =
     "SELECT created_payload, updated_payload, entry_count FROM chat_sessions WHERE session_id = ?1";
 pub(crate) const INSERT_SESSION: &str = "INSERT INTO chat_sessions(session_id, created_payload, updated_payload, entry_count) VALUES (?1, ?2, ?2, 0)";
-pub(crate) const SESSIONS: &str = "SELECT session_id, created_payload, updated_payload, entry_count FROM chat_sessions ORDER BY session_id";
+pub(crate) const SESSIONS: &str = "SELECT s.session_id, s.created_payload, s.updated_payload, s.entry_count, (SELECT e.entry_payload FROM chat_entries AS e WHERE e.session_id = s.session_id AND e.user_message_id IS NOT NULL ORDER BY e.position LIMIT 1) FROM chat_sessions AS s ORDER BY s.session_id";
 pub(crate) const TOUCH_SESSION: &str = "UPDATE chat_sessions SET updated_payload = ?2, entry_count = ?3 WHERE session_id = ?1 AND entry_count = ?4";
 pub(crate) const ENTRIES: &str =
     "SELECT position, entry_payload FROM chat_entries WHERE session_id = ?1 ORDER BY position";

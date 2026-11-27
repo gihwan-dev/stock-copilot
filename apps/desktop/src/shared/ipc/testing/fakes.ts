@@ -183,3 +183,17 @@ export const answerChatTurnStreaming = (
     },
   });
 };
+
+export const answerChatSessionCommands = (): void => {
+  mockCommands({
+    listChatSessions: () => [...responses.listChatSessions],
+    createChatSession: ({ request }) => ({
+      session_id: request.session_id,
+      title: null,
+    }),
+  });
+};
+
+export const returnDifferentChatSession = (): void => {
+  mockCommands({ createChatSession: () => responses.createChatSession });
+};

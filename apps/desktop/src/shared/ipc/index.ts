@@ -101,6 +101,9 @@ export type { ChatListener, ChatTurnHandle } from "./call";
 export {
   cancelChatTurn,
   chatHistory,
+  chatSessions,
+  createChatSession,
+  newChatSessionId,
   mainChatSession,
   newChatTurn,
   resubscribeChatTurn,
@@ -114,6 +117,7 @@ export type {
   ChatFailureReason,
   ChatHistory,
   ChatHistoryEntry,
+  ChatSessionItem,
   ChatHorizon,
   ChatMarket,
   ChatNumberCheck,

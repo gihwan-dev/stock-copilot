@@ -136,21 +136,26 @@ fn append(
 
 fn list(connection: &Connection) -> rusqlite::Result<Vec<ChatSessionSummary>> {
     let mut statement = connection.prepare(sql::SESSIONS)?;
-    let rows = statement
+    statement
         .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
-            ))
+            let session = ChatSessionId::try_new(&row.get::<_, String>(0)?).map_err(invalid)?;
+            let summary = summary(
+                &session,
+                &row.get::<_, String>(1)?,
+                &row.get::<_, String>(2)?,
+                row.get(3)?,
+            )?;
+            let first = row
+                .get::<_, Option<String>>(4)?
+                .as_deref()
+                .map(codec::decode_entry)
+                .transpose()?;
+            match first.as_ref().map(StoredChatEntry::content) {
+                Some(StoredChatContent::User(user)) => Ok(summary.with_first_user(Some(user))),
+                Some(StoredChatContent::Assistant(_)) => Err(invalid(())),
+                None => Ok(summary),
+            }
         })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    rows.iter()
-        .map(|(id, created, updated, count)| {
-            let session = ChatSessionId::try_new(id).map_err(invalid)?;
-            summary(&session, created, updated, *count)
-        })
         .collect()
 }
 
