@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import type { UiText } from "../lib";
 import type { Availability } from "./control-types";
+import { ReferenceRow, type ReferenceProps } from "./ReferenceRow";
 import { Heading } from "./Heading";
 import { IconButton } from "./IconButton";
 import { SwitchControl, type SwitchState } from "./Switch";
@@ -76,7 +77,7 @@ const End = (props: {
   }
 };
 
-export const ListRow = (props: Props): ReactElement => (
+const settingRow = (props: Props): ReactElement => (
   <div className="flex flex-col gap-space-3 px-space-4 py-space-4 border-b-hairline border-solid border-line">
     <div className="flex items-center gap-space-3">
       <div className="flex flex-col flex-1 gap-space-1 scroll-flex">
@@ -94,3 +95,24 @@ export const ListRow = (props: Props): ReactElement => (
     )}
   </div>
 );
+
+type FieldProps = {
+  readonly variant: "field";
+  readonly label: UiText;
+  readonly children: ReactElement;
+};
+export const ListRow = (
+  props:
+    Props | (ReferenceProps & { readonly variant: "reference" }) | FieldProps,
+): ReactElement => {
+  if (!("variant" in props)) return settingRow(props);
+  if (props.variant === "reference") return <ReferenceRow entry={props} />;
+  return (
+    <div className="grid grid-cols-layout items-start gap-space-2">
+      <span className="col-span-3 text-label text-ink-muted pt-space-1">
+        {props.label}
+      </span>
+      <div className="col-span-9 scroll-flex">{props.children}</div>
+    </div>
+  );
+};

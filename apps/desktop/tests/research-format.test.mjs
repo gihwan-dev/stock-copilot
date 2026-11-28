@@ -57,7 +57,7 @@ test("only long legacy reports fold, with every original citation after expansio
   assert.equal(excerpt.kind, "excerpt");
   assert.equal(excerpt.first.split("\n").length, 6);
   assert.equal(excerpt.remaining, "20");
-  assert.equal(excerpt.first + "\n" + excerpt.rest, reportMarkdown(body));
+  assert.equal(excerpt.full, reportMarkdown(body));
   const list = claims.map((line) => "- " + line).join("\n");
   assert.deepEqual(reportParts(list), { kind: "document", body: list });
 });
@@ -76,4 +76,18 @@ test("a new report keeps the conclusion, analysis and conditions in source order
   });
   const fragment = blocks.slice(1).join("\n\n");
   assert.deepEqual(reportParts(fragment), { kind: "document", body: fragment });
+});
+
+test("candidate rows accept the backend's surrounding whitespace and blank lines", () => {
+  const result = reportParts(
+    " 이유: 수주 호조 [2] \n\n 위험 원가 상승 [1]  \n확인 조건  다음 실적 [3] ",
+  );
+  assert.deepEqual(result, {
+    kind: "candidate",
+    fields: [
+      { role: "reason", body: "수주 호조 [2]" },
+      { role: "risk", body: "원가 상승 [1]" },
+      { role: "condition", body: "다음 실적 [3]" },
+    ],
+  });
 });

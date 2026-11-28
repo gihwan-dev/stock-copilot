@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from "react";
-import { Disclosure, Markdown, Stack } from "../../../shared/ds";
+import { Disclosure, ListRow, Markdown, Stack } from "../../../shared/ds";
 import type { ResearchSource } from "../../../shared/ipc";
 import {
   parseFreeText,
@@ -7,22 +7,29 @@ import {
   type ExternalUrl,
   type FreeText,
 } from "../../../shared/lib";
+import { preserveExcerptPosition } from "../../../shared/platform";
 import { researchText } from "../messages";
 import { reportParts } from "../model/report-markdown";
 
-export const ReportBody = (props: {
+type BodyProps = {
   readonly body: FreeText;
   readonly citations: readonly ResearchSource[];
   readonly onOpenLink: (url: ExternalUrl) => void;
   readonly onLocalCitation: (number: EntityId) => void;
-}): ReactElement => {
+};
+export const ReportBody = (props: BodyProps): ReactElement => {
   const [state, setState] = useState<"open" | "closed">("closed");
   const parts = reportParts(props.body);
-  const render = (body: FreeText, scale: "lead" | "body"): ReactElement => (
+  const render = (
+    body: FreeText,
+    scale: "lead" | "body",
+    appearance: "plain" | "research" = "plain",
+  ): ReactElement => (
     <Markdown
       key={body}
       content={body}
       scale={scale}
+      appearance={appearance}
       citations={props.citations}
       linkAllowed={(url) =>
         props.citations.some((source) => source.url === url) ? "allow" : "deny"
@@ -33,27 +40,40 @@ export const ReportBody = (props: {
   );
   if (parts.kind === "sections")
     return (
-      <Stack gap="space-4">
-        {render(parts.lead, "lead")}
-        {render(parts.evidence, "body")}
-        {render(parts.conditions, "body")}
+      <Stack gap="space-2">
+        {render(parts.lead, "lead", "research")}
+        {render(parts.evidence, "body", "research")}
+        {render(parts.conditions, "body", "research")}
+      </Stack>
+    );
+  if (parts.kind === "candidate")
+    return (
+      <Stack gap="space-2">
+        {parts.fields.map((field) => (
+          <ListRow
+            key={field.role}
+            variant="field"
+            label={researchText[field.role]}
+          >
+            {render(field.body, "body", "research")}
+          </ListRow>
+        ))}
       </Stack>
     );
   if (parts.kind === "document") return render(parts.body, "body");
-  const detail = parseFreeText(
-    `${parts.remaining}${state === "open" ? researchText.hideCount : researchText.showCount}`,
-  );
+  const detail = parseFreeText(`${parts.remaining}${researchText.showCount}`);
   return (
-    <Stack gap="space-1">
-      {render(parts.first, "body")}
-      <Disclosure
-        title={researchText.remaining}
-        detail={detail.kind === "ok" ? detail.value : undefined}
-        open={state}
-        onOpenChange={setState}
-      >
-        {render(parts.rest, "body")}
-      </Disclosure>
-    </Stack>
+    <Disclosure
+      title={researchText.remaining}
+      detail={detail.kind === "ok" ? detail.value : undefined}
+      closeTitle={researchText.collapse}
+      open={state}
+      onOpenChange={(next): void => {
+        preserveExcerptPosition(next, setState);
+      }}
+      preview={render(parts.first, "body")}
+    >
+      {render(parts.full, "body")}
+    </Disclosure>
   );
 };

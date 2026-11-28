@@ -1,13 +1,6 @@
 import type { ReactElement } from "react";
 import { useMutation } from "@tanstack/react-query";
-import {
-  Button,
-  DataText,
-  Disclosure,
-  Inline,
-  Stack,
-  TimestampText,
-} from "../../../shared/ds";
+import { ListRow, Disclosure, Stack } from "../../../shared/ds";
 import {
   openExternal,
   type ResearchSection,
@@ -30,33 +23,22 @@ const Source = ({
   const number = parseFreeText(
     item.label.padStart(last.label.length, "\u2007"),
   );
+  const url = item.url;
   return (
-    <Inline gap="space-2" align="center" wrap="wrap">
-      <DataText
-        value={number.kind === "ok" ? number.value : item.label}
-        variant="code"
-      />
-      <DataText value={item.title} />
-      {item.observedAt === null ? (
-        []
-      ) : (
-        <TimestampText value={item.observedAt} variant="caption" />
-      )}
-      {item.url === null ? (
-        []
-      ) : (
-        <Button
-          variant="link"
-          aria-label={researchText.open}
-          size="control-height-sm"
-          onClick={() => {
-            if (item.url !== null) link.mutate(item.url);
-          }}
-        >
-          {researchText.openExternal}
-        </Button>
-      )}
-    </Inline>
+    <ListRow
+      variant="reference"
+      number={number.kind === "ok" ? number.value : item.label}
+      sourceTitle={item.title}
+      observedAt={item.observedAt}
+      linkLabel={researchText.openExternal}
+      onPress={
+        url === null
+          ? undefined
+          : (): void => {
+              link.mutate(url);
+            }
+      }
+    />
   );
 };
 
@@ -100,10 +82,16 @@ export const Sources = (props: {
     cited.length === 0
       ? []
       : sources.filter((source) => !cited.includes(source));
+  const tally =
+    additional.length === 0
+      ? undefined
+      : parseFreeText(
+          `${researchText.cited} ${cited.length.toString()}${researchText.countUnit} / ${researchText.total} ${sources.length.toString()}${researchText.countUnit}`,
+        );
   return (
     <Disclosure
       title={researchText.sources}
-      detail={count(sources)}
+      detail={tally?.kind === "ok" ? tally.value : count(sources)}
       open={props.state}
       onOpenChange={props.change}
     >

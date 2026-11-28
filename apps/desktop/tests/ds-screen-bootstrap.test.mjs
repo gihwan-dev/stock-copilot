@@ -127,6 +127,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "useColorScheme",
         "focusResearchSection",
         "useWindowLayout",
+        "preserveExcerptPosition",
       ],
     );
     const platformFunctions = checker.getExportsOfModule(symbol);
@@ -148,6 +149,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         ["useColorScheme", ['"light" | "dark"']],
         ["focusResearchSection", ["void"]],
         ["useWindowLayout", ["WindowLayout"]],
+        ["preserveExcerptPosition", ["void"]],
       ],
     );
     assert.deepEqual(DOM_ACCESS_FILES, [

@@ -2,6 +2,7 @@ import { useState, type ReactElement } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
 import type { FreeText, UiText } from "../lib";
 import { DataText } from "./Numbers";
+import { DisclosurePreview, type PreviewProps } from "./DisclosurePreview";
 import { Icon } from "./Icon";
 type State = "open" | "closed";
 type Props = {
@@ -12,11 +13,11 @@ type Props = {
   readonly defaultOpen?: State;
   readonly onOpenChange?: (state: State) => void;
 };
-const states = {
-  open: "inline-flex transition-disclosure motion-reduce:transition-none rotate-disclosure",
-  closed: "inline-flex transition-disclosure motion-reduce:transition-none",
-} as const;
-export const Disclosure = (props: Props): ReactElement => {
+const CollapsibleDisclosure = ({
+  config: props,
+}: {
+  readonly config: Props;
+}): ReactElement => {
   const [inner, setInner] = useState<State>(props.defaultOpen ?? "closed");
   const state = props.open ?? inner;
   return (
@@ -32,11 +33,17 @@ export const Disclosure = (props: Props): ReactElement => {
       <Collapsible.Trigger
         className={
           props.detail === undefined
-            ? "flex items-center gap-space-2 w-full min-h-toolbar-height py-space-2 text-left bg-transparent text-ink text-body font-semibold cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
-            : "inline-flex items-center gap-space-2 rounded-md min-h-control-height my-space-1 px-control-pad-sm text-left bg-transparent text-ink text-body font-semibold cursor-pointer hover:bg-surface-sunken focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
+            ? "flex items-center gap-space-2 rounded-md w-full min-h-toolbar-height py-space-2 text-left bg-transparent text-ink text-body font-semibold cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
+            : "inline-flex items-center gap-space-1 rounded-md min-h-control-height my-space-2 px-space-1 text-left bg-transparent text-ink text-body font-semibold cursor-pointer hover:bg-surface-sunken focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
         }
       >
-        <span className={states[state]}>
+        <span
+          className={
+            state === "open"
+              ? "inline-flex transition-disclosure motion-reduce:transition-none rotate-disclosure"
+              : "inline-flex transition-disclosure motion-reduce:transition-none"
+          }
+        >
           <Icon name="chevron-right" />
         </span>
         <span className="status-sentence">{props.title}</span>
@@ -60,3 +67,10 @@ export const Disclosure = (props: Props): ReactElement => {
     </Collapsible.Root>
   );
 };
+
+export const Disclosure = (props: Props | PreviewProps): ReactElement =>
+  "preview" in props ? (
+    <DisclosurePreview config={props} />
+  ) : (
+    <CollapsibleDisclosure config={props} />
+  );

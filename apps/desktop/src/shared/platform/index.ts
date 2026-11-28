@@ -33,7 +33,9 @@ export const focusResearchSection = (
       source === undefined ? target : `${target}-${source}`,
     );
     section?.focus({ preventScroll: true });
-    section?.scrollIntoView({ block: "start" });
+    section?.scrollIntoView({
+      block: source === undefined ? "start" : "center",
+    });
   };
   if (reveal === undefined) {
     focus();
@@ -77,3 +79,32 @@ export const useWindowLayout = (): WindowLayout =>
     readLayout,
     (): WindowLayout => "compact",
   );
+
+export const preserveExcerptPosition = (
+  next: "open" | "closed",
+  change: (value: "open" | "closed") => void,
+): void => {
+  const trigger = document.activeElement;
+  const scroller = Array.from(
+    document.querySelectorAll("[data-scroll-viewport]"),
+  ).findLast(
+    (node) => node.contains(trigger) && node.scrollHeight > node.clientHeight,
+  );
+  if (trigger === null || scroller === undefined) {
+    change(next);
+    return;
+  }
+  const initialScroll = scroller.scrollTop;
+  const initialTop = trigger.getBoundingClientRect().top;
+  change(next);
+  requestAnimationFrame(() => {
+    scroller.scrollTo({
+      top:
+        next === "open"
+          ? initialScroll
+          : scroller.scrollTop +
+            trigger.getBoundingClientRect().top -
+            initialTop,
+    });
+  });
+};

@@ -119,7 +119,9 @@ const MarkdownPre = ({ children }: BlockContent): ReactElement =>
     </pre>
   );
 const MarkdownParagraph = ({ children }: BlockContent): ReactElement =>
-  use(MarkdownContext)?.appearance === "question" ? (
+  ["question", "research"].includes(
+    use(MarkdownContext)?.appearance ?? "plain",
+  ) ? (
     <p className="my-space-1">{children}</p>
   ) : (
     <p className="my-space-3">{children}</p>
@@ -143,6 +145,10 @@ const smallHeading = (
   Tag: "h3" | "h4" | "h5" | "h6",
 ): ((props: BlockContent) => ReactElement) =>
   function MarkdownHeading({ children }: BlockContent): ReactElement {
+    if (use(MarkdownContext)?.appearance === "research" && Tag === "h3")
+      return (
+        <h4 className="text-label text-ink-muted mb-space-1">{children}</h4>
+      );
     return <Tag className="text-title-sm my-space-3">{children}</Tag>;
   };
 const MarkdownUl = ({ children }: BlockContent): ReactElement => (

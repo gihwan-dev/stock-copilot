@@ -5,6 +5,43 @@ const blockMarkup =
   /^(?: {4}|\t| {0,3}(?:#{1,6}(?:\s|$)|[>|`~]|[-*+]\s|\d+[.)]\s|<|\[.+\]:))/u;
 const candidateLabel = /^(이유|위험|확인 조건)(?:[：:]\s*|\s+)/u;
 
+type CandidateField = {
+  readonly role: "reason" | "risk" | "condition";
+  readonly body: FreeText;
+};
+type Candidate = {
+  readonly kind: "candidate";
+  readonly fields: readonly CandidateField[];
+};
+const labels = [
+  { role: "reason", prefix: /^이유(?:[：:]|\s)/u },
+  { role: "risk", prefix: /^위험(?:[：:]|\s)/u },
+  { role: "condition", prefix: /^확인 조건(?:[：:]|\s)/u },
+] as const;
+const candidateParts = (body: FreeText): Candidate | undefined => {
+  const lines = body
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length !== labels.length) return undefined;
+  const fields = lines.flatMap((line, i) => {
+    const match = candidateLabel.exec(line);
+    const label = labels.at(i);
+    if (
+      match === null ||
+      label === undefined ||
+      !label.prefix.test(line) ||
+      !citedLine.test(line)
+    )
+      return [];
+    const body = parseFreeText(line.slice(match[0].length));
+    return body.kind === "ok" ? [{ role: label.role, body: body.value }] : [];
+  });
+  return fields.length === labels.length
+    ? { kind: "candidate", fields }
+    : undefined;
+};
+
 export const reportMarkdown = (body: FreeText): FreeText => {
   const lines = body.trimEnd().split(/\r?\n/u);
   if (
@@ -25,7 +62,7 @@ export const reportMarkdown = (body: FreeText): FreeText => {
 type Excerpt = {
   readonly kind: "excerpt";
   readonly first: FreeText;
-  readonly rest: FreeText;
+  readonly full: FreeText;
   readonly remaining: FreeText;
 };
 type Sections = {
@@ -44,13 +81,12 @@ const excerpt = (markdown: FreeText): Excerpt | undefined => {
   )
     return undefined;
   const first = parseFreeText(lines.slice(0, previewSize).join("\n"));
-  const rest = parseFreeText(lines.slice(previewSize).join("\n"));
   const remaining = parseFreeText((lines.length - previewSize).toString());
-  if (first.kind === "ok" && rest.kind === "ok" && remaining.kind === "ok")
+  if (first.kind === "ok" && remaining.kind === "ok")
     return {
       kind: "excerpt",
       first: first.value,
-      rest: rest.value,
+      full: markdown,
       remaining: remaining.value,
     };
   return undefined;
@@ -76,7 +112,11 @@ const sections = (body: FreeText): Sections | undefined => {
       }
     : undefined;
 };
-export const reportParts = (body: FreeText): Excerpt | Sections | Document => {
+export const reportParts = (
+  body: FreeText,
+): Excerpt | Sections | Candidate | Document => {
+  const candidate = candidateParts(body);
+  if (candidate !== undefined) return candidate;
   const markdown = reportMarkdown(body);
   const folded = markdown === body ? undefined : excerpt(markdown);
   return folded ?? sections(markdown) ?? { kind: "document", body: markdown };

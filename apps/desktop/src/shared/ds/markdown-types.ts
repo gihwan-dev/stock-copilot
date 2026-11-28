@@ -9,5 +9,5 @@ export type MarkdownProps = {
   readonly citations?: readonly MarkdownCitation[];
   readonly scale?: "body" | "reading" | "lead";
   readonly flavor?: "basic" | "gfm";
-  readonly appearance?: "plain" | "question" | "briefing";
+  readonly appearance?: "plain" | "question" | "briefing" | "research";
 };
