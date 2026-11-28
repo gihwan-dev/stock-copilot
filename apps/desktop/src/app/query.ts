@@ -29,6 +29,7 @@ export const createAppQueryClient = (): QueryClient =>
 const appVersionOptions = queryOptions({
   queryKey: queryKeys.appVersion,
   queryFn: appVersion,
+  staleTime: (query) => (query.state.data?.kind === "ok" ? Infinity : 0),
 });
 
 const toQueryView = <T>(

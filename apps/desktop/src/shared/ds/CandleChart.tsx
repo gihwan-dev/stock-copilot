@@ -222,15 +222,13 @@ const CandleContent = ({
       <CandleTable
         data={props.data}
         label={props.label}
-        onHighlight={(p): void => {
-          setHovered(p?.id);
-        }}
+        onHighlight={setHovered}
       />
     </>
   );
 };
 export const CandleChart = (props: CandleChartProps): ReactElement => {
-  const g = candleCoordinates(props.data);
+  const g = useMemo(() => candleCoordinates(props.data), [props.data]);
   const emptyTitle =
     g.kind === "empty" ? props.empty : text("ds.chartInvalid", "ko");
   return (

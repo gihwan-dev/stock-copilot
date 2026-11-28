@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { memo, useState, type ReactElement } from "react";
 import { Disclosure, ListRow, Markdown, Stack } from "../../../shared/ds";
 import type { ResearchSource } from "../../../shared/ipc";
 import {
@@ -17,7 +17,7 @@ type BodyProps = {
   readonly onOpenLink: (url: ExternalUrl) => void;
   readonly onLocalCitation: (number: EntityId) => void;
 };
-export const ReportBody = (props: BodyProps): ReactElement => {
+const Body = (props: BodyProps): ReactElement => {
   const [state, setState] = useState<"open" | "closed">("closed");
   const parts = reportParts(props.body);
   const render = (
@@ -77,3 +77,5 @@ export const ReportBody = (props: BodyProps): ReactElement => {
     </Disclosure>
   );
 };
+
+export const ReportBody: typeof Body = memo(Body);

@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { memo, useState, type ReactElement } from "react";
 import {
   Badge,
   Button,
@@ -161,9 +161,7 @@ const Reply = (props: {
   </Stack>
 );
 
-export const ChatExchangeView = (props: {
-  readonly exchange: ChatExchange;
-}): ReactElement => {
+const Exchange = (props: { readonly exchange: ChatExchange }): ReactElement => {
   const openLink = useOpenLink();
   return (
     <Stack gap="space-3">
@@ -179,3 +177,5 @@ export const ChatExchangeView = (props: {
     </Stack>
   );
 };
+
+export const ChatExchangeView: typeof Exchange = memo(Exchange);

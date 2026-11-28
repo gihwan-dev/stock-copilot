@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { memo, useState, type ReactElement } from "react";
 import {
   Badge,
   Button,
@@ -144,7 +144,7 @@ const ListBody = (props: {
   }
 };
 
-export const InstrumentList = (props: {
+const List = (props: {
   readonly sources: ListSources;
   readonly onSelect: (id: EntityId) => void;
 }): ReactElement => (
@@ -153,3 +153,5 @@ export const InstrumentList = (props: {
     <AddForm sources={props.sources} />
   </Stack>
 );
+
+export const InstrumentList: typeof List = memo(List);

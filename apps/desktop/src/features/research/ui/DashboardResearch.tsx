@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState, type ReactElement } from "react";
+import { useCallback, useState, type ReactElement } from "react";
 import {
   Button,
   Card,
@@ -46,6 +46,14 @@ const Report = ({ report, topic, open }: ReportProps): ReactElement => {
   const link = useMutation({ mutationFn: openExternal });
   const citations = report.sources;
   const [sourceList, setSourceList] = useState<ListState>("closed");
+  const reveal = useCallback(
+    (number: EntityId): void => {
+      focusResearchSection(topic, number, () => {
+        setSourceList("open");
+      });
+    },
+    [topic],
+  );
   return (
     <Stack gap="space-2">
       {report.status === "ready" ? (
@@ -75,11 +83,7 @@ const Report = ({ report, topic, open }: ReportProps): ReactElement => {
           <ReportBody
             body={entry.body}
             citations={citations}
-            onLocalCitation={(number) => {
-              focusResearchSection(topic, number, () => {
-                setSourceList("open");
-              });
-            }}
+            onLocalCitation={reveal}
             onOpenLink={link.mutate}
           />
         </Stack>

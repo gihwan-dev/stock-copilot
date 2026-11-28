@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useEffectEvent,
   useMemo,
   useSyncExternalStore,
   type RefObject,
@@ -199,19 +200,26 @@ export const useCandleCanvas = (
   canvasRef: Readonly<RefObject<HTMLCanvasElement | null>>,
   scene: CandleCanvasScene,
 ): void => {
+  const draw = useEffectEvent((): void => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    const box = canvas.getBoundingClientRect();
+    const width = Math.round(box.width * devicePixelRatio);
+    const height = Math.round(box.height * devicePixelRatio);
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const resolved =
+      scene.palette ??
+      readPaletteFromElement(canvas.closest("[data-chart-theme]") ?? canvas);
+    if (resolved !== undefined) paintScene(canvas, scene, resolved);
+  });
+  useEffect(() => {
+    draw();
+  }, [scene, canvasRef]);
   useEffect((): (() => void) | undefined => {
     const canvas = canvasRef.current;
     if (canvas === null) return undefined;
     const scope = canvas.closest("[data-chart-theme]") ?? canvas;
-    const draw = (): void => {
-      const box = canvas.getBoundingClientRect();
-      const width = Math.round(box.width * devicePixelRatio);
-      const height = Math.round(box.height * devicePixelRatio);
-      if (canvas.width !== width) canvas.width = width;
-      if (canvas.height !== height) canvas.height = height;
-      const resolved = scene.palette ?? readPaletteFromElement(scope);
-      if (resolved !== undefined) paintScene(canvas, scene, resolved);
-    };
     const densityChanges = new AbortController();
     const watchDensity = (): void => {
       if (typeof matchMedia !== "function") return;
@@ -227,7 +235,6 @@ export const useCandleCanvas = (
       );
     };
     watchDensity();
-    draw();
     const unsubscribe = subscribeThemeChanges(scope, draw);
     const resize =
       typeof ResizeObserver === "function"
@@ -239,5 +246,5 @@ export const useCandleCanvas = (
       unsubscribe();
       resize?.disconnect();
     };
-  }, [canvasRef, scene]);
+  }, [canvasRef]);
 };

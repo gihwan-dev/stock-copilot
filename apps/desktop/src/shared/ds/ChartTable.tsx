@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import type {
   CandlePoint,
   ChartProps,
@@ -8,7 +8,7 @@ import type {
 } from "./chart-types";
 import { chartLabelText, ChartNumber } from "./Numbers";
 import { ScrollArea } from "./ScrollArea";
-import { text, type UiText } from "../lib";
+import { text, type EntityId, type UiText } from "../lib";
 type Props = ChartProps & {
   readonly onHighlight: (point: ChartPoint | undefined) => void;
   readonly layout: "trend" | "donut" | "treemap";
@@ -117,10 +117,10 @@ export const ChartStatusBody = (props: {
   </>
 );
 
-export const CandleTable = (props: {
+const CandleRows = (props: {
   readonly data: readonly CandlePoint[];
   readonly label: UiText;
-  readonly onHighlight: (point: CandlePoint | undefined) => void;
+  readonly onHighlight: (id: EntityId | undefined) => void;
 }): ReactElement => (
   <div className="sr-only">
     <table className="sr-only">
@@ -139,7 +139,7 @@ export const CandleTable = (props: {
           <tr
             key={point.id}
             onPointerEnter={(): void => {
-              props.onHighlight(point);
+              props.onHighlight(point.id);
             }}
             onPointerLeave={(): void => {
               props.onHighlight(undefined);
@@ -210,3 +210,5 @@ export const CandleStatusBody = (props: {
     )}
   </>
 );
+
+export const CandleTable: typeof CandleRows = memo(CandleRows);

@@ -45,16 +45,7 @@ const Chart = (props: {
 }): ReactElement => {
   const scheme = useColorScheme();
   const palette = useCanvasChartTheme(scheme);
-  const points: readonly CandlePoint[] = props.view.candles.map(
-    (candle): CandlePoint => ({
-      id: candle.id,
-      label: candle.label,
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
-    }),
-  );
+  const points: readonly CandlePoint[] = props.view.candles;
   return (
     <Card title={instrumentsText("chartTitle", "ko")}>
       {palette === undefined ? (
