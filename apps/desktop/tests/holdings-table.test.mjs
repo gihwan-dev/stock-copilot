@@ -33,8 +33,12 @@ test("보유 표에서 종목명과 코드를 함께 읽고 평가손익과 수�
       Array.from(view.getAllByRole("columnheader"), (node) => node.textContent),
       ["종목", "수량", "평가금액", "평가손익"],
     );
-    const identity = view.getByRole("rowheader");
-    const instrument = view.getByRole("button", { name: "예시 바이오" });
+    const instrument = view.getByRole("button", {
+      name: "예시 바이오",
+      description: "거래정지",
+    });
+    const identity = instrument.closest('th[scope="row"]');
+    assert.ok(identity);
     assert.ok(identity.contains(instrument));
     assert.ok(identity.contains(view.getByText("EXBI")));
     assert.ok(identity.contains(view.getByText("거래정지")));

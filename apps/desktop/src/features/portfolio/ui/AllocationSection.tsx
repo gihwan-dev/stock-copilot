@@ -90,6 +90,7 @@ const WeightTable = (props: {
 }): ReactElement =>
   props.rows.length === 0 ? (
     <TableRoot
+      frame="embedded"
       dense="dense"
       caption={portfolioText(props.titleKey, "ko")}
       empty={portfolioText(
@@ -98,7 +99,11 @@ const WeightTable = (props: {
       )}
     />
   ) : (
-    <TableRoot dense="dense" caption={portfolioText(props.titleKey, "ko")}>
+    <TableRoot
+      frame="embedded"
+      dense="dense"
+      caption={portfolioText(props.titleKey, "ko")}
+    >
       <TableHead>
         <TableRow>
           <TableHeader>

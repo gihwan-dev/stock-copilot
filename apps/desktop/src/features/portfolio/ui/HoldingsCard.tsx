@@ -1,9 +1,7 @@
 import type { ReactElement } from "react";
 import {
-  Badge,
   Card,
   DataText,
-  Inline,
   Money,
   PriceChange,
   Quantity,
@@ -11,7 +9,7 @@ import {
   Table,
 } from "../../../shared/ds";
 import type { HoldingRow } from "../../../shared/ipc";
-import type { EntityId } from "../../../shared/lib";
+import type { EntityId, UiText } from "../../../shared/lib";
 import { portfolioText } from "../messages";
 
 const TableRoot = Table.Root;
@@ -32,27 +30,23 @@ const Row = (props: {
         <DataText
           value={props.row.name}
           variant="emphasis"
+          alert={
+            props.row.trading === "suspended"
+              ? portfolioText("tradingSuspended", "ko")
+              : undefined
+          }
           onPress={(): void => {
             props.open(props.row.id);
           }}
         />
-        <Inline align="center" gap="space-2" wrap="wrap">
-          <DataText value={props.row.ticker} variant="code" />
-          {props.row.trading === "suspended" ? (
-            <Badge tone="alert">
-              {portfolioText("tradingSuspended", "ko")}
-            </Badge>
-          ) : (
-            []
-          )}
-        </Inline>
+        <DataText value={props.row.ticker} variant="code" />
       </Stack>
     </TableRowHeader>
     <TableCell align="end">
       <Quantity value={props.row.quantity} />
     </TableCell>
     <TableCell align="end">
-      <Money value={props.row.value} />
+      <Money value={props.row.value} emphasis="value" />
     </TableCell>
     <TableCell align="end">
       <PriceChange
@@ -65,6 +59,61 @@ const Row = (props: {
   </TableRow>
 );
 
+type PositionsProps = {
+  readonly holdings: readonly HoldingRow[];
+  readonly open: (symbol: EntityId) => void;
+};
+const GroupRows = (
+  props: PositionsProps & { readonly label?: UiText },
+): ReactElement => (
+  <TableBody group={props.label}>
+    {props.holdings.map((row): ReactElement => (
+      <Row key={row.id} open={props.open} row={row} />
+    ))}
+  </TableBody>
+);
+const PositionTables = (props: PositionsProps): ReactElement => {
+  const won = props.holdings.filter((row) => row.value.currency === "KRW");
+  const dollars = props.holdings.filter((row) => row.value.currency === "USD");
+  return (
+    <TableRoot frame="positions">
+      <TableHead>
+        <TableRow>
+          <TableHeader>{portfolioText("nameColumn", "ko")}</TableHeader>
+          <TableHeader align="end">
+            {portfolioText("quantityColumn", "ko")}
+          </TableHeader>
+          <TableHeader align="end">
+            {portfolioText("valueColumn", "ko")}
+          </TableHeader>
+          <TableHeader align="end">
+            {portfolioText("profitColumn", "ko")}
+          </TableHeader>
+        </TableRow>
+      </TableHead>
+
+      {dollars.length === 0 ? (
+        <GroupRows holdings={props.holdings} open={props.open} />
+      ) : (
+        <>
+          {won.length === 0 ? null : (
+            <GroupRows
+              holdings={won}
+              open={props.open}
+              label={portfolioText("wonPositions", "ko")}
+            />
+          )}
+          <GroupRows
+            key="USD"
+            holdings={dollars}
+            open={props.open}
+            label={portfolioText("dollarPositions", "ko")}
+          />
+        </>
+      )}
+    </TableRoot>
+  );
+};
 export const HoldingsCard = (props: {
   readonly holdings: readonly HoldingRow[];
   readonly onOpenInstrument: (symbol: EntityId) => void;
@@ -79,29 +128,12 @@ export const HoldingsCard = (props: {
     }}
   >
     {props.holdings.length === 0 ? (
-      <TableRoot empty={portfolioText("holdingsEmpty", "ko")} />
+      <TableRoot
+        frame="embedded"
+        empty={portfolioText("holdingsEmpty", "ko")}
+      />
     ) : (
-      <TableRoot frame="embedded">
-        <TableHead>
-          <TableRow>
-            <TableHeader>{portfolioText("nameColumn", "ko")}</TableHeader>
-            <TableHeader align="end">
-              {portfolioText("quantityColumn", "ko")}
-            </TableHeader>
-            <TableHeader align="end">
-              {portfolioText("valueColumn", "ko")}
-            </TableHeader>
-            <TableHeader align="end">
-              {portfolioText("profitColumn", "ko")}
-            </TableHeader>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {props.holdings.map((row): ReactElement => (
-            <Row key={row.id} open={props.onOpenInstrument} row={row} />
-          ))}
-        </TableBody>
-      </TableRoot>
+      <PositionTables holdings={props.holdings} open={props.onOpenInstrument} />
     )}
   </Card>
 );

@@ -4,6 +4,7 @@ type Tone = "neutral" | "primary" | "alert";
 type Props = {
   readonly children: UiText;
   readonly tone?: Tone;
+  readonly outline?: "visible";
   readonly mono?: "normal" | "mono";
 };
 const styles = {
@@ -21,6 +22,15 @@ const fonts = {
 export const Badge = (props: Props): ReactElement => {
   const tone = props.tone ?? "neutral";
   const mono = props.mono ?? "normal";
+  if (props.outline === "visible" && tone === "alert")
+    return (
+      <span
+        data-badge=""
+        className="inline-flex items-center rounded-sm px-space-2 border-hairline border-solid border-alert bg-alert-soft text-alert"
+      >
+        <span className={fonts[mono]}>{props.children}</span>
+      </span>
+    );
   return (
     <span data-badge="" className={styles[tone]}>
       <span className={fonts[mono]}>{props.children}</span>

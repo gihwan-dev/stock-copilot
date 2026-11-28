@@ -5,10 +5,10 @@ import { useScrollOwner } from "./scroll-owner";
 type Children = { readonly children?: ReactElement | readonly ReactElement[] };
 type Density = "normal" | "dense";
 const DensityContext = createContext<Density>("normal");
-type Frame = "standalone" | "embedded";
+type Frame = "standalone" | "embedded" | "positions";
 const FrameContext = createContext<Frame>("standalone");
 type RootProps = Children & {
-  readonly caption?: UiText;
+  readonly caption?: UiText | undefined;
   readonly empty?: UiText;
   readonly dense?: Density;
   readonly frame?: Frame;
@@ -40,7 +40,7 @@ const Root = (props: RootProps): ReactElement => (
     <FrameContext value={props.frame ?? "standalone"}>
       <div
         className={
-          props.frame === "embedded"
+          props.frame === "embedded" || props.frame === "positions"
             ? "bg-surface max-w-full scroll-flex"
             : "bg-surface border-hairline border-solid border-line rounded-lg max-w-full scroll-flex"
         }
@@ -61,7 +61,24 @@ const Root = (props: RootProps): ReactElement => (
   </DensityContext>
 );
 const head = (props: Children): ReactElement => <thead>{props.children}</thead>;
-const body = (props: Children): ReactElement => <tbody>{props.children}</tbody>;
+const body = (
+  props: Children & { readonly group?: UiText | undefined },
+): ReactElement => (
+  <tbody>
+    {props.group === undefined ? null : (
+      <tr>
+        <th
+          scope="rowgroup"
+          colSpan={4}
+          className="text-left px-space-3 pt-space-3 pb-space-1 text-label text-ink-muted bg-surface-sunken"
+        >
+          {props.group}
+        </th>
+      </tr>
+    )}
+    {props.children}
+  </tbody>
+);
 const row = (props: Children): ReactElement => (
   <tr className="hover:bg-surface-sunken">{props.children}</tr>
 );
@@ -76,7 +93,7 @@ const headerStyles = {
 } as const;
 const embeddedHeaderStyles = {
   start: "text-left px-space-3 py-space-2 text-ink-muted text-label",
-  end: "text-right px-space-3 py-space-2 text-ink-muted text-label",
+  end: "whitespace-nowrap text-right px-space-3 py-space-2 text-ink-muted text-label",
 } as const;
 const stickyHeaderStyles = {
   start:
@@ -107,7 +124,16 @@ const ColumnHeader = (props: CellProps): ReactElement => {
   const owner = useScrollOwner();
   const frame = use(FrameContext);
   const align = props.align ?? "start";
-  if (frame === "embedded" && owner === "own")
+  if (frame === "positions" && align === "start")
+    return (
+      <th
+        scope="col"
+        className="w-chat-width text-left px-space-3 py-space-2 text-ink-muted text-label"
+      >
+        {props.children}
+      </th>
+    );
+  if (frame !== "standalone" && owner === "own")
     return (
       <th scope="col" className={embeddedHeaderStyles[align]}>
         {props.children}
@@ -127,6 +153,12 @@ const ColumnHeader = (props: CellProps): ReactElement => {
 const Cell = (props: CellProps): ReactElement => {
   const dense = use(DensityContext);
   const align = props.align ?? "start";
+  if (use(FrameContext) === "positions")
+    return (
+      <td className="h-row-height px-space-3 py-space-1 border-t-hairline border-line-strong text-right text-body-sm text-ink-muted">
+        <div className="h-full flex flex-col items-end">{props.children}</div>
+      </td>
+    );
   return (
     <td className={dense === "dense" ? denseCells[align] : normalCells[align]}>
       {props.children}
@@ -136,6 +168,15 @@ const Cell = (props: CellProps): ReactElement => {
 const RowHeader = (props: CellProps): ReactElement => {
   const dense = use(DensityContext);
   const align = props.align ?? "start";
+  if (use(FrameContext) === "positions")
+    return (
+      <th
+        scope="row"
+        className="h-row-height px-space-3 py-space-1 border-t-hairline border-line-strong text-left font-regular"
+      >
+        <div className="h-full flex flex-col items-start">{props.children}</div>
+      </th>
+    );
   return (
     <th
       scope="row"

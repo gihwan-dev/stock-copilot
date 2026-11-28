@@ -1,16 +1,16 @@
 import type { ReactElement } from "react";
+import { DataAction } from "./DataAction";
 import { text } from "../lib";
-import { Icon } from "./Icon";
 import type {
   ChartDecimal,
   EntityId,
+  Ticker,
+  Timestamp,
   FreeText,
   Money as MoneyValue,
   PercentDisplay,
   Price,
   Quantity as QuantityValue,
-  Ticker,
-  Timestamp,
   UiText,
 } from "../lib";
 import {
@@ -61,7 +61,7 @@ const Directed = (props: {
     </span>
   </span>
 );
-type NumberEmphasis = "inherit" | "display" | "large";
+type NumberEmphasis = "inherit" | "display" | "large" | "value";
 const Sized = (props: {
   readonly emphasis: NumberEmphasis | undefined;
   readonly children: ReactElement;
@@ -69,6 +69,8 @@ const Sized = (props: {
   switch (props.emphasis) {
     case "display":
       return <span className="text-num-display">{props.children}</span>;
+    case "value":
+      return <span className="text-title-sm text-ink">{props.children}</span>;
     case "large":
       return <span className="text-num-lg">{props.children}</span>;
     case "inherit":
@@ -150,25 +152,19 @@ const dataClasses = {
 } as const;
 export const DataText = (props: {
   readonly onPress?: () => void;
+  readonly alert?: UiText | undefined;
   readonly value: FreeText | Ticker | EntityId | ChartDecimal;
   readonly variant?: "body" | "body-sm" | "caption" | "code" | "emphasis";
 }): ReactElement => {
   const variant = props.variant ?? "body";
-  if (props.onPress !== undefined)
-    return (
-      <button
-        type="button"
-        onClick={props.onPress}
-        className="inline-flex items-center gap-space-1 max-w-full text-left text-ink-muted rounded-sm hover:text-primary focus-visible:outline-solid focus-visible:outline-focus"
-      >
-        <span className={dataClasses[variant]}>
-          {formatDataValue(props.value)}
-        </span>
-        <Icon name="chevron-right" size="icon-sm" />
-      </button>
-    );
-  return (
+  const label = (
     <span className={dataClasses[variant]}>{formatDataValue(props.value)}</span>
+  );
+  if (props.onPress === undefined) return label;
+  return (
+    <DataAction onPress={props.onPress} alert={props.alert}>
+      {label}
+    </DataAction>
   );
 };
 export const TimestampText = (props: {
@@ -182,6 +178,7 @@ export const TimestampText = (props: {
     </span>
   );
 };
+
 export const Probability = (props: {
   readonly value: PercentDisplay;
 }): ReactElement => (
@@ -225,9 +222,11 @@ export const PriceChange = (props: {
       <span
         role="group"
         aria-label={text(names[props.direction], "ko")}
-        className="inline-flex flex-col items-end py-space-2 tabular-nums whitespace-nowrap"
+        className="inline-flex flex-col items-end gap-space-1 tabular-nums whitespace-nowrap"
       >
-        <span className="text-num-md text-ink">{amount.text}</span>
+        <span className={colors[props.direction]}>
+          <span className="text-body font-medium">{amount.text}</span>
+        </span>
         <span className={colors[props.direction]}>
           <span className="text-num-sm">{rate.text}</span>
         </span>
