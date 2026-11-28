@@ -485,3 +485,5 @@ fn collected_url_catalog_knows_only_urls_the_app_collected() {
 }
 
 mod estimate_citations;
+
+mod candidate_news;

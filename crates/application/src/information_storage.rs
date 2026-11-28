@@ -42,6 +42,15 @@ pub trait DisclosureRepository: Send + Sync {
         instrument: &InstrumentId,
     ) -> impl Future<Output = Result<Vec<Disclosure>, SystemPortError>> + Send;
 }
+pub trait CandidateNewsRepository: Send + Sync {
+    fn retain_candidate_news(
+        &self,
+        item: &domain::NewsItem,
+        instrument: &InstrumentId,
+        published_at: domain::Timestamp,
+        collected_at: domain::Timestamp,
+    ) -> impl Future<Output = Result<crate::ObservedCollectedItem, SystemPortError>> + Send;
+}
 pub trait InformationLinks: Send + Sync {
     fn set_instruments(
         &self,

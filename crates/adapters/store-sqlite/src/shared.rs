@@ -1077,6 +1077,26 @@ impl application::JobScheduleStore for SqliteRepositories {
     }
 }
 
+impl application::CandidateNewsRepository for SqliteRepositories {
+    async fn retain_candidate_news(
+        &self,
+        item: &NewsItem,
+        instrument: &InstrumentId,
+        published_at: Timestamp,
+        collected_at: Timestamp,
+    ) -> Result<application::ObservedCollectedItem, SystemPortError> {
+        let guard = self.shared.read().await;
+        let database = opened(guard.as_ref(), REPOSITORY)?;
+        application::CandidateNewsRepository::retain_candidate_news(
+            &InformationStore::new(database),
+            item,
+            instrument,
+            published_at,
+            collected_at,
+        )
+        .await
+    }
+}
 impl application::InformationLinks for SqliteRepositories {
     async fn set_instruments(
         &self,

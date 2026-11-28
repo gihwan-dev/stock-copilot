@@ -9,6 +9,8 @@ pub(crate) const UPDATE_ITEM: &str =
 pub(crate) const DELETE_LINKS: &str =
     "DELETE FROM information_links WHERE category = ?1 AND source = ?2 AND external_id = ?3";
 pub(crate) const INSERT_LINK: &str = "INSERT INTO information_links(category, source, external_id, instrument) VALUES (?1, ?2, ?3, ?4)";
+pub(crate) const ADD_CONFIRMED_LINK: &str = "INSERT INTO information_links(category, source, external_id, instrument) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(category, source, external_id, instrument) DO NOTHING";
+pub(crate) const COMPLETE_NEWS_TIMES: &str = "INSERT INTO information_times(item_id, published_payload, collected_payload) VALUES (?1, ?2, ?3) ON CONFLICT(item_id) DO UPDATE SET published_payload = excluded.published_payload, collected_payload = excluded.collected_payload WHERE information_times.published_payload IS NULL";
 pub(crate) const BY_INSTRUMENT: &str = "SELECT i.id, i.category, i.source, i.external_id, i.url, i.title, i.body FROM information_items AS i INNER JOIN information_links AS l ON i.category = l.category AND i.source = l.source AND i.external_id = l.external_id WHERE l.instrument = ?1 ORDER BY i.id";
 pub(crate) const DELETE_INDEX: &str = "DELETE FROM information_fts WHERE rowid = ?1";
 pub(crate) const DELETE_ALL_INDEX: &str = "DELETE FROM information_fts";

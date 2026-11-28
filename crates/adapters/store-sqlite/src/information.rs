@@ -216,7 +216,7 @@ fn insert_index(tx: &Transaction<'_>, id: i64, entry: &CollectedEntry) -> rusqli
     )?;
     Ok(())
 }
-fn save(tx: &Transaction<'_>, entry: &CollectedEntry) -> rusqlite::Result<WriteCompleted> {
+fn save_item(tx: &Transaction<'_>, entry: &CollectedEntry) -> rusqlite::Result<i64> {
     let key = key_from_entry(entry)?;
     let (category, source, external_id) = key_parts(&key);
     let item = content(entry);
@@ -244,7 +244,10 @@ fn save(tx: &Transaction<'_>, entry: &CollectedEntry) -> rusqlite::Result<WriteC
         tx.last_insert_rowid()
     };
     insert_index(tx, id, entry)?;
-    Ok(WriteCompleted)
+    Ok(id)
+}
+fn save(tx: &Transaction<'_>, entry: &CollectedEntry) -> rusqlite::Result<WriteCompleted> {
+    save_item(tx, entry).map(|_key| WriteCompleted)
 }
 fn linked(
     connection: &Connection,
@@ -361,6 +364,37 @@ impl DisclosureRepository for InformationStore<'_> {
                         CollectedEntry::News(_) => None,
                     })
                     .collect())
+            })
+            .await
+    }
+}
+impl application::CandidateNewsRepository for InformationStore<'_> {
+    async fn retain_candidate_news(
+        &self,
+        item: &NewsItem,
+        instrument: &InstrumentId,
+        published_at: Timestamp,
+        collected_at: Timestamp,
+    ) -> Result<ObservedCollectedItem, SystemPortError> {
+        let entry = CollectedEntry::News(item.clone());
+        let instrument_id = instrument.clone();
+        self.database
+            .write(move |tx| {
+                let key = key_from_entry(&entry)?;
+                let id = match find(tx, &key)? {
+                    Some(existing) => existing.id,
+                    None => save_item(tx, &entry)?,
+                };
+                let (category, source, external_id) = key_parts(&key);
+                tx.execute(
+                    sql::COMPLETE_NEWS_TIMES,
+                    params![id, encode_moment(published_at), encode_moment(collected_at)],
+                )?;
+                tx.execute(
+                    sql::ADD_CONFIRMED_LINK,
+                    params![category, source, external_id, instrument_id.as_str()],
+                )?;
+                observed_by_id(tx, CollectedKind::News, id)?.ok_or_else(|| invalid(()))
             })
             .await
     }

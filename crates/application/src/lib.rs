@@ -542,8 +542,8 @@ pub mod resolve_estimates;
 
 mod information_storage;
 pub use information_storage::{
-    DisclosureRepository, InformationKey, InformationLinks, InformationSearch, SearchLimit,
-    SearchLimitError,
+    CandidateNewsRepository, DisclosureRepository, InformationKey, InformationLinks,
+    InformationSearch, SearchLimit, SearchLimitError,
 };
 
 mod evaluate_signals;

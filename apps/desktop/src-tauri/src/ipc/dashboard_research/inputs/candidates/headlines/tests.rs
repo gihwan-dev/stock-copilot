@@ -1,9 +1,8 @@
 use super::{Archive, Company, TitleLinker};
 use application::{
-    CollectedEntry, CollectedItemHandle, CollectedObservation, CollectedPresence,
-    CollectedPresenceCheck, CollectedTimes, DataAvailability, FeedCursor, InformationError,
-    NewsDataSettings, NewsRepository, ObservedCollectedItem, PublicationTime, StockAlias,
-    SystemPortError, TrackedInstrument, WriteCompleted,
+    CandidateNewsRepository, CollectedEntry, CollectedItemHandle, CollectedObservation,
+    DataAvailability, FeedCursor, InformationError, NewsDataSettings, ObservedCollectedItem,
+    PublicationTime, StockAlias, SystemPortError, TrackedInstrument,
 };
 use domain::{
     DisplayInstrumentName, InstrumentId, KnownMarket, Nanosecond, NewsItem, NewsSource,
@@ -50,46 +49,27 @@ impl TitleLinker for Matcher {
     }
 }
 #[derive(Default)]
-struct Store {
-    links: Mutex<Vec<NormalizedUrl>>,
-    observations: Mutex<Vec<(PublicationTime, Timestamp)>>,
-}
-impl NewsRepository for Store {
-    async fn store(&self, item: &NewsItem) -> Result<WriteCompleted, SystemPortError> {
-        self.links.lock().await.push(item.collected().url().clone());
-        Ok(WriteCompleted)
-    }
-    fn for_instrument(
+struct Store(Mutex<Vec<ObservedCollectedItem>>);
+impl CandidateNewsRepository for Store {
+    async fn retain_candidate_news(
         &self,
-        _instrument: &InstrumentId,
-    ) -> impl Future<Output = Result<Vec<NewsItem>, SystemPortError>> + Send {
-        std::future::ready(Ok(Vec::new()))
-    }
-}
-impl CollectedPresenceCheck for Store {
-    async fn presence(&self, url: &NormalizedUrl) -> Result<CollectedPresence, SystemPortError> {
-        Ok(if self.links.lock().await.contains(url) {
-            CollectedPresence::Stored
-        } else {
-            CollectedPresence::New
-        })
-    }
-}
-impl CollectedTimes for Store {
-    async fn record_times(
-        &self,
-        _entry: &CollectedEntry,
-        published_at: PublicationTime,
+        item: &NewsItem,
+        instrument: &InstrumentId,
+        published_at: Timestamp,
         collected_at: Timestamp,
-    ) -> Result<WriteCompleted, SystemPortError> {
-        self.observations
-            .lock()
-            .await
-            .push((published_at, collected_at));
-        Ok(WriteCompleted)
+    ) -> Result<ObservedCollectedItem, SystemPortError> {
+        let record = ObservedCollectedItem {
+            handle: CollectedItemHandle::try_new("n-1").expect("핸들"),
+            entry: CollectedEntry::News(item.clone()),
+            published_at: PublicationTime::Known(published_at),
+            collected_at,
+            instruments: vec![instrument.clone()],
+        };
+        self.0.lock().await.push(record.clone());
+        Ok(record)
     }
 }
-struct Feed(Vec<CollectedObservation>);
+struct Feed(Result<Vec<CollectedObservation>, InformationError>);
 type Reply =
     Option<Result<DataAvailability<(Vec<CollectedObservation>, FeedCursor)>, InformationError>>;
 impl TargetedHeadlines for Feed {
@@ -100,10 +80,11 @@ impl TargetedHeadlines for Feed {
     ) -> impl Future<Output = Reply> + Send {
         assert_eq!(source, NewsSource::YahooFinance);
         assert_eq!(target.symbol.as_str(), "NEW");
-        std::future::ready(Some(Ok(DataAvailability::Available((
-            self.0.clone(),
-            FeedCursor::Start,
-        )))))
+        std::future::ready(Some(
+            self.0
+                .clone()
+                .map(|items| DataAvailability::Available((items, FeedCursor::Start))),
+        ))
     }
 }
 fn target() -> TrackedInstrument {
@@ -114,16 +95,19 @@ fn target() -> TrackedInstrument {
         aliases: Vec::new(),
     }
 }
-#[test]
-fn live_company_search_rejects_unrelated_future_or_undated_hits_and_registers_the_source() {
-    let day = 1_800_000_000;
-    let published = PublicationTime::Known(moment(day - 80));
-    let observed = moment(day - 30);
-    let feed = Feed(vec![
+fn archive(items: Vec<ObservedCollectedItem>) -> Archive {
+    Archive {
+        items,
+        settings: Some(NewsDataSettings::initial()),
+        failed: false,
+    }
+}
+fn live_feed(published: PublicationTime, observed: Timestamp, day: i64) -> Feed {
+    Feed(Ok(vec![
         CollectedObservation::new(article("peer", "Peer guidance"), published, observed),
         CollectedObservation::new(
             article("future", "Example forecast"),
-            PublicationTime::Known(moment(day + 1)),
+            PublicationTime::Known(moment(day.saturating_add(1))),
             observed,
         ),
         CollectedObservation::new(
@@ -136,12 +120,15 @@ fn live_company_search_rejects_unrelated_future_or_undated_hits_and_registers_th
             published,
             observed,
         ),
-    ]);
-    let archive = Archive {
-        items: Vec::new(),
-        settings: Some(NewsDataSettings::initial()),
-        failed: false,
-    };
+    ]))
+}
+#[test]
+fn live_company_search_rejects_unrelated_future_or_undated_hits_and_registers_the_source() {
+    let day = 1_800_000_000;
+    let published = PublicationTime::Known(moment(day - 80));
+    let observed = moment(day - 30);
+    let feed = live_feed(published, observed, day);
+    let empty = archive(Vec::new());
     let target = target();
     let canonical = id("US-master-117");
     let company = Company {
@@ -152,7 +139,7 @@ fn live_company_search_rejects_unrelated_future_or_undated_hits_and_registers_th
     };
     let store = Store::default();
     tauri::async_runtime::block_on(async {
-        let (evidence_rows, failed) = archive
+        let (evidence_rows, failed) = empty
             .for_candidate(
                 &company,
                 Some(&store),
@@ -168,11 +155,24 @@ fn live_company_search_rejects_unrelated_future_or_undated_hits_and_registers_th
             "https://finance.yahoo.com/news/valid"
         );
         assert_eq!(source.observed_at, observed);
-        assert_eq!(
-            store.observations.lock().await.as_slice(),
-            &[(published, observed)]
-        );
-        assert_eq!(store.links.lock().await.len(), 1);
+        let persisted = store.0.lock().await.clone();
+        let row = persisted.first().expect("저장된 기사");
+        assert_eq!(row.published_at, published);
+        assert_eq!(row.collected_at, observed);
+        assert_eq!(row.instruments, std::slice::from_ref(&canonical));
+        let offline = archive(persisted);
+        let (cached, unavailable) = offline
+            .for_candidate(
+                &company,
+                Some(&store),
+                Some(&Feed(Err(InformationError::Unavailable(
+                    application::ResetTime::NotProvided,
+                )))),
+                &SteppedClock::new(moment(day + 21_601)),
+            )
+            .await;
+        assert!(!unavailable);
+        assert_eq!(cached, evidence_rows);
     });
 }
 

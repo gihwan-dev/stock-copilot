@@ -1,8 +1,8 @@
 use super::evidence::recent;
 use crate::{collected_links::TitleLinker, news_tracking::MatchName};
 use application::{
-    BriefingSource, Clock, CollectedEntry, CollectedItemReads, CollectedKind, CollectedTimes,
-    DataAvailability, NewsDataSettings, NewsDataSettingsRepository, NewsRepository,
+    BriefingSource, CandidateNewsRepository, Clock, CollectedEntry, CollectedItemReads,
+    CollectedKind, DataAvailability, NewsDataSettings, NewsDataSettingsRepository,
     ObservedCollectedItem, PublicationTime, SourceSwitch, TrackedInstrument,
 };
 use domain::{
@@ -53,9 +53,7 @@ impl Archive {
     pub(super) async fn for_candidate(
         &self,
         company: &Company<'_>,
-        database: Option<
-            &(impl NewsRepository + CollectedTimes + application::CollectedPresenceCheck),
-        >,
+        database: Option<&impl CandidateNewsRepository>,
         reader: Option<&impl TargetedHeadlines>,
         clock: &impl Clock,
     ) -> (Vec<BriefingSource>, bool) {
@@ -65,14 +63,7 @@ impl Archive {
         else {
             return (saved, self.failed);
         };
-        if saved
-            .iter()
-            .find_map(|source| match &source.origin {
-                domain::InformationSource::News(agency) => Some(agency),
-                domain::InformationSource::Disclosure(_) | domain::InformationSource::Web => None,
-            })
-            .is_some()
-        {
+        if saved.iter().find_map(news_agency).is_some() {
             return (saved, self.failed);
         }
         let Some(search) = search_for(settings, company.target.market) else {
@@ -90,18 +81,36 @@ impl Archive {
             .iter()
             .filter_map(|observation| company.confirmed(observation, now))
             .collect::<Vec<_>>();
-        selected.sort_by_key(|(published, _, _, _)| std::cmp::Reverse(*published));
+        selected.sort_by_key(|(published, _, _)| std::cmp::Reverse(*published));
+        let Some(instrument) = company
+            .canonical
+            .cloned()
+            .or_else(|| company.target.link_id())
+        else {
+            return (saved, true);
+        };
         let mut failure = self.failed;
-        for (_, observation, item, fact) in selected {
+        for (published, observation, item) in selected {
             if saved.len() >= 3 {
                 break;
             }
-            if saved.iter().any(|source| source.url == fact.url) {
+            if saved
+                .iter()
+                .any(|source| source.url.as_ref() == Some(item.collected().url()))
+            {
                 continue;
             }
-            match retain(store, item, observation).await {
-                Ok(()) => saved.push(fact),
-                Err(_) => failure = true,
+            match store
+                .retain_candidate_news(item, &instrument, published, observation.collected_at())
+                .await
+            {
+                Ok(record) => saved.extend(article(
+                    &record.entry,
+                    record.published_at,
+                    record.collected_at,
+                    now,
+                )),
+                Err(_error) => failure = true,
             }
         }
         (saved, failure)
@@ -134,24 +143,6 @@ impl Archive {
     }
 }
 
-async fn retain(
-    store: &(impl NewsRepository + CollectedTimes + application::CollectedPresenceCheck),
-    item: &domain::NewsItem,
-    observation: &application::CollectedObservation,
-) -> Result<(), application::SystemPortError> {
-    if store.presence(item.collected().url()).await? == application::CollectedPresence::New {
-        NewsRepository::store(store, item).await?;
-        store
-            .record_times(
-                observation.entry(),
-                observation.published_at(),
-                observation.collected_at(),
-            )
-            .await?;
-    }
-    Ok(())
-}
-
 pub(super) struct Company<'a> {
     pub(super) target: &'a TrackedInstrument,
     pub(super) canonical: Option<&'a InstrumentId>,
@@ -175,7 +166,6 @@ impl Company<'_> {
         Timestamp,
         &'a application::CollectedObservation,
         &'a domain::NewsItem,
-        BriefingSource,
     )> {
         let CollectedEntry::News(item) = observation.entry() else {
             return None;
@@ -183,14 +173,14 @@ impl Company<'_> {
         let PublicationTime::Known(published) = observation.published_at() else {
             return None;
         };
-        let fact = article(
+        article(
             observation.entry(),
             observation.published_at(),
             observation.collected_at(),
             now,
         )?;
         self.named(item.collected().title())
-            .then_some((published, observation, item, fact))
+            .then_some((published, observation, item))
     }
     fn linked(&self, item: &ObservedCollectedItem) -> bool {
         if self
@@ -207,6 +197,13 @@ impl Company<'_> {
             .link_id()
             .is_some_and(|id| item.instruments.contains(&id))
             && self.named(title)
+    }
+}
+
+fn news_agency(source: &BriefingSource) -> Option<&domain::NewsSource> {
+    match &source.origin {
+        domain::InformationSource::News(agency) => Some(agency),
+        domain::InformationSource::Disclosure(_) | domain::InformationSource::Web => None,
     }
 }
 
