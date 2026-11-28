@@ -104,7 +104,22 @@ fn missing_incomplete_or_inaccessible_inventory_cannot_authorize_discovery() {
                 at,
                 SyncOutcome::Complete(empty),
             )))));
-        assert!(inputs::holdings(&ports).await.expect("조회").is_some());
+        let book = inputs::holdings(&ports)
+            .await
+            .expect("조회")
+            .expect("보유 확인");
+        let app = mock_builder()
+            .manage(crate::broker_link::BrokerMarketTools::unconnected())
+            .build(mock_context(noop_assets()))
+            .expect("시험 앱");
+        let key = DashboardCacheKey::Candidates;
+        assert_eq!(
+            inputs::collect(app.handle(), &ports, key, None, at).await,
+            Ok(None)
+        );
+        inputs::collect(app.handle(), &ports, key, Some(&book), at)
+            .await
+            .expect_err("빈 보유를 확인했으므로 후보 시장 조회까지 도달");
     });
 }
 
