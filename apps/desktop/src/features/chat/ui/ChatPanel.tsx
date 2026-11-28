@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import {
   Button,
   ChatInput,
@@ -96,6 +96,20 @@ const Suggestions = (props: {
   </Inline>
 );
 
+const ExchangeList = memo(function ExchangeList({
+  transcript,
+}: {
+  readonly transcript: Transcript;
+}): ReactElement {
+  return (
+    <Stack gap="space-6">
+      {transcript.exchanges.map((exchange) => (
+        <ChatExchangeView key={exchange.turn} exchange={exchange} />
+      ))}
+    </Stack>
+  );
+});
+
 const Exchanges = (props: {
   readonly transcript: Transcript;
   readonly onPick: (value: FreeText) => void;
@@ -111,11 +125,7 @@ const Exchanges = (props: {
       <Suggestions onPick={props.onPick} />
     </Stack>
   ) : (
-    <Stack gap="space-6">
-      {props.transcript.exchanges.map((exchange) => (
-        <ChatExchangeView key={exchange.turn} exchange={exchange} />
-      ))}
-    </Stack>
+    <ExchangeList transcript={props.transcript} />
   );
 
 const StopButton = (props: { readonly live: EntityId }): ReactElement => {
