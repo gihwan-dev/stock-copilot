@@ -62,7 +62,8 @@ const fn wanted_session(kind: BriefingKind, market: KnownMarket) -> Inclusion {
     }
 }
 
-fn line_fact(line: &OverviewToolLine) -> Option<UntrustedText> {
+#[must_use]
+pub fn market_overview_line_fact(line: &OverviewToolLine) -> Option<UntrustedText> {
     let precision = DisplayPrecision::try_new(2).ok()?;
     let value = display_number(&line.value, precision);
     let shown = match line.unit {
@@ -126,7 +127,7 @@ pub fn market_briefing_facts(
         .lines
         .iter()
         .filter(|line| wanted(kind, line.item) == Inclusion::Included)
-        .filter_map(line_fact);
+        .filter_map(market_overview_line_fact);
     let sessions = view
         .sessions
         .iter()

@@ -88,6 +88,10 @@ CREATE TABLE daily_valuation_snapshots (
     snapshot_payload TEXT NOT NULL,
     UNIQUE (account, snapshot_hash)
 ) STRICT;
+CREATE TABLE dashboard_research (
+    section TEXT PRIMARY KEY,
+    payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE estimate_calibrations (
     id INTEGER PRIMARY KEY,
     key_hash TEXT NOT NULL,

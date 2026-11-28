@@ -515,6 +515,11 @@ pub use valuation_gap::{
     ValuationInputError,
 };
 mod briefing;
+mod dashboard_research;
+pub use dashboard_research::{
+    DashboardCache, DashboardCacheDocument, DashboardCacheKey, DashboardSubject,
+    research_dashboard_subject,
+};
 mod run_full_inspection;
 pub use briefing::{
     BriefingContext, BriefingContextSource, BriefingFailure, BriefingOutcome, BriefingRecord,
@@ -729,7 +734,9 @@ pub use collect_feed::{
 mod briefing_context;
 pub use briefing_context::HoldingsBriefingContext;
 mod briefing_market;
-pub use briefing_market::{MarketBriefingContext, market_briefing_facts};
+pub use briefing_market::{
+    MarketBriefingContext, market_briefing_facts, market_overview_line_fact,
+};
 
 mod headline_grouping;
 pub use headline_grouping::{

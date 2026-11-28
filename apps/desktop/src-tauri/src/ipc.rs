@@ -5,6 +5,7 @@ pub mod briefing;
 pub mod chat;
 pub mod chat_dto;
 pub mod chat_hub;
+pub mod dashboard_research;
 pub mod data_status;
 pub mod error;
 pub mod event;

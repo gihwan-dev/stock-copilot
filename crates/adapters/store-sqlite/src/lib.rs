@@ -242,6 +242,7 @@ pub use watchlist::{SignalSkipStore, WatchlistStore};
 mod watchlist_tests;
 
 mod briefing;
+mod dashboard_research;
 pub use briefing::BriefingStore;
 
 mod shared;

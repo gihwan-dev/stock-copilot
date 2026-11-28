@@ -90,6 +90,7 @@ pub(crate) mod watchlist_tests;
 pub(crate) mod briefing;
 #[cfg(test)]
 pub(crate) mod briefing_tests;
+pub(crate) mod dashboard_research;
 pub(crate) mod jobs;
 
 #[cfg(test)]

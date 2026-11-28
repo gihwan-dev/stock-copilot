@@ -159,12 +159,12 @@ fn build_prompt(kind: BriefingKind, context: &BriefingContext) -> Option<Analysi
 }
 
 #[derive(Debug)]
-enum Drained {
+pub(crate) enum Drained {
     Text(UntrustedText),
     Failed(BriefingFailure),
 }
 
-async fn drain<S: AiEventStream>(stream: &mut S) -> Drained {
+pub(crate) async fn drain<S: AiEventStream>(stream: &mut S) -> Drained {
     let mut text = String::new();
     loop {
         match stream.next().await {

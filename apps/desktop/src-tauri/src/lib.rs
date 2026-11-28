@@ -69,6 +69,9 @@ pub fn build_app<R: Runtime, P: PortTypes>(
                     .map(|book| book.inner().clone()),
             );
             let _login_items = platform::autostart::install(app, &ports.events);
+            app.manage(ipc::dashboard_research::DashboardReader::new::<R, P>(
+                app.handle().clone(),
+            ));
             app.manage(ports);
             let _scheduling = platform::scheduling::start_background::<R, P>(app);
             let shutdown_hook = database_shutdown_hook(app, shared_database);

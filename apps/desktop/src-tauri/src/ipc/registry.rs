@@ -12,6 +12,10 @@ use super::{
     trivial_casts,
     reason = "#[specta::specta] 확장이 명령 함수를 fn 포인터로 as 변환한다 (ADR 0016)"
 )]
+#[expect(
+    clippy::too_many_lines,
+    reason = "권한 대조는 모든 IPC 명령을 단일 collect_commands! 목록으로 수집한다 (ADR 0016)"
+)]
 fn product_commands<R: Runtime>() -> Commands<R> {
     collect_commands![
         app_version::app_version::<tauri::Wry>,
@@ -27,6 +31,7 @@ fn product_commands<R: Runtime>() -> Commands<R> {
         open_external::open_external::<tauri::Wry>,
         order_approval::request_order_approval::<tauri::Wry>,
         briefing::get_briefings::<tauri::Wry>,
+        super::dashboard_research::get_dashboard_research::<tauri::Wry>,
         portfolio::get_portfolio::<tauri::Wry>,
         portfolio::get_allocation::<tauri::Wry>,
         simulation::simulate_trades::<tauri::Wry>,
