@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  appendFileSync,
   cpSync,
   mkdirSync,
   readFileSync,
@@ -264,10 +263,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         await make({ "ds/no-dom-values": "off" }).lintFiles([main])
       )[0].messages.some((m) => m.ruleId === "ds/no-dom-values"),
     );
-    appendFileSync(
-      platform,
-      "\nexport const leak=():HTMLElement=>document.body;\n",
-    );
+    writeFileSync(platform, "export const leak=():HTMLElement=>document.body;");
     compile();
     assert.ok(
       (await make().lintFiles([platform]))[0].messages.some(

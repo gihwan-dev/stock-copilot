@@ -1,4 +1,3 @@
-import { useWindowLayout } from "./index";
 import {
   clampPanelShare,
   parseInputValue,
@@ -14,6 +13,7 @@ import {
 import {
   useEffect,
   useState,
+  useSyncExternalStore,
   type ChangeEvent,
   type KeyboardEvent,
   type RefObject,
@@ -127,6 +127,7 @@ export const shellDismiss = (
 };
 
 const chatWidthKey = "stock-copilot.chat-share";
+const wideQuery = "(min-width: 80rem)";
 const chatPixels = 384;
 const sidebarPixels = 232;
 const fallbackShare = 33;
@@ -145,14 +146,24 @@ export const chatPanelLimits = {
   max: clampPanelShare(50, chatBounds),
 } as const;
 
+const subscribeWide = (onChange: () => void): (() => void) => {
+  const media =
+    typeof matchMedia === "function" ? matchMedia(wideQuery) : undefined;
+  media?.addEventListener("change", onChange);
+  return (): void => {
+    media?.removeEventListener("change", onChange);
+  };
+};
 export const panelSupport = (): "resizable" | "static" =>
   typeof ResizeObserver === "function" ? "resizable" : "static";
-export const useShellResize = (): "resizable" | "static" => {
-  const layout = useWindowLayout();
-  return panelSupport() === "resizable" && layout !== "compact"
+const readWide = (): "resizable" | "static" =>
+  panelSupport() === "resizable" &&
+  typeof matchMedia === "function" &&
+  matchMedia(wideQuery).matches
     ? "resizable"
     : "static";
-};
+export const useShellResize = (): "resizable" | "static" =>
+  useSyncExternalStore(subscribeWide, readWide, (): "static" => "static");
 
 export const initialChatShare = (): PanelShare =>
   clampPanelShare(viewportShare(), chatBounds);
