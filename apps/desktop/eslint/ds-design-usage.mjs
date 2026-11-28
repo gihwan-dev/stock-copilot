@@ -151,8 +151,74 @@ export const designUtilities = (tokens) => [
       ]),
     ),
 ];
+const dockTheme = `[data-dock-workspace] {
+  --flexlayout-font-family: var(--font-sans);
+  --flexlayout-font-size: var(--text-size-md);
+  --flexlayout-font-weight: var(--font-weight-medium);
+  --flexlayout-color-text: var(--color-ink);
+  --flexlayout-color-background: var(--color-surface);
+  --flexlayout-color-base: var(--color-surface);
+  --flexlayout-color-1: var(--color-bg);
+  --flexlayout-color-2: var(--color-surface-sunken);
+  --flexlayout-color-3: var(--color-line);
+  --flexlayout-color-4: var(--color-line);
+  --flexlayout-color-5: var(--color-line-strong);
+  --flexlayout-color-6: var(--color-line);
+  --flexlayout-color-icon: var(--color-ink-muted);
+  --flexlayout-color-overflow: var(--color-ink-muted);
+  --flexlayout-color-focus: var(--color-focus-ring);
+  --flexlayout-color-tab-selected: var(--color-primary);
+  --flexlayout-color-tab-selected-background: var(--color-primary-soft);
+  --flexlayout-color-tab-unselected: var(--color-ink-muted);
+  --flexlayout-color-drag1: var(--color-primary);
+  --flexlayout-color-drag2: var(--color-primary);
+  --flexlayout-color-drag1-background: var(--color-primary-soft);
+  --flexlayout-color-drag2-background: var(--color-primary-soft);
+  --flexlayout-color-drag-rect-border: var(--color-primary);
+  --flexlayout-color-drag-rect-background: var(--color-surface-raised);
+  --flexlayout-color-edge-icon: var(--color-primary);
+  --flexlayout-color-edge-marker: var(--color-line-strong);
+  --flexlayout-color-splitter: var(--color-line);
+  --flexlayout-color-splitter-hover: var(--color-line-strong);
+  --flexlayout-color-splitter-drag: var(--color-primary);
+  --flexlayout-color-splitter-handle: var(--color-line-strong);
+  --flexlayout-splitter-handle-visibility: visible;
+  --flexlayout-splitter-size: var(--border-width-hairline);
+  --flexlayout-splitter-active-size: var(--spacing-space-3);
+}
+
+[data-widget-gap="4"] [data-dock-workspace] {
+  --flexlayout-splitter-size: var(--spacing-space-1);
+}
+
+[data-widget-gap="8"] [data-dock-workspace] {
+  --flexlayout-splitter-size: var(--spacing-space-2);
+}
+
+[data-widget-gap="12"] [data-dock-workspace] {
+  --flexlayout-splitter-size: var(--spacing-space-3);
+}
+
+[data-widget-radius="4"] .flexlayout__tabset {
+  border-radius: var(--radius-sm);
+}
+
+[data-widget-radius="8"] .flexlayout__tabset {
+  border-radius: var(--radius-md);
+}
+
+[data-widget-radius="12"] .flexlayout__tabset {
+  border-radius: var(--radius-lg);
+}
+
+[data-dock-workspace] .flexlayout__float_window {
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+}`;
 export const themeSource = (tokens) =>
-  '@import "tailwindcss" source(none);\n@import "./tokens.css";\n@source "../../";\n@source not "./testing/overflow-geometry.ts";\n\n@layer base {\n  html {\n    font-family: var(--font-sans);\n  }\n}\n\n' +
+  '@import "tailwindcss" source(none);\n@import "./tokens.css";\n@import "flexlayout-react/style/light.css";\n@source "../../";\n@source not "./testing/overflow-geometry.ts";\n\n@layer base {\n  html {\n    font-family: var(--font-sans);\n  }\n}\n\n' +
+  dockTheme +
+  "\n\n" +
   designUtilities(tokens)
     .map(
       ([name, property, value]) =>
