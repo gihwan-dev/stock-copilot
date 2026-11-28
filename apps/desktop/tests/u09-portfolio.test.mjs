@@ -65,7 +65,19 @@ const bundleSource = `
     );
   };
 
+  window.awaitSector = (view) => waitFor(() => view.getByText("반도체"), { timeout: 5000 });
   window.scenarios = {
+    sectorRefresh: () => {
+      let reads = 0;
+      const fund = { id: fx.id("fund"), kind: "etf-fund", label: fx.free(""), value: fx.krw("50000"), weight: fx.pct("25"), level: null };
+      const cash = { id: fx.id("cash"), kind: "cash", label: fx.free(""), value: fx.krw("0.1"), weight: fx.pct("0.01"), weightRange: "below-unit", level: null };
+      const unknown = { id: fx.id("unknown"), kind: "unclassified", label: fx.free(""), value: fx.krw("150000"), weight: fx.pct("75"), level: null };
+      return fx.sources({portfolio: () => fx.ok(portfolio()), allocation: () => {
+        const waiting = reads++ === 0;
+        const sector = {...unknown, kind: "sector", label: fx.free("반도체"), level: "over-cap"};
+        return fx.ok({...allocation("balanced"), sectorRefresh: waiting ? "pending" : "settled", sectors: [fund, cash, waiting ? unknown : sector]});
+      }});
+    },
     loading: () => fx.sources({ portfolio: fx.never }),
     empty: () => fx.sources({}),
     error: () => fx.sources({ portfolio: () => fx.fail("retryable") }),
@@ -154,6 +166,32 @@ test("U-10 allocation and concentration show loading, empty, error and ready sta
       "몇 종목에 비중이 몰려 있어요",
     );
     assert.equal(concentratedText.includes("한쪽으로 쏠리지 않았어요."), false);
+    w.cleanup();
+
+    const updating = w.mount(w.scenarios.sectorRefresh());
+    const initial = await w.waitText(updating, "업종을 확인하고 있어요");
+    for (const label of [
+      "예시바이오",
+      "ETF·펀드",
+      "미분류",
+      "현금 (원화·달러)",
+      "0.01% 미만",
+      "해당 없음",
+    ]) {
+      assert.ok(initial.includes(label), label);
+    }
+    assert.equal(
+      initial.includes("아직 자산배분을 계산할 자료가 없어요"),
+      false,
+    );
+    await w.awaitSector(updating);
+    assert.ok(
+      updating.container.textContent.includes("원화로 합산한 총액 기준"),
+    );
+    assert.equal(
+      updating.container.textContent.includes("업종을 확인하고 있어요"),
+      false,
+    );
     w.cleanup();
 
     const empty = w.mount(w.scenarios.allocationEmpty());

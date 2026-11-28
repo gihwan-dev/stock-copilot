@@ -33,7 +33,16 @@ export const usePortfolio = (
 export const useAllocation = (
   load: ScreenSources["allocation"],
 ): AllocationScreenState => {
-  const query = useQuery({ queryKey: screenKeys.allocation, queryFn: load });
+  const query = useQuery({
+    queryKey: screenKeys.allocation,
+    queryFn: load,
+    refetchInterval: (state) => {
+      const reply = state.state.data;
+      return reply?.kind === "ok" && reply.value.sectorRefresh === "pending"
+        ? 2_000
+        : false;
+    },
+  });
   return toScreenState(query.data, (data) =>
     data.instruments.length === 0 ? "empty" : "filled",
   );

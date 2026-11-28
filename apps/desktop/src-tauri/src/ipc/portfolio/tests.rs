@@ -377,3 +377,169 @@ fn a_failed_portfolio_carries_the_last_sync_failure_reason() {
         r#"{"kind":"retryable","reason":null}"#
     );
 }
+
+fn allocation_master(symbol: &str, kind: &str) -> MasterInstrument {
+    let mut row = samsung().row().clone();
+    row.symbol = Symbol::try_new(symbol).expect("심볼");
+    row.instrument_id = InstrumentId::try_new(&format!("inst-{symbol}")).expect("ID");
+    row.security_type = MasterSecurityType::from_code(MasterCode::try_new(kind).expect("유형"));
+    MasterInstrument::try_new(row).expect("마스터")
+}
+
+fn allocation_holding(master: &MasterInstrument, value: &str) -> Holding {
+    Holding::new(
+        master.order_instrument().expect("종목"),
+        Quantity::parse(&number("1")).expect("수량"),
+        AcquisitionPrice::try_new(money(value, Currency::Krw)).expect("취득 단가"),
+        HoldingObservation::new(
+            Some(Price::parse(&number(value), Currency::Krw).expect("시세")),
+            None,
+            at(RECORDED_AT),
+        ),
+    )
+    .expect("보유")
+}
+
+fn sector_service(members: &[MasterInstrument]) -> Arc<crate::sector_classes::SectorClasses> {
+    use crate::sector_classes::{MarketSectorFeed, SectorClasses};
+    use domain::{
+        KnownMarket, SectorCatalog, SectorComposition, SectorDepth, SectorId, SectorMetadataRow,
+        SectorStockRow,
+    };
+    use testkit_ports::scripted::ScriptedMarketInfo;
+    let sector = SectorId::try_new("10").expect("업종");
+    let market = Arc::new(ScriptedMarketInfo::default());
+    market
+        .script_sectors()
+        .push(Ok(SectorCatalog::from_response(
+            vec![SectorMetadataRow {
+                id: sector.clone(),
+                name: DisplayInstrumentName::try_new("반도체").expect("업종명"),
+                depth: SectorDepth::Major,
+                parent: None,
+            }],
+            at(RECORDED_AT),
+        )
+        .expect("카탈로그")));
+    let stocks = members
+        .iter()
+        .map(|master| SectorStockRow {
+            symbol: master.row().symbol.clone(),
+            currency: Currency::Krw,
+            market_capitalization: None,
+            trading_amount: None,
+        })
+        .collect();
+    market
+        .script_sector_composition()
+        .push(Ok(SectorComposition::from_stocks_response(
+            sector,
+            KnownMarket::Kr,
+            stocks,
+            at(RECORDED_AT),
+        )
+        .expect("구성 종목")));
+    Arc::new(SectorClasses::new(
+        Arc::new(MarketSectorFeed(market)),
+        Arc::new(FixedClock),
+    ))
+}
+
+fn assert_mixed_rows(view: &super::UiAllocationView) {
+    use super::{UiAllocationLabel as Kind, UiWeightLevel};
+    let rows: Vec<_> = view
+        .sectors
+        .iter()
+        .map(|row| {
+            (
+                row.kind,
+                row.name.as_str(),
+                row.value.currency,
+                row.value.amount.as_str(),
+                row.weight.as_str(),
+                row.level,
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                Kind::Sector,
+                "반도체",
+                UiCurrency::Krw,
+                "400",
+                "40.00",
+                Some(UiWeightLevel::Normal)
+            ),
+            (Kind::EtfFund, "", UiCurrency::Krw, "300", "30.00", None),
+            (Kind::Cash, "", UiCurrency::Krw, "200", "20.00", None),
+            (
+                Kind::Unclassified,
+                "",
+                UiCurrency::Krw,
+                "100",
+                "10.00",
+                None
+            ),
+        ]
+    );
+}
+
+#[test]
+fn allocation_command_groups_holdings_fund_unknown_and_cash_against_total_assets() {
+    use crate::sector_classes::SectorRefresh;
+    use tauri::Manager;
+    let masters = [
+        samsung(),
+        allocation_master("000660", "STOCK"),
+        allocation_master("069500", "ETF"),
+        allocation_master("012345", "STOCK"),
+    ];
+    let holdings = masters
+        .iter()
+        .zip(["150", "250", "300", "100"])
+        .map(|(master, value)| allocation_holding(master, value))
+        .collect();
+    let portfolio = Portfolio::new(
+        holdings,
+        BuyingPower::new(money("200", Currency::Krw), at(RECORDED_AT)),
+        BuyingPower::new(money("0", Currency::Usd), at(RECORDED_AT)),
+    )
+    .expect("포트폴리오");
+    let app = app_with(backend(Some(&SyncOutcome::Complete(portfolio))));
+    app.state::<InstrumentDirectory>().replace(&masters[..3]);
+    let service = sector_service(&masters[..2]);
+    let _registered = app.manage(Arc::clone(&service));
+    tauri::async_runtime::block_on(async {
+        let _ready = service.assignments(&masters[..1]).await.expect("업종 응답");
+        let view = get_allocation(app.handle().clone(), request())
+            .await
+            .expect("자산배분");
+        assert_eq!(view.sector_refresh, SectorRefresh::Settled);
+        assert_eq!(view.instruments.len(), 5);
+        assert_mixed_rows(&view);
+    });
+}
+
+#[test]
+fn a_positive_allocation_smaller_than_one_display_unit_carries_its_bound() {
+    use super::{UiAllocationLabel, UiWeightRange};
+    let portfolio = Portfolio::new(
+        vec![allocation_holding(&samsung(), "1")],
+        BuyingPower::new(money("99999", Currency::Krw), at(RECORDED_AT)),
+        BuyingPower::new(money("0", Currency::Usd), at(RECORDED_AT)),
+    )
+    .expect("포트폴리오");
+    let app = app_with(backend(Some(&SyncOutcome::Complete(portfolio))));
+    let view = tauri::async_runtime::block_on(get_allocation(app.handle().clone(), request()))
+        .expect("비중");
+    for (rows, kind) in [
+        (&view.instruments, UiAllocationLabel::Holding),
+        (&view.sectors, UiAllocationLabel::Unclassified),
+    ] {
+        let tiny = rows.iter().find(|row| row.kind == kind).expect("소액 보유");
+        assert_eq!(tiny.value.amount, "1");
+        assert_eq!(tiny.weight_range, UiWeightRange::BelowUnit);
+    }
+}

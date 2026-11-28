@@ -1,8 +1,9 @@
 use application::{RecordedView, StoredView, SystemPortError};
 use domain::{
-    Allocation, AllocationDisplayRange, AssetInstrument, Concentration, ConcentrationWarning,
-    Currency, DisplayDirection, DisplayPrecision, HoldingReturn, InvestorProfile, Market, Money,
-    MoneyChange, PortfolioValuation, Symbol, SyncOutcome, Total, ValuedHolding,
+    Allocation, AllocationDisplayRange, AllocationSector, AssetInstrument, Concentration,
+    ConcentrationWarning, Currency, DisplayDirection, DisplayPrecision, HoldingReturn,
+    InvestorProfile, Market, Money, MoneyChange, PortfolioValuation, Symbol, SyncOutcome, Total,
+    ValuedHolding,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -13,6 +14,7 @@ use super::error::{IpcError, IpcErrorKind, IpcSyncError};
 use super::state::ScreenState;
 use crate::diagnostics_log::DiagnosticsLog;
 use crate::holdings_link::InstrumentDirectory;
+use crate::sector_classes::{HoldingSectors, SectorClasses, SectorRefresh};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -124,6 +126,30 @@ pub enum UiAllocationLabel {
     CashKrw,
     #[serde(rename = "cash-usd")]
     CashUsd,
+    #[serde(rename = "sector")]
+    Sector,
+    #[serde(rename = "etf-fund")]
+    EtfFund,
+    #[serde(rename = "cash")]
+    Cash,
+    #[serde(rename = "unclassified")]
+    Unclassified,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub enum UiWeightRange {
+    #[serde(rename = "below-unit")]
+    BelowUnit,
+    #[serde(rename = "at-least-unit")]
+    AtLeastUnit,
+}
+
+fn weight_range(display: &domain::AllocationDisplay) -> Option<UiWeightRange> {
+    match display.range() {
+        AllocationDisplayRange::BelowUnit => Some(UiWeightRange::BelowUnit),
+        AllocationDisplayRange::Zero => None,
+        AllocationDisplayRange::AtLeastUnit => Some(UiWeightRange::AtLeastUnit),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -133,7 +159,8 @@ pub struct UiAllocationRow {
     pub name: String,
     pub value: UiMoney,
     pub weight: String,
-    pub level: UiWeightLevel,
+    pub weight_range: UiWeightRange,
+    pub level: Option<UiWeightLevel>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
@@ -147,6 +174,8 @@ pub enum UiConcentration {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct UiAllocationView {
     pub instruments: Vec<UiAllocationRow>,
+    pub sectors: Vec<UiAllocationRow>,
+    pub sector_refresh: SectorRefresh,
     pub concentration: UiConcentration,
 }
 
@@ -413,7 +442,8 @@ fn allocation_row(
         name,
         value: ui_money(&value)?,
         weight: weight_text(entry.display()),
-        level: match entry.key() {
+        weight_range: weight_range(entry.display())?,
+        level: Some(match entry.key() {
             AssetInstrument::Holding(instrument) => level(
                 entry.weight(),
                 profile,
@@ -424,13 +454,70 @@ fn allocation_row(
                     }),
             ),
             AssetInstrument::Cash(_) => UiWeightLevel::Normal,
-        },
+        }),
     })
 }
 
-#[must_use]
-pub fn to_allocation_view(
+fn sector_row(
+    entry: &domain::AllocationEntry<AllocationSector, domain::AssetWeight>,
+    classes: &HoldingSectors,
+    profile: &InvestorProfile,
+) -> Option<UiAllocationRow> {
+    let (id, kind, name, level) = match entry.key() {
+        AllocationSector::Classified(id) => {
+            let level = if entry
+                .weight()
+                .cmp_profile_weight(&profile.weight_caps().sector_cap())
+                .is_gt()
+            {
+                UiWeightLevel::OverCap
+            } else {
+                UiWeightLevel::Normal
+            };
+            (
+                format!("sector-{}", id.as_str()),
+                UiAllocationLabel::Sector,
+                classes
+                    .names
+                    .get(id)
+                    .map_or(id.as_str(), domain::DisplayInstrumentName::as_str)
+                    .to_owned(),
+                Some(level),
+            )
+        }
+        AllocationSector::EtfFund => (
+            "etf-fund".to_owned(),
+            UiAllocationLabel::EtfFund,
+            String::new(),
+            None,
+        ),
+        AllocationSector::Cash => (
+            "cash".to_owned(),
+            UiAllocationLabel::Cash,
+            String::new(),
+            None,
+        ),
+        AllocationSector::Unclassified => (
+            "unclassified".to_owned(),
+            UiAllocationLabel::Unclassified,
+            String::new(),
+            None,
+        ),
+    };
+    Some(UiAllocationRow {
+        id,
+        kind,
+        name,
+        level,
+        value: ui_money(&entry.value())?,
+        weight: weight_text(entry.display()),
+        weight_range: weight_range(entry.display())?,
+    })
+}
+
+fn to_allocation_view(
     allocation: &Allocation,
+    classes: &HoldingSectors,
     directory: &InstrumentDirectory,
     profile: &InvestorProfile,
 ) -> UiAllocationView {
@@ -438,8 +525,15 @@ pub fn to_allocation_view(
         Ok(weights) => weights
             .entries()
             .iter()
-            .filter(|entry| entry.display().range() != AllocationDisplayRange::Zero)
             .filter_map(|entry| allocation_row(entry, allocation.valuation(), directory, profile))
+            .collect(),
+        Err(_reason) => Vec::new(),
+    };
+    let sectors = match allocation.assets().sectors() {
+        Ok(weights) => weights
+            .entries()
+            .iter()
+            .filter_map(|entry| sector_row(entry, classes, profile))
             .collect(),
         Err(_reason) => Vec::new(),
     };
@@ -451,6 +545,8 @@ pub fn to_allocation_view(
     };
     UiAllocationView {
         instruments,
+        sectors,
+        sector_refresh: classes.refresh,
         concentration,
     }
 }
@@ -475,12 +571,24 @@ pub async fn load_portfolio(
     to_portfolio_view(view.recorded_at(), valuation, directory).ok_or_else(bug)
 }
 
-pub async fn load_allocation(
+async fn load_allocation(
     screen: &ScreenState,
     directory: &InstrumentDirectory,
+    sectors: Option<&SectorClasses>,
 ) -> Result<UiAllocationView, IpcError> {
-    let view = stored(screen.backend().load_allocation_view().await)?;
-    let allocation = view_outcome(&view)?;
+    let view = stored(screen.backend().load_portfolio_view().await)?;
+    let valuation = view_outcome(&view)?;
+    let masters = valuation
+        .holdings()
+        .iter()
+        .filter_map(|holding| {
+            let instrument = holding.instrument();
+            let market = domain::KnownMarket::try_from_market(&instrument.market()).ok()?;
+            directory.master(&directory.instrument_of(market, instrument.symbol())?)
+        })
+        .collect::<Vec<_>>();
+    let classes = HoldingSectors::read(&masters, sectors, view.recorded_at()).ok_or_else(bug)?;
+    let allocation = Allocation::new(valuation, &classes.assignments);
     let profile = screen
         .backend()
         .load_settings()
@@ -488,7 +596,12 @@ pub async fn load_allocation(
         .ok()
         .and_then(|loaded| loaded.profile)
         .unwrap_or_else(InvestorProfile::default);
-    Ok(to_allocation_view(allocation, directory, &profile))
+    Ok(to_allocation_view(
+        &allocation,
+        &classes,
+        directory,
+        &profile,
+    ))
 }
 
 pub(crate) fn managed<R: Runtime>(
@@ -537,5 +650,11 @@ pub async fn get_allocation<R: Runtime>(
         scope: PortfolioScope::Current,
     } = request;
     let (screen, directory) = managed(&app)?;
-    load_allocation(screen, &directory).await
+    let sectors = app.try_state::<Arc<SectorClasses>>();
+    load_allocation(
+        screen,
+        &directory,
+        sectors.as_ref().map(|state| state.inner().as_ref()),
+    )
+    .await
 }

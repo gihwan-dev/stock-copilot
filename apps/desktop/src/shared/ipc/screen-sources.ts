@@ -76,11 +76,20 @@ export type PortfolioView = {
 
 export type AllocationRow = {
   readonly id: EntityId;
-  readonly kind?: "holding" | "cash-krw" | "cash-usd" | undefined;
+  readonly kind?:
+    | "holding"
+    | "cash-krw"
+    | "cash-usd"
+    | "sector"
+    | "etf-fund"
+    | "cash"
+    | "unclassified"
+    | undefined;
   readonly label: FreeText;
   readonly value: Money;
   readonly weight: PercentDisplay;
-  readonly level: "normal" | "warning" | "over-cap";
+  readonly weightRange: "below-unit" | "at-least-unit";
+  readonly level: "normal" | "warning" | "over-cap" | null;
 };
 
 type ConcentrationState = "balanced" | "concentrated";
@@ -88,6 +97,7 @@ type ConcentrationState = "balanced" | "concentrated";
 export type AllocationView = {
   readonly instruments: readonly AllocationRow[];
   readonly sectors: readonly AllocationRow[];
+  readonly sectorRefresh: "pending" | "settled";
   readonly concentration: ConcentrationState;
 };
 

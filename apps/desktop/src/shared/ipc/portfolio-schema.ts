@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   chatIdSchema,
+  parseEntityId,
   freeTextSchema,
   parseMoney,
   parsePercentDisplay,
@@ -120,32 +121,58 @@ const portfolioSchema = z
     today: raw.today ?? undefined,
   }));
 
-const allocationRowSchema = z
-  .strictObject({
-    id: chatIdSchema,
-    kind: z.enum(["holding", "cash-krw", "cash-usd"]),
-    name: freeTextSchema,
-    value: moneySchema,
-    weight: percentSchema,
-    level: z.enum(["normal", "warning", "over-cap"]),
-  })
-  .transform((raw): AllocationRow => ({
-    id: raw.id,
-    kind: raw.kind,
-    label: raw.name,
-    value: raw.value,
-    weight: raw.weight,
-    level: raw.level,
-  }));
+const weightLevelSchema = z.enum(["normal", "warning", "over-cap"]);
+
+const allocationRowSchema = z.strictObject({
+  id: chatIdSchema,
+  kind: z.enum(["holding", "cash-krw", "cash-usd"]),
+  name: freeTextSchema,
+  value: moneySchema,
+  weight: percentSchema,
+  weight_range: z.enum(["below-unit", "at-least-unit"]),
+  level: weightLevelSchema,
+});
+
+const sectorRowSchema = allocationRowSchema.extend({
+  id: z
+    .string()
+    .min(1)
+    .max(128)
+    .transform((value, context) => {
+      const id = parseEntityId(value);
+      if (id.kind === "ok") return id.value;
+      context.addIssue({ code: "custom", message: "sector" });
+      return z.NEVER;
+    }),
+  kind: z.enum(["sector", "etf-fund", "cash", "unclassified"]),
+  level: weightLevelSchema.nullable(),
+});
+
+const allocationRow = (
+  raw: Readonly<
+    z.output<typeof allocationRowSchema> | z.output<typeof sectorRowSchema>
+  >,
+): AllocationRow => ({
+  id: raw.id,
+  kind: raw.kind,
+  label: raw.name,
+  value: raw.value,
+  weight: raw.weight,
+  weightRange: raw.weight_range,
+  level: raw.level,
+});
 
 const allocationSchema = z
   .strictObject({
-    instruments: z.array(allocationRowSchema),
+    instruments: z.array(allocationRowSchema.transform(allocationRow)),
+    sectors: z.array(sectorRowSchema.transform(allocationRow)),
+    sector_refresh: z.enum(["pending", "settled"]),
     concentration: z.enum(["balanced", "concentrated"]),
   })
   .transform((raw): AllocationView => ({
     instruments: raw.instruments,
-    sectors: [],
+    sectors: raw.sectors,
+    sectorRefresh: raw.sector_refresh,
     concentration: raw.concentration,
   }));
 

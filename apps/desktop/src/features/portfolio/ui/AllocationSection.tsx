@@ -32,18 +32,27 @@ const levelKeys = {
   normal: "levelNormal",
   warning: "levelWarning",
   "over-cap": "levelOverCap",
-} as const satisfies Record<AllocationRow["level"], PortfolioMessageKey>;
+} as const satisfies Record<
+  NonNullable<AllocationRow["level"]>,
+  PortfolioMessageKey
+>;
+
+const allocationLabels = {
+  "cash-krw": "cashKrw",
+  "cash-usd": "cashUsd",
+  "etf-fund": "sectorFund",
+  cash: "sectorCash",
+  unclassified: "sectorUnknown",
+} as const;
 
 const RowLabel = (props: { readonly row: AllocationRow }): ReactElement => {
-  switch (props.row.kind) {
-    case "cash-krw":
-      return <Text variant="body-sm">{portfolioText("cashKrw", "ko")}</Text>;
-    case "cash-usd":
-      return <Text variant="body-sm">{portfolioText("cashUsd", "ko")}</Text>;
-    case "holding":
-    case undefined:
-      return <DataText value={props.row.label} variant="body-sm" />;
+  const kind = props.row.kind;
+  if (kind === undefined || kind === "holding" || kind === "sector") {
+    return <DataText value={props.row.label} variant="body-sm" />;
   }
+  return (
+    <Text variant="body-sm">{portfolioText(allocationLabels[kind], "ko")}</Text>
+  );
 };
 
 const Row = (props: { readonly row: AllocationRow }): ReactElement => (
@@ -55,12 +64,22 @@ const Row = (props: { readonly row: AllocationRow }): ReactElement => (
       <Money value={props.row.value} notation="compact" />
     </TableCell>
     <TableCell align="end">
-      <Percent value={props.row.weight} />
+      {props.row.weightRange === "below-unit" ? (
+        <Text variant="body-sm">{portfolioText("weightBelowUnit", "ko")}</Text>
+      ) : (
+        <Percent value={props.row.weight} />
+      )}
     </TableCell>
     <TableCell align="end">
-      <Badge tone={props.row.level === "normal" ? "neutral" : "alert"}>
-        {portfolioText(levelKeys[props.row.level], "ko")}
-      </Badge>
+      {props.row.level === null ? (
+        <Text variant="body-sm">
+          {portfolioText("levelNotApplicable", "ko")}
+        </Text>
+      ) : (
+        <Badge tone={props.row.level === "normal" ? "neutral" : "alert"}>
+          {portfolioText(levelKeys[props.row.level], "ko")}
+        </Badge>
+      )}
     </TableCell>
   </TableRow>
 );
@@ -73,7 +92,10 @@ const WeightTable = (props: {
     <TableRoot
       dense="dense"
       caption={portfolioText(props.titleKey, "ko")}
-      empty={portfolioText("allocationEmpty", "ko")}
+      empty={portfolioText(
+        props.titleKey === "sectorTitle" ? "sectorEmpty" : "allocationEmpty",
+        "ko",
+      )}
     />
   ) : (
     <TableRoot dense="dense" caption={portfolioText(props.titleKey, "ko")}>
@@ -117,6 +139,14 @@ const AllocationReady = (props: {
         titleKey="instrumentTitle"
         rows={props.view.instruments}
       />,
+      <Text key="sector-note" variant="body-sm">
+        {portfolioText(
+          props.view.sectorRefresh === "pending"
+            ? "sectorPending"
+            : "sectorBasis",
+          "ko",
+        )}
+      </Text>,
       <WeightTable
         key="sectors"
         titleKey="sectorTitle"

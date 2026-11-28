@@ -9,6 +9,7 @@
         "currency": "KRW"
       },
       "weight": "59.02",
+      "weight_range": "at-least-unit",
       "level": "over-cap"
     },
     {
@@ -20,8 +21,36 @@
         "currency": "KRW"
       },
       "weight": "40.98",
+      "weight_range": "at-least-unit",
       "level": "normal"
     }
   ],
+  "sectors": [
+    {
+      "id": "cash",
+      "kind": "cash",
+      "name": "",
+      "value": {
+        "amount": "5000000",
+        "currency": "KRW"
+      },
+      "weight": "40.98",
+      "weight_range": "at-least-unit",
+      "level": null
+    },
+    {
+      "id": "unclassified",
+      "kind": "unclassified",
+      "name": "",
+      "value": {
+        "amount": "7200000",
+        "currency": "KRW"
+      },
+      "weight": "59.02",
+      "weight_range": "at-least-unit",
+      "level": null
+    }
+  ],
+  "sector_refresh": "settled",
   "concentration": "concentrated"
 }

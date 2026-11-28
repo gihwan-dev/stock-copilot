@@ -188,3 +188,68 @@ fn a_failed_sector_list_still_marks_etfs_and_retries_later() {
         "실패는 저장하지 않고 다시 시도한다"
     );
 }
+
+struct PausedFeed {
+    gate: tokio::sync::Semaphore,
+    inner: Feed,
+}
+
+impl SectorFeed for PausedFeed {
+    fn catalog(&self) -> BoxFuture<'_, Result<SectorCatalog, PortError>> {
+        Box::pin(async {
+            self.gate
+                .acquire()
+                .await
+                .expect("catalog released")
+                .forget();
+            self.inner.catalog().await
+        })
+    }
+
+    fn composition<'a>(
+        &'a self,
+        sector: &'a SectorId,
+        market: KnownMarket,
+    ) -> BoxFuture<'a, Result<SectorComposition, PortError>> {
+        self.inner.composition(sector, market)
+    }
+}
+
+#[test]
+fn dashboard_reads_fund_and_unknown_while_the_shared_catalog_is_pending() {
+    use super::{HoldingSectors, SectorRefresh};
+    let feed = Arc::new(PausedFeed {
+        gate: tokio::sync::Semaphore::new(0),
+        inner: Feed::new(Catalog::Answers),
+    });
+    let classes = SectorClasses::new(Arc::<PausedFeed>::clone(&feed), Arc::new(Fixed));
+    let masters = [master("005930", "STOCK"), master("069500", "ETF")];
+    let stock = AllocationInstrument::new(&masters[0].order_instrument().expect("종목"));
+    let fund = AllocationInstrument::new(&masters[1].order_instrument().expect("펀드"));
+    let read = || HoldingSectors::read(&masters, Some(&classes), at(1_790_000_000)).expect("분류");
+    for _ in 0_u8..2_u8 {
+        let pending = read();
+        assert_eq!(pending.refresh, SectorRefresh::Pending);
+        assert_eq!(
+            pending.assignments.classification(&stock),
+            Some(&InstrumentClassification::Unclassified)
+        );
+        assert_eq!(
+            pending.assignments.classification(&fund),
+            Some(&InstrumentClassification::EtfFund)
+        );
+    }
+    feed.gate.add_permits(1);
+    let _ready = tauri::async_runtime::block_on(classes.assignments(&masters)).expect("분류");
+    let done = read();
+    assert_eq!(done.refresh, SectorRefresh::Settled);
+    assert_eq!(
+        done.names.get(&sector()).expect("업종명").as_str(),
+        "반도체"
+    );
+    assert_eq!(
+        done.assignments.classification(&stock),
+        Some(&InstrumentClassification::Sector(sector()))
+    );
+    assert_eq!(feed.inner.calls.load(Ordering::SeqCst), 1);
+}

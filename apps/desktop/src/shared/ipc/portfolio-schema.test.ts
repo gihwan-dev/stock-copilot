@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { parsePercentDisplay } from "../lib";
 import { settleAllocation, settlePortfolio } from "./portfolio-schema";
 import { wire } from "./schema";
 import { responses } from "./testing/responses";
@@ -83,7 +84,15 @@ test("settleAllocation keeps the cash row kind so the screen names it, and reads
   expect(result.kind).toBe("ok");
   if (result.kind !== "ok") return;
   expect(result.value.concentration).toBe("concentrated");
-  expect(result.value.sectors).toStrictEqual([]);
+  expect(
+    result.value.sectors.map((row) => [
+      row.kind,
+      { kind: "ok", value: row.weight },
+    ]),
+  ).toStrictEqual([
+    ["cash", parsePercentDisplay("40.98")],
+    ["unclassified", parsePercentDisplay("59.02")],
+  ]);
   expect(result.value.instruments.map((row) => row.kind)).toStrictEqual([
     "holding",
     "cash-krw",

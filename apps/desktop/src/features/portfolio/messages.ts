@@ -56,6 +56,18 @@ const catalog = {
   allocationSection: { ko: "자산배분과 쏠림" as UiText },
   instrumentTitle: { ko: "종목별 비중" as UiText },
   sectorTitle: { ko: "섹터별 비중" as UiText },
+  weightBelowUnit: { ko: "0.01% 미만" as UiText },
+  sectorFund: { ko: "ETF·펀드" as UiText },
+  sectorCash: { ko: "현금 (원화·달러)" as UiText },
+  sectorUnknown: { ko: "미분류" as UiText },
+  sectorBasis: {
+    ko: "보유 종목 평가액과 매수가능금액을 원화로 합산한 총액 기준이에요. 토스증권 업종을 확인할 수 없는 종목은 미분류에 포함해요." as UiText,
+  },
+  sectorPending: {
+    ko: "토스증권 업종을 확인하고 있어요. 확인 전에는 해당 종목을 미분류에 포함해요." as UiText,
+  },
+  sectorEmpty: { ko: "섹터별 비중을 표시할 자료가 없어요" as UiText },
+  levelNotApplicable: { ko: "해당 없음" as UiText },
   allocationNameColumn: { ko: "이름" as UiText },
   weightColumn: { ko: "비중" as UiText },
   levelColumn: { ko: "상한" as UiText },

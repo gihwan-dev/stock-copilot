@@ -209,6 +209,7 @@ impl ManageScreens for tauri::Builder<tauri::Wry> {
             Arc::<platform_macos::SystemClock>::clone(clock),
             Arc::clone(events),
         ))
+        .manage(Arc::clone(&toss.sectors))
         .manage(Arc::clone(&toss.performance))
         .manage(ThesisIpcState::from_repository(Arc::clone(repositories)))
         .manage(
@@ -1404,10 +1405,12 @@ fn product_builder(
         .manage(public_ip_runtime(clock));
     let tracking = src_tauri::news_tracking::NewsTracking::default();
     let hints = sources::NewsLinkHints::default();
-    let with_feeds = builder
-        .manage(collector_feeds(clock, &tracking, &hints))
-        .manage(tracking)
-        .manage(hints);
+    let (feeds, client) = collector_sources(clock, &tracking, &hints);
+    let builder = match client {
+        Some(http) => builder.manage(http),
+        None => builder,
+    };
+    let with_feeds = builder.manage(feeds).manage(tracking).manage(hints);
     match spec_watch_inputs(clock) {
         Some(inputs) => with_feeds.manage(inputs),
         None => with_feeds,
@@ -1468,11 +1471,20 @@ fn disclosure_feeds(
     ]
 }
 
+#[cfg(test)]
 fn collector_feeds(
     clock: &Arc<platform_macos::SystemClock>,
     tracking: &src_tauri::news_tracking::NewsTracking,
     hints: &sources::NewsLinkHints,
 ) -> CollectorFeeds {
+    collector_sources(clock, tracking, hints).0
+}
+
+fn collector_sources(
+    clock: &Arc<platform_macos::SystemClock>,
+    tracking: &src_tauri::news_tracking::NewsTracking,
+    hints: &sources::NewsLinkHints,
+) -> (CollectorFeeds, Option<Arc<sources::SourceHttpClient>>) {
     let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
     let Ok(http) = sources::SourceHttpClient::new(
         sources::SourceEndpoint::live(),
@@ -1480,7 +1492,7 @@ fn collector_feeds(
         Arc::new(sources::TokioSourceWait),
         None,
     ) else {
-        return CollectorFeeds::default();
+        return (CollectorFeeds::default(), None);
     };
     let client = Arc::new(http.with_diagnostics(Arc::new(LoggedSourceCalls)));
     let disclosure_feeds = disclosure_feeds(&client, clock, tracking, hints);
@@ -1526,7 +1538,7 @@ fn collector_feeds(
         });
     }
     feeds.extend(disclosure_feeds);
-    CollectorFeeds(feeds)
+    (CollectorFeeds(feeds), Some(client))
 }
 
 const fn press_target(source: sources::PressMacroSource) -> application::CollectionTarget {

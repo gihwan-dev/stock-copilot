@@ -1,15 +1,19 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use tokio::sync::watch;
 
 use application::{Clock, MarketInfo, PortError};
 use domain::{
-    KnownMarket, MasterInstrument, SectorAssignment, SectorAssignments, SectorCatalog,
-    SectorComposition, SectorDepth, SectorId, Timestamp, sector_assignment_from_compositions,
+    DisplayInstrumentName, InstrumentClassification, KnownMarket, MasterInstrument,
+    SectorAssignment, SectorAssignmentReason, SectorAssignments, SectorCatalog, SectorComposition,
+    SectorDepth, SectorId, Timestamp, sector_assignment_from_compositions,
+    sector_assignment_reason,
 };
 
 use crate::ipc::state::BoxFuture;
 
 const REFRESH_SECONDS: i64 = 86_400;
+const RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(60);
 
 pub trait SectorFeed: Send + Sync {
     fn catalog(&self) -> BoxFuture<'_, Result<SectorCatalog, PortError>>;
@@ -43,15 +47,49 @@ impl<M: MarketInfo + 'static> SectorFeed for MarketSectorFeed<M> {
 }
 
 struct Snapshot {
-    at: Timestamp,
+    coverage: CatalogCoverage,
     catalog: SectorCatalog,
     compositions: Vec<SectorComposition>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CatalogCoverage {
+    Complete,
+    Partial,
+}
+
+#[derive(Clone)]
+enum Lookup {
+    Pending,
+    Ready(Arc<Snapshot>),
+    Failed(Timestamp),
+}
+
+struct CachedLookup {
+    started: Timestamp,
+    result: watch::Receiver<Lookup>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, specta::Type)]
+pub enum SectorRefresh {
+    #[serde(rename = "pending")]
+    Pending,
+    #[default]
+    #[serde(rename = "settled")]
+    Settled,
+}
+
+#[derive(Default)]
+pub(crate) struct HoldingSectors {
+    pub(crate) assignments: SectorAssignments,
+    pub(crate) names: BTreeMap<SectorId, DisplayInstrumentName>,
+    pub(crate) refresh: SectorRefresh,
 }
 
 pub struct SectorClasses {
     feed: Arc<dyn SectorFeed>,
     clock: Arc<dyn Clock>,
-    cache: tokio::sync::Mutex<BTreeMap<KnownMarket, Arc<Snapshot>>>,
+    cache: RwLock<BTreeMap<KnownMarket, CachedLookup>>,
 }
 
 impl std::fmt::Debug for SectorClasses {
@@ -60,11 +98,26 @@ impl std::fmt::Debug for SectorClasses {
     }
 }
 
-fn fresh(snapshot: &Snapshot, now: Timestamp) -> bool {
-    now.utc_seconds()
-        .as_i64()
-        .saturating_sub(*snapshot.at.utc_seconds().as_i64())
-        < REFRESH_SECONDS
+async fn fetch(feed: &dyn SectorFeed, market: KnownMarket) -> Option<Snapshot> {
+    let catalog = feed.catalog().await.ok()?;
+    let mut compositions = Vec::new();
+    let mut coverage = CatalogCoverage::Complete;
+    for sector in catalog
+        .sectors()
+        .iter()
+        .filter(|row| row.depth() == SectorDepth::Major)
+    {
+        if let Ok(composition) = feed.composition(sector.id(), market).await {
+            compositions.push(composition);
+        } else {
+            coverage = CatalogCoverage::Partial;
+        }
+    }
+    Some(Snapshot {
+        coverage,
+        catalog,
+        compositions,
+    })
 }
 
 impl SectorClasses {
@@ -73,33 +126,81 @@ impl SectorClasses {
         Self {
             feed,
             clock,
-            cache: tokio::sync::Mutex::new(BTreeMap::new()),
+            cache: RwLock::new(BTreeMap::new()),
         }
     }
 
-    async fn snapshot(&self, market: KnownMarket, now: Timestamp) -> Option<Arc<Snapshot>> {
-        let mut cache = self.cache.lock().await;
-        if let Some(found) = cache.get(&market).filter(|found| fresh(found, now)) {
-            return Some(Arc::clone(found));
-        }
-        let catalog = self.feed.catalog().await.ok()?;
-        let mut compositions = Vec::new();
-        for sector in catalog
-            .sectors()
-            .iter()
-            .filter(|sector| sector.depth() == SectorDepth::Major)
-        {
-            if let Ok(found) = self.feed.composition(sector.id(), market).await {
-                compositions.push(found);
+    fn lookup(
+        &self,
+        market: KnownMarket,
+        now: Timestamp,
+        retry_after_failure: std::time::Duration,
+    ) -> watch::Receiver<Lookup> {
+        let mut cache = match self.cache.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(cached) = cache.get(&market) {
+            let elapsed = now
+                .utc_seconds()
+                .as_i64()
+                .saturating_sub(*cached.started.utc_seconds().as_i64());
+            let reuse = match &*cached.result.borrow() {
+                Lookup::Pending => true,
+                Lookup::Ready(snapshot) => match snapshot.coverage {
+                    CatalogCoverage::Complete => elapsed < REFRESH_SECONDS,
+                    CatalogCoverage::Partial => elapsed < RETRY_DELAY.as_secs().cast_signed(),
+                },
+                Lookup::Failed(at) => {
+                    now.utc_seconds()
+                        .as_i64()
+                        .saturating_sub(*at.utc_seconds().as_i64())
+                        < retry_after_failure.as_secs().cast_signed()
+                }
+            };
+            if reuse {
+                return cached.result.clone();
             }
         }
-        let snapshot = Arc::new(Snapshot {
-            at: now,
-            catalog,
-            compositions,
+        let (sender, result) = watch::channel(Lookup::Pending);
+        let feed = Arc::clone(&self.feed);
+        let clock = Arc::clone(&self.clock);
+        tauri::async_runtime::spawn(async move {
+            let response = fetch(feed.as_ref(), market).await.map_or_else(
+                || Lookup::Failed(clock.now()),
+                |value| Lookup::Ready(Arc::new(value)),
+            );
+            sender.send_replace(response);
         });
-        let _previous = cache.insert(market, Arc::clone(&snapshot));
-        Some(snapshot)
+        let _previous = cache.insert(
+            market,
+            CachedLookup {
+                started: now,
+                result: result.clone(),
+            },
+        );
+        result
+    }
+
+    fn current(&self, market: KnownMarket) -> Lookup {
+        self.lookup(market, self.clock.now(), RETRY_DELAY)
+            .borrow()
+            .clone()
+    }
+
+    async fn snapshot(&self, market: KnownMarket, now: Timestamp) -> Option<Arc<Snapshot>> {
+        let mut response = self.lookup(market, now, std::time::Duration::ZERO);
+        response
+            .wait_for(|current| match current {
+                Lookup::Pending => false,
+                Lookup::Ready(_) | Lookup::Failed(_) => true,
+            })
+            .await
+            .ok()
+            .and_then(|state| match &*state {
+                Lookup::Ready(snapshot) => Some(Arc::clone(snapshot)),
+                Lookup::Pending | Lookup::Failed(_) => None,
+            })
     }
 
     pub async fn assignments(&self, masters: &[MasterInstrument]) -> Option<SectorAssignments> {
@@ -129,6 +230,67 @@ impl SectorClasses {
             }
         }
         SectorAssignments::try_new(found).ok()
+    }
+}
+
+impl HoldingSectors {
+    fn select(
+        &mut self,
+        master: &MasterInstrument,
+        state: &Lookup,
+        fallback: SectorAssignment,
+    ) -> SectorAssignment {
+        let snapshot = match state {
+            Lookup::Failed(_) => return fallback,
+            Lookup::Pending => {
+                self.refresh = SectorRefresh::Pending;
+                return fallback;
+            }
+            Lookup::Ready(snapshot) => snapshot,
+        };
+        let Ok(classified) =
+            sector_assignment_from_compositions(master, &snapshot.catalog, &snapshot.compositions)
+        else {
+            return fallback;
+        };
+        if let InstrumentClassification::Sector(id) = classified.classification()
+            && let Some(row) = snapshot.catalog.sectors().iter().find(|row| row.id() == id)
+        {
+            self.names.insert(id.clone(), row.name().clone());
+        }
+        classified
+    }
+
+    pub(crate) fn read(
+        masters: &[MasterInstrument],
+        source: Option<&SectorClasses>,
+        now: Timestamp,
+    ) -> Option<Self> {
+        let mut result = Self::default();
+        let empty = SectorCatalog::from_response(Vec::new(), now).ok()?;
+        let mut assignments = Vec::new();
+        let mut lookups = BTreeMap::new();
+        for master in masters {
+            let Ok(fallback) = sector_assignment_from_compositions(master, &empty, &[]) else {
+                continue;
+            };
+            let value = if sector_assignment_reason(&fallback)
+                == Some(SectorAssignmentReason::NoMajorMembership)
+                && let Some(service) = source
+                && let Ok(quote) = master.quote_instrument()
+            {
+                let market = *quote.market();
+                let state = lookups
+                    .entry(market)
+                    .or_insert_with(|| service.current(market));
+                result.select(master, state, fallback)
+            } else {
+                fallback
+            };
+            assignments.push(value);
+        }
+        result.assignments = SectorAssignments::try_new(assignments).ok()?;
+        Some(result)
     }
 }
 

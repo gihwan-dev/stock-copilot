@@ -141,6 +141,7 @@ impl AllocationDisplay {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllocationEntry<K, W> {
     key: K,
+    value: Money,
     weight: W,
     display: AllocationDisplay,
 }
@@ -148,6 +149,10 @@ impl<K, W> AllocationEntry<K, W> {
     #[must_use]
     pub const fn key(&self) -> &K {
         &self.key
+    }
+    #[must_use]
+    pub const fn value(&self) -> Money {
+        self.value
     }
     #[must_use]
     pub const fn weight(&self) -> &W {
@@ -502,6 +507,7 @@ fn weights<K: Ord + Clone, W>(
         remainders.push((key.clone(), remainder));
         entries.push(AllocationEntry {
             key,
+            value,
             weight,
             display: AllocationDisplay {
                 units: AllocationDisplayUnits(units.as_units()),
@@ -751,6 +757,36 @@ mod tests {
             AllocationDisplayRange::Zero
         );
         assert_currency_keys(&allocation);
+    }
+    #[test]
+    fn sector_values_group_both_currencies_at_the_valuation_exchange_rate() {
+        let valuation = portfolio(
+            vec![
+                holding("KR", Some("625"), Currency::Krw),
+                holding("US", Some("1"), Currency::Usd),
+            ],
+            "1000",
+            "2",
+            Some(rate("1375")),
+        );
+        let allocation = Allocation::new(&valuation, &SectorAssignments::default());
+        let sectors = allocation.assets().sectors().as_ref().expect("비중");
+        let values: Vec<_> = sectors
+            .entries()
+            .iter()
+            .map(|row| (row.key(), row.value()))
+            .collect();
+        assert_eq!(
+            values,
+            [
+                (&AllocationSector::Cash, money("3750", Currency::Krw)),
+                (
+                    &AllocationSector::Unclassified,
+                    money("2000", Currency::Krw)
+                ),
+            ]
+        );
+        assert_eq!(units(sectors.entries()).iter().sum::<u32>(), 10_000);
     }
     fn assert_currency_keys(allocation: &Allocation) {
         assert_eq!(
