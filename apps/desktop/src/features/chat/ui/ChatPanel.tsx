@@ -121,17 +121,15 @@ const Exchanges = (props: {
 const StopButton = (props: { readonly live: EntityId }): ReactElement => {
   const stopTurn = useCancelChat();
   return (
-    <Inline justify="end">
-      <Button
-        variant="secondary"
-        size="control-height-sm"
-        onClick={(): void => {
-          stopTurn(props.live);
-        }}
-      >
-        {chatText("chat.stop", "ko")}
-      </Button>
-    </Inline>
+    <Button
+      variant="secondary"
+      size="control-height-sm"
+      onClick={(): void => {
+        stopTurn(props.live);
+      }}
+    >
+      {chatText("chat.stop", "ko")}
+    </Button>
   );
 };
 
@@ -159,16 +157,16 @@ const Conversation = (props: {
   const parts = props.render({
     messages: <Exchanges transcript={transcript} onPick={setDraft} />,
     composer: (
-      <Stack gap="space-2">
-        {live === undefined ? [] : [<StopButton key="stop" live={live} />]}
-        <ChatInput
-          layout="compact"
-          draft={draft}
-          onDraftChange={setDraft}
-          status={live === undefined ? "ready" : "sending"}
-          onSend={send}
-        />
-      </Stack>
+      <ChatInput
+        secondaryAction={
+          live === undefined ? undefined : <StopButton live={live} />
+        }
+        layout="compact"
+        draft={draft}
+        onDraftChange={setDraft}
+        status={live === undefined ? "ready" : "sending"}
+        onSend={send}
+      />
     ),
   });
   return resume === undefined ? (

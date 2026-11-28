@@ -7,6 +7,7 @@ type Props = {
   readonly status?: "ready" | "sending";
   readonly draft?: FreeText;
   readonly onDraftChange?: (value: FreeText) => void;
+  readonly secondaryAction?: ReactElement | undefined;
   readonly layout?: "stacked" | "compact";
 };
 type EditorProps = {
@@ -15,6 +16,7 @@ type EditorProps = {
   readonly initialDraft: FreeText;
   readonly draft?: FreeText | undefined;
   readonly onDraftChange?: ((value: FreeText) => void) | undefined;
+  readonly secondaryAction?: ReactElement | undefined;
   readonly layout?: "stacked" | "compact" | undefined;
 };
 const useDraft = (
@@ -73,6 +75,18 @@ const ChatField = (props: {
     />
   );
 };
+const CompactActions = (props: {
+  readonly secondaryAction: ReactElement | undefined;
+  readonly send: ReactElement;
+}): ReactElement => (
+  <div className="flex items-center gap-space-2">
+    <p className="flex-1 status-sentence text-caption text-ink-subtle">
+      {text("chat.hint", "ko")}
+    </p>
+    <div className="flex flex-1 justify-end">{props.secondaryAction}</div>
+    <div className="flex flex-1">{props.send}</div>
+  </div>
+);
 const ChatEditor = (props: EditorProps): ReactElement => {
   const [value, setValue] = useDraft(props);
   const status = props.status ?? "ready";
@@ -114,12 +128,7 @@ const ChatEditor = (props: EditorProps): ReactElement => {
   return compact === "compact" ? (
     <div className="flex status-sentence flex-col gap-space-2 text-ink">
       {field}
-      <div className="flex items-center justify-between gap-space-2">
-        <p className="status-sentence text-caption text-ink-subtle">
-          {text("chat.hint", "ko")}
-        </p>
-        {button}
-      </div>
+      <CompactActions secondaryAction={props.secondaryAction} send={button} />
     </div>
   ) : (
     <div className="flex status-sentence flex-col gap-space-2 text-ink">
@@ -139,6 +148,7 @@ export const ChatInput = (props: Props): ReactElement => (
     initialDraft={emptyFreeText}
     draft={props.draft}
     onDraftChange={props.onDraftChange}
+    secondaryAction={props.secondaryAction}
     layout={props.layout}
   />
 );
