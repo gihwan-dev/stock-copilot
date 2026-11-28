@@ -70,7 +70,7 @@ const body = (
         <th
           scope="rowgroup"
           colSpan={4}
-          className="text-left px-space-3 pt-space-3 pb-space-1 text-label text-ink-muted bg-surface-sunken"
+          className="text-left px-space-3 py-space-2 border-t-hairline border-b-hairline border-line-strong text-label text-ink-muted bg-surface-sunken"
         >
           {props.group}
         </th>
@@ -128,7 +128,7 @@ const ColumnHeader = (props: CellProps): ReactElement => {
     return (
       <th
         scope="col"
-        className="w-chat-width text-left px-space-3 py-space-2 text-ink-muted text-label"
+        className="w-full text-left px-space-3 py-space-2 text-ink-muted text-label"
       >
         {props.children}
       </th>
@@ -155,7 +155,7 @@ const Cell = (props: CellProps): ReactElement => {
   const align = props.align ?? "start";
   if (use(FrameContext) === "positions")
     return (
-      <td className="h-row-height px-space-3 py-space-1 border-t-hairline border-line-strong text-right text-body-sm text-ink-muted">
+      <td className="h-row-height px-space-3 py-space-1 border-t-hairline border-line text-right text-body-sm text-ink-muted">
         <div className="h-full flex flex-col items-end">{props.children}</div>
       </td>
     );
@@ -172,7 +172,7 @@ const RowHeader = (props: CellProps): ReactElement => {
     return (
       <th
         scope="row"
-        className="h-row-height px-space-3 py-space-1 border-t-hairline border-line-strong text-left font-regular"
+        className="h-row-height px-space-3 py-space-1 border-t-hairline border-line text-left font-regular"
       >
         <div className="h-full flex flex-col items-start">{props.children}</div>
       </th>

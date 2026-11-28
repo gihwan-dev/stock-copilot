@@ -186,6 +186,20 @@ export const formatDataValue = (value: DataDisplayInput): FormattedNumber =>
     ? group(value.toString())
     : value) as FormattedNumber;
 
+type DisplayWord = {
+  readonly offset: number;
+  readonly space: FormattedNumber;
+  readonly word: FormattedNumber;
+};
+export const dataValueWords = (
+  value: FormattedNumber,
+): readonly DisplayWord[] =>
+  Array.from(value.matchAll(/(\s*)(\S+)/gu), (match) => ({
+    offset: match.index,
+    space: (match[1] ?? "") as FormattedNumber,
+    word: (match[2] ?? "") as FormattedNumber,
+  }));
+
 export const formatTimestampValue = (value: Timestamp): FormattedNumber =>
   (value.length >= 16 && value.charAt(10) === "T"
     ? `${value.slice(0, 10)} ${value.slice(11, 16)}`

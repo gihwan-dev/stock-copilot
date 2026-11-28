@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { DataAction } from "./DataAction";
+import { dataClasses, DataAction } from "./DataAction";
 import { text } from "../lib";
 import type {
   ChartDecimal,
@@ -17,6 +17,7 @@ import {
   formatNumber,
   formatPriceChange,
   formatDataValue,
+  dataValueWords,
   formatTimestampValue,
   directionStatus,
   type Display,
@@ -143,13 +144,6 @@ export const chartNumberText = (value: ChartDecimal): Display["text"] =>
   formatNumber({ kind: "decimal", value }).text;
 export const chartLabelText: (value: UiText | FreeText) => Display["text"] =
   formatDataValue;
-const dataClasses = {
-  emphasis: "status-sentence text-title-sm font-semibold text-ink",
-  body: "status-sentence text-body text-ink",
-  "body-sm": "status-sentence text-body-sm text-ink-muted",
-  caption: "status-sentence text-caption text-ink-subtle",
-  code: "status-sentence text-code text-ink-muted",
-} as const;
 export const DataText = (props: {
   readonly onPress?: () => void;
   readonly alert?: UiText | undefined;
@@ -157,13 +151,22 @@ export const DataText = (props: {
   readonly variant?: "body" | "body-sm" | "caption" | "code" | "emphasis";
 }): ReactElement => {
   const variant = props.variant ?? "body";
-  const label = (
-    <span className={dataClasses[variant]}>{formatDataValue(props.value)}</span>
-  );
-  if (props.onPress === undefined) return label;
+  const value = formatDataValue(props.value);
+  if (props.onPress === undefined)
+    return <span className={dataClasses[variant]}>{value}</span>;
   return (
     <DataAction onPress={props.onPress} alert={props.alert}>
-      {label}
+      <span className="status-sentence">
+        {dataValueWords(value).flatMap(({ offset, space, word }) => [
+          space,
+          <span
+            key={offset}
+            className="inline-block max-w-full status-sentence"
+          >
+            {word}
+          </span>,
+        ])}
+      </span>
     </DataAction>
   );
 };
