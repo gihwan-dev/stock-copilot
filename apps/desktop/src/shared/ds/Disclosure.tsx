@@ -29,7 +29,13 @@ export const Disclosure = (props: Props): ReactElement => {
       }}
       className="border-t-hairline border-solid border-line"
     >
-      <Collapsible.Trigger className="flex items-center gap-space-2 w-full min-h-toolbar-height py-space-2 text-left bg-transparent text-ink text-body font-semibold cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus">
+      <Collapsible.Trigger
+        className={
+          props.detail === undefined
+            ? "flex items-center gap-space-2 w-full min-h-toolbar-height py-space-2 text-left bg-transparent text-ink text-body font-semibold cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
+            : "inline-flex items-center gap-space-2 rounded-md min-h-control-height my-space-1 px-control-pad-sm text-left bg-transparent text-ink text-body font-semibold cursor-pointer hover:bg-surface-sunken focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
+        }
+      >
         <span className={states[state]}>
           <Icon name="chevron-right" />
         </span>
@@ -39,11 +45,17 @@ export const Disclosure = (props: Props): ReactElement => {
         )}
       </Collapsible.Trigger>
       <Collapsible.Panel
-        className={
-          state === "closed" ? "hidden" : "pb-space-4 flex flex-col gap-space-4"
-        }
+        className={state === "closed" ? "hidden" : "flex flex-col"}
       >
-        {props.children}
+        <div
+          className={
+            props.detail === undefined
+              ? "pb-space-4 flex flex-col gap-space-4"
+              : "pb-space-1 flex flex-col gap-space-2"
+          }
+        >
+          {props.children}
+        </div>
       </Collapsible.Panel>
     </Collapsible.Root>
   );

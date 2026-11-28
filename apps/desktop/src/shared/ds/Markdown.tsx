@@ -40,10 +40,15 @@ type Props = {
   readonly onOpenLink: (url: ExternalUrl) => void;
   readonly onLocalCitation?: (number: EntityId) => void;
   readonly citations?: readonly MarkdownCitation[];
-  readonly scale?: "body" | "reading";
+  readonly scale?: "body" | "reading" | "lead";
   readonly flavor?: "basic" | "gfm";
   readonly appearance?: "plain" | "question";
 };
+const textScales = {
+  body: "markdown-content text-body text-ink",
+  reading: "markdown-content text-size-lg text-ink",
+  lead: "markdown-content text-size-lg font-semibold text-ink",
+} as const;
 const MarkdownContext = createContext<Props | undefined>(undefined);
 const LinkContext = createContext<"outside" | "inside">("outside");
 const MarkdownImage = ({ src, alt }: ImageContent): ReactElement => {
@@ -230,15 +235,7 @@ export const Markdown = (props: Props): ReactElement => {
           {body}
         </div>
       ) : (
-        <div
-          className={
-            props.scale === "reading"
-              ? "markdown-content text-size-lg text-ink"
-              : "markdown-content text-body text-ink"
-          }
-        >
-          {body}
-        </div>
+        <div className={textScales[props.scale ?? "body"]}>{body}</div>
       )}
     </MarkdownContext>
   );

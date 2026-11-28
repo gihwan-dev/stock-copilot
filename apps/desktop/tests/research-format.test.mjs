@@ -3,14 +3,14 @@ import { after, before, test } from "node:test";
 import { createServer } from "vite";
 import { desktopRoot } from "./paths.mjs";
 
-let vite, reportMarkdown;
+let vite, reportMarkdown, reportParts;
 before(async () => {
   vite = await createServer({
     root: desktopRoot,
     configFile: false,
     server: { middlewareMode: true, watch: null },
   });
-  ({ reportMarkdown } = await vite.ssrLoadModule(
+  ({ reportMarkdown, reportParts } = await vite.ssrLoadModule(
     "/src/features/research/model/report-markdown.ts",
   ));
 });
@@ -45,4 +45,35 @@ test("preserves authored Markdown and ordinary wrapped paragraphs", () => {
     "한 문단의 앞부분\n뒷부분 [1]",
   ])
     assert.equal(reportMarkdown(input), input);
+});
+
+test("only long legacy reports fold, with every original citation after expansion", () => {
+  const claims = Array.from(
+    { length: 26 },
+    (_, i) => `매출이 변했다 [${i + 1}]`,
+  );
+  const body = claims.join("\n");
+  const excerpt = reportParts(body);
+  assert.equal(excerpt.kind, "excerpt");
+  assert.equal(excerpt.first.split("\n").length, 6);
+  assert.equal(excerpt.remaining, "20");
+  assert.equal(excerpt.first + "\n" + excerpt.rest, reportMarkdown(body));
+  const list = claims.map((line) => "- " + line).join("\n");
+  assert.deepEqual(reportParts(list), { kind: "document", body: list });
+});
+
+test("a new report keeps the conclusion, analysis and conditions in source order", () => {
+  const blocks = [
+    "### 핵심\n\n매출 증가 [26].",
+    "### 판단 근거\n\n- 수주 증가 [2].",
+    "### 확인 조건\n\n원가 상승 [7].",
+  ];
+  assert.deepEqual(reportParts(blocks.join("\n\n")), {
+    kind: "sections",
+    lead: blocks[0],
+    evidence: blocks[1],
+    conditions: blocks[2],
+  });
+  const fragment = blocks.slice(1).join("\n\n");
+  assert.deepEqual(reportParts(fragment), { kind: "document", body: fragment });
 });

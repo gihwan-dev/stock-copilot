@@ -4,6 +4,7 @@ export const researchText = {
   detail: "종목 상세" as UiText,
   asOf: "분석 기준" as UiText,
   open: "원문 열기" as UiText,
+  openExternal: "원문 열기 ↗" as UiText,
   holdings: "보유 자산 평가" as UiText,
   candidates: "새 종목 후보" as UiText,
   economy: "경제와 산업 동향" as UiText,
@@ -11,6 +12,10 @@ export const researchText = {
   refreshing: "새 자료를 확인하고 있어요." as UiText,
   failed: "이번 조사 결과를 불러오지 못했어요." as UiText,
   countUnit: "건" as UiText,
+  additional: "추가 자료" as UiText,
+  remaining: "나머지" as UiText,
+  showCount: "개 보기" as UiText,
+  hideCount: "개 접기" as UiText,
   sources: "근거 자료" as UiText,
   loading: "조사 결과를 불러오고 있어요." as UiText,
 } as const;
