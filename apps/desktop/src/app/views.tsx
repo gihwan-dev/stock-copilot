@@ -81,6 +81,7 @@ const HomeBriefing = (): ReactElement => {
 };
 
 const HomeBody = (props: {
+  readonly view: ReturnType<typeof useAppVersion>;
   readonly retry: () => void;
   readonly assessment: ReactElement;
   readonly reports: ReactElement;
@@ -88,7 +89,7 @@ const HomeBody = (props: {
   const go = useNavigate();
   const sources = useSources();
   const open = useInstrumentSelection();
-  const view = useAppVersion();
+  const view = props.view;
   switch (view.status) {
     case "loading":
       return (
@@ -138,6 +139,7 @@ const HomeBody = (props: {
 export const HomeView = (): ReactElement => {
   const open = useInstrumentSelection();
   const research = useDashboardResearch(open);
+  const view = useAppVersion();
   const queryClient = useQueryClient();
   const retry = (): void => {
     detach({
@@ -150,9 +152,14 @@ export const HomeView = (): ReactElement => {
     <Page
       title={text("app.homeTitle", "ko")}
       layout="reading"
-      navigation={<ResearchNavigation />}
+      navigation={
+        <ResearchNavigation
+          account={view.status === "ready" ? "ready" : "pending"}
+        />
+      }
     >
       <HomeBody
+        view={view}
         retry={retry}
         assessment={research("holdings")}
         reports={

@@ -17,7 +17,14 @@ export {
   useColorScheme,
 } from "./canvasTheme";
 export const focusResearchSection = (
-  target: "holdings" | "candidates" | "economy",
+  target:
+    | "holdings"
+    | "candidates"
+    | "economy"
+    | "positions"
+    | "daily-briefing"
+    | "signals"
+    | "allocation",
   source?: EntityId,
   reveal?: () => void,
 ): void => {
@@ -36,20 +43,37 @@ export const focusResearchSection = (
   }
 };
 
-const wideQuery = "(min-width: 80rem)";
+const layoutQueries = [
+  ["three-columns", "(min-width: 140rem)"],
+  ["two-columns", "(min-width: 100rem)"],
+  ["summary-row", "(min-width: 80rem)"],
+] as const;
+type WindowLayout = "three-columns" | "two-columns" | "summary-row" | "compact";
 
-const subscribeWide = (onChange: () => void): (() => void) => {
-  const media =
-    typeof matchMedia === "function" ? matchMedia(wideQuery) : undefined;
-  media?.addEventListener("change", onChange);
+const subscribeLayout = (change: () => void): (() => void) => {
+  const queries =
+    typeof matchMedia === "function"
+      ? layoutQueries.map(([, query]) => matchMedia(query))
+      : [];
+  queries.forEach((query) => {
+    query.addEventListener("change", change);
+  });
   return (): void => {
-    media?.removeEventListener("change", onChange);
+    queries.forEach((query) => {
+      query.removeEventListener("change", change);
+    });
   };
 };
-const windowLayout = (): "wide" | "compact" =>
-  typeof matchMedia === "function" && matchMedia(wideQuery).matches
-    ? "wide"
+
+const readLayout = (): WindowLayout =>
+  typeof matchMedia === "function"
+    ? (layoutQueries.find(([, query]) => matchMedia(query).matches)?.[0] ??
+      "compact")
     : "compact";
 
-export const useWideWindow = (): "wide" | "compact" =>
-  useSyncExternalStore(subscribeWide, windowLayout, (): "compact" => "compact");
+export const useWindowLayout = (): WindowLayout =>
+  useSyncExternalStore(
+    subscribeLayout,
+    readLayout,
+    (): WindowLayout => "compact",
+  );

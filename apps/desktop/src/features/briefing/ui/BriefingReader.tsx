@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import {
+  Disclosure,
   Inline,
   Markdown,
   Stack,
@@ -23,6 +24,7 @@ export const Body = (props: {
     case "completed": {
       const markdown = (
         <Markdown
+          appearance="briefing"
           content={outcome.body}
           citations={briefingCitations(outcome.sources)}
           linkAllowed={(url) => linkVerdict(props.briefing, url)}
@@ -30,7 +32,20 @@ export const Body = (props: {
           scale={props.presentation === "dashboard" ? "body" : "reading"}
         />
       );
-      if (props.presentation === "dashboard") return markdown;
+      if (props.presentation === "dashboard")
+        return outcome.sources.length === 0 ? (
+          markdown
+        ) : (
+          <Stack gap="space-3">
+            {markdown}
+            <Disclosure title={briefingText("sourceDetails", "ko")}>
+              <Sources
+                sources={outcome.sources}
+                onOpenSource={props.onOpenSource}
+              />
+            </Disclosure>
+          </Stack>
+        );
       return (
         <Stack gap="space-3">
           {markdown}

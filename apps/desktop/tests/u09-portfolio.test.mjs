@@ -78,6 +78,13 @@ const bundleSource = `
         return fx.ok({...allocation("balanced"), sectorRefresh: waiting ? "pending" : "settled", sectors: [fund, cash, waiting ? unknown : sector]});
       }});
     },
+    converted: () => fx.sources({portfolio: () => fx.ok({
+      ...portfolio(),
+      totalApproximate:fx.krw("122458659"),
+      usdConversion:{
+        krwPerUsd:fx.krw("1345.67"), holdingsKrw:fx.krw("18840053"), buyingPowerKrw:fx.krw("161817")
+      },
+    })}),
     loading: () => fx.sources({ portfolio: fx.never }),
     empty: () => fx.sources({}),
     error: () => fx.sources({ portfolio: () => fx.fail("retryable") }),
@@ -138,6 +145,33 @@ test("U-09 home overview shows loading, empty, error and ready states with appro
 
     w.click(ready.getByRole("button", { name: "거래내역" }));
     await w.waitText(ready, "현황으로");
+    w.cleanup();
+  } finally {
+    bundle.close();
+  }
+});
+
+test("통화별 명세는 적용된 달러 환율과 두 원화 환산액을 그대로 보여준다", async () => {
+  const bundle = await screenDom(bundleSource);
+  try {
+    const w = bundle.open();
+    const old = w.mount(w.scenarios.ready("balanced"));
+    await w.waitText(old, "총평가");
+    assert.equal(old.queryByText("1달러당"), null);
+    assert.equal(old.queryByText("달러의 원화 환산액"), null);
+    w.cleanup();
+    const view = w.mount(w.scenarios.converted());
+    await w.waitText(view, "달러의 원화 환산액");
+    assert.ok(view.getByText("122,458,659원"));
+    assert.ok(view.getByText("1,345.67원"));
+    const row = view
+      .getByText("달러의 원화 환산액", { exact: true })
+      .closest("tr");
+    assert.ok(row);
+    assert.deepEqual(
+      [...row.cells].map((cell) => cell.textContent),
+      ["달러의 원화 환산액", "18,840,053원", "161,817원"],
+    );
     w.cleanup();
   } finally {
     bundle.close();

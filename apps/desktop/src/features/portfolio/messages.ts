@@ -24,6 +24,8 @@ const catalog = {
   totalHint: {
     ko: "보유 평가액과 매수가능금액을 원화로 환산해 더한 근사값이에요." as UiText,
   },
+  dollarUnit: { ko: "1달러당" as UiText },
+  dollarConverted: { ko: "달러의 원화 환산액" as UiText },
   exchangeRateNote: { ko: "매매기준율 환산 시각" as UiText },
   recordedAt: { ko: "기준 시각" as UiText },
   storedNotice: {
@@ -49,10 +51,13 @@ const catalog = {
   currencyUsd: { ko: "달러" as UiText },
   holdingsTitle: { ko: "보유 종목" as UiText },
   nameColumn: { ko: "종목" as UiText },
+  wonPositions: { ko: "원화 종목 (KRW)" as UiText },
+  dollarPositions: { ko: "달러 종목 (USD)" as UiText },
   quantityColumn: { ko: "수량" as UiText },
   valueColumn: { ko: "평가금액" as UiText },
   profitColumn: { ko: "평가손익" as UiText },
   holdingsEmpty: { ko: "보유 종목이 없어요" as UiText },
+  allocationLink: { ko: "종목·섹터별 비중" as UiText },
   allocationSection: { ko: "자산배분과 쏠림" as UiText },
   instrumentTitle: { ko: "종목별 비중" as UiText },
   sectorTitle: { ko: "섹터별 비중" as UiText },

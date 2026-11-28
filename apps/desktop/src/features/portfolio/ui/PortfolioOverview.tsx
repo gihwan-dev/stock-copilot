@@ -1,9 +1,7 @@
-import { Fragment, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import {
   Card,
   EmptyState,
-  Grid,
-  GridItem,
   Skeleton,
   StatusBar,
   Stack,
@@ -14,7 +12,7 @@ import type {
   PortfolioView,
   ScreenSources,
 } from "../../../shared/ipc";
-import { useWideWindow } from "../../../shared/platform";
+import { OverviewColumns } from "./OverviewColumns";
 import { text, type EntityId } from "../../../shared/lib";
 import { portfolioText, type PortfolioMessageKey } from "../messages";
 import { usePortfolio } from "../model/portfolio";
@@ -64,87 +62,73 @@ type Props = {
   readonly signals: ReactElement;
 };
 
-const OverviewColumns = (props: {
-  readonly overview: ReactElement;
-  readonly account: ReactElement;
-  readonly reports: ReactElement;
-  readonly briefing: ReactElement;
-}): ReactElement => {
-  const layout = useWideWindow();
-  const span = layout === "wide" ? 6 : 12;
-  const briefing = <Fragment key="briefing">{props.briefing}</Fragment>;
-  return (
-    <Grid layout="fit-row">
-      <GridItem span={span}>
-        <Stack gap="space-4">
-          {[
-            <Fragment key="summary">{props.overview}</Fragment>,
-            ...(layout === "compact" ? [briefing] : []),
-            <Fragment key="account">{props.account}</Fragment>,
-          ]}
-        </Stack>
-      </GridItem>
-      <GridItem span={span}>
-        <Stack gap="space-4">
-          {[
-            ...(layout === "wide" ? [briefing] : []),
-            <Fragment key="reports">{props.reports}</Fragment>,
-          ]}
-        </Stack>
-      </GridItem>
-    </Grid>
-  );
-};
+const overviewParts = (
+  props: Props,
+): Pick<Props, "reports" | "briefing" | "signals"> => ({
+  reports: (
+    <Stack gap="space-4">
+      {props.assessment}
+      {props.reports}
+    </Stack>
+  ),
+  briefing: (
+    <Stack position={{ topic: "daily-briefing" }}>{props.briefing}</Stack>
+  ),
+  signals: <Stack position={{ topic: "signals" }}>{props.signals}</Stack>,
+});
 
 const OverviewReady = (
-  props: Props & {
-    readonly view: PortfolioView;
-    readonly retry: () => void;
-  },
-): ReactElement => (
-  <>
-    {props.view.connection === "stored" ? (
-      <StatusBar tone="info">{portfolioText("storedNotice", "ko")}</StatusBar>
-    ) : null}
-    <OverviewColumns
-      overview={<SummaryCard view={props.view} />}
-      account={
-        <Stack gap="space-4">
-          <HoldingsCard
-            holdings={props.view.holdings}
-            onOpenInstrument={props.onOpenInstrument}
-            onOpenTransactions={props.onOpenTransactions}
-          />
-          {props.assessment}
-          <AllocationSection
-            load={props.sources.allocation}
-            retry={props.retry}
-          />
-          {props.signals}
-        </Stack>
-      }
-      reports={props.reports}
-      briefing={props.briefing}
-    />
-  </>
-);
+  props: Props & { readonly view: PortfolioView; readonly retry: () => void },
+): ReactElement => {
+  const parts = overviewParts(props);
+  return (
+    <>
+      {props.view.connection === "stored" ? (
+        <StatusBar tone="info">{portfolioText("storedNotice", "ko")}</StatusBar>
+      ) : null}
+      <OverviewColumns
+        overview={<SummaryCard view={props.view} />}
+        positions={
+          <Stack position={{ topic: "positions" }}>
+            <HoldingsCard
+              holdings={props.view.holdings}
+              onOpenInstrument={props.onOpenInstrument}
+              onOpenTransactions={props.onOpenTransactions}
+            />
+          </Stack>
+        }
+        allocation={
+          <Stack position={{ topic: "allocation" }}>
+            <AllocationSection
+              load={props.sources.allocation}
+              retry={props.retry}
+            />
+          </Stack>
+        }
+        reports={parts.reports}
+        briefing={parts.briefing}
+        signals={parts.signals}
+      />
+    </>
+  );
+};
 
 const OverviewPending = (props: {
   readonly status: ReactElement;
   readonly overview: Props;
-}): ReactElement => (
-  <OverviewColumns
-    overview={props.status}
-    account={
-      <Stack gap="space-4">
-        {props.overview.assessment}
-        {props.overview.signals}
-      </Stack>
-    }
-    reports={props.overview.reports}
-    briefing={props.overview.briefing}
-  />
-);
+}): ReactElement => {
+  const parts = overviewParts(props.overview);
+  return (
+    <OverviewColumns
+      overview={<Stack position={{ topic: "positions" }}>{props.status}</Stack>}
+      positions={undefined}
+      allocation={undefined}
+      reports={parts.reports}
+      briefing={parts.briefing}
+      signals={parts.signals}
+    />
+  );
+};
 
 export const PortfolioOverview = (props: Props): ReactElement => {
   const portfolio = usePortfolio(props.sources.portfolio);

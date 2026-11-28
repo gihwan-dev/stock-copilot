@@ -15,7 +15,10 @@ import {
   type ResearchSection,
 } from "../../../shared/ipc";
 import type { EntityId } from "../../../shared/lib";
-import { focusResearchSection } from "../../../shared/platform";
+import {
+  focusResearchSection,
+  useWindowLayout,
+} from "../../../shared/platform";
 import { ReportBody } from "./ReportBody";
 import { Sources, type ListState } from "./Sources";
 import { researchText } from "../messages";
@@ -137,19 +140,32 @@ export const useDashboardResearch = (
   };
 };
 
-export const ResearchNavigation = (): ReactElement => (
-  <Inline gap="space-4" wrap="wrap">
-    {topics.map((topic) => (
-      <Button
-        key={topic}
-        variant="link"
-        size="control-height-sm"
-        onClick={(): void => {
-          focusResearchSection(topic);
-        }}
-      >
-        {researchText[topic]}
-      </Button>
-    ))}
-  </Inline>
-);
+const compactTopics = [
+  "positions",
+  "daily-briefing",
+  "signals",
+  ...topics,
+] as const;
+export const ResearchNavigation = (props: {
+  readonly account: "ready" | "pending";
+}): ReactElement => {
+  const layout = useWindowLayout();
+  const destinations =
+    props.account === "ready" && layout === "compact" ? compactTopics : topics;
+  return (
+    <Inline gap="space-4" wrap="wrap">
+      {destinations.map((topic) => (
+        <Button
+          key={topic}
+          variant="link"
+          size="control-height-sm"
+          onClick={(): void => {
+            focusResearchSection(topic);
+          }}
+        >
+          {researchText[topic]}
+        </Button>
+      ))}
+    </Inline>
+  );
+};

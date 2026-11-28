@@ -9,6 +9,7 @@ const catalog = {
   openBriefing: { ko: "브리핑 보기" as UiText },
   backToHome: { ko: "현황으로" as UiText },
   finishedAt: { ko: "만든 시각" as UiText },
+  sourceDetails: { ko: "브리핑 근거 자료" as UiText },
   sources: { ko: "출처" as UiText },
   observedAt: { ko: "자료 확인 시각" as UiText },
   noSources: { ko: "출처 없음" as UiText },

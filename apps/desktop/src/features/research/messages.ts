@@ -1,6 +1,9 @@
 import type { UiText } from "../../shared/lib";
 
 export const researchText = {
+  positions: "보유 내역" as UiText,
+  "daily-briefing": "오늘 브리핑" as UiText,
+  signals: "신호 보기" as UiText,
   detail: "종목 상세" as UiText,
   asOf: "분석 기준" as UiText,
   open: "원문 열기" as UiText,

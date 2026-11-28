@@ -52,6 +52,10 @@ const measure = () => {
     briefing: bounds(briefing),
     prose: bounds(briefing?.querySelector(".markdown-content")),
     holdings: bounds(card("보유 종목")),
+    signals: bounds(main.querySelector("#signals")),
+    reports: ["holdings", "candidates", "economy"].map((id) =>
+      bounds(main.querySelector("#" + id)),
+    ),
     cardScrollers: cardScrollers.length,
     stickyHeaders,
   };
@@ -120,6 +124,40 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
               name.y < action.y + action.height &&
                 action.y < name.y + name.height,
             );
+            const shortcuts = [
+              ["allocation", "종목·섹터별 비중"],
+              ...(["minimum", "medium"].includes(size)
+                ? [
+                    ["positions", "보유 내역"],
+                    ["daily-briefing", "오늘 브리핑"],
+                    ["signals", "신호 보기"],
+                  ]
+                : []),
+            ];
+            for (const [id, label] of shortcuts) {
+              await page
+                .getByRole("button", { name: label, exact: true })
+                .press("Enter");
+              await page.waitForFunction(
+                (id) => globalThis.document.activeElement.id === id,
+                id,
+              );
+              assert.ok(
+                (await page.locator("#" + id).boundingBox()).y <
+                  dashboardSizes[size].height,
+              );
+            }
+            const sources = page
+              .locator("#daily-briefing")
+              .getByRole("button", { name: "브리핑 근거 자료" });
+            assert.equal(await sources.getAttribute("aria-expanded"), "false");
+            await sources.press("Enter");
+            assert.equal(await sources.getAttribute("aria-expanded"), "true");
+            await sources.press("Enter");
+            await page
+              .locator("#daily-briefing")
+              .getByText("만든 시각", { exact: true })
+              .waitFor();
             for (const [topic, label] of [
               ["holdings", "보유 자산 평가"],
               ["candidates", "새 종목 후보"],
@@ -227,22 +265,47 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
     assert.ok(row.holdings.y >= row.summary.y + row.summary.height, row.size);
     assert.equal(row.holdings.x, row.summary.x, row.size);
     const leftGutter = row.summary.x - row.area.x;
-    const rightGutter =
-      row.area.x + row.area.width - row.briefing.x - row.briefing.width;
+    const last = row.size === "qhd" ? row.signals : row.briefing;
+    const rightGutter = row.area.x + row.area.width - last.x - last.width;
     assert.ok(leftGutter >= 0 && leftGutter <= 25, row.size);
     assert.ok(rightGutter >= 0 && rightGutter <= 25, row.size);
-    if (["qhd", "fullhd", "wide"].includes(row.size)) {
+    if (row.size === "qhd" || row.size === "fullhd") {
       assert.equal(row.summary.y, row.briefing.y, row.size);
       assert.ok(row.briefing.x >= row.summary.x + row.summary.width, row.size);
-      assert.ok(row.prose.width >= (row.size === "wide" ? 480 : 700), row.size);
+      assert.ok(row.prose.width >= 700 && row.prose.width <= 721, row.size);
+      if (row.size === "qhd") {
+        assert.equal(row.signals.y, row.summary.y, row.size);
+        assert.ok(
+          row.signals.x >= row.briefing.x + row.briefing.width,
+          row.size,
+        );
+      }
+    } else if (row.size === "wide") {
+      assert.equal(row.holdings.y, row.briefing.y, row.size);
+      assert.ok(
+        row.summary.width >= row.briefing.width + row.holdings.width,
+        row.size,
+      );
+      assert.ok(row.summary.height < 400 && row.prose.width >= 480, row.size);
     } else {
       assert.equal(row.summary.x, row.briefing.x, row.size);
       assert.equal(row.summary.width, row.briefing.width, row.size);
       assert.ok(
-        row.briefing.y >= row.summary.y + row.summary.height &&
-          row.briefing.y < row.holdings.y,
+        row.briefing.y >= row.holdings.y + row.holdings.height,
         row.size,
       );
+    }
+    const [assessment, candidates, economy] = row.reports;
+    assert.ok(
+      assessment.y + assessment.height <= candidates.y &&
+        candidates.y + candidates.height <= economy.y,
+      row.size,
+    );
+    assert.equal(assessment.x, economy.x, row.size);
+    if (row.size === "qhd") {
+      assert.equal(assessment.x, row.briefing.x, row.size);
+      assert.equal(assessment.width, row.briefing.width, row.size);
+      assert.ok(assessment.y >= row.briefing.y + row.briefing.height, row.size);
     }
     assert.ok(row.stickyHeaders.length > 0, row.size);
     assert.ok(

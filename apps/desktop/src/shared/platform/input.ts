@@ -1,4 +1,4 @@
-import { useWideWindow } from "./index";
+import { useWindowLayout } from "./index";
 import {
   clampPanelShare,
   parseInputValue,
@@ -148,8 +148,8 @@ export const chatPanelLimits = {
 export const panelSupport = (): "resizable" | "static" =>
   typeof ResizeObserver === "function" ? "resizable" : "static";
 export const useShellResize = (): "resizable" | "static" => {
-  const layout = useWideWindow();
-  return panelSupport() === "resizable" && layout === "wide"
+  const layout = useWindowLayout();
+  return panelSupport() === "resizable" && layout !== "compact"
     ? "resizable"
     : "static";
 };

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  appendFileSync,
   cpSync,
   mkdirSync,
   readFileSync,
@@ -126,6 +127,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "useCanvasChartTheme",
         "useColorScheme",
         "focusResearchSection",
+        "useWindowLayout",
       ],
     );
     const platformFunctions = checker.getExportsOfModule(symbol);
@@ -146,6 +148,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         ["useCanvasChartTheme", ["CandleThemePalette | undefined"]],
         ["useColorScheme", ['"light" | "dark"']],
         ["focusResearchSection", ["void"]],
+        ["useWindowLayout", ["WindowLayout"]],
       ],
     );
     assert.deepEqual(DOM_ACCESS_FILES, [
@@ -261,7 +264,10 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         await make({ "ds/no-dom-values": "off" }).lintFiles([main])
       )[0].messages.some((m) => m.ruleId === "ds/no-dom-values"),
     );
-    writeFileSync(platform, "export const leak=():HTMLElement=>document.body;");
+    appendFileSync(
+      platform,
+      "\nexport const leak=():HTMLElement=>document.body;\n",
+    );
     compile();
     assert.ok(
       (await make().lintFiles([platform]))[0].messages.some(

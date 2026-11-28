@@ -10,7 +10,7 @@ import {
 import type { BriefingSummary, ScreenSources } from "../../../shared/ipc";
 import { briefingText } from "../messages";
 import { useBriefings, useOpenSource } from "../model/briefings";
-import { Body } from "./BriefingReader";
+import { Body, Stamp } from "./BriefingReader";
 import { BriefingView, type BriefingLayout } from "./BriefingView";
 
 type Load = ScreenSources["briefings"];
@@ -53,6 +53,7 @@ const Summary = (props: {
 }): ReactElement => (
   <Card
     title={briefingText(props.latest.kind, "ko")}
+    meta={<Stamp briefing={props.latest} />}
     layout={props.layout}
     actions={{
       label: briefingText("openBriefing", "ko"),
