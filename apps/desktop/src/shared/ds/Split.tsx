@@ -45,7 +45,7 @@ export const Split = (props: Props): ReactElement =>
       data-split-content=""
       className="flex flex-1 flex-wrap gap-space-2 w-full max-w-full"
     >
-      <div className="flex-none w-chat-width-min max-w-full">
+      <div className="flex flex-1 flex-col gap-space-2 max-w-full">
         {props.children[0]}
       </div>
       <div className="flex flex-1 flex-col max-w-full">{props.children[1]}</div>

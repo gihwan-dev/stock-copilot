@@ -14,12 +14,17 @@ type RootProps = Children & {
   readonly dense?: Density;
   readonly frame?: Frame;
 };
-const TableElement = (props: {
-  readonly children: Children["children"];
-  readonly caption?: UiText | undefined;
-  readonly empty?: UiText | undefined;
-}): ReactElement => (
-  <table className="w-full h-full border-collapse tabular-nums">
+const tableElement = (
+  props: RootProps,
+  widget: UiText | undefined,
+): ReactElement => (
+  <table
+    className={
+      widget === undefined
+        ? "w-full h-full border-collapse tabular-nums"
+        : "w-full flex-1 border-collapse tabular-nums"
+    }
+  >
     {props.caption === undefined ? null : (
       <caption className="text-left p-space-3 text-body-sm text-ink-muted">
         {props.caption}
@@ -54,20 +59,15 @@ const Root = (props: RootProps): ReactElement => {
   const widget = useWidgetTitle();
   const frame = props.frame ?? "standalone";
   const surface = frame === "standalone" ? "standalone" : "embedded";
+  const table = tableElement(props, widget);
   return (
     <DensityContext value={props.dense ?? "normal"}>
       <FrameContext value={frame}>
         <TableSurface mode={widget === undefined ? surface : "widget"}>
           {useScrollOwner() === "card" ? (
-            <TableElement caption={props.caption} empty={props.empty}>
-              {props.children}
-            </TableElement>
+            table
           ) : (
-            <ScrollArea direction="horizontal">
-              <TableElement caption={props.caption} empty={props.empty}>
-                {props.children}
-              </TableElement>
-            </ScrollArea>
+            <ScrollArea direction="horizontal">{table}</ScrollArea>
           )}
         </TableSurface>
       </FrameContext>

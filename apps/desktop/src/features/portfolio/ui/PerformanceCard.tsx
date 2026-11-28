@@ -1,14 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { Inline, Percent, Stack, Text } from "../../../shared/ds";
+import { Percent, PriceChange, Table, Text } from "../../../shared/ds";
 import {
   getPerformance,
   type PerformanceLine,
   type PerformanceSpan,
+  type PortfolioView,
   type SignedRate,
 } from "../../../shared/ipc";
-import { queryKeys } from "../../../shared/lib";
+import { queryKeys, type UiText } from "../../../shared/lib";
 import { portfolioText, type PortfolioMessageKey } from "../messages";
+
+const TableRoot = Table.Root;
+const TableBody = Table.Body;
+const TableRowHeader = Table.RowHeader;
+const TableCell = Table.Cell;
+const TableRow = Table.Row;
 
 const refreshMs = 600_000;
 
@@ -44,16 +51,17 @@ const Rate = (props: {
     <Percent value={props.value.rate} direction={props.value.direction} />
   );
 
-const SpanRate = (props: { readonly line: PerformanceLine }): ReactElement => (
-  <Inline gap="space-1" align="center">
-    <Text variant="caption" tone="ink-muted">
-      {portfolioText(spanKeys[props.line.span], "ko")}
-    </Text>
-    <Rate value={props.line.periodReturn} status={props.line.status} />
-  </Inline>
+const MetricRow = (props: {
+  readonly label: UiText;
+  readonly children: ReactElement;
+}): ReactElement => (
+  <TableRow>
+    <TableRowHeader>{props.label}</TableRowHeader>
+    <TableCell align="end">{props.children}</TableCell>
+  </TableRow>
 );
 
-const Lines = (props: {
+const PeriodRows = (props: {
   readonly lines: readonly PerformanceLine[];
 }): ReactElement => {
   const year = props.lines.find((line) => line.span === "1y");
@@ -66,39 +74,33 @@ const Lines = (props: {
     )
   )
     return (
-      <Inline align="center" gap="space-2">
-        <Text variant="caption">
-          {portfolioText("performanceCombined", "ko")}
-        </Text>
+      <MetricRow label={portfolioText("performanceCombined", "ko")}>
         <Rate status={first.status} value={undefined} />
-      </Inline>
+      </MetricRow>
     );
   return (
-    <Stack gap="space-1">
-      <Inline gap="space-2" align="center" wrap="wrap">
-        {[
-          <Text key="title" variant="caption" tone="ink-muted">
-            {portfolioText("performanceTitle", "ko")}
-          </Text>,
-          ...props.lines.map((line): ReactElement => (
-            <SpanRate key={line.span} line={line} />
-          )),
-        ]}
-      </Inline>
-      <Inline key="drawdown" gap="space-1" align="center">
-        <Text variant="caption" tone="ink-muted">
-          {portfolioText("performanceDrawdown", "ko")}
-        </Text>
+    <>
+      {props.lines.map((line) => (
+        <MetricRow
+          key={line.span}
+          label={portfolioText(spanKeys[line.span], "ko")}
+        >
+          <Rate value={line.periodReturn} status={line.status} />
+        </MetricRow>
+      ))}
+      <MetricRow label={portfolioText("performanceDrawdown", "ko")}>
         <Rate
           value={year?.maxDrawdown}
           status={year?.status ?? "unavailable"}
         />
-      </Inline>
-    </Stack>
+      </MetricRow>
+    </>
   );
 };
 
-export const PerformanceSummary = (): ReactElement => {
+export const PerformanceSummary = (props: {
+  readonly today?: PortfolioView["today"];
+}): ReactElement => {
   const query = useQuery({
     queryKey: [...queryKeys.portfolio, "performance"],
     queryFn: getPerformance,
@@ -113,14 +115,39 @@ export const PerformanceSummary = (): ReactElement => {
     },
   });
   const reply = query.data;
-  if (reply === undefined || reply.kind === "err")
-    return (
-      <Text variant="caption" tone="ink-muted">
-        {portfolioText(
-          reply === undefined ? "performanceLoading" : "performanceError",
-          "ko",
+  return (
+    <TableRoot
+      frame="embedded"
+      dense="dense"
+      caption={portfolioText("performanceMetrics", "ko")}
+    >
+      <TableBody>
+        <MetricRow label={portfolioText("todayTitle", "ko")}>
+          {props.today === undefined ? (
+            <Text variant="caption" tone="ink-muted">
+              {portfolioText("todayPending", "ko")}
+            </Text>
+          ) : (
+            <PriceChange
+              amount={props.today.amount}
+              rate={props.today.rate}
+              direction={props.today.direction}
+            />
+          )}
+        </MetricRow>
+        {reply === undefined || reply.kind === "err" ? (
+          <MetricRow label={portfolioText("performanceTitle", "ko")}>
+            <Text variant="caption" tone="ink-muted">
+              {portfolioText(
+                reply === undefined ? "performanceLoading" : "performanceError",
+                "ko",
+              )}
+            </Text>
+          </MetricRow>
+        ) : (
+          <PeriodRows lines={reply.value.lines} />
         )}
-      </Text>
-    );
-  return <Lines lines={reply.value.lines} />;
+      </TableBody>
+    </TableRoot>
+  );
 };

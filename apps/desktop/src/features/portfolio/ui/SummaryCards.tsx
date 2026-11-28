@@ -7,8 +7,6 @@ import {
   Split,
   Inline,
   Money,
-  PriceChange,
-  Stack,
   Table,
   Text,
   TimestampText,
@@ -30,26 +28,6 @@ const currencyKeys = {
   KRW: "currencyKrw",
   USD: "currencyUsd",
 } as const satisfies Record<Currency, PortfolioMessageKey>;
-
-const TodayLine = (props: { readonly view: PortfolioView }): ReactElement => (
-  <Inline gap="space-2" align="center" wrap="wrap">
-    <Text variant="body-sm" tone="ink-muted">
-      {portfolioText("todayTitle", "ko")}
-    </Text>
-    {props.view.today === undefined ? (
-      <Text variant="body-sm" tone="ink-muted">
-        {portfolioText("todayPending", "ko")}
-      </Text>
-    ) : (
-      <PriceChange
-        amount={props.view.today.amount}
-        rate={props.view.today.rate}
-        direction={props.view.today.direction}
-        emphasis="large"
-      />
-    )}
-  </Inline>
-);
 
 const MetaLine = (props: { readonly view: PortfolioView }): ReactElement => (
   <Inline gap="space-3" align="center" wrap="wrap">
@@ -85,30 +63,25 @@ const MetaLine = (props: { readonly view: PortfolioView }): ReactElement => (
 );
 
 const TotalValue = (props: { readonly view: PortfolioView }): ReactElement => (
-  <Stack gap="space-2">
-    {[
-      <Inline key="total" gap="space-2" align="center" wrap="wrap">
-        <Money
-          value={props.view.totalApproximate}
-          notation="full"
-          emphasis="display"
-        />
-        <Badge tone="neutral">{portfolioText("totalApproximate", "ko")}</Badge>
-      </Inline>,
-      <TodayLine key="today" view={props.view} />,
-      <PerformanceSummary key="performance" />,
-      <Text key="hint" variant="caption" tone="ink-muted">
-        {portfolioText("totalHint", "ko")}
-      </Text>,
-      ...(props.view.totalCoverage === "partial"
-        ? [
-            <Text key="partial" variant="caption" tone="ink-muted">
-              {portfolioText("totalPartial", "ko")}
-            </Text>,
-          ]
-        : []),
-    ]}
-  </Stack>
+  <>
+    <Inline gap="space-2" align="center" wrap="wrap">
+      <Money
+        value={props.view.totalApproximate}
+        notation="full"
+        emphasis="display"
+      />
+      <Badge tone="neutral">{portfolioText("totalApproximate", "ko")}</Badge>
+    </Inline>
+    <PerformanceSummary today={props.view.today} />
+    <Text variant="caption" tone="ink-muted">
+      {portfolioText("totalHint", "ko")}
+    </Text>
+    {props.view.totalCoverage === "partial" ? (
+      <Text variant="caption" tone="ink-muted">
+        {portfolioText("totalPartial", "ko")}
+      </Text>
+    ) : null}
+  </>
 );
 
 const CurrencyRow = (props: {

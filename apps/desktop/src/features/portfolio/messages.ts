@@ -2,6 +2,7 @@ import type { Locale, UiText } from "../../shared/lib";
 
 const catalog = {
   totalTitle: { ko: "총평가" as UiText },
+  performanceMetrics: { ko: "손익과 수익률" as UiText },
   performanceCombined: { ko: "기간 수익률 · 최대 낙폭(1년)" as UiText },
   performanceTitle: { ko: "기간 수익률" as UiText },
   performanceDrawdown: { ko: "최대 낙폭(1년)" as UiText },
