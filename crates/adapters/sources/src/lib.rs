@@ -77,8 +77,8 @@ pub use tracked_disclosures::{
 };
 pub use tracked_news::{
     MAX_GOOGLE_SEARCHES, MAX_ITEMS_PER_TARGET, MAX_TRACKED_TARGETS, NewsLinkHints,
-    TRACKED_RECENCY_SECONDS, TrackedNewsFeed, TrackedSearch, TrackedTargets, google_query,
-    is_recent, with_alias_searches,
+    TRACKED_RECENCY_SECONDS, TargetedHeadlines, TrackedNewsFeed, TrackedSearch, TrackedTargets,
+    google_query, is_recent, with_alias_searches,
 };
 pub use us_macro::{
     FredSeries, TreasuryTenor, UsMacroClient, build_fred_observations_url,

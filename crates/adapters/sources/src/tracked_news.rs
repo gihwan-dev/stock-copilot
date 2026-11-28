@@ -218,6 +218,41 @@ impl fmt::Debug for TrackedNewsFeed {
     }
 }
 
+pub trait TargetedHeadlines: Send + Sync {
+    fn target_headlines(
+        &self,
+        source: NewsSource,
+        target: &TrackedInstrument,
+    ) -> impl Future<Output = Option<TargetItems>> + Send;
+}
+
+impl TargetedHeadlines for Arc<SourceHttpClient> {
+    async fn target_headlines(
+        &self,
+        source: NewsSource,
+        target: &TrackedInstrument,
+    ) -> Option<TargetItems> {
+        match source {
+            NewsSource::GoogleNews => {
+                let query = approved_query(&google_query(target))?;
+                let feed = GoogleNewsFeed::new(Self::clone(self), query);
+                Some(feed.new_items(FeedCursor::Start).await)
+            }
+            NewsSource::YahooFinance => {
+                let feed = YahooFinanceFeed::new(Self::clone(self), vec![target.symbol.clone()]);
+                Some(feed.new_items(FeedCursor::Start).await)
+            }
+            NewsSource::Hankyung
+            | NewsSource::Maekyung
+            | NewsSource::Yonhap
+            | NewsSource::Edaily
+            | NewsSource::BankOfKorea
+            | NewsSource::FederalReserve
+            | NewsSource::SegyeFinance => None,
+        }
+    }
+}
+
 impl TrackedNewsFeed {
     #[must_use]
     pub fn new(
@@ -239,21 +274,6 @@ impl TrackedNewsFeed {
         match self.search {
             TrackedSearch::YahooFinance => true,
             TrackedSearch::GoogleNews => exact_phrase(target) == ExactPhrase::Quoted,
-        }
-    }
-
-    async fn fetch_target(&self, target: &TrackedInstrument) -> Option<TargetItems> {
-        match self.search {
-            TrackedSearch::GoogleNews => {
-                let query = approved_query(&google_query(target))?;
-                let feed = GoogleNewsFeed::new(Arc::clone(&self.client), query);
-                Some(feed.new_items(FeedCursor::Start).await)
-            }
-            TrackedSearch::YahooFinance => {
-                let feed =
-                    YahooFinanceFeed::new(Arc::clone(&self.client), vec![target.symbol.clone()]);
-                Some(feed.new_items(FeedCursor::Start).await)
-            }
         }
     }
 
@@ -335,7 +355,11 @@ impl NewsFeed for TrackedNewsFeed {
         let mut failure = None;
         let mut answered = 0_usize;
         for target in &targets {
-            match self.fetch_target(target).await {
+            match self
+                .client
+                .target_headlines(self.search.news_source(), target)
+                .await
+            {
                 None => {}
                 Some(Ok(DataAvailability::Available((found, _cursor)))) => {
                     answered = answered.saturating_add(1);
