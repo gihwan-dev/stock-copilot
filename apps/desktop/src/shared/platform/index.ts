@@ -16,6 +16,29 @@ export {
   useCanvasChartTheme,
   useColorScheme,
 } from "./canvasTheme";
+const scrollViewport = (target: Readonly<Element>): Element | undefined =>
+  Array.from(document.querySelectorAll("[data-scroll-viewport]")).findLast(
+    (node) => node.contains(target) && node.scrollHeight > node.clientHeight,
+  );
+
+const revealNearest = (target: Readonly<HTMLElement>): void => {
+  target.focus({ preventScroll: true });
+  const scroller = scrollViewport(target);
+  if (scroller === undefined) {
+    target.scrollIntoView({ block: "nearest" });
+    return;
+  }
+  const viewport = scroller.getBoundingClientRect();
+  const item = target.getBoundingClientRect();
+  const margin = 16;
+  const top = Math.max(0, viewport.top) + margin;
+  const bottom =
+    Math.min(document.documentElement.clientHeight, viewport.bottom) - margin;
+  if (item.top < top) scroller.scrollBy({ top: item.top - top });
+  else if (item.bottom > bottom)
+    scroller.scrollBy({ top: item.bottom - bottom });
+};
+
 export const focusResearchSection = (
   target:
     | "holdings"
@@ -32,10 +55,11 @@ export const focusResearchSection = (
     const section = document.getElementById(
       source === undefined ? target : `${target}-${source}`,
     );
-    section?.focus({ preventScroll: true });
-    section?.scrollIntoView({
-      block: source === undefined ? "start" : "center",
-    });
+    if (section === null) return;
+    if (source === undefined) {
+      section.focus({ preventScroll: true });
+      section.scrollIntoView({ block: "start" });
+    } else revealNearest(section);
   };
   if (reveal === undefined) {
     focus();
@@ -80,31 +104,40 @@ export const useWindowLayout = (): WindowLayout =>
     (): WindowLayout => "compact",
   );
 
+const focusNewExcerpt = (item: Readonly<HTMLLIElement> | undefined): void => {
+  if (item === undefined) return;
+  const citation = item.querySelector<HTMLElement>('[role="link"], a[href]');
+  revealNearest(citation ?? item);
+};
+
 export const preserveExcerptPosition = (
   next: "open" | "closed",
+  activation: {
+    readonly trigger: EntityId;
+    readonly input: "keyboard" | "pointer";
+  },
   change: (value: "open" | "closed") => void,
 ): void => {
-  const trigger = document.activeElement;
-  const scroller = Array.from(
-    document.querySelectorAll("[data-scroll-viewport]"),
-  ).findLast(
-    (node) => node.contains(trigger) && node.scrollHeight > node.clientHeight,
-  );
-  if (trigger === null || scroller === undefined) {
+  const trigger = document.getElementById(activation.trigger);
+  const controlled = trigger?.getAttribute("aria-controls");
+  const content = document.getElementById(controlled ?? "");
+  if (trigger === null || content === null) {
     change(next);
     return;
   }
-  const initialScroll = scroller.scrollTop;
+  const scroller = scrollViewport(trigger);
+  const initialScroll = scroller?.scrollTop ?? 0;
   const initialTop = trigger.getBoundingClientRect().top;
+  const shown = content.querySelectorAll("li").length;
   change(next);
   requestAnimationFrame(() => {
-    scroller.scrollTo({
-      top:
-        next === "open"
-          ? initialScroll
-          : scroller.scrollTop +
-            trigger.getBoundingClientRect().top -
-            initialTop,
-    });
+    if (next === "open" && activation.input === "keyboard") {
+      focusNewExcerpt(Array.from(content.querySelectorAll("li")).at(shown));
+    } else if (scroller !== undefined) {
+      const relativeTop = trigger.getBoundingClientRect().top - initialTop;
+      scroller.scrollTo({
+        top: next === "open" ? initialScroll : scroller.scrollTop + relativeTop,
+      });
+    }
   });
 };

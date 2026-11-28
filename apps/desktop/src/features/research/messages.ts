@@ -21,8 +21,8 @@ export const researchText = {
   condition: "확인 조건" as UiText,
   collapse: "접기" as UiText,
   additional: "추가 자료" as UiText,
-  remaining: "나머지" as UiText,
-  showCount: "개 보기" as UiText,
+  remaining: "더 보기" as UiText,
+  showCount: "개" as UiText,
   sources: "근거 자료" as UiText,
   loading: "조사 결과를 불러오고 있어요." as UiText,
 } as const;

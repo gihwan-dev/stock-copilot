@@ -23,7 +23,7 @@ export const ReportBody = (props: BodyProps): ReactElement => {
   const render = (
     body: FreeText,
     scale: "lead" | "body",
-    appearance: "plain" | "research" = "plain",
+    appearance: "plain" | "research" | "excerpt" = "plain",
   ): ReactElement => (
     <Markdown
       key={body}
@@ -68,12 +68,12 @@ export const ReportBody = (props: BodyProps): ReactElement => {
       detail={detail.kind === "ok" ? detail.value : undefined}
       closeTitle={researchText.collapse}
       open={state}
-      onOpenChange={(next): void => {
-        preserveExcerptPosition(next, setState);
+      onOpenChange={(next, trigger, input): void => {
+        preserveExcerptPosition(next, { trigger, input }, setState);
       }}
       preview={render(parts.first, "body")}
     >
-      {render(parts.full, "body")}
+      {render(parts.full, "body", "excerpt")}
     </Disclosure>
   );
 };

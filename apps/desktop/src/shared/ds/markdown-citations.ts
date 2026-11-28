@@ -1,3 +1,4 @@
+import type { MarkdownProps } from "./markdown-types";
 import type { MarkdownParent as Parent } from "./Markdown";
 import type { EntityId, ExternalUrl, FreeText } from "../lib";
 
@@ -48,6 +49,7 @@ const expandText = (
 
 export const citationPlugin = (
   citations: readonly MarkdownCitation[],
+  appearance?: MarkdownProps["appearance"],
 ): (() => (root: Root) => Branch) => {
   const expand = (node: Node): readonly (Node | Branch)[] => {
     if (node.type === "text") return expandText(node, citations);
@@ -57,7 +59,16 @@ export const citationPlugin = (
       node.type === "linkReference"
     )
       return [node];
-    return [{ ...node, children: node.children.flatMap(expand) }];
+    const children = node.children.flatMap(expand);
+    if (node.type === "listItem" && appearance === "excerpt")
+      return [
+        {
+          ...node,
+          data: { ...node.data, hProperties: { tabIndex: -1 } },
+          children,
+        },
+      ];
+    return [{ ...node, children }];
   };
   return () =>
     (root): Branch => ({ ...root, children: root.children.flatMap(expand) });

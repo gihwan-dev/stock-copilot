@@ -228,9 +228,9 @@ export const Markdown = (props: MarkdownProps): ReactElement => {
       skipHtml
       components={components}
       remarkPlugins={
-        citations.length === 0
+        citations.length === 0 && props.appearance !== "excerpt"
           ? plugins
-          : [...plugins, citationPlugin(citations)]
+          : [...plugins, citationPlugin(citations, props.appearance)]
       }
     >
       {props.content}
