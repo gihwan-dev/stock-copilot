@@ -123,15 +123,13 @@ const HomeBody = (props: {
           onOpenTransactions={(): void => {
             go("/transactions");
           }}
-          aside={{
-            top: (
-              <SignalCards
-                sources={sources}
-                footer={<ScorecardPanel load={sources.scorecard} />}
-              />
-            ),
-            bottom: <HomeBriefing />,
-          }}
+          signals={
+            <SignalCards
+              sources={sources}
+              footer={<ScorecardPanel load={sources.scorecard} />}
+            />
+          }
+          briefing={<HomeBriefing />}
         />
       );
   }

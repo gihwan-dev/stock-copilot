@@ -35,7 +35,7 @@ const bodyClasses = {
 } as const;
 
 const innerClasses = {
-  reading: "flex flex-col gap-space-6 w-full max-w-content-max scroll-flex",
+  reading: "flex flex-col gap-space-6 w-full max-w-full scroll-flex",
   scroll: "flex flex-col gap-space-6 w-full max-w-content-max scroll-flex",
   fill: "flex flex-col flex-1 gap-space-4 w-full max-w-content-max scroll-flex",
 } as const;

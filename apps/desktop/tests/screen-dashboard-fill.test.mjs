@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sizes, withAuditServer } from "../../../harness/screen-audit/run.mjs";
 
+const dashboardSizes = {
+  ...sizes,
+  fullhd: { width: 1920, height: 1080 },
+  qhd: { width: 2560, height: 1440 },
+};
+
 const measure = () => {
   const tolerance = 1;
   const main = globalThis.document.querySelector("main");
@@ -12,21 +18,23 @@ const measure = () => {
   const looseScrollers = verticalScrollers
     .filter((node) => node.closest("main section") === null)
     .map((node) => `${node.scrollHeight}/${node.clientHeight}`);
-  const rows = [...main.querySelectorAll(".grid")]
-    .filter((grid) => grid.closest("section") === null)
-    .map((grid) =>
-      [...grid.children].map((item) => {
-        const card = item.querySelector("section");
-        return {
-          item: Math.round(item.getBoundingClientRect().height),
-          top: Math.round(item.getBoundingClientRect().top),
-          card:
-            card === null
-              ? -1
-              : Math.round(card.getBoundingClientRect().height),
-        };
-      }),
-    );
+  const card = (title) =>
+    [...main.querySelectorAll("section > header h3")]
+      .find((heading) => heading.textContent === title)
+      ?.closest("section");
+  const bounds = (element) => {
+    if (!element) return undefined;
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  };
+  const summary = card("총평가");
+  const briefing =
+    card("아침 브리핑") ??
+    card("브리핑을 불러오는 중이에요") ??
+    card("브리핑을 불러오지 못했어요");
+  const hasCurrencyTable = [
+    ...(summary?.querySelectorAll("caption") ?? []),
+  ].some((caption) => caption.textContent === "통화별 평가");
   const cardScrollers = verticalScrollers.filter(
     (node) => node.closest("main section") !== null,
   );
@@ -38,7 +46,12 @@ const measure = () => {
     mainBottom: Math.round(main.getBoundingClientRect().bottom),
     windowHeight: globalThis.innerHeight,
     looseScrollers,
-    rows,
+    hasCurrencyTable,
+    area: bounds(main),
+    summary: bounds(summary),
+    briefing: bounds(briefing),
+    prose: bounds(briefing?.querySelector(".markdown-content")),
+    holdings: bounds(card("보유 종목")),
     cardScrollers: cardScrollers.length,
     stickyHeaders,
   };
@@ -58,7 +71,7 @@ const visit = async (page, address, attempt = 1) => {
 
 const open = async ({ browser, url }, scenario, size) => {
   const context = await browser.newContext({
-    viewport: sizes[size],
+    viewport: dashboardSizes[size],
     colorScheme: "light",
     locale: "ko-KR",
     timezoneId: "Asia/Seoul",
@@ -79,7 +92,9 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
   const results = await withAuditServer(async (target) => {
     const rows = [];
     for (const scenario of ["home-ready", "home-loading", "home-error"])
-      for (const size of ["wide", "medium", "minimum"]) {
+      for (const size of scenario === "home-ready"
+        ? ["qhd", "fullhd", "wide", "medium", "minimum"]
+        : ["wide", "medium", "minimum"]) {
         const { context, page } = await open(target, scenario, size);
         try {
           if (scenario === "home-ready") {
@@ -127,6 +142,13 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
                 (id) => globalThis.document.activeElement.id === id,
                 topic,
               );
+              const disclosure = page.locator("#" + topic).getByRole("button", {
+                name: "근거 자료 1건",
+              });
+              assert.equal(
+                await disclosure.getAttribute("aria-expanded"),
+                "false",
+              );
               if (topic === "holdings") {
                 await page
                   .locator("#holdings")
@@ -146,15 +168,26 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
                 await page.waitForFunction(
                   () => globalThis.document.activeElement.id === "holdings-1",
                 );
+                assert.equal(
+                  await disclosure.getAttribute("aria-expanded"),
+                  "true",
+                );
+                await disclosure.press("Space");
+                assert.equal(
+                  await disclosure.getAttribute("aria-expanded"),
+                  "false",
+                );
                 continue;
               }
+              await disclosure.press("Enter");
               const source = page
                 .locator("#" + topic)
                 .getByRole("button", { name: "원문 열기" });
               await source.focus();
               const bounds = await source.boundingBox();
               assert.ok(
-                bounds.y >= 0 && bounds.y + bounds.height <= sizes[size].height,
+                bounds.y >= 0 &&
+                  bounds.y + bounds.height <= dashboardSizes[size].height,
                 topic,
               );
             }
@@ -164,7 +197,8 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
             );
             const rect = await last.boundingBox();
             assert.ok(
-              rect.y >= 0 && rect.y + rect.height <= sizes[size].height,
+              rect.y >= 0 &&
+                rect.y + rect.height <= dashboardSizes[size].height,
               "마지막 경제 분석 문단",
             );
           }
@@ -184,26 +218,32 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
     );
     assert.ok(row.mainBottom <= row.windowHeight + 1, `${where}: 창 밖으로`);
     assert.ok(row.looseScrollers.length <= 1, where);
-    assert.ok(row.rows.length >= 1, where);
+    assert.ok(row.briefing?.width > 0, where);
   }
   const ready = results.filter((row) => row.scenario === "home-ready");
   for (const row of ready) {
     assert.equal(row.looseScrollers.length, 1, row.size);
-    assert.deepEqual(
-      row.rows.map((items) => items.length),
-      [2, 2],
-      row.size,
-    );
-    const [summary] = row.rows;
-    if (row.size === "wide") {
-      assert.equal(summary[0].top, summary[1].top);
-      assert.equal(summary[0].item, summary[1].item, row.size);
-    } else
-      assert.ok(summary[1].top >= summary[0].top + summary[0].item, row.size);
-    assert.ok(
-      summary.every((item) => item.card > 0 && item.card <= item.item + 1),
-      row.size,
-    );
+    assert.equal(row.hasCurrencyTable, true, row.size);
+    assert.ok(row.holdings.y >= row.summary.y + row.summary.height, row.size);
+    assert.equal(row.holdings.x, row.summary.x, row.size);
+    const leftGutter = row.summary.x - row.area.x;
+    const rightGutter =
+      row.area.x + row.area.width - row.briefing.x - row.briefing.width;
+    assert.ok(leftGutter >= 0 && leftGutter <= 25, row.size);
+    assert.ok(rightGutter >= 0 && rightGutter <= 25, row.size);
+    if (["qhd", "fullhd", "wide"].includes(row.size)) {
+      assert.equal(row.summary.y, row.briefing.y, row.size);
+      assert.ok(row.briefing.x >= row.summary.x + row.summary.width, row.size);
+      assert.ok(row.prose.width >= (row.size === "wide" ? 480 : 700), row.size);
+    } else {
+      assert.equal(row.summary.x, row.briefing.x, row.size);
+      assert.equal(row.summary.width, row.briefing.width, row.size);
+      assert.ok(
+        row.briefing.y >= row.summary.y + row.summary.height &&
+          row.briefing.y < row.holdings.y,
+        row.size,
+      );
+    }
     assert.ok(row.stickyHeaders.length > 0, row.size);
     assert.ok(
       row.cardScrollers === 0 &&
@@ -223,6 +263,9 @@ test("한 조사가 실패해도 보관된 분석과 근거는 열리고 갱신 
     try {
       const holdings = page.locator("#holdings");
       await holdings.getByText("이번 조사 결과를 불러오지 못했어요.").waitFor();
+      await holdings
+        .getByRole("button", { name: "근거 자료 1건" })
+        .press("Enter");
       await holdings.getByText("예시전자 분기보고서").waitFor();
       await page
         .locator("#candidates")
@@ -231,6 +274,9 @@ test("한 조사가 실패해도 보관된 분석과 근거는 열리고 갱신 
       const economy = page.locator("#economy");
       const updating = economy.getByText("새 자료를 확인하고 있어요.");
       await updating.waitFor();
+      await economy
+        .getByRole("button", { name: "근거 자료 1건" })
+        .press("Enter");
       await page.clock.fastForward(5100);
       await updating.waitFor({ state: "detached", timeout: 10000 });
       await economy.getByText("산업 동향 조사").waitFor();

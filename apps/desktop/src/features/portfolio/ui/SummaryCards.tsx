@@ -2,8 +2,7 @@ import type { ReactElement } from "react";
 import {
   Badge,
   Card,
-  Grid,
-  GridItem,
+  Split,
   Inline,
   Money,
   PriceChange,
@@ -69,36 +68,32 @@ const MetaLine = (props: { readonly view: PortfolioView }): ReactElement => (
   </Inline>
 );
 
-const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
-  <Card title={portfolioText("totalTitle", "ko")} layout="flow">
-    <Stack gap="space-2">
-      {[
-        <Inline key="total" gap="space-2" align="center" wrap="wrap">
-          <Money
-            value={props.view.totalApproximate}
-            notation="compact"
-            emphasis="display"
-          />
-          <Badge tone="neutral">
-            {portfolioText("totalApproximate", "ko")}
-          </Badge>
-        </Inline>,
-        <TodayLine key="today" view={props.view} />,
-        <PerformanceSummary key="performance" />,
-        <MetaLine key="meta" view={props.view} />,
-        <Text key="hint" variant="caption" tone="ink-muted">
-          {portfolioText("totalHint", "ko")}
-        </Text>,
-        ...(props.view.totalCoverage === "partial"
-          ? [
-              <Text key="partial" variant="caption" tone="ink-muted">
-                {portfolioText("totalPartial", "ko")}
-              </Text>,
-            ]
-          : []),
-      ]}
-    </Stack>
-  </Card>
+const TotalValue = (props: { readonly view: PortfolioView }): ReactElement => (
+  <Stack gap="space-2">
+    {[
+      <Inline key="total" gap="space-2" align="center" wrap="wrap">
+        <Money
+          value={props.view.totalApproximate}
+          notation="compact"
+          emphasis="display"
+        />
+        <Badge tone="neutral">{portfolioText("totalApproximate", "ko")}</Badge>
+      </Inline>,
+      <TodayLine key="today" view={props.view} />,
+      <PerformanceSummary key="performance" />,
+      <MetaLine key="meta" view={props.view} />,
+      <Text key="hint" variant="caption" tone="ink-muted">
+        {portfolioText("totalHint", "ko")}
+      </Text>,
+      ...(props.view.totalCoverage === "partial"
+        ? [
+            <Text key="partial" variant="caption" tone="ink-muted">
+              {portfolioText("totalPartial", "ko")}
+            </Text>,
+          ]
+        : []),
+    ]}
+  </Stack>
 );
 
 const CurrencyRow = (props: {
@@ -123,40 +118,40 @@ const CurrencyRow = (props: {
   </TableRow>
 );
 
-const CurrencyCard = (props: {
+const CurrencyTable = (props: {
   readonly view: PortfolioView;
 }): ReactElement => (
-  <Card title={portfolioText("currencyTitle", "ko")} layout="flow">
-    <TableRoot dense="dense">
-      <TableHead>
-        <TableRow>
-          <TableHeader>{portfolioText("currencyColumn", "ko")}</TableHeader>
-          <TableHeader align="end">
-            {portfolioText("holdingsColumn", "ko")}
-          </TableHeader>
-          <TableHeader align="end">
-            {portfolioText("buyingPowerColumn", "ko")}
-          </TableHeader>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {props.view.currencies.map((value): ReactElement => (
-          <CurrencyRow key={value.currency} value={value} />
-        ))}
-      </TableBody>
-    </TableRoot>
-  </Card>
+  <TableRoot
+    dense="dense"
+    frame="embedded"
+    caption={portfolioText("currencyTitle", "ko")}
+  >
+    <TableHead>
+      <TableRow>
+        <TableHeader>{portfolioText("currencyColumn", "ko")}</TableHeader>
+        <TableHeader align="end">
+          {portfolioText("holdingsColumn", "ko")}
+        </TableHeader>
+        <TableHeader align="end">
+          {portfolioText("buyingPowerColumn", "ko")}
+        </TableHeader>
+      </TableRow>
+    </TableHead>
+    <TableBody>
+      {props.view.currencies.map((value): ReactElement => (
+        <CurrencyRow key={value.currency} value={value} />
+      ))}
+    </TableBody>
+  </TableRoot>
 );
 
-export const SummaryCards = (props: {
+export const SummaryCard = (props: {
   readonly view: PortfolioView;
 }): ReactElement => (
-  <Grid layout="fit-row">
-    <GridItem span={{ narrow: 12, medium: 6 }}>
-      <TotalCard view={props.view} />
-    </GridItem>
-    <GridItem span={{ narrow: 12, medium: 6 }}>
-      <CurrencyCard view={props.view} />
-    </GridItem>
-  </Grid>
+  <Card title={portfolioText("totalTitle", "ko")}>
+    <Split size="chat-width">
+      <TotalValue view={props.view} />
+      <CurrencyTable view={props.view} />
+    </Split>
+  </Card>
 );

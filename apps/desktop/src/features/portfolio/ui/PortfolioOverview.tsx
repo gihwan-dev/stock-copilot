@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { Fragment, type ReactElement } from "react";
 import {
   Card,
   EmptyState,
@@ -14,12 +14,13 @@ import type {
   PortfolioView,
   ScreenSources,
 } from "../../../shared/ipc";
+import { useWideWindow } from "../../../shared/platform";
 import { text, type EntityId } from "../../../shared/lib";
 import { portfolioText, type PortfolioMessageKey } from "../messages";
 import { usePortfolio } from "../model/portfolio";
 import { AllocationSection } from "./AllocationSection";
 import { HoldingsCard } from "./HoldingsCard";
-import { SummaryCards } from "./SummaryCards";
+import { SummaryCard } from "./SummaryCards";
 
 const reasonBodies = {
   network: "errorNetworkBody",
@@ -53,37 +54,61 @@ const failureBody = (failure: IpcFailure): PortfolioMessageKey => {
   }
 };
 
-type Aside = {
-  readonly top: ReactElement;
-  readonly bottom: ReactElement;
-};
-
 type Props = {
   readonly sources: Pick<ScreenSources, "portfolio" | "allocation">;
   readonly onOpenInstrument: (symbol: EntityId) => void;
   readonly onOpenTransactions: () => void;
   readonly assessment: ReactElement;
   readonly reports: ReactElement;
-  readonly aside: Aside;
+  readonly briefing: ReactElement;
+  readonly signals: ReactElement;
 };
 
-const OverviewReady = (props: {
-  readonly view: PortfolioView;
-  readonly sources: Props["sources"];
-  readonly retry: () => void;
-  readonly onOpenInstrument: (symbol: EntityId) => void;
-  readonly onOpenTransactions: () => void;
-  readonly assessment: ReactElement;
+const OverviewColumns = (props: {
+  readonly overview: ReactElement;
+  readonly account: ReactElement;
   readonly reports: ReactElement;
-  readonly aside: Aside;
-}): ReactElement => (
+  readonly briefing: ReactElement;
+}): ReactElement => {
+  const layout = useWideWindow();
+  const span = layout === "wide" ? 6 : 12;
+  const briefing = <Fragment key="briefing">{props.briefing}</Fragment>;
+  return (
+    <Grid layout="fit-row">
+      <GridItem span={span}>
+        <Stack gap="space-4">
+          {[
+            <Fragment key="summary">{props.overview}</Fragment>,
+            ...(layout === "compact" ? [briefing] : []),
+            <Fragment key="account">{props.account}</Fragment>,
+          ]}
+        </Stack>
+      </GridItem>
+      <GridItem span={span}>
+        <Stack gap="space-4">
+          {[
+            ...(layout === "wide" ? [briefing] : []),
+            <Fragment key="reports">{props.reports}</Fragment>,
+          ]}
+        </Stack>
+      </GridItem>
+    </Grid>
+  );
+};
+
+const OverviewReady = (
+  props: Props & {
+    readonly view: PortfolioView;
+    readonly retry: () => void;
+  },
+): ReactElement => (
   <>
     {props.view.connection === "stored" ? (
       <StatusBar tone="info">{portfolioText("storedNotice", "ko")}</StatusBar>
     ) : null}
-    <SummaryCards view={props.view} />
-    <Grid layout="fit-row">
-      <GridItem span={{ narrow: 12, medium: 8 }}>
+    <OverviewColumns
+      overview={<SummaryCard view={props.view} />}
+      account={
         <Stack gap="space-4">
           <HoldingsCard
             holdings={props.view.holdings}
@@ -95,16 +120,12 @@ const OverviewReady = (props: {
             load={props.sources.allocation}
             retry={props.retry}
           />
-          {props.reports}
+          {props.signals}
         </Stack>
-      </GridItem>
-      <GridItem span={{ narrow: 12, medium: 4 }}>
-        <Stack gap="space-4">
-          {props.aside.top}
-          {props.aside.bottom}
-        </Stack>
-      </GridItem>
-    </Grid>
+      }
+      reports={props.reports}
+      briefing={props.briefing}
+    />
   </>
 );
 
@@ -112,19 +133,17 @@ const OverviewPending = (props: {
   readonly status: ReactElement;
   readonly overview: Props;
 }): ReactElement => (
-  <>
-    {props.status}
-    {props.overview.assessment}
-    {props.overview.reports}
-    <Grid layout="fit-row">
-      <GridItem span={{ narrow: 12, medium: 6 }}>
-        {props.overview.aside.top}
-      </GridItem>
-      <GridItem span={{ narrow: 12, medium: 6 }}>
-        {props.overview.aside.bottom}
-      </GridItem>
-    </Grid>
-  </>
+  <OverviewColumns
+    overview={props.status}
+    account={
+      <Stack gap="space-4">
+        {props.overview.assessment}
+        {props.overview.signals}
+      </Stack>
+    }
+    reports={props.overview.reports}
+    briefing={props.overview.briefing}
+  />
 );
 
 export const PortfolioOverview = (props: Props): ReactElement => {
@@ -179,7 +198,8 @@ export const PortfolioOverview = (props: Props): ReactElement => {
           onOpenTransactions={props.onOpenTransactions}
           assessment={props.assessment}
           reports={props.reports}
-          aside={props.aside}
+          signals={props.signals}
+          briefing={props.briefing}
         />
       );
   }

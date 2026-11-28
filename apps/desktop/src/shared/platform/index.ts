@@ -1,5 +1,5 @@
 import type { EntityId } from "../lib";
-import type { ReactElement } from "react";
+import { useSyncExternalStore, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
 export { detach } from "./detach";
@@ -19,10 +19,37 @@ export {
 export const focusResearchSection = (
   target: "holdings" | "candidates" | "economy",
   source?: EntityId,
+  reveal?: () => void,
 ): void => {
-  const section = document.getElementById(
-    source === undefined ? target : `${target}-${source}`,
-  );
-  section?.focus({ preventScroll: true });
-  section?.scrollIntoView({ block: "start" });
+  const focus = (): void => {
+    const section = document.getElementById(
+      source === undefined ? target : `${target}-${source}`,
+    );
+    section?.focus({ preventScroll: true });
+    section?.scrollIntoView({ block: "start" });
+  };
+  if (reveal === undefined) {
+    focus();
+  } else {
+    reveal();
+    requestAnimationFrame(focus);
+  }
 };
+
+const wideQuery = "(min-width: 80rem)";
+
+const subscribeWide = (onChange: () => void): (() => void) => {
+  const media =
+    typeof matchMedia === "function" ? matchMedia(wideQuery) : undefined;
+  media?.addEventListener("change", onChange);
+  return (): void => {
+    media?.removeEventListener("change", onChange);
+  };
+};
+const windowLayout = (): "wide" | "compact" =>
+  typeof matchMedia === "function" && matchMedia(wideQuery).matches
+    ? "wide"
+    : "compact";
+
+export const useWideWindow = (): "wide" | "compact" =>
+  useSyncExternalStore(subscribeWide, windowLayout, (): "compact" => "compact");
