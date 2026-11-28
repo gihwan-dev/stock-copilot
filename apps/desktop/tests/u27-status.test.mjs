@@ -95,6 +95,8 @@ test("U-27 advanced status shows check records with reasons, no-action states, s
     const readyText = await w.waitText(ready, "한도 안에서 쓰고 있어요.");
     assert.equal(readyText.includes("재개 시각"), false);
     assert.equal(readyText.includes("AI 기능만 꺼 두었어요"), false);
+    const settings = ready.getByRole("button", { name: "설정", exact: true });
+    assert.equal(settings.getAttribute("aria-pressed"), "true");
     w.click(ready.getByRole("button", { name: "설정으로" }));
     await w.waitText(ready, "기본 설정");
     w.cleanup();

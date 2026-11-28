@@ -87,6 +87,13 @@ test("U04 App boots with mockCommands, renders ready and error states without re
       if (!first.view.container.textContent.includes("현황으로"))
         throw new Error("waiting for settings route");
     });
+    assert.equal(
+      first.view.getByRole("navigation", { name: "화면 이동" }),
+      destination("설정").closest("nav"),
+    );
+    assert.equal(destination("설정").getAttribute("aria-pressed"), "true");
+    w.click(destination("브리핑"));
+    await first.view.findByRole("heading", { name: "브리핑" });
     w.cleanup();
     w.clearMocks();
 

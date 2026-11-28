@@ -68,13 +68,13 @@ const chatRoute = createRoute({
 });
 
 const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellLayoutRoute,
   path: "/settings",
   component: SettingsRouteView,
 });
 
 const statusRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellLayoutRoute,
   path: "/settings/status",
   component: StatusView,
 });
@@ -86,9 +86,9 @@ const routeTree = rootRoute.addChildren([
     latestBriefingRoute,
     briefingsRoute,
     chatRoute,
+    settingsRoute,
+    statusRoute,
   ]),
-  settingsRoute,
-  statusRoute,
 ]);
 
 export const AppRouter = (props: {

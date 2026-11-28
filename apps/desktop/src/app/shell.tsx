@@ -33,7 +33,9 @@ const Destinations = (props: {
             props.shown === undefined &&
             (matchRoute({ to: item.path }) !== false ||
               (item.path === "/briefing" &&
-                matchRoute({ to: "/briefings" }) !== false))
+                matchRoute({ to: "/briefings" }) !== false) ||
+              (item.path === "/settings" &&
+                matchRoute({ to: "/settings/status" }) !== false))
               ? "pressed"
               : "released"
           }
@@ -52,6 +54,7 @@ export const ShellLayout = (): ReactElement => {
   const [shown, setShown] = useState<EntityId | undefined>(undefined);
   const [listState, setListState] = useState<PanelState>("closed");
   const matchRoute = useMatchRoute();
+  const settings = matchRoute({ to: "/settings", fuzzy: true }) !== false;
   const status = (
     <>
       <UpdateBar client={coreUpdateClient} />
@@ -65,7 +68,7 @@ export const ShellLayout = (): ReactElement => {
     </>
   );
   const page =
-    shown === undefined ? (
+    shown === undefined || settings ? (
       <Outlet />
     ) : (
       <InstrumentDetail
@@ -81,7 +84,7 @@ export const ShellLayout = (): ReactElement => {
     <AppShell
       navigation={
         <Destinations
-          shown={shown}
+          shown={settings ? undefined : shown}
           open={(path): void => {
             setShown(undefined);
             setListState("closed");
@@ -99,8 +102,12 @@ export const ShellLayout = (): ReactElement => {
       }
       listOpen={listState}
       onListOpenChange={setListState}
-      list={<InstrumentList sources={sources} onSelect={setShown} />}
-      status={status}
+      list={
+        settings ? null : (
+          <InstrumentList sources={sources} onSelect={setShown} />
+        )
+      }
+      status={settings ? null : status}
     >
       {page}
     </AppShell>
