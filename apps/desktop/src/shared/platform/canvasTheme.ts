@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
   useSyncExternalStore,
@@ -22,17 +21,18 @@ const TOKEN_NAMES = [
   "--color-focus-ring",
 ] as const;
 
-const readTokenValues = (
-  computed: Readonly<CSSStyleDeclaration>,
-): readonly (CanvasColor | undefined)[] =>
-  TOKEN_NAMES.map((token) => {
-    const parsed = parseCanvasColor(computed.getPropertyValue(token));
-    return parsed.kind === "ok" ? parsed.value : undefined;
-  });
+const readTokenValues = (target: Readonly<Element>): readonly string[] => {
+  const computed = getComputedStyle(target);
+  return TOKEN_NAMES.map((token) => computed.getPropertyValue(token).trim());
+};
 
 const assemblePalette = (
-  values: readonly (CanvasColor | undefined)[],
+  tokens: readonly string[],
 ): CandleThemePalette | undefined => {
+  const values = tokens.map((token) => {
+    const parsed = parseCanvasColor(token);
+    return parsed.kind === "ok" ? parsed.value : undefined;
+  });
   const [surface, grid, axisText, rising, falling, focus] = values;
   if (
     surface === undefined ||
@@ -51,7 +51,7 @@ const readPaletteFromElement = (
 ): CandleThemePalette | undefined => {
   if (target === null || typeof getComputedStyle !== "function")
     return undefined;
-  return assemblePalette(readTokenValues(getComputedStyle(target)));
+  return assemblePalette(readTokenValues(target));
 };
 
 export const readCanvasTheme = (): CandleThemePalette | undefined =>
@@ -59,10 +59,7 @@ export const readCanvasTheme = (): CandleThemePalette | undefined =>
 
 const readRootTokenKey = (): string => {
   if (typeof getComputedStyle !== "function") return "";
-  const computed = getComputedStyle(document.documentElement);
-  return TOKEN_NAMES.map((token) =>
-    computed.getPropertyValue(token).trim(),
-  ).join("\u001f");
+  return readTokenValues(document.documentElement).join("\u001f");
 };
 
 const subscribeThemeChanges = (
@@ -97,16 +94,6 @@ const subscribeThemeChanges = (
 const subscribeRootTheme = (onChange: () => void): (() => void) =>
   subscribeThemeChanges(document.documentElement, onChange);
 
-const parseTokenKey = (key: string): CandleThemePalette | undefined => {
-  if (key.length === 0) return undefined;
-  return assemblePalette(
-    key.split("\u001f").map((value) => {
-      const parsed = parseCanvasColor(value);
-      return parsed.kind === "ok" ? parsed.value : undefined;
-    }),
-  );
-};
-
 const readColorScheme = (): "light" | "dark" => {
   const forced = document.documentElement.getAttribute("data-theme");
   if (forced === "dark" || forced === "light") return forced;
@@ -126,19 +113,12 @@ export const useColorScheme = (): "light" | "dark" =>
 export const useCanvasChartTheme = (
   theme: "light" | "dark",
 ): CandleThemePalette | undefined => {
-  const snapshot = useCallback(
-    (): string => `${theme}\u001e${readRootTokenKey()}`,
-    [theme],
-  );
   const raw = useSyncExternalStore(
     subscribeRootTheme,
-    snapshot,
+    (): string => `${theme}\u001f${readRootTokenKey()}`,
     (): string => "",
   );
-  return useMemo(() => {
-    const separator = raw.indexOf("\u001e");
-    return separator < 0 ? undefined : parseTokenKey(raw.slice(separator + 1));
-  }, [raw]);
+  return useMemo(() => assemblePalette(raw.split("\u001f").slice(1)), [raw]);
 };
 
 const barTone = (
@@ -160,17 +140,19 @@ const paintScene = (
   scene: CandleCanvasScene,
   palette: CandleThemePalette,
 ): void => {
+  const { width, height } = canvas;
+  if (width === 0 || height === 0) return;
+  const density = devicePixelRatio;
   const ctx = canvas.getContext("2d");
   if (ctx === null) return;
-  const width = canvas.width > 0 ? canvas.width : 300;
-  const height = canvas.height > 0 ? canvas.height : 150;
+  const hairline = Math.max(1, Math.round(density));
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = palette.surface;
   ctx.fillRect(0, 0, width, height);
   ctx.strokeStyle = palette.grid;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = hairline;
   [0.2, 0.5, 0.8].forEach((ratio): void => {
-    const y = Math.round(height * ratio) + 0.5;
+    const y = Math.floor(height * ratio) + (hairline % 2) / 2;
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
@@ -178,28 +160,36 @@ const paintScene = (
   });
   scene.bars.forEach((bar): void => {
     const tone = barTone(palette, bar.direction);
-    const cx = (bar.x / 100) * width;
-    const barWidth = Math.max(2, (bar.span / 100) * width);
+    const cx = Math.round((bar.x / 100) * width);
+    const slotWidth = (bar.span / 100) * width;
+    const maxWidth = Math.min(16 * density, Math.floor(slotWidth) - 1);
+    const barWidth = Math.max(
+      1,
+      Math.round(Math.min(maxWidth, slotWidth * 0.6)),
+    );
+    const left = cx - Math.floor(barWidth / 2);
+    const wickWidth = Math.min(hairline, barWidth);
+    const wickX = left + Math.floor((barWidth - wickWidth) / 2) + wickWidth / 2;
     const wickTop = (bar.wickTop / 60) * height;
     const wickBottom = (bar.wickBottom / 60) * height;
     const bodyTop = (bar.bodyTop / 60) * height;
     const bodyHeight = Math.max(
-      1.5,
+      hairline,
       ((bar.bodyBottom - bar.bodyTop) / 60) * height,
     );
     ctx.fillStyle = tone;
     ctx.strokeStyle = tone;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = wickWidth;
     ctx.beginPath();
-    ctx.moveTo(cx, wickTop);
-    ctx.lineTo(cx, wickBottom);
+    ctx.moveTo(wickX, wickTop);
+    ctx.lineTo(wickX, wickBottom);
     ctx.stroke();
-    ctx.fillRect(cx - barWidth / 2, bodyTop, barWidth, bodyHeight);
+    ctx.fillRect(left, bodyTop, barWidth, bodyHeight);
     if (scene.activeId === bar.id) {
       ctx.strokeStyle = palette.focus;
       ctx.beginPath();
-      ctx.moveTo(cx, 0);
-      ctx.lineTo(cx, height);
+      ctx.moveTo(wickX, 0);
+      ctx.lineTo(wickX, height);
       ctx.stroke();
     }
   });
@@ -214,9 +204,29 @@ export const useCandleCanvas = (
     if (canvas === null) return undefined;
     const scope = canvas.closest("[data-chart-theme]") ?? canvas;
     const draw = (): void => {
+      const box = canvas.getBoundingClientRect();
+      const width = Math.round(box.width * devicePixelRatio);
+      const height = Math.round(box.height * devicePixelRatio);
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
       const resolved = scene.palette ?? readPaletteFromElement(scope);
       if (resolved !== undefined) paintScene(canvas, scene, resolved);
     };
+    const densityChanges = new AbortController();
+    const watchDensity = (): void => {
+      if (typeof matchMedia !== "function") return;
+      matchMedia(
+        `(resolution: ${devicePixelRatio.toString()}dppx)`,
+      ).addEventListener(
+        "change",
+        () => {
+          draw();
+          watchDensity();
+        },
+        { once: true, signal: densityChanges.signal },
+      );
+    };
+    watchDensity();
     draw();
     const unsubscribe = subscribeThemeChanges(scope, draw);
     const resize =
@@ -225,6 +235,7 @@ export const useCandleCanvas = (
         : undefined;
     resize?.observe(canvas);
     return (): void => {
+      densityChanges.abort();
       unsubscribe();
       resize?.disconnect();
     };

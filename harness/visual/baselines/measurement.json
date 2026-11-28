@@ -558,16 +558,16 @@
     {
       "component": "CandleChart",
       "theme": "light",
-      "bytes": 14920,
-      "first": "b9596119eae43bbba997ae6c8ae0978966fe42b97c0400f2cae42024b992db20",
-      "second": "b9596119eae43bbba997ae6c8ae0978966fe42b97c0400f2cae42024b992db20"
+      "bytes": 12588,
+      "first": "61e1f4c27937fbbf76613e7f1838ec122fdf0863fc108e5670bc8d33d684ae94",
+      "second": "61e1f4c27937fbbf76613e7f1838ec122fdf0863fc108e5670bc8d33d684ae94"
     },
     {
       "component": "CandleChart",
       "theme": "dark",
-      "bytes": 14810,
-      "first": "01cced30977287ec8b849af76699e0229c6da3e8bb4162f9f3680379f8c86efb",
-      "second": "01cced30977287ec8b849af76699e0229c6da3e8bb4162f9f3680379f8c86efb"
+      "bytes": 12624,
+      "first": "8b6f8ff4feb395814b6e843f9f41b609251a1115b9161580baee45d1c2e12379",
+      "second": "8b6f8ff4feb395814b6e843f9f41b609251a1115b9161580baee45d1c2e12379"
     },
     {
       "component": "Money",

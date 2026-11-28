@@ -65,11 +65,10 @@ const buildBars = (
   max: ChartCoordinate,
 ): readonly CandleBar[] => {
   const step = 90 / cs.length;
-  const span = c(Math.min(12, Math.max(1.2, step * 0.6)));
   return cs.map((b, i) => ({
     ...b,
     x: c(5 + step * (i + 0.5)),
-    span,
+    span: c(step),
     wickTop: py(b.h, min, max),
     wickBottom: py(b.l, min, max),
     bodyTop: py(c(Math.max(b.o, b.cl)), min, max),

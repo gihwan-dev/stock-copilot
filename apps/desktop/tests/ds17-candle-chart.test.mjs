@@ -149,6 +149,8 @@ const installCanvasAndTheme = (w, initialTokens) => {
   w.getComputedStyle = () => ({
     getPropertyValue: (name) => state.tokens[name] ?? "",
   });
+  w.HTMLCanvasElement.prototype.getBoundingClientRect = () =>
+    new w.DOMRect(0, 0, 300, 150);
   w.HTMLCanvasElement.prototype.getContext = function getContext(kind) {
     if (kind !== "2d") return null;
     const ops = [];
@@ -375,6 +377,94 @@ test("DS17 platform theme wrapper passes palette props and keyboard navigation e
     );
     assert.equal(view.container.querySelector("canvas"), null);
     assert.ok(view.container.textContent.includes("차트 값을 읽을 수 없어요"));
+  } finally {
+    bundle.close();
+  }
+});
+
+test("DS17 uses screen pixels for wicks and keeps candle bodies within their time slots", async () => {
+  const bundle = await componentsDom(harnessSource);
+  try {
+    const w = bundle.open();
+    const { draws } = installCanvasAndTheme(w, lightTokens);
+    let width = 1920;
+    const height = 220;
+    w.HTMLCanvasElement.prototype.getBoundingClientRect = () =>
+      new w.DOMRect(0, 0, width, height);
+    w.Element.prototype.getAnimations = () => [];
+    const resizeHandlers = new WeakMap();
+    w.ResizeObserver = class {
+      constructor(notify) {
+        this.notify = notify;
+      }
+      observe(element) {
+        resizeHandlers.set(element, this.notify);
+      }
+      disconnect() {}
+    };
+    const queries = new Map();
+    w.matchMedia = (name) => {
+      const media = new w.EventTarget();
+      queries.set(name, media);
+      return media;
+    };
+    const series = (count) =>
+      Array.from({ length: count }, (_, i) => ({
+        ...sampleRows[i % sampleRows.length],
+        id: `bar-${i}`,
+      }));
+    w.devicePixelRatio = 1;
+    const view = w.renderCandle(series(60));
+    const canvas = view.container.querySelector("canvas");
+    const resize = () => w.act(() => resizeHandlers.get(canvas)());
+    const assertPlot = (count) => {
+      const dpr = w.devicePixelRatio;
+      const ops = draws.at(-1);
+      assert.equal(canvas.width, Math.round(width * dpr));
+      assert.equal(canvas.height, Math.round(height * dpr));
+      const bodies = ops.filter((op) => op.op === "fillRect").slice(1);
+      const wicks = ops.filter((op) => op.op === "stroke").slice(3);
+      assert.equal(bodies.length, count);
+      assert.equal(wicks.length, count);
+      for (const [i, body] of bodies.entries()) {
+        const [left, , size] = body.args;
+        assert.ok(size >= 1 && size <= 16 * dpr);
+        assert.ok(wicks[i].lineWidth <= dpr);
+        const next = bodies[i + 1];
+        if (next !== undefined) {
+          const gap = next.args[0] - left - size;
+          assert.ok(
+            gap >= (Math.floor((0.9 * canvas.width) / count) >= 2 ? 1 : 0),
+          );
+        }
+      }
+    };
+    assertPlot(60);
+    width = 720;
+    resize();
+    assertPlot(60);
+    for (const [oldRatio, newRatio] of [
+      [1, 2],
+      [2, 1],
+    ]) {
+      w.devicePixelRatio = newRatio;
+      w.act(() => {
+        queries
+          .get(`(resolution: ${oldRatio}dppx)`)
+          .dispatchEvent(new w.Event("change"));
+      });
+      assertPlot(60);
+      w.rerenderCandle(view, series(500));
+      assertPlot(500);
+      width = 1920;
+      resize();
+      assertPlot(500);
+      width = 720;
+      w.rerenderCandle(view, series(60));
+    }
+    w.rerenderCandle(view, series(1));
+    assertPlot(1);
+    w.cleanup();
   } finally {
     bundle.close();
   }

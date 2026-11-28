@@ -460,7 +460,8 @@ export const appConfig = (
         "functional/no-expression-statements",
       ]),
     }),
-    ...whenListed(PLATFORM_FILE_ALLOWLIST, {
+    ...PLATFORM_FILE_ALLOWLIST.map((file) => ({
+      files: [file],
       rules: {
         "functional/immutable-data": [
           "error",
@@ -471,11 +472,14 @@ export const appConfig = (
               "ctx.fillStyle",
               "ctx.strokeStyle",
               "ctx.lineWidth",
+              ...(file === "src/shared/platform/canvasTheme.ts"
+                ? ["canvas.width", "canvas.height"]
+                : []),
             ],
           },
         ],
       },
-    }),
+    })),
     ...whenListed(TYPE_PREDICATE_ALLOWLIST, {
       rules: off(["guard/no-type-predicate"]),
     }),
