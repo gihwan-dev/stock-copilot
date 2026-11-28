@@ -108,21 +108,19 @@ const Report = ({
           {entry.symbol === null ? (
             []
           ) : (
-            <Inline gap="space-2" align="center">
+            <Inline gap="space-2" align="center" wrap="wrap">
               {entry.displayName === null ? (
                 []
               ) : (
                 <DataText value={entry.displayName} variant="emphasis" />
               )}
               <DataText value={entry.symbol} variant="code" />
+              {topic === "candidates" && entry.detail === "available" ? (
+                <InstrumentAction symbol={entry.symbol} open={open} />
+              ) : (
+                []
+              )}
             </Inline>
-          )}
-          {topic === "candidates" &&
-          entry.detail === "available" &&
-          entry.symbol !== null ? (
-            <InstrumentAction symbol={entry.symbol} open={open} />
-          ) : (
-            []
           )}
           <Markdown
             content={entry.body}
@@ -190,7 +188,7 @@ export const ResearchNavigation = (): ReactElement => (
     {topics.map((topic) => (
       <Button
         key={topic}
-        variant="ghost"
+        variant="link"
         size="control-height-sm"
         onClick={(): void => {
           focusResearchSection(topic);

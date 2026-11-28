@@ -83,6 +83,28 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
         const { context, page } = await open(target, scenario, size);
         try {
           if (scenario === "home-ready") {
+            const skip = page
+              .getByRole("button", { name: "넘기기", exact: true })
+              .first();
+            const closed = await skip.getAttribute("aria-controls");
+            if (closed !== null)
+              assert.equal(
+                await page
+                  .locator("[id=" + JSON.stringify(closed) + "]")
+                  .isVisible(),
+                false,
+              );
+            const candidate = page.locator("#candidates");
+            const name = await candidate
+              .getByText("예시전력", { exact: true })
+              .boundingBox();
+            const action = await candidate
+              .getByRole("button", { name: "종목 상세" })
+              .boundingBox();
+            assert.ok(
+              name.y < action.y + action.height &&
+                action.y < name.y + name.height,
+            );
             for (const [topic, label] of [
               ["holdings", "보유 자산 평가"],
               ["candidates", "새 종목 후보"],
@@ -92,6 +114,13 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
                 name: label,
                 exact: true,
               });
+              await jump.hover();
+              assert.equal(
+                await jump.evaluate(
+                  (el) => globalThis.getComputedStyle(el).backgroundColor,
+                ),
+                "rgba(0, 0, 0, 0)",
+              );
               await jump.focus();
               await page.keyboard.press("Enter");
               await page.waitForFunction(

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Stack, Text } from "../../../shared/ds";
+import { Text } from "../../../shared/ds";
 import type { OrderRequestOutcome } from "../../../shared/ipc";
 import { signalText, type SignalMessageKey } from "../messages";
 
@@ -22,15 +22,12 @@ const outcomeKeys = {
 } as const satisfies Record<OrderRequestOutcome, SignalMessageKey>;
 
 export const OutcomeNotice = (props: {
-  readonly outcome: OrderRequestOutcome | undefined;
-}): ReactElement =>
-  props.outcome === undefined ? (
-    <Stack gap="space-1">{[]}</Stack>
-  ) : (
-    <Text
-      variant="body-sm"
-      tone={props.outcome === "requested" ? "ink" : "alert"}
-    >
-      {signalText(outcomeKeys[props.outcome], "ko")}
-    </Text>
-  );
+  readonly outcome: OrderRequestOutcome;
+}): ReactElement => (
+  <Text
+    variant="body-sm"
+    tone={props.outcome === "requested" ? "ink" : "alert"}
+  >
+    {signalText(outcomeKeys[props.outcome], "ko")}
+  </Text>
+);

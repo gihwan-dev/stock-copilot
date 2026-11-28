@@ -96,33 +96,36 @@ const Actions = (props: {
 const SignalCard = (props: {
   readonly card: SignalCardView;
   readonly handlers: SignalHandlers;
-}): ReactElement => (
-  <Stack gap="space-3">
-    <Text variant="label">
-      {props.card.market === "closed"
-        ? signalText("marketClosed", "ko")
-        : signalText(props.card.direction, "ko")}
-    </Text>
+}): ReactElement => {
+  const outcome = props.handlers.outcomeOf(props.card.id);
+  return (
     <Stack gap="space-3">
-      <Inline gap="space-2" align="center" wrap="wrap">
-        <DataText value={props.card.name} />
-        <DataText value={props.card.ticker} variant="code" />
-      </Inline>
-      {props.card.market === "closed" ? (
-        <Text variant="body-sm" tone="ink-muted">
-          {signalText("marketClosedBody", "ko")}
-        </Text>
-      ) : (
-        <Stack gap="space-1">{[]}</Stack>
-      )}
-      <KeyFacts card={props.card} />
-      <Reasons card={props.card} />
-      <Actions card={props.card} handlers={props.handlers} />
-      <OutcomeNotice outcome={props.handlers.outcomeOf(props.card.id)} />
-      <Facts card={props.card} />
+      <Text variant="label">
+        {props.card.market === "closed"
+          ? signalText("marketClosed", "ko")
+          : signalText(props.card.direction, "ko")}
+      </Text>
+      <Stack gap="space-3">
+        <Inline gap="space-2" align="center" wrap="wrap">
+          <DataText value={props.card.name} />
+          <DataText value={props.card.ticker} variant="code" />
+        </Inline>
+        {props.card.market === "closed" ? (
+          <Text variant="body-sm" tone="ink-muted">
+            {signalText("marketClosedBody", "ko")}
+          </Text>
+        ) : (
+          []
+        )}
+        <KeyFacts card={props.card} />
+        <Reasons card={props.card} />
+        <Actions card={props.card} handlers={props.handlers} />
+        {outcome === undefined ? [] : <OutcomeNotice outcome={outcome} />}
+        <Facts card={props.card} />
+      </Stack>
     </Stack>
-  </Stack>
-);
+  );
+};
 
 type SignalActions = Pick<
   ScreenSources,

@@ -13,7 +13,7 @@ export type Segments =
   | readonly [Option, Option, Option, Option, Option];
 export type ButtonProps = {
   readonly children: UiText;
-  readonly variant?: "primary" | "secondary" | "ghost";
+  readonly variant?: "primary" | "secondary" | "ghost" | "link";
   readonly size?: ControlSize;
   readonly disabled?: Availability;
   readonly type?: "button" | "submit";
