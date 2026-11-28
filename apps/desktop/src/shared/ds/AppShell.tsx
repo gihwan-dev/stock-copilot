@@ -5,6 +5,7 @@ import {
   chatPanelLimits,
   clearChatShare,
   initialChatShare,
+  panelSupport,
   readChatShare,
   saveChatShare,
   shellDismiss,
@@ -35,22 +36,6 @@ const chatPanelClasses = {
     "hidden window-lg:flex flex-none w-chat-width min-w-chat-width-min max-w-chat-width-max flex-col bg-surface scroll-flex",
   open: "flex flex-col bg-surface scroll-flex absolute top-space-1 bottom-space-1 right-space-2 z-panel shadow-popover rounded-md w-chat-width max-w-full window-lg:static window-lg:z-auto window-lg:shadow-none window-lg:min-w-chat-width-min window-lg:max-w-chat-width-max",
 } as const;
-const ShellRail = (props: {
-  readonly rail: ReactElement | null;
-  readonly state: PanelState;
-  readonly onChange: (next: PanelState) => void;
-}): ReactElement => (
-  <aside
-    aria-label={text("shell.stockList", "ko")}
-    className="flex flex-col items-center gap-space-2 py-space-2 px-space-1 flex-none w-sidebar-collapsed bg-surface scroll-flex window-md:hidden"
-  >
-    <RailContent
-      rail={props.rail}
-      state={props.state}
-      onChange={props.onChange}
-    />
-  </aside>
-);
 const ShellSidebar = (props: {
   readonly list: ReactElement | null | undefined;
   readonly rail: ReactElement | null | undefined;
@@ -61,11 +46,16 @@ const ShellSidebar = (props: {
   return (
     <>
       <Divider direction="vertical" />
-      <ShellRail
-        rail={props.rail ?? null}
-        state={props.state}
-        onChange={props.onChange}
-      />
+      <aside
+        aria-label={text("shell.stockList", "ko")}
+        className="flex flex-col items-center gap-space-2 py-space-2 px-space-1 flex-none w-sidebar-collapsed bg-surface scroll-flex window-md:hidden"
+      >
+        <RailContent
+          rail={props.rail ?? null}
+          state={props.state}
+          onChange={props.onChange}
+        />
+      </aside>
       <div className={listSlotClasses[props.state]}>
         <aside
           aria-label={text("shell.stockList", "ko")}
@@ -246,3 +236,9 @@ export const AppShell = (props: AppShellProps): ReactElement => {
     </div>
   );
 };
+
+export const PanelLayout = (props: {
+  readonly fallback: ReactElement;
+  readonly children: ReactElement;
+}): ReactElement =>
+  panelSupport() === "resizable" ? props.children : props.fallback;

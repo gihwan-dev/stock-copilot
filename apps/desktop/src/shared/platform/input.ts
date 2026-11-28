@@ -154,8 +154,10 @@ const subscribeWide = (onChange: () => void): (() => void) => {
     media?.removeEventListener("change", onChange);
   };
 };
+export const panelSupport = (): "resizable" | "static" =>
+  typeof ResizeObserver === "function" ? "resizable" : "static";
 const readWide = (): "resizable" | "static" =>
-  typeof ResizeObserver === "function" &&
+  panelSupport() === "resizable" &&
   typeof matchMedia === "function" &&
   matchMedia(wideQuery).matches
     ? "resizable"

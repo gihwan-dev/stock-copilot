@@ -1,5 +1,12 @@
 import { useId, useState, type ReactElement } from "react";
 import type { EntityId, FreeText, UiText } from "../lib";
+import {
+  Group,
+  Panel,
+  Separator,
+  usePanelCallbackRef,
+} from "react-resizable-panels";
+import { PanelLayout } from "./AppShell";
 import { Button } from "./Button";
 import { DataText } from "./Numbers";
 import { ScrollArea } from "./ScrollArea";
@@ -68,73 +75,118 @@ const SessionList = (
   </ScrollArea>
 );
 
-const layoutClasses = {
-  open: "grid grid-cols-layout flex-1 scroll-flex",
-  closed: "flex flex-col flex-1 scroll-flex",
-} as const;
+type Visibility = "open" | "closed";
 
-const Layout = (props: {
-  readonly panel: "open" | "closed";
-  readonly children: readonly [ReactElement, ReactElement];
-}): ReactElement => (
-  <div className={layoutClasses[props.panel]}>{props.children}</div>
-);
-
-export const ConversationTree = (props: Props): ReactElement => {
-  const [panel, setPanel] = useState<"open" | "closed">("open");
+const List = (props: {
+  readonly tree: Props;
+  readonly panel: Visibility;
+  readonly toggle: () => void;
+}): ReactElement => {
+  const { panel, tree } = props;
   const listId = useId();
   return (
-    <div className="@container flex flex-col flex-1 scroll-flex w-full">
-      <Layout panel={panel}>
-        <nav
-          aria-label={props.heading}
-          className="flex flex-col scroll-flex col-span-4 @content-medium:col-span-3 @content-medium:p-space-2 border-b-hairline border-solid border-line bg-surface"
+    <nav
+      aria-label={tree.heading}
+      className="flex flex-col scroll-flex @content-medium:p-space-2 border-b-hairline border-solid border-line bg-surface"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-space-1">
+        <button
+          type="button"
+          aria-label={tree.heading}
+          aria-expanded={panel === "open"}
+          aria-controls={listId}
+          onClick={(): void => {
+            props.toggle();
+          }}
+          className="inline-flex flex-wrap items-center gap-space-1 @content-medium:px-space-2 font-semibold text-ink rounded-md hover:bg-surface-sunken focus-visible:outline-focus"
         >
-          <div className="flex flex-wrap items-center justify-between gap-space-1">
-            <button
-              type="button"
-              aria-expanded={panel === "open"}
-              aria-controls={listId}
-              onClick={(): void => {
-                setPanel(panel === "open" ? "closed" : "open");
-              }}
-              className="inline-flex flex-wrap items-center gap-space-1 @content-medium:px-space-2 font-semibold text-ink rounded-md hover:bg-surface-sunken focus-visible:outline-focus"
-            >
-              <Icon
-                name={panel === "open" ? "chevron-down" : "chevron-right"}
-              />
-              {props.heading}
-            </button>
-            <Button
-              size="control-height-sm"
-              onClick={(): void => {
-                setPanel("open");
-                props.create();
-              }}
-              disabled={props.availability}
-            >
-              {props.add}
-            </Button>
-          </div>
-          <div
-            id={listId}
-            hidden={panel === "closed"}
+          <Icon name={panel === "open" ? "chevron-down" : "chevron-right"} />
+          {panel === "open" ? tree.heading : null}
+        </button>
+        {panel === "open" && (
+          <Button
+            size="control-height-sm"
+            onClick={(): void => {
+              tree.create();
+            }}
+            disabled={tree.availability}
+          >
+            {tree.add}
+          </Button>
+        )}
+      </div>
+      <div
+        id={listId}
+        hidden={panel === "closed"}
+        className="flex flex-col scroll-flex"
+      >
+        {panel === "closed" ? null : (
+          <SessionList
+            entries={tree.entries}
+            selected={tree.selected}
+            select={tree.select}
+          />
+        )}
+      </div>
+      {tree.feedback}
+    </nav>
+  );
+};
+
+export const ConversationTree = (props: Props): ReactElement => {
+  const [panel, setPanel] = useState<Visibility>("open");
+  const [handle, setHandle] = usePanelCallbackRef();
+  const list = (
+    <List
+      tree={props}
+      panel={panel}
+      toggle={(): void => {
+        if (handle !== null) {
+          if (panel === "open") handle.collapse();
+          else handle.expand();
+        }
+        setPanel(panel === "open" ? "closed" : "open");
+      }}
+    />
+  );
+  const content = (
+    <div className="flex flex-col flex-1 scroll-flex">{props.children}</div>
+  );
+  return (
+    <div className="@container flex flex-col flex-1 scroll-flex w-full">
+      <PanelLayout
+        fallback={
+          <>
+            {list}
+            {content}
+          </>
+        }
+      >
+        <Group orientation="horizontal" className="flex flex-1 scroll-flex">
+          <Panel
+            panelRef={setHandle}
+            defaultSize="25"
+            minSize="18"
+            maxSize="50"
+            collapsible
+            collapsedSize="5"
+            onResize={(size): void => {
+              if (size.asPercentage > 0)
+                setPanel(handle?.isCollapsed() === true ? "closed" : "open");
+            }}
             className="flex flex-col scroll-flex"
           >
-            {panel === "closed" ? null : (
-              <SessionList
-                entries={props.entries}
-                selected={props.selected}
-                select={props.select}
-              />
-            )}
-          </div>
-          {props.feedback}
-        </nav>
-        <div className="flex flex-col flex-1 scroll-flex col-span-8 @content-medium:col-span-9">
-          {props.children}
-        </div>
-      </Layout>
+            {list}
+          </Panel>
+          <Separator
+            aria-label={props.heading}
+            className="flex-none px-space-1 bg-line hover:bg-primary focus-visible:bg-primary focus-visible:outline-focus"
+          />
+          <Panel minSize="45" className="flex flex-col scroll-flex">
+            {content}
+          </Panel>
+        </Group>
+      </PanelLayout>
     </div>
   );
 };
