@@ -125,14 +125,14 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
                 action.y < name.y + name.height,
             );
             const shortcuts = [
-              ["allocation", "종목·섹터별 비중"],
+              ["allocation", "종목·섹터별 비중 보기"],
               ...(["minimum", "medium"].includes(size)
                 ? [
                     ["positions", "보유 내역"],
                     ["daily-briefing", "오늘 브리핑"],
-                    ["signals", "신호 보기"],
                   ]
                 : []),
+              ...(size === "qhd" ? [] : [["signals", "신호 보기"]]),
             ];
             for (const [id, label] of shortcuts) {
               await page
@@ -195,7 +195,7 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
                 assert.equal(
                   await page
                     .locator("#holdings")
-                    .getByRole("button", { name: "원문 열기" })
+                    .getByRole("link", { name: /원문 열기/u })
                     .count(),
                   0,
                 );
@@ -220,7 +220,7 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
               await disclosure.press("Enter");
               const source = page
                 .locator("#" + topic)
-                .getByRole("button", { name: "원문 열기" });
+                .getByRole("link", { name: /원문 열기/u });
               await source.focus();
               const bounds = await source.boundingBox();
               assert.ok(

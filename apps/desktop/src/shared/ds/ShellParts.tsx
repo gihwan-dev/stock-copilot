@@ -1,6 +1,7 @@
 import { useState, type ReactElement } from "react";
 import { text, type UiText } from "../lib";
 import { Button } from "./Button";
+import { Divider } from "./Divider";
 import { IconButton } from "./IconButton";
 import { ScrollArea } from "./ScrollArea";
 import { Text } from "./Text";
@@ -29,12 +30,15 @@ export const ShellNavigation = (props: {
   readonly navigation: ReactElement | undefined;
 }): ReactElement | null =>
   props.navigation === undefined ? null : (
-    <nav
-      aria-label={text("nav.destinations", "ko")}
-      className="flex flex-none flex-col items-center gap-space-2 bg-surface p-space-1"
-    >
-      {props.navigation}
-    </nav>
+    <>
+      <nav
+        aria-label={text("nav.destinations", "ko")}
+        className="flex flex-none flex-col items-center gap-space-2 bg-surface p-space-1"
+      >
+        {props.navigation}
+      </nav>
+      <Divider direction="vertical" />
+    </>
   );
 
 export type ChatProps = {

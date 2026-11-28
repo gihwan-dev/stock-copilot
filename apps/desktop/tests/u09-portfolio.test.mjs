@@ -85,6 +85,14 @@ const bundleSource = `
         krwPerUsd:fx.krw("1345.67"), holdingsKrw:fx.krw("18840053"), buyingPowerKrw:fx.krw("161817")
       },
     })}),
+    mixed: () => {
+      const base = allocation("balanced");
+      const dollars = { id: fx.id("usd"), label: fx.free("달러 현금"), value: fx.usd("120.25"), weight: fx.pct("4.5"), level: "normal" };
+      return fx.sources({
+        portfolio: () => fx.ok(portfolio()),
+        allocation: () => fx.ok({...base, instruments: [dollars, ...base.instruments], sectors: [...base.sectors, dollars]}),
+      });
+    },
     loading: () => fx.sources({ portfolio: fx.never }),
     empty: () => fx.sources({}),
     error: () => fx.sources({ portfolio: () => fx.fail("retryable") }),
@@ -235,6 +243,29 @@ test("U-10 allocation and concentration show loading, empty, error and ready sta
     const failed = w.mount(w.scenarios.allocationError());
     const failedText = await w.waitText(failed, "자산배분을 불러오지 못했어요");
     assert.ok(failedText.includes("총평가"));
+    w.cleanup();
+  } finally {
+    bundle.close();
+  }
+});
+
+test("종목과 섹터의 자산배분은 원화와 달러를 구분해 각 통화의 전체 금액을 표시한다", async () => {
+  const bundle = await screenDom(bundleSource);
+  try {
+    const w = bundle.open();
+    const view = w.mount(w.scenarios.mixed());
+    await w.waitText(view, "종목별 비중");
+    for (const name of ["종목별 비중", "섹터별 비중"]) {
+      const table = view.getByRole("table", { name });
+      assert.deepEqual(
+        [...table.querySelectorAll('th[scope="rowgroup"]')].map(
+          (th) => th.textContent,
+        ),
+        ["원화 (KRW)", "달러 (USD)"],
+      );
+      assert.ok(table.tBodies[0].textContent.includes("2,400,000원"));
+      assert.ok(table.tBodies[1].textContent.includes("$120.25"));
+    }
     w.cleanup();
   } finally {
     bundle.close();

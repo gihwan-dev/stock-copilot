@@ -190,7 +190,7 @@ export const SummaryCard = (props: {
     <Inline gap="space-2" justify="between" wrap="wrap">
       <MetaLine view={props.view} />
       <Button
-        variant="link"
+        variant="secondary"
         size="control-height-sm"
         onClick={(): void => {
           focusResearchSection("allocation");

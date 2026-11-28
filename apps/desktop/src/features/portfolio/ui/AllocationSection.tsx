@@ -61,7 +61,7 @@ const Row = (props: { readonly row: AllocationRow }): ReactElement => (
       <RowLabel row={props.row} />
     </TableRowHeader>
     <TableCell align="end">
-      <Money value={props.row.value} notation="compact" />
+      <Money value={props.row.value} />
     </TableCell>
     <TableCell align="end">
       {props.row.weightRange === "below-unit" ? (
@@ -83,6 +83,38 @@ const Row = (props: { readonly row: AllocationRow }): ReactElement => (
     </TableCell>
   </TableRow>
 );
+
+const WeightBodies = (props: {
+  readonly rows: readonly AllocationRow[];
+}): ReactElement => {
+  const currencies = (["KRW", "USD"] as const)
+    .map((currency) => ({
+      currency,
+      rows: props.rows.filter((row) => row.value.currency === currency),
+    }))
+    .filter((group) => group.rows.length > 0);
+  return (
+    <>
+      {currencies.map(({ currency, rows }) => (
+        <TableBody
+          key={currency}
+          group={
+            currencies.length > 1
+              ? portfolioText(
+                  currency === "KRW" ? "allocationWon" : "allocationDollar",
+                  "ko",
+                )
+              : undefined
+          }
+        >
+          {rows.map((row) => (
+            <Row key={row.id} row={row} />
+          ))}
+        </TableBody>
+      ))}
+    </>
+  );
+};
 
 const WeightTable = (props: {
   readonly titleKey: PortfolioMessageKey;
@@ -120,11 +152,7 @@ const WeightTable = (props: {
           </TableHeader>
         </TableRow>
       </TableHead>
-      <TableBody>
-        {props.rows.map((row): ReactElement => (
-          <Row key={row.id} row={row} />
-        ))}
-      </TableBody>
+      <WeightBodies rows={props.rows} />
     </TableRoot>
   );
 

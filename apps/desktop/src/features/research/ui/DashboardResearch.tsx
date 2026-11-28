@@ -146,12 +146,19 @@ const compactTopics = [
   "signals",
   ...topics,
 ] as const;
+const signalTopics = ["signals", ...topics] as const;
+const navigationTopics = {
+  compact: compactTopics,
+  "summary-row": signalTopics,
+  "two-columns": signalTopics,
+  "three-columns": topics,
+} as const;
 export const ResearchNavigation = (props: {
   readonly account: "ready" | "pending";
 }): ReactElement => {
   const layout = useWindowLayout();
   const destinations =
-    props.account === "ready" && layout === "compact" ? compactTopics : topics;
+    props.account === "ready" ? navigationTopics[layout] : topics;
   return (
     <Inline gap="space-4" wrap="wrap">
       {destinations.map((topic) => (

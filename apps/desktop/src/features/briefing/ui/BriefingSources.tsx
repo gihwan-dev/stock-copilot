@@ -27,7 +27,7 @@ const SourceTitle = (props: {
 }): ReactElement => {
   const url = props.source.url;
   return (
-    <Inline gap="space-1" align="center" wrap="wrap">
+    <Inline gap="space-3" align="center" wrap="wrap">
       {[
         <DataText key="title" value={props.source.title} variant="body-sm" />,
         ...(url === undefined
@@ -39,7 +39,7 @@ const SourceTitle = (props: {
           : [
               <Button
                 key="open"
-                variant="ghost"
+                variant="secondary"
                 size="control-height-sm"
                 onClick={(): void => {
                   props.onOpenSource(url);

@@ -17,12 +17,12 @@ const sectionOrder = {
     second: ["reports"],
   },
   "summary-row": {
-    first: ["positions", "allocation", "signals"],
-    second: ["briefing", "reports"],
+    first: ["positions", "allocation"],
+    second: ["briefing", "reports", "signals"],
   },
   "two-columns": {
-    first: ["overview", "positions", "allocation", "signals"],
-    second: ["briefing", "reports"],
+    first: ["overview", "positions", "allocation"],
+    second: ["briefing", "reports", "signals"],
   },
   "three-columns": {
     first: ["overview", "positions"],
