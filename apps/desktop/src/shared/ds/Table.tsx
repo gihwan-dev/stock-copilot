@@ -5,10 +5,13 @@ import { useScrollOwner } from "./scroll-owner";
 type Children = { readonly children?: ReactElement | readonly ReactElement[] };
 type Density = "normal" | "dense";
 const DensityContext = createContext<Density>("normal");
+type Frame = "standalone" | "embedded";
+const FrameContext = createContext<Frame>("standalone");
 type RootProps = Children & {
   readonly caption?: UiText;
   readonly empty?: UiText;
   readonly dense?: Density;
+  readonly frame?: Frame;
 };
 const TableElement = (props: {
   readonly children: ReactElement | readonly ReactElement[] | undefined;
@@ -34,19 +37,27 @@ const TableElement = (props: {
 );
 const Root = (props: RootProps): ReactElement => (
   <DensityContext value={props.dense ?? "normal"}>
-    <div className="bg-surface border-hairline border-solid border-line rounded-lg max-w-full scroll-flex">
-      {useScrollOwner() === "card" ? (
-        <TableElement caption={props.caption} empty={props.empty}>
-          {props.children}
-        </TableElement>
-      ) : (
-        <ScrollArea direction="horizontal">
+    <FrameContext value={props.frame ?? "standalone"}>
+      <div
+        className={
+          props.frame === "embedded"
+            ? "bg-surface max-w-full scroll-flex"
+            : "bg-surface border-hairline border-solid border-line rounded-lg max-w-full scroll-flex"
+        }
+      >
+        {useScrollOwner() === "card" ? (
           <TableElement caption={props.caption} empty={props.empty}>
             {props.children}
           </TableElement>
-        </ScrollArea>
-      )}
-    </div>
+        ) : (
+          <ScrollArea direction="horizontal">
+            <TableElement caption={props.caption} empty={props.empty}>
+              {props.children}
+            </TableElement>
+          </ScrollArea>
+        )}
+      </div>
+    </FrameContext>
   </DensityContext>
 );
 const head = (props: Children): ReactElement => <thead>{props.children}</thead>;
@@ -62,6 +73,10 @@ const headerStyles = {
   start:
     "text-left px-space-3 py-space-2 bg-surface-sunken text-ink-muted text-label",
   end: "text-right px-space-3 py-space-2 bg-surface-sunken text-ink-muted text-label",
+} as const;
+const embeddedHeaderStyles = {
+  start: "text-left px-space-3 py-space-2 text-ink-muted text-label",
+  end: "text-right px-space-3 py-space-2 text-ink-muted text-label",
 } as const;
 const stickyHeaderStyles = {
   start:
@@ -90,7 +105,14 @@ const denseHeaders = {
 } as const;
 const ColumnHeader = (props: CellProps): ReactElement => {
   const owner = useScrollOwner();
+  const frame = use(FrameContext);
   const align = props.align ?? "start";
+  if (frame === "embedded" && owner === "own")
+    return (
+      <th scope="col" className={embeddedHeaderStyles[align]}>
+        {props.children}
+      </th>
+    );
   return (
     <th
       scope="col"

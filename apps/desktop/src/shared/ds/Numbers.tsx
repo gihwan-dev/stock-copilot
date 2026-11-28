@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { text } from "../lib";
+import { Icon } from "./Icon";
 import type {
   ChartDecimal,
   EntityId,
@@ -158,11 +159,12 @@ export const DataText = (props: {
       <button
         type="button"
         onClick={props.onPress}
-        className="markdown-link text-body-sm focus-visible:outline-solid focus-visible:outline-focus"
+        className="inline-flex items-center gap-space-1 max-w-full text-left text-ink-muted rounded-sm hover:text-primary focus-visible:outline-solid focus-visible:outline-focus"
       >
         <span className={dataClasses[variant]}>
           {formatDataValue(props.value)}
         </span>
+        <Icon name="chevron-right" size="icon-sm" />
       </button>
     );
   return (
@@ -205,11 +207,39 @@ export const PriceChange = (props: {
   readonly rate: PercentDisplay;
   readonly direction: Direction;
   readonly emphasis?: NumberEmphasis;
-}): ReactElement => (
-  <Sized emphasis={props.emphasis}>
-    <Numeric
-      display={formatPriceChange(props.amount, props.rate, props.direction)}
-      direction={props.direction}
-    />
-  </Sized>
-);
+  readonly layout?: "inline" | "stacked";
+}): ReactElement => {
+  if (props.layout === "stacked") {
+    if (directionStatus(props.direction) === "invalid") return <Unavailable />;
+    const amount = formatNumber(
+      { kind: "money", value: props.amount },
+      props.direction,
+    );
+    const rate = formatNumber(
+      { kind: "percent", value: props.rate },
+      props.direction,
+    );
+    if (amount.kind === "unavailable" || rate.kind === "unavailable")
+      return <Unavailable />;
+    return (
+      <span
+        role="group"
+        aria-label={text(names[props.direction], "ko")}
+        className="inline-flex flex-col items-end py-space-2 tabular-nums whitespace-nowrap"
+      >
+        <span className="text-num-md text-ink">{amount.text}</span>
+        <span className={colors[props.direction]}>
+          <span className="text-num-sm">{rate.text}</span>
+        </span>
+      </span>
+    );
+  }
+  return (
+    <Sized emphasis={props.emphasis}>
+      <Numeric
+        display={formatPriceChange(props.amount, props.rate, props.direction)}
+        direction={props.direction}
+      />
+    </Sized>
+  );
+};

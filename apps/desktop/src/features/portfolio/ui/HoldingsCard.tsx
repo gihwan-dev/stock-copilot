@@ -7,6 +7,7 @@ import {
   Money,
   PriceChange,
   Quantity,
+  Stack,
   Table,
 } from "../../../shared/ds";
 import type { HoldingRow } from "../../../shared/ipc";
@@ -27,30 +28,26 @@ const Row = (props: {
 }): ReactElement => (
   <TableRow>
     <TableRowHeader>
-      {props.row.trading === "suspended" ? (
-        <Inline gap="space-2" align="center" wrap="wrap">
-          <DataText
-            value={props.row.name}
-            variant="body-sm"
-            onPress={(): void => {
-              props.open(props.row.id);
-            }}
-          />
-          <Badge tone="alert">{portfolioText("tradingSuspended", "ko")}</Badge>
-        </Inline>
-      ) : (
+      <Stack gap="space-1">
         <DataText
           value={props.row.name}
-          variant="body-sm"
+          variant="emphasis"
           onPress={(): void => {
             props.open(props.row.id);
           }}
         />
-      )}
+        <Inline align="center" gap="space-2" wrap="wrap">
+          <DataText value={props.row.ticker} variant="code" />
+          {props.row.trading === "suspended" ? (
+            <Badge tone="alert">
+              {portfolioText("tradingSuspended", "ko")}
+            </Badge>
+          ) : (
+            []
+          )}
+        </Inline>
+      </Stack>
     </TableRowHeader>
-    <TableCell>
-      <DataText value={props.row.ticker} variant="code" />
-    </TableCell>
     <TableCell align="end">
       <Quantity value={props.row.quantity} />
     </TableCell>
@@ -59,6 +56,7 @@ const Row = (props: {
     </TableCell>
     <TableCell align="end">
       <PriceChange
+        layout="stacked"
         amount={props.row.profit.amount}
         rate={props.row.profit.rate}
         direction={props.row.profit.direction}
@@ -83,11 +81,10 @@ export const HoldingsCard = (props: {
     {props.holdings.length === 0 ? (
       <TableRoot empty={portfolioText("holdingsEmpty", "ko")} />
     ) : (
-      <TableRoot>
+      <TableRoot frame="embedded">
         <TableHead>
           <TableRow>
             <TableHeader>{portfolioText("nameColumn", "ko")}</TableHeader>
-            <TableHeader>{portfolioText("tickerColumn", "ko")}</TableHeader>
             <TableHeader align="end">
               {portfolioText("quantityColumn", "ko")}
             </TableHeader>
