@@ -35,6 +35,7 @@ test("평가 표의 기간별 상태와 자산배분의 마지막 행이 프레�
     const route = url + "?s=home-ready";
     for (const viewport of [
       { width: 960, height: 640 },
+      { width: 1440, height: 900 },
       { width: 2560, height: 1440 },
     ]) {
       const page = await browser.newPage({ viewport, colorScheme: "dark" });
@@ -44,19 +45,39 @@ test("평가 표의 기간별 상태와 자산배분의 마지막 행이 프레�
           name: "손익과 수익률",
           exact: true,
         });
-        const year = metrics
-          .getByRole("row")
-          .filter({
-            has: page.getByRole("rowheader", { name: "1년", exact: true }),
-          });
+        const year = metrics.getByRole("row").filter({
+          has: page.getByRole("rowheader", { name: "1년", exact: true }),
+        });
         await year.getByText("자료 부족", { exact: true }).waitFor();
         assert.deepEqual(
           await metrics.getByRole("rowheader").allTextContents(),
           ["오늘 손익", "1개월", "3개월", "6개월", "1년", "최대 낙폭(1년)"],
         );
-        await page
-          .getByRole("button", { name: "종목·섹터별 비중 보기" })
-          .click();
+        const overview = page.locator("[data-dock-content=overview]");
+        const pane = await overview.boundingBox();
+        const currency = overview.getByRole("table", { name: "통화별 평가" });
+        const link = overview.getByRole("button", {
+          name: "종목·섹터별 비중 보기",
+        });
+        for (const item of [
+          metrics.getByRole("row").last(),
+          currency.getByRole("row").last(),
+          overview.getByText("기준 시각", { exact: true }),
+          overview.getByText("매매기준율 환산 시각", { exact: true }),
+          link,
+        ]) {
+          const box = await item.boundingBox();
+          assert.ok(
+            box &&
+              pane &&
+              box.y >= pane.y - 1 &&
+              box.y + box.height <= pane.y + pane.height + 1 &&
+              box.x >= pane.x - 1 &&
+              box.x + box.width <= pane.x + pane.width + 1,
+            `${viewport.width} 기본 배치에서 ${await item.innerText()} 표시`,
+          );
+        }
+        await link.click();
         const allocation = page.locator("[data-widget-frame=allocation]");
         const note = allocation.getByText("보유 종목 평가액과 매수가능금액을", {
           exact: false,

@@ -1,11 +1,16 @@
 import type { ReactElement } from "react";
 
-export type NumberEmphasis = "inherit" | "display" | "large" | "value";
+export type NumberEmphasis =
+  "inherit" | "display" | "large" | "value" | "caption";
 export const NumberSize = (props: {
   readonly emphasis: NumberEmphasis | undefined;
   readonly children: ReactElement;
 }): ReactElement => {
   switch (props.emphasis) {
+    case "caption":
+      return (
+        <span className="text-caption text-ink-muted">{props.children}</span>
+      );
     case "display":
       return <span className="text-num-display">{props.children}</span>;
     case "value":

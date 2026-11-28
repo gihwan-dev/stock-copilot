@@ -47,10 +47,12 @@ const allocationLabels = {
 const RowLabel = (props: { readonly row: AllocationRow }): ReactElement => {
   const kind = props.row.kind;
   if (kind === undefined || kind === "holding" || kind === "sector") {
-    return <DataText value={props.row.label} variant="body-sm" />;
+    return <DataText value={props.row.label} variant="body" />;
   }
   return (
-    <Text variant="body-sm">{portfolioText(allocationLabels[kind], "ko")}</Text>
+    <Text variant="body-sm" tone="ink-muted">
+      {portfolioText(allocationLabels[kind], "ko")}
+    </Text>
   );
 };
 
@@ -171,7 +173,7 @@ const AllocationReady = (props: {
         titleKey="instrumentTitle"
         rows={props.view.instruments}
       />,
-      <Text key="sector-note" variant="body-sm">
+      <Text key="sector-note" variant="caption" tone="ink-muted">
         {portfolioText(
           props.view.sectorRefresh === "pending"
             ? "sectorPending"

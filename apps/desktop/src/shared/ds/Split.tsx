@@ -7,11 +7,9 @@ type SplitWidthToken = Extract<
   "sidebar-width" | "sidebar-collapsed" | "chat-width" | "chat-width-min"
 >;
 
-type WidthKey =
-  "sidebar-width" | "sidebar-collapsed" | "chat-width" | "chat-width-min";
-
 type Props = {
   readonly size: SplitWidthToken;
+  readonly secondaryFooter?: ReactElement;
   readonly children: readonly [ReactElement, ReactElement];
 };
 
@@ -22,8 +20,11 @@ const fixedPaneClasses = {
   "chat-width-min": "flex-none w-chat-width-min max-w-full scroll-flex",
 } as const;
 
+type WidthKey =
+  "sidebar-width" | "sidebar-collapsed" | "chat-width" | "chat-width-min";
 const SplitBox = (props: {
   readonly pane: WidthKey;
+  readonly secondaryFooter?: ReactElement | undefined;
   readonly children: readonly [ReactElement, ReactElement];
 }): ReactElement => (
   <div
@@ -32,14 +33,19 @@ const SplitBox = (props: {
   >
     <div className={fixedPaneClasses[props.pane]}>{props.children[0]}</div>
     <div className="flex-1 wrap-slot max-w-full scroll-flex">
-      <div className="w-full max-w-full scroll-flex">{props.children[1]}</div>
+      <div className="flex flex-col gap-space-2 w-full max-w-full scroll-flex">
+        {props.children[1]}
+        {props.secondaryFooter}
+      </div>
     </div>
   </div>
 );
 
 export const Split = (props: Props): ReactElement =>
   useWidgetTitle() === undefined ? (
-    <SplitBox pane={props.size}>{props.children}</SplitBox>
+    <SplitBox pane={props.size} secondaryFooter={props.secondaryFooter}>
+      {props.children}
+    </SplitBox>
   ) : (
     <div
       data-split-content=""
@@ -48,6 +54,13 @@ export const Split = (props: Props): ReactElement =>
       <div className="flex flex-1 flex-col gap-space-2 max-w-full">
         {props.children[0]}
       </div>
-      <div className="flex flex-1 flex-col max-w-full">{props.children[1]}</div>
+      <div className="flex flex-1 flex-col gap-space-2 max-w-full">
+        {props.children[1]}
+        {props.secondaryFooter === undefined ? null : (
+          <div className="flex flex-1 flex-col gap-space-1 justify-between">
+            {props.secondaryFooter}
+          </div>
+        )}
+      </div>
     </div>
   );

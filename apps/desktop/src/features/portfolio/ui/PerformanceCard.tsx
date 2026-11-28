@@ -118,7 +118,7 @@ export const PerformanceSummary = (props: {
   return (
     <TableRoot
       frame="embedded"
-      dense="dense"
+      dense="compact"
       caption={portfolioText("performanceMetrics", "ko")}
     >
       <TableBody>

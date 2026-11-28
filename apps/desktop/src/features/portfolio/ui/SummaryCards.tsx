@@ -2,9 +2,9 @@ import type { ReactElement } from "react";
 import {
   Badge,
   Button,
-  Divider,
   Card,
   Split,
+  Stack,
   Inline,
   Money,
   Table,
@@ -30,7 +30,7 @@ const currencyKeys = {
 } as const satisfies Record<Currency, PortfolioMessageKey>;
 
 const MetaLine = (props: { readonly view: PortfolioView }): ReactElement => (
-  <Inline gap="space-3" align="center" wrap="wrap">
+  <Inline gap="space-1" align="center" wrap="wrap">
     {[
       <Inline key="recorded" gap="space-1">
         <Text variant="caption" tone="ink-muted">
@@ -45,7 +45,10 @@ const MetaLine = (props: { readonly view: PortfolioView }): ReactElement => (
               <Text variant="caption" tone="ink-muted">
                 {portfolioText("dollarUnit", "ko")}
               </Text>
-              <Money value={props.view.usdConversion.krwPerUsd} />
+              <Money
+                value={props.view.usdConversion.krwPerUsd}
+                emphasis="caption"
+              />
             </Inline>,
           ]),
       ...(props.view.exchangeRate === undefined
@@ -73,14 +76,6 @@ const TotalValue = (props: { readonly view: PortfolioView }): ReactElement => (
       <Badge tone="neutral">{portfolioText("totalApproximate", "ko")}</Badge>
     </Inline>
     <PerformanceSummary today={props.view.today} />
-    <Text variant="caption" tone="ink-muted">
-      {portfolioText("totalHint", "ko")}
-    </Text>
-    {props.view.totalCoverage === "partial" ? (
-      <Text variant="caption" tone="ink-muted">
-        {portfolioText("totalPartial", "ko")}
-      </Text>
-    ) : null}
   </>
 );
 
@@ -110,7 +105,7 @@ const CurrencyTable = (props: {
   readonly view: PortfolioView;
 }): ReactElement => (
   <TableRoot
-    dense="dense"
+    dense="compact"
     frame="currency"
     caption={portfolioText("currencyTitle", "ko")}
   >
@@ -150,29 +145,52 @@ const CurrencyTable = (props: {
   </TableRoot>
 );
 
-export const SummaryCard = (props: {
+const ValuationNotes = (props: {
   readonly view: PortfolioView;
 }): ReactElement => {
   const openWidget = useRevealDockWidget();
   return (
-    <Card title={portfolioText("totalTitle", "ko")}>
-      <Split size="chat-width">
-        <TotalValue view={props.view} />
-        <CurrencyTable view={props.view} />
-      </Split>
-      <Divider />
-      <Inline gap="space-2" justify="between" wrap="wrap">
-        <MetaLine view={props.view} />
+    <>
+      <Stack gap="space-1">
+        {[
+          <Text key="basis" variant="caption" tone="ink-muted">
+            {portfolioText("totalHint", "ko")}
+          </Text>,
+          ...(props.view.totalCoverage === "partial"
+            ? [
+                <Text key="partial" variant="caption" tone="ink-muted">
+                  {portfolioText("totalPartial", "ko")}
+                </Text>,
+              ]
+            : []),
+          <MetaLine key="observed" view={props.view} />,
+        ]}
+      </Stack>
+      <Inline gap="space-1" justify="end">
         <Button
           variant="secondary"
           size="control-height-sm"
           onClick={(): void => {
-            openWidget("allocation", portfolioText("allocationSection", "ko"));
+            openWidget("allocation");
           }}
         >
           {portfolioText("allocationLink", "ko")}
         </Button>
       </Inline>
-    </Card>
+    </>
   );
 };
+
+export const SummaryCard = (props: {
+  readonly view: PortfolioView;
+}): ReactElement => (
+  <Card title={portfolioText("totalTitle", "ko")}>
+    <Split
+      size="chat-width"
+      secondaryFooter={<ValuationNotes view={props.view} />}
+    >
+      <TotalValue view={props.view} />
+      <CurrencyTable view={props.view} />
+    </Split>
+  </Card>
+);

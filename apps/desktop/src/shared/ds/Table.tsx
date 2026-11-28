@@ -3,8 +3,10 @@ import { text, type UiText } from "../lib";
 import { ScrollArea } from "./ScrollArea";
 import { useWidgetTitle } from "./WidgetFrame";
 import { useScrollOwner } from "./scroll-owner";
+import { PositionCell, PositionRowHeader, StickyHeader } from "./TableCells";
 type Children = { readonly children?: ReactElement | readonly ReactElement[] };
-type Density = "normal" | "dense";
+
+type Density = "normal" | "dense" | "compact";
 const DensityContext = createContext<Density>("normal");
 type Frame = "standalone" | "embedded" | "positions" | "currency";
 const FrameContext = createContext<Frame>("standalone");
@@ -26,7 +28,13 @@ const tableElement = (
     }
   >
     {props.caption === undefined ? null : (
-      <caption className="text-left p-space-3 text-body-sm text-ink-muted">
+      <caption
+        className={
+          props.dense === "compact"
+            ? "text-left px-space-2 py-space-1 text-body-sm text-ink-muted"
+            : "text-left p-space-3 text-body-sm text-ink-muted"
+        }
+      >
         {props.caption}
       </caption>
     )}
@@ -119,41 +127,6 @@ const embeddedHeaderStyles = {
   start: "text-left px-space-3 py-space-2 text-ink-muted text-label",
   end: "whitespace-nowrap text-right px-space-3 py-space-2 text-ink-muted text-label",
 } as const;
-const stickyHeaderStyles = {
-  start: "text-left bg-surface-sunken text-ink-muted text-label",
-  end: "text-right bg-surface-sunken text-ink-muted text-label",
-  name: "w-full text-left bg-surface-sunken text-ink-muted text-label",
-} as const;
-const StickyHeader = (props: {
-  readonly alignment: "start" | "end" | "name";
-  readonly children: CellProps["children"];
-}): ReactElement => (
-  <th scope="col" className={stickyHeaderStyles[props.alignment]}>
-    <span className="block px-space-3 py-space-2 border-b-hairline border-solid border-line">
-      {props.children}
-    </span>
-  </th>
-);
-const normalCells = {
-  start:
-    "h-row-height px-space-3 border-t-hairline border-line text-body text-left",
-  end: "h-row-height px-space-3 border-t-hairline border-line text-body text-right",
-} as const;
-const denseCells = {
-  start:
-    "h-row-height-dense px-space-3 border-t-hairline border-line text-body-sm text-left",
-  end: "h-row-height-dense px-space-3 border-t-hairline border-line text-body-sm text-right",
-} as const;
-const normalHeaders = {
-  start:
-    "h-row-height px-space-3 font-regular border-t-hairline border-line text-body text-left",
-  end: "h-row-height px-space-3 font-regular border-t-hairline border-line text-body text-right",
-} as const;
-const denseHeaders = {
-  start:
-    "h-row-height-dense px-space-3 font-regular border-t-hairline border-line text-body-sm text-left",
-  end: "h-row-height-dense px-space-3 font-regular border-t-hairline border-line text-body-sm text-right",
-} as const;
 const ColumnHeader = (props: CellProps): ReactElement => {
   const owner = useScrollOwner();
   const frame = use(FrameContext);
@@ -188,17 +161,38 @@ const ColumnHeader = (props: CellProps): ReactElement => {
     </th>
   );
 };
+const normalCells = {
+  start:
+    "h-row-height px-space-3 border-t-hairline border-line text-body text-left",
+  end: "h-row-height px-space-3 border-t-hairline border-line text-body text-right",
+} as const;
+const denseCells = {
+  start:
+    "h-row-height-dense px-space-3 border-t-hairline border-line text-body-sm text-left",
+  end: "h-row-height-dense px-space-3 border-t-hairline border-line text-body-sm text-right",
+} as const;
+const normalHeaders = {
+  start:
+    "h-row-height px-space-3 font-regular border-t-hairline border-line text-body text-left",
+  end: "h-row-height px-space-3 font-regular border-t-hairline border-line text-body text-right",
+} as const;
+const denseHeaders = {
+  start:
+    "h-row-height-dense px-space-3 font-regular border-t-hairline border-line text-body-sm text-left",
+  end: "h-row-height-dense px-space-3 font-regular border-t-hairline border-line text-body-sm text-right",
+} as const;
+const compactCells = {
+  start:
+    "py-gap-hairline px-space-2 border-t-hairline border-line text-body-sm text-left",
+  end: "py-gap-hairline px-space-2 border-t-hairline border-line text-body-sm text-right",
+} as const;
 const Cell = (props: CellProps): ReactElement => {
   const dense = use(DensityContext);
   const align = props.align ?? "start";
   if (use(FrameContext) === "positions")
-    return (
-      <td className="px-space-3 py-space-1 border-t-hairline border-line text-right text-body-sm text-ink-muted">
-        <div className="h-full flex flex-col justify-center items-end">
-          {props.children}
-        </div>
-      </td>
-    );
+    return <PositionCell>{props.children}</PositionCell>;
+  if (dense === "compact")
+    return <td className={compactCells[align]}>{props.children}</td>;
   return (
     <td className={dense === "dense" ? denseCells[align] : normalCells[align]}>
       {props.children}
@@ -209,6 +203,19 @@ const RowHeader = (props: CellProps): ReactElement => {
   const dense = use(DensityContext);
   const align = props.align ?? "start";
   const frame = use(FrameContext);
+  if (dense === "compact")
+    return (
+      <th
+        scope="row"
+        className={
+          align === "start"
+            ? "whitespace-nowrap py-gap-hairline px-space-2 font-regular border-t-hairline border-line text-body-sm text-left"
+            : "whitespace-nowrap py-gap-hairline px-space-2 font-regular border-t-hairline border-line text-body-sm text-right"
+        }
+      >
+        {props.children}
+      </th>
+    );
   if (frame === "currency")
     return (
       <th
@@ -219,16 +226,7 @@ const RowHeader = (props: CellProps): ReactElement => {
       </th>
     );
   if (frame === "positions")
-    return (
-      <th
-        scope="row"
-        className="px-space-3 py-space-1 border-t-hairline border-line text-left font-regular"
-      >
-        <div className="h-full flex flex-col justify-center items-start">
-          {props.children}
-        </div>
-      </th>
-    );
+    return <PositionRowHeader>{props.children}</PositionRowHeader>;
   return (
     <th
       scope="row"
