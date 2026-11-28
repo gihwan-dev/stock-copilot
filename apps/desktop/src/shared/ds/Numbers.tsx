@@ -148,10 +148,23 @@ const dataClasses = {
   code: "status-sentence text-code text-ink-muted",
 } as const;
 export const DataText = (props: {
+  readonly onPress?: () => void;
   readonly value: FreeText | Ticker | EntityId | ChartDecimal;
   readonly variant?: "body" | "body-sm" | "caption" | "code" | "emphasis";
 }): ReactElement => {
   const variant = props.variant ?? "body";
+  if (props.onPress !== undefined)
+    return (
+      <button
+        type="button"
+        onClick={props.onPress}
+        className="markdown-link text-body-sm focus-visible:outline-solid focus-visible:outline-focus"
+      >
+        <span className={dataClasses[variant]}>
+          {formatDataValue(props.value)}
+        </span>
+      </button>
+    );
   return (
     <span className={dataClasses[variant]}>{formatDataValue(props.value)}</span>
   );

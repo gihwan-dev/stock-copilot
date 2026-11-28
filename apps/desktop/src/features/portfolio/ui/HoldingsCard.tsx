@@ -3,7 +3,6 @@ import {
   Badge,
   Card,
   DataText,
-  SectionLink,
   Inline,
   Money,
   PriceChange,
@@ -30,23 +29,23 @@ const Row = (props: {
     <TableRowHeader>
       {props.row.trading === "suspended" ? (
         <Inline gap="space-2" align="center" wrap="wrap">
-          <SectionLink
+          <DataText
+            value={props.row.name}
+            variant="body-sm"
             onPress={(): void => {
               props.open(props.row.id);
             }}
-          >
-            <DataText value={props.row.name} variant="body-sm" />
-          </SectionLink>
+          />
           <Badge tone="alert">{portfolioText("tradingSuspended", "ko")}</Badge>
         </Inline>
       ) : (
-        <SectionLink
+        <DataText
+          value={props.row.name}
+          variant="body-sm"
           onPress={(): void => {
             props.open(props.row.id);
           }}
-        >
-          <DataText value={props.row.name} variant="body-sm" />
-        </SectionLink>
+        />
       )}
     </TableRowHeader>
     <TableCell>

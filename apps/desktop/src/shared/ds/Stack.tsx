@@ -1,3 +1,4 @@
+import { SectionTarget, type SectionPosition } from "./SectionTarget";
 import type { ReactElement } from "react";
 import { LayoutItems, type LayoutChildren } from "./layout-children";
 import type { SpacingToken } from "./tokens";
@@ -17,6 +18,7 @@ type GapKey =
   | "space-12";
 
 type Props = LayoutChildren & {
+  readonly position?: SectionPosition;
   readonly gap?: SpacingToken;
 };
 
@@ -46,5 +48,7 @@ const StackBox = (
 );
 
 export const Stack = (props: Props): ReactElement => (
-  <StackBox track={props.gap ?? "space-4"}>{props.children}</StackBox>
+  <SectionTarget position={props.position}>
+    <StackBox track={props.gap ?? "space-4"}>{props.children}</StackBox>
+  </SectionTarget>
 );

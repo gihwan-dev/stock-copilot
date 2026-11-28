@@ -5,7 +5,6 @@ import {
   Card,
   DataText,
   Inline,
-  SectionTarget,
   Markdown,
   Stack,
   Text,
@@ -79,9 +78,9 @@ const SourceList = ({
       <Text variant="label">{researchText.sources}</Text>
     )}
     {report.sources.map((item) => (
-      <SectionTarget key={item.number} target={topic} source={item.number}>
+      <Stack key={item.number} position={{ topic, source: item.number }}>
         <Source item={item} />
-      </SectionTarget>
+      </Stack>
     ))}
   </Stack>
 );
@@ -162,27 +161,26 @@ export const useDashboardResearch = (
   return (topic): ReactElement => {
     const at = result?.kind === "ok" ? result.value[topic].asOf : null;
     return (
-      <SectionTarget target={topic}>
-        <Card
-          title={researchText[topic]}
-          meta={
-            at === null ? undefined : (
-              <Inline gap="space-1">
-                <Text variant="caption">{researchText.asOf}</Text>
-                <TimestampText value={at} />
-              </Inline>
-            )
-          }
-        >
-          {result?.kind === "ok" ? (
-            <Report topic={topic} open={open} report={result.value[topic]} />
-          ) : (
-            <Text>
-              {query.isPending ? researchText.loading : researchText.failed}
-            </Text>
-          )}
-        </Card>
-      </SectionTarget>
+      <Card
+        position={{ topic }}
+        title={researchText[topic]}
+        meta={
+          at === null ? undefined : (
+            <Inline gap="space-1">
+              <Text variant="caption">{researchText.asOf}</Text>
+              <TimestampText value={at} />
+            </Inline>
+          )
+        }
+      >
+        {result?.kind === "ok" ? (
+          <Report topic={topic} open={open} report={result.value[topic]} />
+        ) : (
+          <Text>
+            {query.isPending ? researchText.loading : researchText.failed}
+          </Text>
+        )}
+      </Card>
     );
   };
 };

@@ -95,7 +95,7 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
               await jump.focus();
               await page.keyboard.press("Enter");
               await page.waitForFunction(
-                (id) => document.activeElement.id === id,
+                (id) => globalThis.document.activeElement.id === id,
                 topic,
               );
               if (topic === "holdings") {
@@ -115,7 +115,7 @@ test("대시보드의 조사 바로가기와 마지막 근거까지 키보드로
                   .getByRole("link", { name: "[1]", exact: true })
                   .press("Enter");
                 await page.waitForFunction(
-                  () => document.activeElement.id === "holdings-1",
+                  () => globalThis.document.activeElement.id === "holdings-1",
                 );
                 continue;
               }
@@ -240,10 +240,12 @@ test("운영 해시 라우터에서 조사 이동·설정 왕복·새로고침�
       await jump.focus();
       await page.keyboard.press("Enter");
       await page.waitForFunction(
-        () => document.activeElement.id === "candidates",
+        () => globalThis.document.activeElement.id === "candidates",
       );
       await page.getByRole("button", { name: "설정", exact: true }).click();
-      await page.waitForFunction(() => location.hash === "#/settings");
+      await page.waitForFunction(
+        () => globalThis.location.hash === "#/settings",
+      );
       await page.goBack();
       await jump.waitFor();
       assert.equal(new URL(page.url()).hash, "#/");

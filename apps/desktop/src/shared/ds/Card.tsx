@@ -1,3 +1,4 @@
+import { SectionTarget, type SectionPosition } from "./SectionTarget";
 import type { Action } from "./control-types";
 import { Button } from "./Button";
 import type { ReactElement } from "react";
@@ -7,6 +8,7 @@ import { ScrollArea as CardBody } from "./ScrollArea";
 import { ScrollOwnerScope } from "./scroll-owner";
 type Layout = "flow" | "fill";
 type Props = {
+  readonly position?: SectionPosition;
   readonly title?: UiText;
   readonly actions?: Action;
   readonly meta?: ReactElement | undefined;
@@ -74,23 +76,25 @@ export const Card = (props: Props): ReactElement => {
       ? "shown"
       : "hidden";
   return (
-    <section
-      className={
-        layout === "fill"
-          ? "bg-surface border-hairline border-solid border-line rounded-lg flex flex-col h-full max-w-full scroll-flex"
-          : "bg-surface border-hairline border-solid border-line rounded-lg flex flex-col max-w-full scroll-flex"
-      }
-    >
-      {header === "shown" ? (
-        <CardHeader
-          meta={props.meta}
-          title={props.title}
-          actions={props.actions}
-        />
-      ) : null}
-      <Body layout={layout} header={header}>
-        {props.children}
-      </Body>
-    </section>
+    <SectionTarget position={props.position}>
+      <section
+        className={
+          layout === "fill"
+            ? "bg-surface border-hairline border-solid border-line rounded-lg flex flex-col h-full max-w-full scroll-flex"
+            : "bg-surface border-hairline border-solid border-line rounded-lg flex flex-col max-w-full scroll-flex"
+        }
+      >
+        {header === "shown" ? (
+          <CardHeader
+            meta={props.meta}
+            title={props.title}
+            actions={props.actions}
+          />
+        ) : null}
+        <Body layout={layout} header={header}>
+          {props.children}
+        </Body>
+      </section>
+    </SectionTarget>
   );
 };
