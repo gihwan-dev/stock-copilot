@@ -12,7 +12,7 @@ use domain::{
     SettlementWindow, SnapshotCalendar, SnapshotInstrumentHistory, Symbol, TimeInterval, Timestamp,
     WindowDay, valuation_time,
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 
 use crate::ipc::state::BoxFuture;
 
@@ -325,11 +325,11 @@ impl PerformanceHistorySource for FeedHistory {
     }
 }
 
-struct SharedClock(Arc<dyn Clock>);
+struct ValuationClock(Timestamp);
 
-impl Clock for SharedClock {
+impl Clock for ValuationClock {
     fn now(&self) -> Timestamp {
-        self.0.now()
+        self.0
     }
 }
 
@@ -341,11 +341,22 @@ pub enum DayRecord {
 
 pub const DEFERRED_RETRY_MINUTES: [u64; 2] = [60, 180];
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum PeriodReading {
+    Waiting,
+    Calculating,
+    Finished(Result<Arc<PerformanceSummary>, PerformanceRunError>),
+}
+
+type PeriodResults =
+    BTreeMap<PerformanceSpan, Result<Arc<PerformanceSummary>, PerformanceRunError>>;
+
 pub struct PerformanceBook {
     history: Arc<FeedHistory>,
     clock: Arc<dyn Clock>,
-    results: RwLock<BTreeMap<PerformanceSpan, PerformanceSummary>>,
-    running: Mutex<()>,
+    results:
+        RwLock<BTreeMap<PerformanceSpan, Result<Arc<PerformanceSummary>, PerformanceRunError>>>,
+    running: Semaphore,
 }
 
 impl std::fmt::Debug for PerformanceBook {
@@ -412,30 +423,46 @@ impl PerformanceBook {
             history,
             clock,
             results: RwLock::new(BTreeMap::new()),
-            running: Mutex::new(()),
+            running: Semaphore::new(1),
         }
     }
 
     #[must_use]
     pub fn summary(&self, span: PerformanceSpan) -> Option<PerformanceSummary> {
-        match self.results.read() {
-            Ok(guard) => guard.get(&span).cloned(),
-            Err(poisoned) => poisoned.into_inner().get(&span).cloned(),
+        match self.reading(span) {
+            PeriodReading::Finished(outcome) => {
+                outcome.ok().map(|summary| summary.as_ref().clone())
+            }
+            PeriodReading::Calculating | PeriodReading::Waiting => None,
         }
     }
 
-    fn store(&self, span: PerformanceSpan, value: Option<PerformanceSummary>) {
-        let mut guard = match self.results.write() {
+    #[must_use]
+    pub fn reading(&self, span: PerformanceSpan) -> PeriodReading {
+        let guard = match self.results.read() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        match value {
-            Some(summary) => {
-                let _previous = guard.insert(span, summary);
-            }
-            None => {
-                let _removed = guard.remove(&span);
-            }
+        match guard.get(&span) {
+            Some(outcome) => PeriodReading::Finished(outcome.clone()),
+            None if self.running.available_permits() == 0 => PeriodReading::Calculating,
+            None => PeriodReading::Waiting,
+        }
+    }
+
+    fn store(
+        &self,
+        span: PerformanceSpan,
+        outcome: Result<PerformanceSummary, PerformanceRunError>,
+    ) {
+        record_outcome(span, &outcome);
+        let _previous = self.stored_results().insert(span, outcome.map(Arc::new));
+    }
+
+    fn stored_results(&self) -> std::sync::RwLockWriteGuard<'_, PeriodResults> {
+        match self.results.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
         }
     }
 
@@ -448,7 +475,7 @@ impl PerformanceBook {
         ComputePerformance {
             rows,
             source: self.history.as_ref(),
-            clock: &SharedClock(Arc::clone(&self.clock)),
+            clock: &ValuationClock(self.clock.now()),
         }
         .recompute_day(account, date)
         .await
@@ -483,19 +510,33 @@ impl PerformanceBook {
     }
 
     pub async fn refresh<Rows: SettledRowsSource>(&self, rows: &Rows, account: &AccountId) {
-        let Ok(_running) = self.running.try_lock() else {
+        let Ok(_running) = self.running.try_acquire() else {
             return;
         };
+        self.stored_results().clear();
+        let compute = ComputePerformance {
+            rows,
+            source: self.history.as_ref(),
+            clock: &ValuationClock(self.clock.now()),
+        };
+        let mut failed_spans = Vec::new();
         for span in SPANS {
-            let outcome = ComputePerformance {
-                rows,
-                source: self.history.as_ref(),
-                clock: &SharedClock(Arc::clone(&self.clock)),
+            let outcome = compute
+                .execute_with_recovery(account, span, &failed_spans)
+                .await;
+            let (summary, recovered) = match outcome {
+                Ok(found) => found,
+                Err(error) => {
+                    self.store(span, Err(error));
+                    failed_spans.push(span);
+                    continue;
+                }
+            };
+            for found in recovered {
+                failed_spans.retain(|earlier| *earlier != found.span);
+                self.store(found.span, Ok(found));
             }
-            .execute(account, span)
-            .await;
-            record_outcome(span, &outcome);
-            self.store(span, outcome.ok());
+            self.store(span, Ok(summary));
         }
         let (carried, missing) = self.history.take_rate_gaps().await;
         if carried > 0 || missing > 0 {

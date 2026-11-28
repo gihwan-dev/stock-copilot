@@ -1,4 +1,7 @@
-use super::{UiPerformanceSpan, performance_view};
+use super::{UiPerformanceSpan, UiPerformanceStatus, performance_view, period_line};
+use crate::performance_book::PeriodReading;
+use application::PerformanceRunError;
+use domain::{PerformanceError, PerformanceSpan};
 
 #[test]
 fn every_period_is_listed_even_before_the_first_calculation() {
@@ -15,4 +18,29 @@ fn every_period_is_listed_even_before_the_first_calculation() {
         ]
     );
     assert!(view.lines.iter().all(|line| line.period_return.is_none()));
+}
+
+#[test]
+fn the_six_month_failed_result_keeps_its_reason_and_has_no_number() {
+    for (error, status) in [
+        (
+            PerformanceRunError::NoValuedDays,
+            UiPerformanceStatus::InsufficientData,
+        ),
+        (
+            PerformanceRunError::Performance(PerformanceError::MissingFx),
+            UiPerformanceStatus::MissingFx,
+        ),
+        (
+            PerformanceRunError::Performance(PerformanceError::NonPositiveCapital),
+            UiPerformanceStatus::NonPositiveCapital,
+        ),
+    ] {
+        let item = period_line(
+            PerformanceSpan::SixMonths,
+            Some(PeriodReading::Finished(Err(error))),
+        );
+        assert_eq!(item.status, status);
+        assert_eq!(item.period_return, None);
+    }
 }

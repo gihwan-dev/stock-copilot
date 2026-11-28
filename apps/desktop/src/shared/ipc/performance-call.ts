@@ -24,6 +24,7 @@ export type SignedRate = {
 
 export type PerformanceLine = {
   readonly span: PerformanceSpan;
+  readonly status: z.infer<typeof statusSchema>;
   readonly periodReturn: SignedRate | undefined;
   readonly maxDrawdown: SignedRate | undefined;
   readonly from: Timestamp | undefined;
@@ -62,11 +63,25 @@ const rateSchema = z
   ])
   .transform((value): SignedRate | undefined => value ?? undefined);
 
+const statusSchema = z.enum([
+  "waiting",
+  "calculating",
+  "ready",
+  "missing-price",
+  "missing-fx",
+  "missing-cash",
+  "insufficient-data",
+  "load-failed",
+  "non-positive-capital",
+  "unavailable",
+]);
+
 const performanceSchema = z
   .strictObject({
     lines: z.array(
       z.strictObject({
         span: z.enum(["1m", "3m", "6m", "1y"]),
+        status: statusSchema.optional(),
         period_return: rateSchema,
         max_drawdown: rateSchema,
         from: optionalTimestamp,
@@ -77,6 +92,9 @@ const performanceSchema = z
   .transform((raw): PerformanceView => ({
     lines: raw.lines.map((line): PerformanceLine => ({
       span: line.span,
+      status:
+        line.status ??
+        (line.period_return === undefined ? "unavailable" : "ready"),
       periodReturn: line.period_return,
       maxDrawdown: line.max_drawdown,
       from: line.from,

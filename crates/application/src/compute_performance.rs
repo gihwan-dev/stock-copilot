@@ -160,9 +160,20 @@ where
         account: &AccountId,
         span: PerformanceSpan,
     ) -> Result<PerformanceSummary, PerformanceRunError> {
+        self.execute_with_recovery(account, span, &[])
+            .await
+            .map(|(summary, _recovered)| summary)
+    }
+
+    pub async fn execute_with_recovery(
+        &self,
+        account: &AccountId,
+        span: PerformanceSpan,
+        missing: &[PerformanceSpan],
+    ) -> Result<(PerformanceSummary, Vec<PerformanceSummary>), PerformanceRunError> {
         let now = self.clock.now();
         let requested = performance_window(now, span).map_err(PerformanceRunError::Window)?;
-        let mut days = self.valued_days(requested).await?;
+        let days = self.valued_days(requested).await?;
         if days.is_empty() {
             return Err(PerformanceRunError::NoValuedDays);
         }
@@ -188,22 +199,47 @@ where
             histories: &histories,
             now,
         };
-        let mut dropped = Vec::new();
-        for _attempt in 0_u8..4_u8 {
-            match calculate(&inputs, &days)? {
-                Calculated::Done(done) => return Ok(summarize(span, *done, dropped)),
-                Calculated::Trim(edges) => {
-                    days.retain(|entry| edges.iter().all(|edge| edge.0 != entry.0));
-                    dropped.extend(edges);
-                }
+        let summary = calculate_span(&inputs, span, &days)?;
+        let mut recovered = Vec::new();
+        for &shorter in missing {
+            let Ok(window) = performance_window(now, shorter) else {
+                continue;
+            };
+            if window.from() <= requested.from() || window.to() != requested.to() {
+                continue;
+            }
+            let subset = days.partition_point(|(date, _day)| *date < window.from());
+            if let Some(dates) = days.get(subset..)
+                && let Ok(found) = calculate_span(&inputs, shorter, dates)
+            {
+                recovered.push(found);
             }
         }
-        Err(dropped
-            .first()
-            .map_or(PerformanceRunError::NoValuedDays, |(date, reason)| {
-                PerformanceRunError::EdgeDay(*date, *reason)
-            }))
+        Ok((summary, recovered))
     }
+}
+
+fn calculate_span(
+    inputs: &WindowInputs<'_>,
+    span: PerformanceSpan,
+    days: &[(CalendarDate, WindowDay)],
+) -> Result<PerformanceSummary, PerformanceRunError> {
+    let mut eligible = days.to_vec();
+    let mut dropped = Vec::new();
+    for _attempt in 0_u8..4_u8 {
+        match calculate(inputs, &eligible)? {
+            Calculated::Done(done) => return Ok(summarize(span, *done, dropped)),
+            Calculated::Trim(edges) => {
+                eligible.retain(|entry| edges.iter().all(|edge| edge.0 != entry.0));
+                dropped.extend(edges);
+            }
+        }
+    }
+    Err(dropped
+        .first()
+        .map_or(PerformanceRunError::NoValuedDays, |(date, reason)| {
+            PerformanceRunError::EdgeDay(*date, *reason)
+        }))
 }
 
 struct WindowInputs<'a> {

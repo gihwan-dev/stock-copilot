@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use application::PerformanceSummary;
+use application::{PerformanceRunError, PerformanceSummary};
 use domain::{
     DisplayDirection, NumericInput, PerformanceSpan, PerformanceValue, Ratio, RiskMetric,
 };
@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use super::briefing::kst_iso;
 use super::error::IpcError;
 use super::portfolio::{UiDirection, percent};
-use crate::performance_book::{PerformanceBook, SPANS};
+use crate::performance_book::{PerformanceBook, PeriodReading, SPANS};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
@@ -44,9 +44,64 @@ pub struct UiSignedRate {
     pub direction: UiDirection,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub enum UiPerformanceStatus {
+    #[serde(rename = "waiting")]
+    Waiting,
+    #[serde(rename = "calculating")]
+    Calculating,
+    #[serde(rename = "ready")]
+    Ready,
+    #[serde(rename = "missing-price")]
+    MissingPrice,
+    #[serde(rename = "missing-fx")]
+    MissingFx,
+    #[serde(rename = "missing-cash")]
+    MissingCash,
+    #[serde(rename = "insufficient-data")]
+    InsufficientData,
+    #[serde(rename = "load-failed")]
+    LoadFailed,
+    #[serde(rename = "non-positive-capital")]
+    NonPositiveCapital,
+    #[serde(rename = "unavailable")]
+    Unavailable,
+}
+
+const fn failure_status(error: PerformanceRunError) -> UiPerformanceStatus {
+    use domain::{PerformanceError, SnapshotError};
+    match error {
+        PerformanceRunError::Source(_) | PerformanceRunError::Repository(_) => {
+            UiPerformanceStatus::LoadFailed
+        }
+        PerformanceRunError::EdgeDay(_, SnapshotError::MissingPrice) => {
+            UiPerformanceStatus::MissingPrice
+        }
+        PerformanceRunError::EdgeDay(_, SnapshotError::MissingFx)
+        | PerformanceRunError::Performance(PerformanceError::MissingFx) => {
+            UiPerformanceStatus::MissingFx
+        }
+        PerformanceRunError::Cash(_, _)
+        | PerformanceRunError::EdgeDay(_, SnapshotError::MissingCash) => {
+            UiPerformanceStatus::MissingCash
+        }
+        PerformanceRunError::NoValuedDays
+        | PerformanceRunError::Performance(PerformanceError::InvalidPeriod) => {
+            UiPerformanceStatus::InsufficientData
+        }
+        PerformanceRunError::Performance(PerformanceError::NonPositiveCapital) => {
+            UiPerformanceStatus::NonPositiveCapital
+        }
+        PerformanceRunError::Window(_)
+        | PerformanceRunError::EdgeDay(_, _)
+        | PerformanceRunError::Performance(_) => UiPerformanceStatus::Unavailable,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct UiPerformanceLine {
     pub span: UiPerformanceSpan,
+    pub status: UiPerformanceStatus,
     pub period_return: Option<UiSignedRate>,
     pub max_drawdown: Option<UiSignedRate>,
     pub from: Option<String>,
@@ -79,17 +134,27 @@ fn signed_rate(value: PerformanceValue) -> Option<UiSignedRate> {
     })
 }
 
-fn line(span: PerformanceSpan, summary: Option<&PerformanceSummary>) -> UiPerformanceLine {
-    let Some(found) = summary else {
-        return UiPerformanceLine {
-            span: ui_span(span),
-            period_return: None,
-            max_drawdown: None,
-            from: None,
-            to: None,
-        };
+fn period_line(span: PerformanceSpan, reading: Option<PeriodReading>) -> UiPerformanceLine {
+    let status = match reading {
+        Some(PeriodReading::Finished(Ok(found))) => return ready_line(span, &found),
+        Some(PeriodReading::Finished(Err(error))) => failure_status(error),
+        Some(PeriodReading::Waiting) => UiPerformanceStatus::Waiting,
+        Some(PeriodReading::Calculating) => UiPerformanceStatus::Calculating,
+        None => UiPerformanceStatus::Unavailable,
     };
     UiPerformanceLine {
+        status,
+        span: ui_span(span),
+        period_return: None,
+        max_drawdown: None,
+        from: None,
+        to: None,
+    }
+}
+
+fn ready_line(span: PerformanceSpan, found: &PerformanceSummary) -> UiPerformanceLine {
+    UiPerformanceLine {
+        status: UiPerformanceStatus::Ready,
         span: ui_span(span),
         period_return: signed_rate(found.performance.twr()),
         max_drawdown: match found.drawdown {
@@ -106,10 +171,7 @@ pub fn performance_view(book: Option<&PerformanceBook>) -> UiPerformanceView {
     UiPerformanceView {
         lines: SPANS
             .iter()
-            .map(|span| {
-                let summary = book.and_then(|found| found.summary(*span));
-                line(*span, summary.as_ref())
-            })
+            .map(|span| period_line(*span, book.map(|found| found.reading(*span))))
             .collect(),
     }
 }

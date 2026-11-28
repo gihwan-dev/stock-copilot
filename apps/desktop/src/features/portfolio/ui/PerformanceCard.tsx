@@ -19,12 +19,26 @@ const spanKeys = {
   "1y": "performanceOneYear",
 } as const satisfies Record<PerformanceSpan, PortfolioMessageKey>;
 
+const statusKeys = {
+  waiting: "performanceWaiting",
+  calculating: "performancePending",
+  ready: "performanceUnavailable",
+  "missing-price": "performanceMissingPrice",
+  "missing-fx": "performanceMissingFx",
+  "missing-cash": "performanceMissingCash",
+  "insufficient-data": "performanceMissingData",
+  "load-failed": "performanceLoadFailed",
+  "non-positive-capital": "performanceNonPositiveCapital",
+  unavailable: "performanceUnavailable",
+} as const satisfies Record<PerformanceLine["status"], PortfolioMessageKey>;
+
 const Rate = (props: {
+  readonly status: PerformanceLine["status"];
   readonly value: SignedRate | undefined;
 }): ReactElement =>
   props.value === undefined ? (
     <Text variant="caption" tone="ink-muted">
-      {portfolioText("performancePending", "ko")}
+      {portfolioText(statusKeys[props.status], "ko")}
     </Text>
   ) : (
     <Percent value={props.value.rate} direction={props.value.direction} />
@@ -35,7 +49,7 @@ const SpanRate = (props: { readonly line: PerformanceLine }): ReactElement => (
     <Text variant="caption" tone="ink-muted">
       {portfolioText(spanKeys[props.line.span], "ko")}
     </Text>
-    <Rate value={props.line.periodReturn} />
+    <Rate value={props.line.periodReturn} status={props.line.status} />
   </Inline>
 );
 
@@ -56,7 +70,10 @@ const Lines = (props: {
           <Text variant="caption" tone="ink-muted">
             {portfolioText("performanceDrawdown", "ko")}
           </Text>
-          <Rate value={year?.maxDrawdown} />
+          <Rate
+            value={year?.maxDrawdown}
+            status={year?.status ?? "unavailable"}
+          />
         </Inline>,
       ]}
     </Inline>
@@ -67,14 +84,22 @@ export const PerformanceSummary = (): ReactElement => {
   const query = useQuery({
     queryKey: [...queryKeys.portfolio, "performance"],
     queryFn: getPerformance,
-    refetchInterval: refreshMs,
+    refetchInterval: (current) => {
+      const reply = current.state.data;
+      if (reply?.kind !== "ok") return refreshMs;
+      if (reply.value.lines.some((line) => line.status === "calculating"))
+        return 2_000;
+      if (reply.value.lines.some((line) => line.status === "waiting"))
+        return 10_000;
+      return refreshMs;
+    },
   });
   const reply = query.data;
   if (reply === undefined || reply.kind === "err")
     return (
       <Text variant="caption" tone="ink-muted">
         {portfolioText(
-          reply === undefined ? "performancePending" : "performanceError",
+          reply === undefined ? "performanceLoading" : "performanceError",
           "ko",
         )}
       </Text>

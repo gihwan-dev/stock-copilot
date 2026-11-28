@@ -2,6 +2,7 @@
   "lines": [
     {
       "span": "1m",
+      "status": "unavailable",
       "period_return": null,
       "max_drawdown": null,
       "from": null,
@@ -9,6 +10,7 @@
     },
     {
       "span": "3m",
+      "status": "unavailable",
       "period_return": null,
       "max_drawdown": null,
       "from": null,
@@ -16,6 +18,7 @@
     },
     {
       "span": "6m",
+      "status": "unavailable",
       "period_return": null,
       "max_drawdown": null,
       "from": null,
@@ -23,6 +26,7 @@
     },
     {
       "span": "1y",
+      "status": "unavailable",
       "period_return": null,
       "max_drawdown": null,
       "from": null,

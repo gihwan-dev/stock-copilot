@@ -100,9 +100,13 @@ fn snapshot_calendar(day: u8) -> SnapshotCalendar {
 }
 
 fn fx(day: u8) -> FxRate {
+    fx_at_rate(day, "1300")
+}
+
+fn fx_at_rate(day: u8, rate: &str) -> FxRate {
     let valued = valuation_time(date(day));
     FxRate::parse(
-        &NumericInput::try_new("1300").expect("입력"),
+        &NumericInput::try_new(rate).expect("입력"),
         FxPair::UsdKrw,
         FxRateKind::Mid,
         TimeInterval::try_new(
@@ -190,6 +194,7 @@ impl SettledRowsSource for Rows {
 enum Days {
     Weekdays,
     FirstWithoutFx,
+    MovingFx,
     None,
 }
 
@@ -238,11 +243,15 @@ impl PerformanceHistorySource for Source {
                 calendar: snapshot_calendar(day),
                 fx: Some(fx(day)),
             }),
+            (Days::MovingFx, Some(day)) => Some(WindowDay {
+                calendar: snapshot_calendar(day),
+                fx: Some(fx_at_rate(day, if day < 15 { "1100" } else { "1300" })),
+            }),
             (Days::FirstWithoutFx, Some(day)) => Some(WindowDay {
                 calendar: snapshot_calendar(day),
                 fx: (day != 10).then(|| fx(day)),
             }),
-            (Days::Weekdays | Days::FirstWithoutFx | Days::None, _) => None,
+            (Days::Weekdays | Days::FirstWithoutFx | Days::MovingFx | Days::None, _) => None,
         }))
     }
 
@@ -346,4 +355,75 @@ fn reported_cash_that_matches_the_rows_is_marked_as_matching() {
             (Currency::Usd, domain::CashAnchor::ReportedMatches),
         ]
     );
+}
+
+struct AsOf(CalendarDate);
+impl Clock for AsOf {
+    fn now(&self) -> Timestamp {
+        valuation_time(self.0)
+    }
+}
+
+#[test]
+fn a_wider_read_recovers_six_months_with_its_own_ledger_and_actual_first_session() {
+    let clock = AsOf(
+        CalendarDate::from_parts(
+            CalendarYear::new(1970),
+            MonthNumber::new(8),
+            DayNumber::new(15),
+        )
+        .expect("평가일"),
+    );
+    let calculate = ComputePerformance {
+        rows: &Rows,
+        source: &Source(Days::MovingFx),
+        clock: &clock,
+    };
+    let six = PerformanceSpan::SixMonths;
+    let interrupted = ComputePerformance {
+        rows: &Rows,
+        source: &Source(Days::None),
+        clock: &clock,
+    };
+    assert_eq!(
+        run(interrupted.execute(&account(), six)),
+        Err(PerformanceRunError::NoValuedDays)
+    );
+    let independent = run(calculate.execute(&account(), six)).expect("독립 6개월");
+    let (year, recovered) =
+        run(calculate.execute_with_recovery(&account(), PerformanceSpan::OneYear, &[six]))
+            .expect("1년");
+    assert_eq!(year.performance.start(), date(10));
+    assert_eq!(
+        independent.performance.start(),
+        date(15),
+        "2월 14일 휴장 뒤 첫 평가일"
+    );
+    assert_ne!(year.performance.twr(), independent.performance.twr());
+    assert_eq!(recovered, [independent]);
+}
+
+#[test]
+fn an_annual_result_does_not_fill_a_period_without_valuation_days() {
+    let clock = AsOf(
+        CalendarDate::from_parts(
+            CalendarYear::new(1970),
+            MonthNumber::new(9),
+            DayNumber::new(15),
+        )
+        .expect("평가일"),
+    );
+    let calculate = ComputePerformance {
+        rows: &Rows,
+        source: &Source(Days::Weekdays),
+        clock: &clock,
+    };
+    let (year, recovered) = run(calculate.execute_with_recovery(
+        &account(),
+        PerformanceSpan::OneYear,
+        &[PerformanceSpan::SixMonths],
+    ))
+    .expect("1년");
+    assert_eq!(year.performance.start(), date(10));
+    assert_eq!(recovered, Vec::new());
 }

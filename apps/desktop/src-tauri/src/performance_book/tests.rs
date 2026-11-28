@@ -366,3 +366,28 @@ fn a_fetched_rate_is_cached_and_not_counted_as_a_gap() {
     let (carried, missing) = tauri::async_runtime::block_on(history.take_rate_gaps());
     assert_eq!((carried, missing), (0, 0), "받은 날은 캐시에서 다시 쓴다");
 }
+
+#[test]
+fn a_finished_period_failure_stays_distinct_from_a_live_or_unstarted_calculation() {
+    let clock: Arc<dyn Clock> = Arc::new(Fixed);
+    let book = PerformanceBook::new(
+        Arc::new(FeedHistory::new(
+            Arc::new(DownFeed::default()),
+            Arc::clone(&clock),
+        )),
+        clock,
+    );
+    let span = PerformanceSpan::SixMonths;
+    assert_eq!(book.reading(span), super::PeriodReading::Waiting);
+    {
+        let _permit = book.running.try_acquire().expect("실행");
+        assert_eq!(book.reading(span), super::PeriodReading::Calculating);
+    }
+    tauri::async_runtime::block_on(book.refresh(&Rows, &AccountId::new(7)));
+    assert_eq!(
+        book.reading(span),
+        super::PeriodReading::Finished(Err(application::PerformanceRunError::Source(denied(
+            ReadEndpoint::Calendar
+        ))))
+    );
+}
