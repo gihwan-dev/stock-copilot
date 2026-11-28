@@ -6,7 +6,8 @@ import {
   type ComponentProps,
 } from "react";
 import ReactMarkdown, { type ExtraProps, type Options } from "react-markdown";
-import { citationPlugin, type MarkdownCitation } from "./markdown-citations";
+import type { MarkdownProps } from "./markdown-types";
+import { citationPlugin } from "./markdown-citations";
 import { resolveMarkdownAction, MarkdownAction } from "./MarkdownAction";
 import remarkGfm from "remark-gfm";
 import { ScrollArea } from "./ScrollArea";
@@ -14,9 +15,7 @@ import {
   parseExternalUrl,
   parseFreeText,
   emptyFreeText,
-  type ExternalUrl,
   type FreeText,
-  type EntityId,
 } from "../lib";
 type Conversion = NonNullable<
   NonNullable<Options["remarkRehypeOptions"]>["unknownHandler"]
@@ -34,22 +33,12 @@ type ImageContent = {
   readonly alt?: ComponentProps<"img">["alt"];
 };
 type BlockContent = { readonly children?: ReactNode };
-type Props = {
-  readonly content: FreeText;
-  readonly linkAllowed: (url: ExternalUrl) => "allow" | "deny";
-  readonly onOpenLink: (url: ExternalUrl) => void;
-  readonly onLocalCitation?: (number: EntityId) => void;
-  readonly citations?: readonly MarkdownCitation[];
-  readonly scale?: "body" | "reading" | "lead";
-  readonly flavor?: "basic" | "gfm";
-  readonly appearance?: "plain" | "question";
-};
 const textScales = {
   body: "markdown-content text-body text-ink",
   reading: "markdown-content text-size-lg text-ink",
   lead: "markdown-content text-size-lg font-semibold text-ink",
 } as const;
-const MarkdownContext = createContext<Props | undefined>(undefined);
+const MarkdownContext = createContext<MarkdownProps | undefined>(undefined);
 const LinkContext = createContext<"outside" | "inside">("outside");
 const MarkdownImage = ({ src, alt }: ImageContent): ReactElement => {
   const props = use(MarkdownContext);
@@ -94,12 +83,10 @@ const hasContent = (node: ContentNode): "present" | "empty" => {
     return valuePresent(imageLabel(node.properties.alt, node.properties.src));
   return hasChildren(node.children);
 };
-const citationNumber = (node: LinkContent["node"]): unknown =>
-  node?.properties["dataCitation"];
 const MarkdownLink = ({ href, children, node }: LinkContent): ReactElement => {
   const props = use(MarkdownContext);
   const citation = props?.citations?.find(
-    (entry) => entry.number === citationNumber(node),
+    (entry) => entry.number === node?.properties["dataCitation"],
   );
   const url = parseExternalUrl(href);
   const open = resolveMarkdownAction(
@@ -142,7 +129,15 @@ const MarkdownH1 = ({ children }: BlockContent): ReactElement => (
 );
 const MarkdownH2 = ({ children, node }: LinkContent): ReactElement | null =>
   node?.properties.id === "footnote-label" ? null : (
-    <h2 className="text-title-md my-space-4">{children}</h2>
+    <h2
+      className={
+        use(MarkdownContext)?.appearance === "briefing"
+          ? "text-title-lg mt-space-6 mb-space-2"
+          : "text-title-md my-space-4"
+      }
+    >
+      {children}
+    </h2>
   );
 const smallHeading = (
   Tag: "h3" | "h4" | "h5" | "h6",
@@ -192,7 +187,14 @@ const MarkdownTd = ({ children }: BlockContent): ReactElement => (
     {children}
   </td>
 );
+const MarkdownSpan = ({ node, children }: LinkContent): ReactElement =>
+  node?.properties["dataCitationGroup"] === "joined" ? (
+    <span className="inline-flex">{children}</span>
+  ) : (
+    <span>{children}</span>
+  );
 const components = {
+  span: MarkdownSpan,
   a: MarkdownLink,
   img: MarkdownImage,
   pre: MarkdownPre,
@@ -212,7 +214,7 @@ const components = {
   td: MarkdownTd,
   input: (): null => null,
 };
-export const Markdown = (props: Props): ReactElement => {
+export const Markdown = (props: MarkdownProps): ReactElement => {
   const plugins = props.flavor === "gfm" ? [remarkGfm] : [];
   const citations = props.citations ?? [];
   const body = (

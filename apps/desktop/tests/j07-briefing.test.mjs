@@ -121,7 +121,7 @@ test("J-07 briefing card and past briefing screen show loading, empty, error and
     );
     w.cleanup();
 
-    const lead = "근거 [1] 원문 없는 출처 [2] ";
+    const lead = "근거 [1]. 원문 없는 출처 [2] ";
     const citationCase = w.mount(w.ipc, {
       latest: {
         ...w.recorded.latest,
@@ -133,6 +133,8 @@ test("J-07 briefing card and past briefing screen show loading, empty, error and
       if (screen === "full")
         await citationCase.findByText("원문 없음", { exact: true });
       const link = await citationCase.findByRole("link", { name: "[1]" });
+      assert.equal(link.closest("span.inline-flex")?.textContent, "[1].");
+      assert.equal(link.textContent, "[1]");
       assert.equal(citationCase.queryByRole("link", { name: "[2]" }), null);
       const rendered = citationCase.container.textContent;
       assert.ok(rendered.includes("[2]"));
