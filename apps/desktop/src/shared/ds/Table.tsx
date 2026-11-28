@@ -67,15 +67,15 @@ const Root = (props: RootProps): ReactElement => {
   const widget = useWidgetTitle();
   const frame = props.frame ?? "standalone";
   const surface = frame === "standalone" ? "standalone" : "embedded";
-  const table = tableElement(props, widget);
+  const renderedTable = tableElement(props, widget);
   return (
     <DensityContext value={props.dense ?? "normal"}>
       <FrameContext value={frame}>
         <TableSurface mode={widget === undefined ? surface : "widget"}>
           {useScrollOwner() === "card" ? (
-            table
+            renderedTable
           ) : (
-            <ScrollArea direction="horizontal">{table}</ScrollArea>
+            <ScrollArea direction="horizontal">{renderedTable}</ScrollArea>
           )}
         </TableSurface>
       </FrameContext>
