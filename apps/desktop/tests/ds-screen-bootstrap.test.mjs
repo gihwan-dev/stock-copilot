@@ -125,6 +125,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "readCanvasTheme",
         "useCanvasChartTheme",
         "useColorScheme",
+        "focusResearchSection",
       ],
     );
     const platformFunctions = checker.getExportsOfModule(symbol);
@@ -144,6 +145,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         ["readCanvasTheme", ["CandleThemePalette | undefined"]],
         ["useCanvasChartTheme", ["CandleThemePalette | undefined"]],
         ["useColorScheme", ['"light" | "dark"']],
+        ["focusResearchSection", ["void"]],
       ],
     );
     assert.deepEqual(DOM_ACCESS_FILES, [
@@ -170,6 +172,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "chatCommit",
         "shellDismiss",
         "chatPanelLimits",
+        "panelSupport",
         "useShellResize",
         "initialChatShare",
         "readChatShare",
@@ -194,6 +197,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       ['"commit" | "ignore"'],
       ['"ignore" | "dismiss"'],
       [],
+      ['"resizable" | "static"'],
       ['"resizable" | "static"'],
       ["PanelShare"],
       ["PanelShare"],
