@@ -50,7 +50,7 @@ pub trait PerformanceHistorySource: Send + Sync {
 pub enum PerformanceRunError {
     Repository(SystemPortError),
     Source(PortError),
-    Window(SnapshotError),
+    ValuationPeriod(SnapshotError),
     NoValuedDays,
     Cash(Currency, CashUnavailable),
     EdgeDay(CalendarDate, SnapshotError),
@@ -119,7 +119,7 @@ where
     ) -> Result<ValuationSnapshot, PerformanceRunError> {
         let now = self.clock.now();
         let window = SettlementWindow::try_new(date, date)
-            .map_err(|_error| PerformanceRunError::Window(SnapshotError::WrongPeriod))?;
+            .map_err(|_error| PerformanceRunError::ValuationPeriod(SnapshotError::WrongPeriod))?;
         let day = self
             .source
             .window_day(date)
@@ -172,7 +172,8 @@ where
         missing: &[PerformanceSpan],
     ) -> Result<(PerformanceSummary, Vec<PerformanceSummary>), PerformanceRunError> {
         let now = self.clock.now();
-        let requested = performance_window(now, span).map_err(PerformanceRunError::Window)?;
+        let requested =
+            performance_window(now, span).map_err(PerformanceRunError::ValuationPeriod)?;
         let days = self.valued_days(requested).await?;
         if days.is_empty() {
             return Err(PerformanceRunError::NoValuedDays);
@@ -282,7 +283,7 @@ fn calculate(
         return Err(PerformanceRunError::NoValuedDays);
     };
     let window = SettlementWindow::try_new(*first, *last)
-        .map_err(|_error| PerformanceRunError::Window(SnapshotError::WrongPeriod))?;
+        .map_err(|_error| PerformanceRunError::ValuationPeriod(SnapshotError::WrongPeriod))?;
     let [(_, kr_cash), (_, us_cash)] = inputs.reported;
     let (kr, kr_anchor) = cash_ledger(inputs, window, Currency::Krw, kr_cash)?;
     let (us, us_anchor) = cash_ledger(inputs, window, Currency::Usd, us_cash)?;

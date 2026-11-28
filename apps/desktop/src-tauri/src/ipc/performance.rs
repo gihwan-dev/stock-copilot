@@ -92,7 +92,7 @@ const fn failure_status(error: PerformanceRunError) -> UiPerformanceStatus {
         PerformanceRunError::Performance(PerformanceError::NonPositiveCapital) => {
             UiPerformanceStatus::NonPositiveCapital
         }
-        PerformanceRunError::Window(_)
+        PerformanceRunError::ValuationPeriod(_)
         | PerformanceRunError::EdgeDay(_, _)
         | PerformanceRunError::Performance(_) => UiPerformanceStatus::Unavailable,
     }
