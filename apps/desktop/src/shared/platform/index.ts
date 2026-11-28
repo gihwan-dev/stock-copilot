@@ -1,4 +1,26 @@
-import type { EntityId } from "../lib";
+import {
+  parseInputValue,
+  type DockArea,
+  measureDockArea,
+  type InputValue,
+  restoreDock,
+  type DockModel,
+  type DockPanel,
+  type DockProfile,
+  type EntityId,
+} from "../lib";
+import {
+  dockKey,
+  loadDockProfile,
+  saveDockProfile,
+  useAppearanceState,
+  useInitialDock,
+  useFittedDock,
+} from "./detach";
+import {
+  defaultParseSearch,
+  defaultStringifySearch,
+} from "@tanstack/react-router";
 import { useSyncExternalStore, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -37,6 +59,33 @@ const revealNearest = (target: Readonly<HTMLElement>): void => {
   if (item.top < top) scroller.scrollBy({ top: item.top - top });
   else if (item.bottom > bottom)
     scroller.scrollBy({ top: item.bottom - bottom });
+};
+
+const focusDockTab = (panel?: DockPanel): void => {
+  const interaction = new AbortController();
+  const cancel = (): void => {
+    interaction.abort();
+  };
+  const options = { capture: true, signal: interaction.signal };
+  document.addEventListener("keydown", cancel, options);
+  document.addEventListener("pointerdown", cancel, options);
+  requestAnimationFrame(() => {
+    const interrupted = interaction.signal.aborted;
+    interaction.abort();
+    if (interrupted) return;
+    const workspace = document.querySelector("[data-dock-workspace]");
+    const tab =
+      panel === undefined
+        ? null
+        : workspace?.querySelector<HTMLElement>(`[data-tab-id="${panel}"]`);
+    const fallback = workspace?.querySelector<HTMLElement>(
+      "[data-tab-selected]",
+    );
+    const trigger = document.querySelector<HTMLElement>(
+      '[data-dock-trigger="add"]',
+    );
+    (tab ?? fallback ?? trigger)?.focus({ preventScroll: true });
+  });
 };
 
 export const focusResearchSection = (
@@ -139,5 +188,63 @@ export const preserveExcerptPosition = (
         top: next === "open" ? initialScroll : scroller.scrollTop + relativeTop,
       });
     }
+  });
+};
+
+const readLocalPreference = (key: InputValue): InputValue | undefined => {
+  const value = parseInputValue(localStorage.getItem(key));
+  return value.kind === "ok" ? value.value : undefined;
+};
+const writeLocalPreference = (key: InputValue, value: InputValue): void => {
+  localStorage.setItem(key, value);
+};
+
+const readDockLayout = (profile: DockProfile): Promise<DockModel> =>
+  loadDockProfile(profile, () => {
+    const raw = localStorage.getItem(dockKey(profile));
+    return raw === null || raw.length > 65536
+      ? undefined
+      : restoreDock(defaultParseSearch(raw));
+  });
+
+const writeDockLayout = (profile: DockProfile, model: DockModel): void => {
+  saveDockProfile(profile, model, () => {
+    localStorage.setItem(dockKey(profile), defaultStringifySearch(model));
+  });
+};
+
+export const useWidgetPreferences = (): ReturnType<typeof useAppearanceState> =>
+  useAppearanceState({
+    read: readLocalPreference,
+    write: writeLocalPreference,
+  });
+
+const observeDockArea = (change: (area: DockArea) => void): (() => void) => {
+  const host = document.querySelector<HTMLElement>("[data-dock-workspace]");
+  if (host === null) return (): void => undefined;
+  const measure = (): void => {
+    const area = measureDockArea(host.clientWidth, host.clientHeight);
+    if (area !== undefined) change(area);
+  };
+  measure();
+  const observer = new ResizeObserver(measure);
+  observer.observe(host);
+  return (): void => {
+    observer.disconnect();
+  };
+};
+
+export const useDashboardDockPreferences = (): ReturnType<
+  typeof useFittedDock
+> => {
+  const profile = useWindowLayout();
+  const initial = useInitialDock(profile, readDockLayout);
+  return useFittedDock({
+    watch: observeDockArea,
+    profile,
+    initial,
+    mode: typeof ResizeObserver === "function" ? "resizable" : "static",
+    persist: writeDockLayout,
+    onFocusTab: focusDockTab,
   });
 };

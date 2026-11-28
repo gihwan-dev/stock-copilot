@@ -1,3 +1,4 @@
+import { AppearanceSettingsProvider } from "../features/settings";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { useState, type ReactElement } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
@@ -29,7 +30,7 @@ import {
   type SettingsClient,
 } from "../shared/ipc";
 import { text, type AppRoutePath } from "../shared/lib";
-import { useCoreEvent } from "../shared/platform";
+import { useWidgetPreferences, useCoreEvent } from "../shared/platform";
 import { createAppQueryClient } from "./query";
 import { AppRouter } from "./router";
 import { SettingsClients } from "./settings";
@@ -104,34 +105,41 @@ export const App = (props: AppProps): ReactElement => {
   const [defaultClient] = useState(createAppQueryClient);
   const client = props.queryClient ?? defaultClient;
   const sources = props.sources ?? coreScreenSources;
+  const appearance = useWidgetPreferences();
   return (
-    <AppFrame>
-      <ErrorBoundary FallbackComponent={AppErrorFallback}>
-        <QueryClientProvider client={client}>
-          <CoreEventBridge />
-          {props.settingsClient === undefined ? (
-            <SetupGate client={props.setupClient}>
-              <AppRouter
-                initialPath={props.initialPath}
-                sources={sources}
-                system="hidden"
-              />
-            </SetupGate>
-          ) : (
-            <OnboardingClientProvider client={props.settingsClient}>
-              <SettingsClients client={props.settingsClient}>
-                <FirstRunGate>
-                  <AppRouter
-                    initialPath={props.initialPath}
-                    sources={sources}
-                    system="shown"
-                  />
-                </FirstRunGate>
-              </SettingsClients>
-            </OnboardingClientProvider>
-          )}
-        </QueryClientProvider>
-      </ErrorBoundary>
+    <AppFrame
+      widgetGap={appearance.prefs.gap}
+      widgetPadding={appearance.prefs.padding}
+      widgetRadius={appearance.prefs.radius}
+    >
+      <AppearanceSettingsProvider appearance={appearance}>
+        <ErrorBoundary FallbackComponent={AppErrorFallback}>
+          <QueryClientProvider client={client}>
+            <CoreEventBridge />
+            {props.settingsClient === undefined ? (
+              <SetupGate client={props.setupClient}>
+                <AppRouter
+                  initialPath={props.initialPath}
+                  sources={sources}
+                  system="hidden"
+                />
+              </SetupGate>
+            ) : (
+              <OnboardingClientProvider client={props.settingsClient}>
+                <SettingsClients client={props.settingsClient}>
+                  <FirstRunGate>
+                    <AppRouter
+                      initialPath={props.initialPath}
+                      sources={sources}
+                      system="shown"
+                    />
+                  </FirstRunGate>
+                </SettingsClients>
+              </OnboardingClientProvider>
+            )}
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </AppearanceSettingsProvider>
     </AppFrame>
   );
 };

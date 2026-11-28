@@ -15,9 +15,14 @@ export type AllocationScreenState = ScreenState<AllocationView>;
 
 export const usePortfolio = (
   load: ScreenSources["portfolio"],
+  availability: "enabled" | "waiting",
 ): { readonly view: PortfolioScreenState; readonly retry: () => void } => {
   const client = useQueryClient();
-  const query = useQuery({ queryKey: screenKeys.portfolio, queryFn: load });
+  const query = useQuery({
+    queryKey: screenKeys.portfolio,
+    queryFn: load,
+    enabled: availability === "enabled",
+  });
   return {
     view: toScreenState(query.data, () => "filled"),
     retry: (): void => {

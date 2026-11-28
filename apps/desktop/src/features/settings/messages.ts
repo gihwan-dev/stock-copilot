@@ -1,6 +1,15 @@
 import type { Locale, UiText } from "../../shared/lib";
 
 const catalog = {
+  appearanceTitle: { ko: "화면 모양" as UiText },
+  widgetGap: { ko: "위젯 간격" as UiText },
+  widgetPadding: { ko: "안쪽 여백" as UiText },
+  widgetRadius: { ko: "카드 모서리" as UiText },
+  pixels0: { ko: "0 픽셀" as UiText },
+  pixels4: { ko: "4 픽셀" as UiText },
+  pixels8: { ko: "8 픽셀" as UiText },
+  pixels12: { ko: "12 픽셀" as UiText },
+  pixels16: { ko: "16 픽셀" as UiText },
   title: { ko: "설정" as UiText },
   back: { ko: "이전 화면으로" as UiText },
   backToHome: { ko: "현황으로" as UiText },

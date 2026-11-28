@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { AboutSection } from "../features/about";
 import { BriefingCard, BriefingHistoryScreen } from "../features/briefing";
 import { ChatWorkspace } from "../features/chat";
-import { useDashboardResearch, ResearchNavigation } from "../features/research";
+import { useDashboardResearch } from "../features/research";
 import { PortfolioOverview } from "../features/portfolio";
 import { useKeyEntry } from "../features/onboarding";
 import { SettingsScreen } from "../features/settings";
@@ -23,8 +23,8 @@ import {
   Stack,
 } from "../shared/ds";
 import { coreUpdateClient, getDataStatus } from "../shared/ipc";
-import { queryKeys, text } from "../shared/lib";
-import { detach } from "../shared/platform";
+import { dockPreferencesScope, queryKeys, text } from "../shared/lib";
+import { detach, useDashboardDockPreferences } from "../shared/platform";
 import {
   useNavigate,
   useInstrumentSelection,
@@ -80,66 +80,32 @@ const HomeBriefing = (): ReactElement => {
   );
 };
 
-const HomeBody = (props: {
-  readonly view: ReturnType<typeof useAppVersion>;
+const StartupNotice = (props: {
+  readonly view: Exclude<ReturnType<typeof useAppVersion>, { status: "ready" }>;
   readonly retry: () => void;
-  readonly assessment: ReactElement;
-  readonly reports: ReactElement;
-}): ReactElement => {
+}): ReactElement =>
+  props.view.status === "loading" ? (
+    <Card title={text("app.loading", "ko")}>
+      <Skeleton variant="text" />
+    </Card>
+  ) : (
+    <EmptyState
+      title={text("app.errorTitle", "ko")}
+      action={{ label: text("app.retry", "ko"), onPress: props.retry }}
+    >
+      {describeIpcFailure(props.view.failure)}
+    </EmptyState>
+  );
+
+const DockPreferences = dockPreferencesScope.Context;
+
+export const HomeView = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
   const open = useInstrumentSelection();
-  const view = props.view;
-  switch (view.status) {
-    case "loading":
-      return (
-        <>
-          <Card title={text("app.loading", "ko")}>
-            <Skeleton variant="text" />
-          </Card>
-          {props.assessment}
-          {props.reports}
-        </>
-      );
-    case "error":
-      return (
-        <>
-          <EmptyState
-            title={text("app.errorTitle", "ko")}
-            action={{ label: text("app.retry", "ko"), onPress: props.retry }}
-          >
-            {describeIpcFailure(view.failure)}
-          </EmptyState>
-          {props.assessment}
-          {props.reports}
-        </>
-      );
-    case "ready":
-      return (
-        <PortfolioOverview
-          onOpenInstrument={open}
-          assessment={props.assessment}
-          reports={props.reports}
-          sources={sources}
-          onOpenTransactions={(): void => {
-            go("/transactions");
-          }}
-          signals={
-            <SignalCards
-              sources={sources}
-              footer={<ScorecardPanel load={sources.scorecard} />}
-            />
-          }
-          briefing={<HomeBriefing />}
-        />
-      );
-  }
-};
-
-export const HomeView = (): ReactElement => {
-  const open = useInstrumentSelection();
   const research = useDashboardResearch(open);
   const view = useAppVersion();
+  const dock = useDashboardDockPreferences();
   const queryClient = useQueryClient();
   const retry = (): void => {
     detach({
@@ -149,30 +115,34 @@ export const HomeView = (): ReactElement => {
     });
   };
   return (
-    <Page
-      title={text("app.homeTitle", "ko")}
-      layout="reading"
-      navigation={
-        <ResearchNavigation
-          account={view.status === "ready" ? "ready" : "pending"}
-        />
-      }
-    >
-      <HomeBody
-        view={view}
-        retry={retry}
-        assessment={research("holdings")}
-        reports={
-          <Stack gap="space-4">
-            {research("candidates")}
-            {research("economy")}
-          </Stack>
+    <DockPreferences key={dock.profile} value={dock}>
+      <PortfolioOverview
+        sources={sources}
+        startup={
+          view.status === "ready" ? undefined : (
+            <StartupNotice view={view} retry={retry} />
+          )
         }
+        onOpenInstrument={open}
+        onOpenTransactions={(): void => {
+          go("/transactions");
+        }}
+        reports={{
+          holdings: research("holdings"),
+          candidates: research("candidates"),
+          economy: research("economy"),
+        }}
+        signals={
+          <SignalCards
+            sources={sources}
+            footer={<ScorecardPanel load={sources.scorecard} />}
+          />
+        }
+        briefing={<HomeBriefing />}
       />
-    </Page>
+    </DockPreferences>
   );
 };
-
 export const BriefingsRouteView = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();

@@ -1,4 +1,1 @@
-export {
-  useDashboardResearch,
-  ResearchNavigation,
-} from "./ui/DashboardResearch";
+export { useDashboardResearch } from "./ui/DashboardResearch";

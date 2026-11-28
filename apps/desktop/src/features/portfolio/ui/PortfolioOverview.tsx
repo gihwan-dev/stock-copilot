@@ -4,7 +4,7 @@ import {
   EmptyState,
   Skeleton,
   StatusBar,
-  Stack,
+  Page,
 } from "../../../shared/ds";
 import type {
   CommandFailureReason,
@@ -12,7 +12,6 @@ import type {
   PortfolioView,
   ScreenSources,
 } from "../../../shared/ipc";
-import { OverviewColumns } from "./OverviewColumns";
 import { text, type EntityId } from "../../../shared/lib";
 import { portfolioText, type PortfolioMessageKey } from "../messages";
 import { usePortfolio } from "../model/portfolio";
@@ -56,135 +55,98 @@ type Props = {
   readonly sources: Pick<ScreenSources, "portfolio" | "allocation">;
   readonly onOpenInstrument: (symbol: EntityId) => void;
   readonly onOpenTransactions: () => void;
-  readonly assessment: ReactElement;
-  readonly reports: ReactElement;
+  readonly reports: Readonly<
+    Record<"holdings" | "candidates" | "economy", ReactElement>
+  >;
   readonly briefing: ReactElement;
   readonly signals: ReactElement;
+  readonly startup: ReactElement | undefined;
 };
 
-const overviewParts = (
+const accountSections = (
+  view: PortfolioView,
   props: Props,
-): Pick<Props, "reports" | "briefing" | "signals"> => ({
-  reports: (
-    <Stack gap="space-4">
-      {props.assessment}
-      {props.reports}
-    </Stack>
+  retry: () => void,
+): Readonly<Record<"overview" | "positions" | "allocation", ReactElement>> => ({
+  overview: <SummaryCard view={view} />,
+  positions: (
+    <HoldingsCard
+      holdings={view.holdings}
+      onOpenInstrument={props.onOpenInstrument}
+      onOpenTransactions={props.onOpenTransactions}
+    />
   ),
-  briefing: (
-    <Stack position={{ topic: "daily-briefing" }}>{props.briefing}</Stack>
+  allocation: (
+    <AllocationSection load={props.sources.allocation} retry={retry} />
   ),
-  signals: <Stack position={{ topic: "signals" }}>{props.signals}</Stack>,
 });
 
-const OverviewReady = (
-  props: Props & { readonly view: PortfolioView; readonly retry: () => void },
-): ReactElement => {
-  const parts = overviewParts(props);
-  return (
-    <>
-      {props.view.connection === "stored" ? (
-        <StatusBar tone="info">{portfolioText("storedNotice", "ko")}</StatusBar>
-      ) : null}
-      <OverviewColumns
-        overview={<SummaryCard view={props.view} />}
-        positions={
-          <Stack position={{ topic: "positions" }}>
-            <HoldingsCard
-              holdings={props.view.holdings}
-              onOpenInstrument={props.onOpenInstrument}
-              onOpenTransactions={props.onOpenTransactions}
-            />
-          </Stack>
-        }
-        allocation={
-          <Stack position={{ topic: "allocation" }}>
-            <AllocationSection
-              load={props.sources.allocation}
-              retry={props.retry}
-            />
-          </Stack>
-        }
-        reports={parts.reports}
-        briefing={parts.briefing}
-        signals={parts.signals}
-      />
-    </>
-  );
-};
-
-const OverviewPending = (props: {
-  readonly status: ReactElement;
-  readonly overview: Props;
+const AccountNotice = (props: {
+  readonly state: Exclude<
+    ReturnType<typeof usePortfolio>["view"],
+    { status: "ready" }
+  >;
 }): ReactElement => {
-  const parts = overviewParts(props.overview);
-  return (
-    <OverviewColumns
-      overview={<Stack position={{ topic: "positions" }}>{props.status}</Stack>}
-      positions={undefined}
-      allocation={undefined}
-      reports={parts.reports}
-      briefing={parts.briefing}
-      signals={parts.signals}
-    />
-  );
-};
-
-export const PortfolioOverview = (props: Props): ReactElement => {
-  const portfolio = usePortfolio(props.sources.portfolio);
-  switch (portfolio.view.status) {
+  switch (props.state.status) {
     case "loading":
       return (
-        <OverviewPending
-          status={
-            <Card title={portfolioText("loadingTitle", "ko")}>
-              <Skeleton variant="text" lines={3} />
-            </Card>
-          }
-          overview={props}
-        />
+        <Card title={portfolioText("loadingTitle", "ko")}>
+          <Skeleton variant="text" lines={3} />
+        </Card>
       );
     case "empty":
       return (
-        <OverviewPending
-          status={
-            <EmptyState title={text("app.readySummary", "ko")}>
-              {portfolioText("emptyBody", "ko")}
-            </EmptyState>
-          }
-          overview={props}
-        />
+        <EmptyState title={text("app.readySummary", "ko")}>
+          {portfolioText("emptyBody", "ko")}
+        </EmptyState>
       );
     case "error":
       return (
-        <OverviewPending
-          status={
-            <EmptyState
-              title={portfolioText("errorTitle", "ko")}
-              action={{
-                label: portfolioText("retry", "ko"),
-                onPress: portfolio.retry,
-              }}
-            >
-              {portfolioText(failureBody(portfolio.view.failure), "ko")}
-            </EmptyState>
-          }
-          overview={props}
-        />
-      );
-    case "ready":
-      return (
-        <OverviewReady
-          view={portfolio.view.data}
-          sources={props.sources}
-          retry={portfolio.retry}
-          onOpenInstrument={props.onOpenInstrument}
-          onOpenTransactions={props.onOpenTransactions}
-          assessment={props.assessment}
-          reports={props.reports}
-          signals={props.signals}
-          briefing={props.briefing}
-        />
+        <EmptyState title={portfolioText("errorTitle", "ko")}>
+          {portfolioText(failureBody(props.state.failure), "ko")}
+        </EmptyState>
       );
   }
+};
+
+const unavailableSections = (
+  state: Exclude<ReturnType<typeof usePortfolio>["view"], { status: "ready" }>,
+): ReturnType<typeof accountSections> => {
+  const notice = <AccountNotice state={state} />;
+  return { overview: notice, positions: notice, allocation: notice };
+};
+
+export const PortfolioOverview = (props: Props): ReactElement => {
+  const portfolio = usePortfolio(
+    props.sources.portfolio,
+    props.startup === undefined ? "enabled" : "waiting",
+  );
+  const view = portfolio.view;
+  if (props.startup !== undefined)
+    return <Page title={text("app.homeTitle", "ko")}>{props.startup}</Page>;
+  const sections =
+    view.status === "ready"
+      ? accountSections(view.data, props, portfolio.retry)
+      : unavailableSections(view);
+  return (
+    <Page
+      layout="workspace"
+      actions={
+        view.status === "error"
+          ? { label: portfolioText("retry", "ko"), onPress: portfolio.retry }
+          : undefined
+      }
+      title={text("app.homeTitle", "ko")}
+      widgets={{
+        ...sections,
+        ...props.reports,
+        briefing: props.briefing,
+        signals: props.signals,
+      }}
+    >
+      {view.status === "ready" && view.data.connection === "stored" ? (
+        <StatusBar tone="info">{portfolioText("storedNotice", "ko")}</StatusBar>
+      ) : undefined}
+    </Page>
+  );
 };

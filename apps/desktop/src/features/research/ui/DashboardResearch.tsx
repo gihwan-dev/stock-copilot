@@ -15,10 +15,7 @@ import {
   type ResearchSection,
 } from "../../../shared/ipc";
 import type { EntityId } from "../../../shared/lib";
-import {
-  focusResearchSection,
-  useWindowLayout,
-} from "../../../shared/platform";
+import { focusResearchSection } from "../../../shared/platform";
 import { ReportBody } from "./ReportBody";
 import { Sources, type ListState } from "./Sources";
 import { researchText } from "../messages";
@@ -117,7 +114,6 @@ export const useDashboardResearch = (
     const at = result?.kind === "ok" ? result.value[topic].asOf : null;
     return (
       <Card
-        position={{ topic }}
         title={researchText[topic]}
         meta={
           at === null ? undefined : (
@@ -138,41 +134,4 @@ export const useDashboardResearch = (
       </Card>
     );
   };
-};
-
-const compactTopics = [
-  "positions",
-  "daily-briefing",
-  "signals",
-  ...topics,
-] as const;
-const signalTopics = ["signals", ...topics] as const;
-const navigationTopics = {
-  compact: compactTopics,
-  "summary-row": signalTopics,
-  "two-columns": signalTopics,
-  "three-columns": topics,
-} as const;
-export const ResearchNavigation = (props: {
-  readonly account: "ready" | "pending";
-}): ReactElement => {
-  const layout = useWindowLayout();
-  const destinations =
-    props.account === "ready" ? navigationTopics[layout] : topics;
-  return (
-    <Inline gap="space-4" wrap="wrap">
-      {destinations.map((topic) => (
-        <Button
-          key={topic}
-          variant="link"
-          size="control-height-sm"
-          onClick={(): void => {
-            focusResearchSection(topic);
-          }}
-        >
-          {researchText[topic]}
-        </Button>
-      ))}
-    </Inline>
-  );
 };

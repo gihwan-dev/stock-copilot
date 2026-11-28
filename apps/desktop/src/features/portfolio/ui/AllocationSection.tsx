@@ -7,7 +7,6 @@ import {
   Money,
   Percent,
   Skeleton,
-  Stack,
   StatusBar,
   Table,
   Text,
@@ -159,7 +158,7 @@ const WeightTable = (props: {
 const AllocationReady = (props: {
   readonly view: AllocationView;
 }): ReactElement => (
-  <Stack gap="space-4">
+  <>
     {[
       <StatusBar
         key="concentration"
@@ -186,7 +185,7 @@ const AllocationReady = (props: {
         rows={props.view.sectors}
       />,
     ]}
-  </Stack>
+  </>
 );
 
 const AllocationBody = (props: {

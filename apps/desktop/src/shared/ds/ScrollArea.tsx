@@ -1,9 +1,12 @@
+import type { DockPanel, UiText } from "../lib";
 import type { ReactElement } from "react";
 import { ScrollArea as BaseScrollArea } from "@base-ui/react/scroll-area";
 
 type Direction = "horizontal" | "vertical" | "both";
 type Props = {
   readonly direction: Direction;
+  readonly dockPanel?: DockPanel;
+  readonly label?: UiText;
   readonly children:
     ReactElement | readonly (ReactElement | readonly ReactElement[])[];
 };
@@ -70,9 +73,22 @@ export const ScrollArea = (props: Props): ReactElement => (
   <BaseScrollArea.Root className={rootClasses[props.direction]}>
     <BaseScrollArea.Viewport
       data-scroll-viewport=""
-      className={viewportClasses[props.direction]}
+      data-dock-content={props.dockPanel}
+      role={props.dockPanel === undefined ? undefined : "region"}
+      aria-label={props.label}
+      className={
+        props.dockPanel === undefined
+          ? viewportClasses[props.direction]
+          : "scroll-viewport-both flex-1 scroll-flex w-full max-w-full focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:scroll-outline-inset"
+      }
     >
-      <BaseScrollArea.Content className={contentClasses[props.direction]}>
+      <BaseScrollArea.Content
+        className={
+          props.dockPanel === undefined
+            ? contentClasses[props.direction]
+            : "h-full w-full"
+        }
+      >
         {props.children}
       </BaseScrollArea.Content>
     </BaseScrollArea.Viewport>

@@ -1,41 +1,40 @@
 import type { ReactElement } from "react";
-import type { UiText } from "../lib";
+import type { DockPanel, UiText } from "../lib";
+import { DockWidgetControls, DockWorkspace } from "./docking";
 import { Button } from "./Button";
 import type { Action } from "./control-types";
 import { ChatBody } from "./AppShell";
-import { ScrollArea } from "./ScrollArea";
 import { Heading } from "./Heading";
 import type { LayoutChildren } from "./layout-children";
 
-type Layout = "scroll" | "fill" | "reading";
-
-type Props = LayoutChildren & {
+type Props = {
+  readonly layout?: "scroll" | "fill" | "workspace";
   readonly title: UiText;
   readonly conversation?: {
     readonly messages: ReactElement;
     readonly composer: ReactElement | null;
   };
-  readonly actions?: Action;
+  readonly actions?: Action | undefined;
   readonly navigation?: ReactElement;
-  readonly layout?: Layout;
+  readonly widgets?: Readonly<Record<DockPanel, ReactElement>>;
+  readonly children?: LayoutChildren["children"] | undefined;
 };
 
 const rootClasses = {
-  reading: "@container flex flex-col flex-1 w-full max-w-full scroll-flex",
+  workspace: "@container flex flex-col flex-1 w-full max-w-full scroll-flex",
   scroll: "@container flex flex-col w-full max-w-full scroll-flex",
   fill: "@container flex flex-col flex-1 w-full max-w-full scroll-flex",
 } as const;
 
 const bodyClasses = {
-  reading:
-    "flex flex-col items-center w-full max-w-full scroll-flex p-space-3 @content-medium:p-space-6",
+  workspace: "flex flex-1 flex-col w-full max-w-full scroll-flex",
   scroll:
     "flex flex-col items-center w-full max-w-full scroll-flex p-space-3 @content-medium:p-space-6",
   fill: "flex flex-col items-center flex-1 w-full max-w-full scroll-flex p-space-3 @content-medium:p-space-6",
 } as const;
 
 const innerClasses = {
-  reading: "flex flex-col gap-space-6 w-full max-w-full scroll-flex",
+  workspace: "flex flex-1 flex-col w-full max-w-full scroll-flex",
   scroll: "flex flex-col gap-space-6 w-full max-w-content-max scroll-flex",
   fill: "flex flex-col flex-1 gap-space-4 w-full max-w-content-max scroll-flex",
 } as const;
@@ -46,6 +45,9 @@ export const Page = (props: Props): ReactElement => {
     <div className={bodyClasses[layout]}>
       <div className={innerClasses[layout]}>
         {props.children}
+        {props.widgets !== undefined ? (
+          <DockWorkspace sections={props.widgets} />
+        ) : null}
         {props.conversation === undefined ? null : (
           <ChatBody
             chat={props.conversation.messages}
@@ -61,6 +63,7 @@ export const Page = (props: Props): ReactElement => {
         <div className="flex-1 wrap-slot scroll-flex py-gap-hairline">
           <Heading level={1}>{props.title}</Heading>
         </div>
+        {props.layout === "workspace" ? <DockWidgetControls /> : null}
         {props.navigation === undefined ? null : (
           <div className="max-w-full scroll-flex">{props.navigation}</div>
         )}
@@ -74,11 +77,7 @@ export const Page = (props: Props): ReactElement => {
           </Button>
         )}
       </header>
-      {layout !== "reading" ? (
-        body
-      ) : (
-        <ScrollArea direction="vertical">{body}</ScrollArea>
-      )}
+      {body}
     </div>
   );
 };

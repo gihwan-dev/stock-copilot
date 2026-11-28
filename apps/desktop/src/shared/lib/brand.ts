@@ -1,4 +1,14 @@
 import { z } from "zod";
+import {
+  normalizeWorkspaceModel,
+  type WorkspaceNode,
+} from "react-resizable-panels";
+import {
+  dockPanels,
+  dockTab,
+  type DockModel,
+  type DockPanel,
+} from "./dock-panels";
 import { err, ok, type Result } from "./result";
 
 type Brand<N extends string> = Readonly<z.core.$brand<N>>;
@@ -123,4 +133,109 @@ export const clampPanelShare = (
   if (parsed.data < bounds.min) return shareText(bounds.min);
   if (parsed.data > bounds.max) return shareText(bounds.max);
   return shareText(parsed.data);
+};
+
+const dockPanelSchema = z.enum(dockPanels);
+type DockExtent = number & Brand<"DockExtent">;
+export type DockArea = {
+  readonly width: DockExtent;
+  readonly height: DockExtent;
+};
+export const measureDockArea = (
+  width: number,
+  height: number,
+): DockArea | undefined =>
+  width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height)
+    ? { width: width as DockExtent, height: height as DockExtent }
+    : undefined;
+
+export const parseDockPanel = (value: unknown): DockPanel | undefined =>
+  dockPanelSchema.safeParse(value).data;
+
+const dockId = z.string().min(1).max(128);
+const dockSize = z.number().min(0).max(100).optional();
+const dockGroup = z.object({
+  type: z.literal("tabset"),
+  id: dockId,
+  size: dockSize,
+  selectedId: dockPanelSchema.optional(),
+  tabs: z
+    .array(
+      z.object({ id: dockPanelSchema }).transform((tab) => dockTab(tab.id)),
+    )
+    .max(dockPanels.length),
+});
+const dockSplit = z.object({
+  type: z.literal("split"),
+  id: dockId,
+  size: dockSize,
+  orientation: z.enum(["horizontal", "vertical"]),
+  children: z.array(z.unknown()).min(2).max(dockPanels.length),
+});
+const dockFloat = dockGroup.extend({
+  x: z.number().min(-32768).max(32768),
+  y: z.number().min(-32768).max(32768),
+  width: z.number().positive().max(32768),
+  height: z.number().positive().max(32768),
+  collapsed: z.boolean().optional(),
+});
+const dockEnvelope = z.object({
+  version: z.literal(1),
+  root: z.unknown(),
+  floating: z.array(dockFloat).max(dockPanels.length).optional(),
+  maximizedTabsetId: dockId.optional(),
+});
+type DecodedDock = {
+  readonly node: WorkspaceNode<DockPanel>;
+  readonly used: number;
+};
+type DecodedChildren = {
+  readonly nodes: readonly WorkspaceNode<DockPanel>[];
+  readonly used: number;
+};
+const dockNode = (value: unknown, limit: number): DecodedDock | undefined => {
+  if (limit < 1) return undefined;
+  const group = dockGroup.safeParse(value);
+  if (group.success) return { node: group.data, used: 1 };
+  const split = dockSplit.safeParse(value);
+  if (!split.success) return undefined;
+  const decoded = split.data.children.reduce<DecodedChildren | undefined>(
+    (prev, item) => {
+      if (prev === undefined) return undefined;
+      const next = dockNode(item, limit - prev.used);
+      return next === undefined
+        ? undefined
+        : { nodes: [...prev.nodes, next.node], used: prev.used + next.used };
+    },
+    { nodes: [], used: 1 },
+  );
+  return decoded === undefined
+    ? undefined
+    : {
+        node: { ...split.data, children: [...decoded.nodes] },
+        used: decoded.used,
+      };
+};
+const dockIds = (
+  node: Readonly<WorkspaceNode<DockPanel>>,
+): readonly string[] => [
+  node.id,
+  ...(node.type === "split"
+    ? node.children.flatMap(dockIds)
+    : node.tabs.map((tab) => tab.id)),
+];
+
+export const restoreDock = (value: unknown): DockModel | undefined => {
+  const envelope = dockEnvelope.safeParse(value);
+  if (!envelope.success) return undefined;
+  const root = dockNode(envelope.data.root, dockPanels.length * 2)?.node;
+  if (root === undefined) return undefined;
+  const ids = [
+    ...dockIds(root),
+    ...(envelope.data.floating ?? []).flatMap(dockIds),
+  ];
+  if (new Set(ids).size !== ids.length) return undefined;
+  return (
+    normalizeWorkspaceModel<DockPanel>({ ...envelope.data, root }) ?? undefined
+  );
 };

@@ -14,8 +14,7 @@ import {
   TimestampText,
 } from "../../../shared/ds";
 import type { CurrencyValue, PortfolioView } from "../../../shared/ipc";
-import { focusResearchSection } from "../../../shared/platform";
-import type { Currency } from "../../../shared/lib";
+import { useRevealDockWidget, type Currency } from "../../../shared/lib";
 import { portfolioText, type PortfolioMessageKey } from "../messages";
 import { PerformanceSummary } from "./PerformanceCard";
 
@@ -139,7 +138,7 @@ const CurrencyTable = (props: {
 }): ReactElement => (
   <TableRoot
     dense="dense"
-    frame="embedded"
+    frame="currency"
     caption={portfolioText("currencyTitle", "ko")}
   >
     <TableHead>
@@ -180,24 +179,27 @@ const CurrencyTable = (props: {
 
 export const SummaryCard = (props: {
   readonly view: PortfolioView;
-}): ReactElement => (
-  <Card title={portfolioText("totalTitle", "ko")}>
-    <Split size="chat-width">
-      <TotalValue view={props.view} />
-      <CurrencyTable view={props.view} />
-    </Split>
-    <Divider />
-    <Inline gap="space-2" justify="between" wrap="wrap">
-      <MetaLine view={props.view} />
-      <Button
-        variant="secondary"
-        size="control-height-sm"
-        onClick={(): void => {
-          focusResearchSection("allocation");
-        }}
-      >
-        {portfolioText("allocationLink", "ko")}
-      </Button>
-    </Inline>
-  </Card>
-);
+}): ReactElement => {
+  const openWidget = useRevealDockWidget();
+  return (
+    <Card title={portfolioText("totalTitle", "ko")}>
+      <Split size="chat-width">
+        <TotalValue view={props.view} />
+        <CurrencyTable view={props.view} />
+      </Split>
+      <Divider />
+      <Inline gap="space-2" justify="between" wrap="wrap">
+        <MetaLine view={props.view} />
+        <Button
+          variant="secondary"
+          size="control-height-sm"
+          onClick={(): void => {
+            openWidget("allocation", portfolioText("allocationSection", "ko"));
+          }}
+        >
+          {portfolioText("allocationLink", "ko")}
+        </Button>
+      </Inline>
+    </Card>
+  );
+};

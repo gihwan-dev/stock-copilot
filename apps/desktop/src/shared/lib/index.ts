@@ -74,3 +74,24 @@ export {
   externalUrlSchema,
   freeTextSchema,
 } from "./brand";
+export {
+  defaultDock,
+  dockPanels,
+  dockTab,
+  parseDockPanel,
+  restoreDock,
+  type DockPanel,
+  type DockProfile,
+  type DockModel,
+} from "./dock";
+
+export {
+  useDockPreferences,
+  dockPreferencesScope,
+  useRevealDockWidget,
+} from "./dock-runtime";
+
+export { groupsOf, removeStaticPanel, type DockGroup } from "./dock-frames";
+
+export { preferredDockAfterEdit, visibleDockModel } from "./dock-geometry";
+export { measureDockArea, type DockArea } from "./brand";

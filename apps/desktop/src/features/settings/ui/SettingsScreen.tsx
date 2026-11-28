@@ -14,6 +14,7 @@ import {
   useSettingsQuery,
   type SettingsQueryState,
 } from "../model/settings";
+import { AppearanceSettings } from "./AppearanceSettings";
 import { AdvancedSettings, type SummaryScope } from "./AdvancedSettings";
 import {
   InvestorProfileRow,
@@ -102,6 +103,7 @@ export const SettingsScreen = (props: Props): ReactElement => {
             entry={props.tossEntry}
             retry={query.retry}
           />,
+          <AppearanceSettings key="appearance" />,
           <AdvancedSettings
             key="advanced"
             overview={
