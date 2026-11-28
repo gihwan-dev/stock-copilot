@@ -2643,6 +2643,7 @@ export type UiPortfolioView_Deserialize = {
   total: UiMoney;
   total_coverage: UiTotalCoverage;
   exchange_rate_at?: string | null;
+  usd_conversion?: UiUsdConversion | null;
   currencies: UiCurrencyValue_Deserialize[];
   holdings: UiHolding[];
   today?: UiSignedAmount | null;
@@ -2653,6 +2654,7 @@ export type UiPortfolioView_Serialize = {
   total: UiMoney;
   total_coverage: UiTotalCoverage;
   exchange_rate_at: string | null;
+  usd_conversion: UiUsdConversion | null;
   currencies: UiCurrencyValue_Serialize[];
   holdings: UiHolding[];
   today: UiSignedAmount | null;
@@ -3201,6 +3203,12 @@ export type UiUpdateState =
         failure: UiUpdateFailure;
       };
     } & { downloading?: never; ready?: never });
+
+export type UiUsdConversion = {
+  krw_per_usd: UiMoney;
+  holdings_krw: UiMoney;
+  buying_power_krw: UiMoney;
+};
 
 export type UiValuationFx = {
   pair: string;

@@ -6,6 +6,7 @@
   },
   "total_coverage": "complete",
   "exchange_rate_at": null,
+  "usd_conversion": null,
   "currencies": [
     {
       "currency": "KRW",

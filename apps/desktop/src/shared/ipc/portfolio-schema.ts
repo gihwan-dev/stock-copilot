@@ -29,14 +29,36 @@ const timestampSchema = z.unknown().transform((value, context): Timestamp => {
   return z.NEVER;
 });
 
-const moneySchema = z
-  .strictObject({ amount: z.string(), currency: z.enum(["KRW", "USD"]) })
-  .transform((raw, context): Money => {
-    const parsed = parseMoney(raw.amount, raw.currency);
-    if (parsed.kind === "ok") return parsed.value;
-    context.addIssue({ code: "custom", message: "money" });
-    return z.NEVER;
-  });
+const moneyInput = z.strictObject({
+  amount: z.string(),
+  currency: z.enum(["KRW", "USD"]),
+});
+const readMoney = (
+  raw: Readonly<z.output<typeof moneyInput>>,
+  context: Readonly<z.RefinementCtx>,
+): Money => {
+  const parsed = parseMoney(raw.amount, raw.currency);
+  if (parsed.kind === "ok") return parsed.value;
+  context.addIssue({ code: "custom", message: "money" });
+  return z.NEVER;
+};
+const moneySchema = moneyInput.transform(readMoney);
+const krwInput = moneyInput.extend({ currency: z.literal("KRW") });
+const usdConversionSchema = z
+  .strictObject({
+    krw_per_usd: krwInput
+      .extend({
+        amount: z.string().regex(/^(?!-|0(?:\.0+)?$)/u),
+      })
+      .transform(readMoney),
+    holdings_krw: krwInput.transform(readMoney),
+    buying_power_krw: krwInput.transform(readMoney),
+  })
+  .transform((raw): NonNullable<PortfolioView["usdConversion"]> => ({
+    krwPerUsd: raw.krw_per_usd,
+    holdingsKrw: raw.holdings_krw,
+    buyingPowerKrw: raw.buying_power_krw,
+  }));
 
 const percentSchema = z.string().transform((raw, context): PercentDisplay => {
   const parsed = parsePercentDisplay(raw);
@@ -103,19 +125,28 @@ const portfolioSchema = z
     total: moneySchema,
     total_coverage: z.enum(["complete", "partial"]),
     exchange_rate_at: z.union([timestampSchema, z.null()]),
+    usd_conversion: usdConversionSchema
+      .nullish()
+      .transform((value) => value ?? undefined),
     currencies: z.array(currencySchema),
     holdings: z.array(holdingSchema),
     today: z.union([signedSchema, z.null()]),
   })
+  .refine(
+    (raw) =>
+      raw.usd_conversion === undefined ||
+      (raw.total_coverage === "complete" && raw.exchange_rate_at !== null),
+  )
   .transform((raw): PortfolioView => ({
     recordedAt: raw.recorded_at,
     connection: "live",
     totalApproximate: raw.total,
     totalCoverage: raw.total_coverage,
     exchangeRate:
-      raw.exchange_rate_at === null
+      raw.usd_conversion === undefined || raw.exchange_rate_at === null
         ? undefined
         : { kind: "mid-rate", at: raw.exchange_rate_at },
+    usdConversion: raw.usd_conversion,
     currencies: raw.currencies,
     holdings: raw.holdings,
     today: raw.today ?? undefined,

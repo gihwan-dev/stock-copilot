@@ -1,9 +1,9 @@
 use application::{RecordedView, StoredView, SystemPortError};
 use domain::{
     Allocation, AllocationDisplayRange, AllocationSector, AssetInstrument, Concentration,
-    ConcentrationWarning, Currency, DisplayDirection, DisplayPrecision, HoldingReturn,
-    InvestorProfile, Market, Money, MoneyChange, PortfolioValuation, Symbol, SyncOutcome, Total,
-    ValuedHolding,
+    ConcentrationWarning, Currency, DisplayDirection, DisplayPrecision, FxPair, FxRate, FxRateKind,
+    HoldingReturn, InvestorProfile, Market, Money, MoneyChange, PortfolioValuation, Symbol,
+    SyncOutcome, Total, ValuedHolding,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -19,6 +19,9 @@ use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod usd_conversion_tests;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
@@ -98,11 +101,19 @@ pub struct UiCurrencyValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct UiUsdConversion {
+    pub krw_per_usd: UiMoney,
+    pub holdings_krw: UiMoney,
+    pub buying_power_krw: UiMoney,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct UiPortfolioView {
     pub recorded_at: String,
     pub total: UiMoney,
     pub total_coverage: UiTotalCoverage,
     pub exchange_rate_at: Option<String>,
+    pub usd_conversion: Option<UiUsdConversion>,
     pub currencies: Vec<UiCurrencyValue>,
     pub holdings: Vec<UiHolding>,
     pub today: Option<UiSignedAmount>,
@@ -334,6 +345,39 @@ const fn bug() -> IpcError {
     }
 }
 
+fn applied_usd_rate(rates: &[FxRate], coverage: UiTotalCoverage) -> Option<FxRate> {
+    match (coverage, rates) {
+        (UiTotalCoverage::Complete, [rate])
+            if rate.pair() == FxPair::UsdKrw && rate.kind() == FxRateKind::Mid =>
+        {
+            Some(*rate)
+        }
+        _ => None,
+    }
+}
+
+fn usd_conversion(
+    valuation: &PortfolioValuation,
+    rate: FxRate,
+) -> Option<(String, UiUsdConversion)> {
+    let Total::Complete(holdings) = valuation.currency_total(Currency::Usd) else {
+        return None;
+    };
+    let convert = |money| ui_money(&rate.convert_for_aggregation(money).ok()?.into_parts().0);
+    let quote = rate.quote_per_base().as_money();
+    Some((
+        kst_iso(rate.as_of())?,
+        UiUsdConversion {
+            krw_per_usd: UiMoney {
+                amount: quote.amount().as_decimal().normalize().to_string(),
+                currency: ui_currency(quote.currency()),
+            },
+            holdings_krw: convert(*holdings.value())?,
+            buying_power_krw: convert(valuation.buying_power(Currency::Usd).money().ok()?)?,
+        },
+    ))
+}
+
 #[must_use]
 pub fn to_portfolio_view(
     recorded_at: domain::Timestamp,
@@ -342,10 +386,13 @@ pub fn to_portfolio_view(
 ) -> Option<UiPortfolioView> {
     let (assets, total_coverage) = current(valuation.assets());
     let (total, rates, _accuracy) = assets.into_parts();
-    let recorded = kst_iso(recorded_at)?;
+    let (exchange_rate_at, usd_conversion) = applied_usd_rate(&rates, total_coverage)
+        .and_then(|rate| usd_conversion(valuation, rate))
+        .unzip();
     Some(UiPortfolioView {
-        exchange_rate_at: (!rates.is_empty()).then(|| recorded.clone()),
-        recorded_at: recorded,
+        recorded_at: kst_iso(recorded_at)?,
+        exchange_rate_at,
+        usd_conversion,
         total: ui_money(&total)?,
         total_coverage,
         currencies: [Currency::Krw, Currency::Usd]

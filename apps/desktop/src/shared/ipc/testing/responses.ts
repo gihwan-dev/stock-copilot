@@ -407,6 +407,7 @@ export const responses = {
     },
     total: { amount: "12200000", currency: "KRW" },
     total_coverage: "complete",
+    usd_conversion: null,
   },
   getPrinciples: {
     cash_min_percent: "10",

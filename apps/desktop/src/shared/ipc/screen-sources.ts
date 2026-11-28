@@ -69,6 +69,13 @@ export type PortfolioView = {
   readonly totalApproximate: Money;
   readonly totalCoverage?: TotalCoverage | undefined;
   readonly exchangeRate: ExchangeRateNote | undefined;
+  readonly usdConversion?:
+    | {
+        readonly krwPerUsd: Money;
+        readonly holdingsKrw: Money;
+        readonly buyingPowerKrw: Money;
+      }
+    | undefined;
   readonly currencies: readonly CurrencyValue[];
   readonly holdings: readonly HoldingRow[];
   readonly today: SignedAmount | undefined;
