@@ -8,48 +8,29 @@ import {
 } from "../../../shared/ds";
 import { briefingCitations } from "../model/citations";
 import type { BriefingSummary } from "../../../shared/ipc";
-import {
-  parseFreeText,
-  type FreeText,
-  type ExternalUrl,
-} from "../../../shared/lib";
+import type { ExternalUrl } from "../../../shared/lib";
 import { briefingText } from "../messages";
 import { linkVerdict } from "../model/briefings";
 import { Sources } from "./BriefingSources";
 
-const excerpt = (body: FreeText): FreeText => {
-  const characters = Array.from(body);
-  if (characters.length <= 180) return body;
-  const head = characters.slice(0, 179).join("");
-  const complete = /^\d*\]/u.test(characters.slice(179).join(""))
-    ? head.replace(/\[\d*$/u, "")
-    : head;
-  const shortened = parseFreeText(`${complete.trimEnd()}…`);
-  return shortened.kind === "ok" ? shortened.value : body;
-};
-
 export const Body = (props: {
   readonly briefing: BriefingSummary;
   readonly onOpenSource: (url: ExternalUrl) => void;
-  readonly presentation: "excerpt" | "full";
+  readonly presentation: "dashboard" | "full";
 }): ReactElement => {
   const outcome = props.briefing.outcome;
   switch (outcome.kind) {
     case "completed": {
       const markdown = (
         <Markdown
-          content={
-            props.presentation === "excerpt"
-              ? excerpt(outcome.body)
-              : outcome.body
-          }
+          content={outcome.body}
           citations={briefingCitations(outcome.sources)}
           linkAllowed={(url) => linkVerdict(props.briefing, url)}
           onOpenLink={props.onOpenSource}
-          scale={props.presentation === "excerpt" ? "body" : "reading"}
+          scale={props.presentation === "dashboard" ? "body" : "reading"}
         />
       );
-      if (props.presentation === "excerpt") return markdown;
+      if (props.presentation === "dashboard") return markdown;
       return (
         <Stack gap="space-3">
           {markdown}

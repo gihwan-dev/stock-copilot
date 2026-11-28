@@ -63,7 +63,7 @@ const Summary = (props: {
       <Body
         briefing={props.latest}
         onOpenSource={props.openSource}
-        presentation="excerpt"
+        presentation="dashboard"
       />
     ) : (
       <Text>{briefingText(props.latest.outcome.reason, "ko")}</Text>

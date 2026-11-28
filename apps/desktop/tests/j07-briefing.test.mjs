@@ -136,12 +136,8 @@ test("J-07 briefing card and past briefing screen show loading, empty, error and
       assert.equal(citationCase.queryByRole("link", { name: "[2]" }), null);
       const rendered = citationCase.container.textContent;
       assert.ok(rendered.includes("[2]"));
-      if (screen === "summary") {
-        assert.ok(rendered.includes("가…"));
-        assert.equal(rendered.includes("[1…"), false);
-      } else {
-        assert.ok(rendered.includes("[123] 뒷부분"));
-      }
+      assert.ok(rendered.includes("[123] 뒷부분"));
+      assert.equal(citationCase.queryByRole("link", { name: "[123]" }), null);
       w.click(link);
       const count = screen === "summary" ? 1 : 2;
       await w.waitFor(() =>

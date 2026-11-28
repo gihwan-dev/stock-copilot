@@ -28,15 +28,15 @@ const briefing = (): BriefingSummary => {
   };
 };
 
-test("the dashboard excerpt ends before a partial citation and uses the preview scale", () => {
+test("the dashboard keeps the citation and final paragraph at dashboard size", () => {
   const body = Body({
     briefing: briefing(),
     onOpenSource: vi.fn<(url: ExternalUrl) => void>(),
-    presentation: "excerpt",
+    presentation: "dashboard",
   });
   expect(body).toMatchObject({
     type: Markdown,
-    props: { content: lead + "…", scale: "body" },
+    props: { content: lead + tail, scale: "body" },
   });
 });
 

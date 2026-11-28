@@ -125,9 +125,9 @@ test("minimum window supports keyboard travel between dashboard, briefing reader
             Number.parseFloat(globalThis.getComputedStyle(p).fontSize),
           );
       const previewSize = await fontSize(morning);
-      const excerpt = await morning.innerText();
-      assert.match(excerpt, /…$/u);
-      assert.ok(!excerpt.includes(morningTail));
+      const finalParagraph = morning.getByText(morningTail, { exact: true });
+      await finalParagraph.scrollIntoViewIfNeeded();
+      assert.ok((await morning.innerText()).includes(morningTail));
       await dashboard.focus();
       await tab.keyboard.press("Tab");
       await tab.keyboard.press("Enter");
