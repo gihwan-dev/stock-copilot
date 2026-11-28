@@ -72,8 +72,17 @@
 
 [data-dock-workspace] .flexlayout__float_window {
   background: var(--color-surface);
-  border: var(--border-width-hairline) solid var(--color-line-strong);
   box-shadow: var(--shadow-popover);
+}
+
+[data-dock-workspace] .flexlayout__float_window::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-index-panel);
+  border: var(--border-width-hairline) solid var(--color-line-strong);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 [data-dock-workspace] .flexlayout__float_window_content {
