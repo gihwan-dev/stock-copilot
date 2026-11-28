@@ -721,10 +721,28 @@ export const publicProps = {
             .endsWith("/src/shared/ds/Markdown.tsx")
         )
           return;
-        const internalLibrary = from(
-          resolved,
-          /\/node_modules\/(?:@base-ui\/react|react-resizable-panels)\//u,
-        );
+        const dockLayout =
+          filename.endsWith("/src/shared/ds/docking/DockWorkspace.tsx") &&
+          resolved?.name === "Layout" &&
+          from(resolved, /\/flexlayout-react\/types\/view\/Layout\.d\.ts$/u);
+        if (
+          dockLayout &&
+          node.name.name === "model" &&
+          from(
+            type.getSymbol(),
+            /\/flexlayout-react\/types\/model\/Model\.d\.ts$/u,
+          )
+        )
+          return;
+        const internalLibrary =
+          from(
+            resolved,
+            /\/node_modules\/(?:@base-ui\/react|react-resizable-panels)\//u,
+          ) ||
+          (dockLayout &&
+            ["factory", "onContextMenu", "onTabSetPlaceHolder"].includes(
+              node.name.name,
+            ));
         if (internalLibrary && type.getCallSignatures().length !== 0) {
           for (const callback of callbackValues(expression))
             inspectCallback(callback);
