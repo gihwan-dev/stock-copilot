@@ -63,12 +63,16 @@ export const commands = {
     typedError<UiBriefingsView_Serialize, IpcError>(
       __TAURI_INVOKE("get_briefings", { request }),
     ),
+  getDashboardResearch: () =>
+    typedError<DashboardResearch_Serialize, IpcError>(
+      __TAURI_INVOKE("get_dashboard_research"),
+    ),
   getPortfolio: (request: GetPortfolioRequest) =>
     typedError<UiPortfolioView_Serialize, IpcSyncError_Serialize>(
       __TAURI_INVOKE("get_portfolio", { request }),
     ),
   getAllocation: (request: GetPortfolioRequest) =>
-    typedError<UiAllocationView, IpcError>(
+    typedError<UiAllocationView_Serialize, IpcError>(
       __TAURI_INVOKE("get_allocation", { request }),
     ),
   simulateTrades: (request: SimulateTradesRequest_Deserialize) =>
@@ -692,6 +696,21 @@ export type CopyTextRequest = {
   text: string;
 };
 
+export type DashboardResearch =
+  DashboardResearch_Serialize | DashboardResearch_Deserialize;
+
+export type DashboardResearch_Deserialize = {
+  holdings: ResearchSection_Deserialize;
+  candidates: ResearchSection_Deserialize;
+  economy: ResearchSection_Deserialize;
+};
+
+export type DashboardResearch_Serialize = {
+  holdings: ResearchSection_Serialize;
+  candidates: ResearchSection_Serialize;
+  economy: ResearchSection_Serialize;
+};
+
 export type DataStatusScope = "current";
 
 export type GetBriefingsRequest = {
@@ -860,6 +879,58 @@ export type PortfolioScope = "current";
 
 export type PublicIpQuery = "current";
 
+export type ResearchDetail = "available" | "unavailable";
+
+export type ResearchEntry = ResearchEntry_Serialize | ResearchEntry_Deserialize;
+
+export type ResearchEntry_Deserialize = {
+  symbol?: string | null;
+  body: string;
+  displayName?: string | null;
+  detail?: ResearchDetail;
+};
+
+export type ResearchEntry_Serialize = {
+  symbol: string | null;
+  body: string;
+  displayName: string | null;
+  detail: ResearchDetail;
+};
+
+export type ResearchSection =
+  ResearchSection_Serialize | ResearchSection_Deserialize;
+
+export type ResearchSection_Deserialize = {
+  status: ResearchStatus;
+  asOf?: string | null;
+  entries: ResearchEntry_Deserialize[];
+  sources: ResearchSource_Deserialize[];
+};
+
+export type ResearchSection_Serialize = {
+  status: ResearchStatus;
+  asOf: string | null;
+  entries: ResearchEntry_Serialize[];
+  sources: ResearchSource_Serialize[];
+};
+
+export type ResearchSource =
+  ResearchSource_Serialize | ResearchSource_Deserialize;
+
+export type ResearchSource_Deserialize = {
+  title: string;
+  url?: string | null;
+  observedAt?: string | null;
+};
+
+export type ResearchSource_Serialize = {
+  title: string;
+  url: string | null;
+  observedAt: string | null;
+};
+
+export type ResearchStatus = "ready" | "empty" | "failed" | "refreshing";
+
 export type RestartConfirm = "restart";
 
 export type RestartToUpdateRequest = {
@@ -901,6 +972,8 @@ export type SearchInstrumentsRequest_Serialize = {
   query: string | null;
   fund_kind: UiFundKindFilter | null;
 };
+
+export type SectorRefresh = "pending" | "settled";
 
 export type SelectAccountRequest = {
   account: string;
@@ -1146,19 +1219,52 @@ export type UiAliasRow = {
   ticker: string;
 };
 
-export type UiAllocationLabel = "holding" | "cash-krw" | "cash-usd";
+export type UiAllocationLabel =
+  | "holding"
+  | "cash-krw"
+  | "cash-usd"
+  | "sector"
+  | "etf-fund"
+  | "cash"
+  | "unclassified";
 
-export type UiAllocationRow = {
+export type UiAllocationRow =
+  UiAllocationRow_Serialize | UiAllocationRow_Deserialize;
+
+export type UiAllocationRow_Deserialize = {
   id: string;
   kind: UiAllocationLabel;
   name: string;
   value: UiMoney;
   weight: string;
-  level: UiWeightLevel;
+  weight_range: UiWeightRange;
+  level?: UiWeightLevel | null;
 };
 
-export type UiAllocationView = {
-  instruments: UiAllocationRow[];
+export type UiAllocationRow_Serialize = {
+  id: string;
+  kind: UiAllocationLabel;
+  name: string;
+  value: UiMoney;
+  weight: string;
+  weight_range: UiWeightRange;
+  level: UiWeightLevel | null;
+};
+
+export type UiAllocationView =
+  UiAllocationView_Serialize | UiAllocationView_Deserialize;
+
+export type UiAllocationView_Deserialize = {
+  instruments: UiAllocationRow_Deserialize[];
+  sectors: UiAllocationRow_Deserialize[];
+  sector_refresh: SectorRefresh;
+  concentration: UiConcentration;
+};
+
+export type UiAllocationView_Serialize = {
+  instruments: UiAllocationRow_Serialize[];
+  sectors: UiAllocationRow_Serialize[];
+  sector_refresh: SectorRefresh;
   concentration: UiConcentration;
 };
 
@@ -2487,6 +2593,7 @@ export type UiPerformanceLine =
 
 export type UiPerformanceLine_Deserialize = {
   span: UiPerformanceSpan;
+  status: UiPerformanceStatus;
   period_return?: UiSignedRate | null;
   max_drawdown?: UiSignedRate | null;
   from?: string | null;
@@ -2495,6 +2602,7 @@ export type UiPerformanceLine_Deserialize = {
 
 export type UiPerformanceLine_Serialize = {
   span: UiPerformanceSpan;
+  status: UiPerformanceStatus;
   period_return: UiSignedRate | null;
   max_drawdown: UiSignedRate | null;
   from: string | null;
@@ -2502,6 +2610,18 @@ export type UiPerformanceLine_Serialize = {
 };
 
 export type UiPerformanceSpan = "1m" | "3m" | "6m" | "1y";
+
+export type UiPerformanceStatus =
+  | "waiting"
+  | "calculating"
+  | "ready"
+  | "missing-price"
+  | "missing-fx"
+  | "missing-cash"
+  | "insufficient-data"
+  | "load-failed"
+  | "non-positive-capital"
+  | "unavailable";
 
 export type UiPerformanceView =
   UiPerformanceView_Serialize | UiPerformanceView_Deserialize;
@@ -3120,6 +3240,8 @@ export type UiWatchlistRejection =
   | "not-in-watchlist";
 
 export type UiWeightLevel = "normal" | "warning" | "over-cap";
+
+export type UiWeightRange = "below-unit" | "at-least-unit";
 
 export type UpdateStatusQuery = "current" | "check-now";
 

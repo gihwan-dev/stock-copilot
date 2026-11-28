@@ -12,6 +12,7 @@ get_ai_settings
 get_allocation
 get_briefings
 get_chat_history
+get_dashboard_research
 get_data_status
 get_instrument_detail
 get_instruments

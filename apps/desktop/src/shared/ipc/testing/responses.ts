@@ -38,6 +38,7 @@ export const responses = {
         name: "삼성전자",
         value: { amount: "7200000", currency: "KRW" },
         weight: "59.02",
+        weight_range: "at-least-unit",
       },
       {
         id: "cash-Krw",
@@ -46,6 +47,28 @@ export const responses = {
         name: "",
         value: { amount: "5000000", currency: "KRW" },
         weight: "40.98",
+        weight_range: "at-least-unit",
+      },
+    ],
+    sector_refresh: "settled",
+    sectors: [
+      {
+        id: "cash",
+        kind: "cash",
+        level: null,
+        name: "",
+        value: { amount: "5000000", currency: "KRW" },
+        weight: "40.98",
+        weight_range: "at-least-unit",
+      },
+      {
+        id: "unclassified",
+        kind: "unclassified",
+        level: null,
+        name: "",
+        value: { amount: "7200000", currency: "KRW" },
+        weight: "59.02",
+        weight_range: "at-least-unit",
       },
     ],
   },
@@ -111,6 +134,29 @@ export const responses = {
       },
     ],
     session_id: "session-ipc-1",
+  },
+  getDashboardResearch: {
+    candidates: { asOf: null, entries: [], sources: [], status: "empty" },
+    economy: { asOf: null, entries: [], sources: [], status: "failed" },
+    holdings: {
+      asOf: "2026-11-25T08:20:00+09:00",
+      entries: [
+        {
+          body: "보유 내역에서 종목별 비중을 확인했습니다 [1].",
+          detail: "unavailable",
+          displayName: null,
+          symbol: null,
+        },
+      ],
+      sources: [
+        {
+          observedAt: "2026-11-25T08:15:00+09:00",
+          title: "보유 내역",
+          url: null,
+        },
+      ],
+      status: "ready",
+    },
   },
   getDataStatus: {
     jobs: [
@@ -296,6 +342,7 @@ export const responses = {
         max_drawdown: null,
         period_return: null,
         span: "1m",
+        status: "unavailable",
         to: null,
       },
       {
@@ -303,6 +350,7 @@ export const responses = {
         max_drawdown: null,
         period_return: null,
         span: "3m",
+        status: "unavailable",
         to: null,
       },
       {
@@ -310,6 +358,7 @@ export const responses = {
         max_drawdown: null,
         period_return: null,
         span: "6m",
+        status: "unavailable",
         to: null,
       },
       {
@@ -317,6 +366,7 @@ export const responses = {
         max_drawdown: null,
         period_return: null,
         span: "1y",
+        status: "unavailable",
         to: null,
       },
     ],
