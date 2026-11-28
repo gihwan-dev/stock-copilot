@@ -12,12 +12,8 @@ use super::{
     trivial_casts,
     reason = "#[specta::specta] 확장이 명령 함수를 fn 포인터로 as 변환한다 (ADR 0016)"
 )]
-#[expect(
-    clippy::too_many_lines,
-    reason = "권한 대조는 모든 IPC 명령을 단일 collect_commands! 목록으로 수집한다 (ADR 0016)"
-)]
 fn product_commands<R: Runtime>() -> Commands<R> {
-    collect_commands![
+    collect_commands! {
         app_version::app_version::<tauri::Wry>,
         settings::get_settings::<tauri::Wry>,
         settings::set_order_permission::<tauri::Wry>,
@@ -38,8 +34,7 @@ fn product_commands<R: Runtime>() -> Commands<R> {
         instrument_search::search_instruments::<tauri::Wry>,
         schedule::get_job_schedules::<tauri::Wry>,
         schedule::set_job_schedule::<tauri::Wry>,
-        public_ip::get_public_ip::<tauri::Wry>,
-        public_ip::copy_text::<tauri::Wry>,
+        public_ip::get_public_ip::<tauri::Wry>, public_ip::copy_text::<tauri::Wry>,
         toss::check_toss_connection::<tauri::Wry>,
         toss::submit_toss_keys::<tauri::Wry>,
         updates::get_update_status::<tauri::Wry>,
@@ -77,7 +72,7 @@ fn product_commands<R: Runtime>() -> Commands<R> {
         ai_settings::set_task_model::<tauri::Wry>,
         ai_settings::set_budget_percent::<tauri::Wry>,
         ai_settings::set_claude_config_dir::<tauri::Wry>
-    ]
+    }
 }
 
 #[must_use]
