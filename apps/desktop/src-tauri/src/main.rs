@@ -1406,11 +1406,11 @@ fn product_builder(
     let tracking = src_tauri::news_tracking::NewsTracking::default();
     let hints = sources::NewsLinkHints::default();
     let (feeds, client) = collector_sources(clock, &tracking, &hints);
-    let builder = match client {
+    let sources_builder = match client {
         Some(http) => builder.manage(http),
         None => builder,
     };
-    let with_feeds = builder.manage(feeds).manage(tracking).manage(hints);
+    let with_feeds = sources_builder.manage(feeds).manage(tracking).manage(hints);
     match spec_watch_inputs(clock) {
         Some(inputs) => with_feeds.manage(inputs),
         None => with_feeds,
@@ -1469,15 +1469,6 @@ fn disclosure_feeds(
             )),
         },
     ]
-}
-
-#[cfg(test)]
-fn collector_feeds(
-    clock: &Arc<platform_macos::SystemClock>,
-    tracking: &src_tauri::news_tracking::NewsTracking,
-    hints: &sources::NewsLinkHints,
-) -> CollectorFeeds {
-    collector_sources(clock, tracking, hints).0
 }
 
 fn collector_sources(
@@ -2488,7 +2479,7 @@ mod tests {
     fn composition_root_registers_keyless_press_and_kind_feeds_for_the_collector() {
         use application::{CollectionTarget, FeedSource, NewsFeed};
         let clock = std::sync::Arc::new(platform_macos::SystemClock::new().expect("시계"));
-        let feeds = super::collector_feeds(
+        let (feeds, _client) = super::collector_sources(
             &clock,
             &src_tauri::news_tracking::NewsTracking::default(),
             &sources::NewsLinkHints::default(),
