@@ -1,3 +1,5 @@
+import type { IJsonModel } from "flexlayout-react";
+import { widgetLayoutSchema } from "./widget-layout-schema";
 import { z } from "zod";
 import {
   err,
@@ -228,3 +230,19 @@ export const settlePublicIp = (
 export const settleCopyResult = (
   outcome: CommandOutcome,
 ): Result<CopyResult, IpcFailure> => settleWithSchema(outcome, copiedSchema);
+
+type SavedNode = {
+  readonly id?: string;
+  readonly children?: readonly SavedNode[];
+};
+const nodeIds = (node: SavedNode): readonly string[] => [
+  ...(node.id === undefined ? [] : [node.id]),
+  ...(node.children ?? []).flatMap(nodeIds),
+];
+export const readWidgetLayout = (raw: unknown): IJsonModel | undefined => {
+  const saved = widgetLayoutSchema.safeParse(raw).data;
+  if (saved === undefined) return undefined;
+  const frames = Object.values(saved.subLayouts ?? {}).map((sub) => sub.layout);
+  const ids = [saved.layout, ...frames].flatMap(nodeIds);
+  return new Set(ids).size === ids.length ? saved : undefined;
+};

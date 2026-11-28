@@ -1,30 +1,30 @@
 import {
+  ContextMenuBuilder,
+  showPopupMenu,
+  type ILayoutProps,
+} from "flexlayout-react";
+import {
   parseInputValue,
-  type DockArea,
-  measureDockArea,
+  type DockSources,
   type InputValue,
-  restoreDock,
-  type DockModel,
+  type DockSnapshot,
   type DockPanel,
   type DockProfile,
   type EntityId,
 } from "../lib";
 import {
   dockKey,
+  decodeDockLayout,
   loadDockProfile,
   saveDockProfile,
   useAppearanceState,
   useInitialDock,
-  useFittedDock,
 } from "./detach";
-import {
-  defaultParseSearch,
-  defaultStringifySearch,
-} from "@tanstack/react-router";
+import { defaultStringifySearch } from "@tanstack/react-router";
 import { useSyncExternalStore, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
-export { detach } from "./detach";
+export { detach, useDockPersistence, applyDockAction } from "./detach";
 export { useCoreEvent, useNavigationEvent } from "./useCoreEvent";
 
 export const mountApp = (app: Readonly<ReactElement>): void => {
@@ -77,9 +77,11 @@ const focusDockTab = (panel?: DockPanel): void => {
     const tab =
       panel === undefined
         ? null
-        : workspace?.querySelector<HTMLElement>(`[data-tab-id="${panel}"]`);
+        : workspace?.querySelector<HTMLElement>(
+            `#flexlayout-tabbutton-${panel}, [data-tab-id="${panel}"]`,
+          );
     const fallback = workspace?.querySelector<HTMLElement>(
-      "[data-tab-selected]",
+      '[role="tab"][aria-selected="true"]',
     );
     const trigger = document.querySelector<HTMLElement>(
       '[data-dock-trigger="add"]',
@@ -191,7 +193,9 @@ export const preserveExcerptPosition = (
   });
 };
 
-const readLocalPreference = (key: InputValue): InputValue | undefined => {
+const readLocalPreference = (
+  key: InputValue | ReturnType<typeof dockKey>,
+): InputValue | undefined => {
   const value = parseInputValue(localStorage.getItem(key));
   return value.kind === "ok" ? value.value : undefined;
 };
@@ -199,52 +203,48 @@ const writeLocalPreference = (key: InputValue, value: InputValue): void => {
   localStorage.setItem(key, value);
 };
 
-const readDockLayout = (profile: DockProfile): Promise<DockModel> =>
-  loadDockProfile(profile, () => {
-    const raw = localStorage.getItem(dockKey(profile));
-    return raw === null || raw.length > 65536
-      ? undefined
-      : restoreDock(defaultParseSearch(raw));
-  });
-
-const writeDockLayout = (profile: DockProfile, model: DockModel): void => {
+const readDockLayout = (profile: DockProfile): Promise<DockSnapshot> =>
+  loadDockProfile(profile, () =>
+    decodeDockLayout(profile, readLocalPreference),
+  );
+const writeDockLayout: DockSources["persist"] = (profile, model) => {
   saveDockProfile(profile, model, () => {
-    localStorage.setItem(dockKey(profile), defaultStringifySearch(model));
+    localStorage.setItem(
+      dockKey(profile, "v2"),
+      defaultStringifySearch(model.layout),
+    );
   });
 };
-
 export const useWidgetPreferences = (): ReturnType<typeof useAppearanceState> =>
   useAppearanceState({
     read: readLocalPreference,
     write: writeLocalPreference,
   });
 
-const observeDockArea = (change: (area: DockArea) => void): (() => void) => {
-  const host = document.querySelector<HTMLElement>("[data-dock-workspace]");
-  if (host === null) return (): void => undefined;
-  const measure = (): void => {
-    const area = measureDockArea(host.clientWidth, host.clientHeight);
-    if (area !== undefined) change(area);
-  };
-  measure();
-  const observer = new ResizeObserver(measure);
-  observer.observe(host);
-  return (): void => {
-    observer.disconnect();
-  };
-};
-
-export const useDashboardDockPreferences = (): ReturnType<
-  typeof useFittedDock
-> => {
+export const useDashboardDockPreferences = (): DockSources => {
   const profile = useWindowLayout();
   const initial = useInitialDock(profile, readDockLayout);
-  return useFittedDock({
-    watch: observeDockArea,
+  return {
     profile,
     initial,
     mode: typeof ResizeObserver === "function" ? "resizable" : "static",
     persist: writeDockLayout,
     onFocusTab: focusDockTab,
+  };
+};
+
+export const showDockMenu: NonNullable<ILayoutProps["onContextMenu"]> = (
+  node,
+  event,
+) => {
+  event.preventDefault();
+  event.stopPropagation();
+  const container = node.getLayoutRef();
+  if (container === null) return;
+  showPopupMenu({
+    container,
+    anchor: { x: event.clientX, y: event.clientY },
+    items: new ContextMenuBuilder(node).addStandard().build(),
+    onClose: (): void => undefined,
   });
 };

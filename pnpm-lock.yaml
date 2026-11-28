@@ -184,6 +184,9 @@ importers:
       '@tauri-apps/api':
         specifier: 2.12.4
         version: 2.12.4
+      flexlayout-react:
+        specifier: 0.11.2
+        version: 0.11.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -2452,6 +2455,13 @@ packages:
 
   flatted@3.4.4:
     resolution: {integrity: sha512-5+ybhBZANEJxaH3X5evAFatUxLfEHSr7n6kYJ+1Qd0mUqr4eu9gIf6GDbWHf8RJijHrjjO8G+la14SlL2SeS1Q==}
+
+  flexlayout-react@0.11.2:
+    resolution: {integrity: sha512-cInJOtoOaBrg1siFGGcEB41W1RIrO41oYL26l2mMmacpMzEz6elysRzljql819BAlb7oEjk/AxuUvoJUo5+U1Q==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
+      react-dom: ^18.0.0 || ^19.0.0
 
   formatly@0.11.4:
     resolution: {integrity: sha512-TeCC10lP8KCgoX+Fe5lryILIT0/Dy+nP0OSVnsuB5CwXoLuOdqxCYlPFF1inR8S/zTy1ec7TjhS2TeRKWzzImA==}
@@ -5495,6 +5505,11 @@ snapshots:
       hookified: 1.15.1
 
   flatted@3.4.4: {}
+
+  flexlayout-react@0.11.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+    dependencies:
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
 
   formatly@0.11.4:
     dependencies:

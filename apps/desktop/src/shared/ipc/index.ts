@@ -237,3 +237,5 @@ export {
   type ResearchSection,
   type ResearchSource,
 } from "./dashboard-research";
+
+export { readWidgetLayout } from "./settings-schema";

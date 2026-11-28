@@ -1,29 +1,19 @@
 import type { ReactElement } from "react";
-import { defaultDock, dockPanels } from "../../lib";
+import { dockPanels } from "../../lib";
 import { Icon } from "../Icon";
-import { groupsOf, useOpenDockWidget, useDockSession } from "./controller";
+import { useDockSession } from "./controller";
 import { DockPopover, useCloseDockMenu } from "./DockPopover";
 import { dockText, dockTitle } from "./messages";
-import { labelDock } from "./labels";
 
 function Catalog(): ReactElement | null {
   const session = useDockSession();
-  const show = useOpenDockWidget();
   const close = useCloseDockMenu();
-  if (session === undefined) return null;
-  const model = session.handle?.getModel() ?? session.initial;
-  if (model === undefined) return null;
-  const opened = groupsOf(model).flatMap((entry) =>
-    entry.tabs.map((tab) => tab.data),
+  if (session?.model === undefined) return null;
+  const opened = dockPanels.filter(
+    (id) => session.model?.getNodeById(id) !== undefined,
   );
   const reset = (): void => {
-    const defaults = defaultDock(session.profile);
-    if (session.handle === null) session.update(defaults);
-    else {
-      const restored = session.handle.setModel(labelDock(defaults));
-      session.update(restored);
-      session.onFocusTab(groupsOf(restored).at(0)?.tabs.at(0)?.data);
-    }
+    session.reset();
     close();
   };
   return (
@@ -37,7 +27,7 @@ function Catalog(): ReactElement | null {
               disabled={opened.includes(panel)}
               onClick={(): void => {
                 close();
-                show(panel);
+                session.show(panel);
               }}
             >
               <span>{dockTitle[panel]}</span>
@@ -66,7 +56,7 @@ function Catalog(): ReactElement | null {
 }
 export function DockWidgetControls(): ReactElement {
   return (
-    <DockPopover kind="add" label={dockText.add}>
+    <DockPopover>
       <Catalog />
     </DockPopover>
   );

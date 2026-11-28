@@ -87,6 +87,7 @@ export {
 
 export {
   useDockPreferences,
+  type DockSources,
   dockPreferencesScope,
   useRevealDockWidget,
 } from "./dock-runtime";
@@ -95,3 +96,5 @@ export { groupsOf, removeStaticPanel, type DockGroup } from "./dock-frames";
 
 export { preferredDockAfterEdit, visibleDockModel } from "./dock-geometry";
 export { measureDockArea, type DockArea } from "./brand";
+
+export type { DockSnapshot } from "./widget-layout";

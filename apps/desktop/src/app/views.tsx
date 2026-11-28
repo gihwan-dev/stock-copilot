@@ -23,8 +23,20 @@ import {
   Stack,
 } from "../shared/ds";
 import { coreUpdateClient, getDataStatus } from "../shared/ipc";
-import { dockPreferencesScope, queryKeys, text } from "../shared/lib";
-import { detach, useDashboardDockPreferences } from "../shared/platform";
+import {
+  dockPreferencesScope,
+  type DockSources,
+  useDockPreferences,
+  queryKeys,
+  text,
+} from "../shared/lib";
+import {
+  detach,
+  useDashboardDockPreferences,
+  useDockPersistence,
+  showDockMenu,
+  applyDockAction,
+} from "../shared/platform";
 import {
   useNavigate,
   useInstrumentSelection,
@@ -99,13 +111,18 @@ const StartupNotice = (props: {
 
 const DockPreferences = dockPreferencesScope.Context;
 
-export const HomeView = (): ReactElement => {
+const DashboardView = ({
+  preferences,
+}: {
+  readonly preferences: DockSources;
+}): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
   const open = useInstrumentSelection();
   const research = useDashboardResearch(open);
   const view = useAppVersion();
-  const dock = useDashboardDockPreferences();
+  const dock = useDockPreferences(preferences, showDockMenu, applyDockAction);
+  useDockPersistence(dock.model, dock.save);
   const queryClient = useQueryClient();
   const retry = (): void => {
     detach({
@@ -115,7 +132,7 @@ export const HomeView = (): ReactElement => {
     });
   };
   return (
-    <DockPreferences key={dock.profile} value={dock}>
+    <DockPreferences value={dock}>
       <PortfolioOverview
         sources={sources}
         startup={
@@ -142,6 +159,10 @@ export const HomeView = (): ReactElement => {
       />
     </DockPreferences>
   );
+};
+export const HomeView = (): ReactElement => {
+  const preferences = useDashboardDockPreferences();
+  return <DashboardView key={preferences.profile} preferences={preferences} />;
 };
 export const BriefingsRouteView = (): ReactElement => {
   const go = useNavigate();
