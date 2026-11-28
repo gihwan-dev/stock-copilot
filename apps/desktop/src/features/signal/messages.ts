@@ -5,7 +5,7 @@ const catalog = {
   loading: { ko: "신호를 불러오는 중이에요" as UiText },
   emptyTitle: { ko: "지금은 신호가 없어요" as UiText },
   emptyBody: {
-    ko: "확률이 기준을 넘는 종목이 생기면 여기에 카드가 떠요." as UiText,
+    ko: "종목 분류와 근거 자료를 확인하고 매수·매도 조건을 충족하면 신호가 표시돼요." as UiText,
   },
   errorTitle: { ko: "신호를 불러오지 못했어요" as UiText },
   retry: { ko: "다시 시도" as UiText },
