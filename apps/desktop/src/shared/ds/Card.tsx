@@ -9,6 +9,7 @@ type Layout = "flow" | "fill";
 type Props = {
   readonly title?: UiText;
   readonly actions?: Action;
+  readonly meta?: ReactElement | undefined;
   readonly layout?: Layout;
   readonly children: ReactElement | readonly ReactElement[];
 };
@@ -42,6 +43,7 @@ const Body = (props: {
     </ScrollOwnerScope>
   );
 const CardHeader = (props: {
+  readonly meta?: ReactElement | undefined;
   readonly title: UiText | undefined;
   readonly actions: Action | undefined;
 }): ReactElement => (
@@ -50,6 +52,9 @@ const CardHeader = (props: {
       <div className="flex-1 scroll-flex">
         <Heading level={3}>{props.title}</Heading>
       </div>
+    )}
+    {props.meta === undefined ? null : (
+      <div className="max-w-full scroll-flex">{props.meta}</div>
     )}
     {props.actions === undefined ? null : (
       <Button
@@ -77,7 +82,11 @@ export const Card = (props: Props): ReactElement => {
       }
     >
       {header === "shown" ? (
-        <CardHeader title={props.title} actions={props.actions} />
+        <CardHeader
+          meta={props.meta}
+          title={props.title}
+          actions={props.actions}
+        />
       ) : null}
       <Body layout={layout} header={header}>
         {props.children}

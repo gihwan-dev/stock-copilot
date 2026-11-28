@@ -1,6 +1,20 @@
 import { createContext, use, type ReactElement } from "react";
 import { pendingScreenSources, type ScreenSources } from "../shared/ipc";
-import type { AppRoutePath } from "../shared/lib";
+import type { AppRoutePath, EntityId } from "../shared/lib";
+
+const InstrumentSelectionContext = createContext<
+  (instrument: EntityId) => void
+>((): void => undefined);
+export const useInstrumentSelection = (): ((instrument: EntityId) => void) =>
+  use(InstrumentSelectionContext);
+export const InstrumentSelection = (props: {
+  readonly value: (instrument: EntityId) => void;
+  readonly children: ReactElement;
+}): ReactElement => (
+  <InstrumentSelectionContext value={props.value}>
+    {props.children}
+  </InstrumentSelectionContext>
+);
 
 export type NavigateFn = (path: AppRoutePath) => void;
 

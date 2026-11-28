@@ -3,7 +3,7 @@ import type { EntityId, ExternalUrl, FreeText } from "../lib";
 
 export type MarkdownCitation = {
   readonly number: EntityId;
-  readonly url: ExternalUrl;
+  readonly url: ExternalUrl | null;
   readonly title: FreeText;
 };
 type Node = Readonly<Parent | Parent["children"][0]>;
@@ -29,7 +29,7 @@ const expandText = (
         ? label
         : {
             type: "link",
-            url: ref.url,
+            url: ref.url ?? "",
             children: [label],
             data: { hProperties: { dataCitation: ref.number } },
           };

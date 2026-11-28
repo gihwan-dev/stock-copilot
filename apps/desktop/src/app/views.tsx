@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { AboutSection } from "../features/about";
 import { BriefingCard, BriefingHistoryScreen } from "../features/briefing";
 import { ChatWorkspace } from "../features/chat";
+import { useDashboardResearch, ResearchNavigation } from "../features/research";
 import { PortfolioOverview } from "../features/portfolio";
 import { useKeyEntry } from "../features/onboarding";
 import { SettingsScreen } from "../features/settings";
@@ -26,6 +27,7 @@ import { queryKeys, text } from "../shared/lib";
 import { detach } from "../shared/platform";
 import {
   useNavigate,
+  useInstrumentSelection,
   useSources,
   useSettingsOrigin,
   useSystemSettings,
@@ -64,29 +66,59 @@ export const LatestBriefingView = (): ReactElement => {
   );
 };
 
-const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
+const HomeBriefing = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
+  return (
+    <BriefingCard
+      presentation="summary"
+      load={sources.briefings}
+      onOpenHistory={(): void => {
+        go("/briefing");
+      }}
+    />
+  );
+};
+
+const HomeBody = (props: {
+  readonly retry: () => void;
+  readonly assessment: ReactElement;
+  readonly reports: ReactElement;
+}): ReactElement => {
+  const go = useNavigate();
+  const sources = useSources();
+  const open = useInstrumentSelection();
   const view = useAppVersion();
   switch (view.status) {
     case "loading":
       return (
-        <Card title={text("app.loading", "ko")}>
-          <Skeleton variant="text" />
-        </Card>
+        <>
+          <Card title={text("app.loading", "ko")}>
+            <Skeleton variant="text" />
+          </Card>
+          {props.assessment}
+          {props.reports}
+        </>
       );
     case "error":
       return (
-        <EmptyState
-          title={text("app.errorTitle", "ko")}
-          action={{ label: text("app.retry", "ko"), onPress: props.retry }}
-        >
-          {describeIpcFailure(view.failure)}
-        </EmptyState>
+        <>
+          <EmptyState
+            title={text("app.errorTitle", "ko")}
+            action={{ label: text("app.retry", "ko"), onPress: props.retry }}
+          >
+            {describeIpcFailure(view.failure)}
+          </EmptyState>
+          {props.assessment}
+          {props.reports}
+        </>
       );
     case "ready":
       return (
         <PortfolioOverview
+          onOpenInstrument={open}
+          assessment={props.assessment}
+          reports={props.reports}
           sources={sources}
           onOpenTransactions={(): void => {
             go("/transactions");
@@ -98,16 +130,7 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
                 footer={<ScorecardPanel load={sources.scorecard} />}
               />
             ),
-            bottom: (
-              <BriefingCard
-                layout="fill"
-                presentation="summary"
-                load={sources.briefings}
-                onOpenHistory={(): void => {
-                  go("/briefing");
-                }}
-              />
-            ),
+            bottom: <HomeBriefing />,
           }}
         />
       );
@@ -115,6 +138,8 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
 };
 
 export const HomeView = (): ReactElement => {
+  const open = useInstrumentSelection();
+  const research = useDashboardResearch(open);
   const queryClient = useQueryClient();
   const retry = (): void => {
     detach({
@@ -124,8 +149,21 @@ export const HomeView = (): ReactElement => {
     });
   };
   return (
-    <Page title={text("app.homeTitle", "ko")} layout="fill">
-      <HomeBody retry={retry} />
+    <Page
+      title={text("app.homeTitle", "ko")}
+      layout="reading"
+      navigation={<ResearchNavigation />}
+    >
+      <HomeBody
+        retry={retry}
+        assessment={research("holdings")}
+        reports={
+          <Stack gap="space-4">
+            {research("candidates")}
+            {research("economy")}
+          </Stack>
+        }
+      />
     </Page>
   );
 };

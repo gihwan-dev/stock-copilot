@@ -232,3 +232,8 @@ export {
   getInstruments,
   removeWatchlist,
 } from "./instruments-call";
+export {
+  getDashboardResearch,
+  type ResearchSection,
+  type ResearchSource,
+} from "./dashboard-research";

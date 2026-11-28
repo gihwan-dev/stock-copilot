@@ -70,7 +70,7 @@ const MetaLine = (props: { readonly view: PortfolioView }): ReactElement => (
 );
 
 const TotalCard = (props: { readonly view: PortfolioView }): ReactElement => (
-  <Card title={portfolioText("totalTitle", "ko")} layout="fill">
+  <Card title={portfolioText("totalTitle", "ko")} layout="flow">
     <Stack gap="space-2">
       {[
         <Inline key="total" gap="space-2" align="center" wrap="wrap">
@@ -126,7 +126,7 @@ const CurrencyRow = (props: {
 const CurrencyCard = (props: {
   readonly view: PortfolioView;
 }): ReactElement => (
-  <Card title={portfolioText("currencyTitle", "ko")} layout="fill">
+  <Card title={portfolioText("currencyTitle", "ko")} layout="flow">
     <TableRoot dense="dense">
       <TableHead>
         <TableRow>
@@ -152,10 +152,10 @@ export const SummaryCards = (props: {
   readonly view: PortfolioView;
 }): ReactElement => (
   <Grid layout="fit-row">
-    <GridItem span={6}>
+    <GridItem span={{ narrow: 12, medium: 6 }}>
       <TotalCard view={props.view} />
     </GridItem>
-    <GridItem span={6}>
+    <GridItem span={{ narrow: 12, medium: 6 }}>
       <CurrencyCard view={props.view} />
     </GridItem>
   </Grid>

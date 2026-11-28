@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { Inline, Percent, Text } from "../../../shared/ds";
+import { Inline, Percent, Stack, Text } from "../../../shared/ds";
 import {
   getPerformance,
   type PerformanceLine,
@@ -57,26 +57,44 @@ const Lines = (props: {
   readonly lines: readonly PerformanceLine[];
 }): ReactElement => {
   const year = props.lines.find((line) => line.span === "1y");
+  const first = props.lines.at(0);
+  if (
+    first !== undefined &&
+    year?.maxDrawdown === undefined &&
+    props.lines.every(
+      (line) => line.periodReturn === undefined && line.status === first.status,
+    )
+  )
+    return (
+      <Inline align="center" gap="space-2">
+        <Text variant="caption">
+          {portfolioText("performanceCombined", "ko")}
+        </Text>
+        <Rate status={first.status} value={undefined} />
+      </Inline>
+    );
   return (
-    <Inline gap="space-2" align="center" wrap="wrap">
-      {[
-        <Text key="title" variant="caption" tone="ink-muted">
-          {portfolioText("performanceTitle", "ko")}
-        </Text>,
-        ...props.lines.map((line): ReactElement => (
-          <SpanRate key={line.span} line={line} />
-        )),
-        <Inline key="drawdown" gap="space-1" align="center">
-          <Text variant="caption" tone="ink-muted">
-            {portfolioText("performanceDrawdown", "ko")}
-          </Text>
-          <Rate
-            value={year?.maxDrawdown}
-            status={year?.status ?? "unavailable"}
-          />
-        </Inline>,
-      ]}
-    </Inline>
+    <Stack gap="space-1">
+      <Inline gap="space-2" align="center" wrap="wrap">
+        {[
+          <Text key="title" variant="caption" tone="ink-muted">
+            {portfolioText("performanceTitle", "ko")}
+          </Text>,
+          ...props.lines.map((line): ReactElement => (
+            <SpanRate key={line.span} line={line} />
+          )),
+        ]}
+      </Inline>
+      <Inline key="drawdown" gap="space-1" align="center">
+        <Text variant="caption" tone="ink-muted">
+          {portfolioText("performanceDrawdown", "ko")}
+        </Text>
+        <Rate
+          value={year?.maxDrawdown}
+          status={year?.status ?? "unavailable"}
+        />
+      </Inline>
+    </Stack>
   );
 };
 

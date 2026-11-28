@@ -3,6 +3,7 @@ import {
   Badge,
   Card,
   DataText,
+  SectionLink,
   Inline,
   Money,
   PriceChange,
@@ -10,6 +11,7 @@ import {
   Table,
 } from "../../../shared/ds";
 import type { HoldingRow } from "../../../shared/ipc";
+import type { EntityId } from "../../../shared/lib";
 import { portfolioText } from "../messages";
 
 const TableRoot = Table.Root;
@@ -20,16 +22,31 @@ const TableHeader = Table.Header;
 const TableRowHeader = Table.RowHeader;
 const TableCell = Table.Cell;
 
-const Row = (props: { readonly row: HoldingRow }): ReactElement => (
+const Row = (props: {
+  readonly open: (symbol: EntityId) => void;
+  readonly row: HoldingRow;
+}): ReactElement => (
   <TableRow>
     <TableRowHeader>
       {props.row.trading === "suspended" ? (
         <Inline gap="space-2" align="center" wrap="wrap">
-          <DataText value={props.row.name} variant="body-sm" />
+          <SectionLink
+            onPress={(): void => {
+              props.open(props.row.id);
+            }}
+          >
+            <DataText value={props.row.name} variant="body-sm" />
+          </SectionLink>
           <Badge tone="alert">{portfolioText("tradingSuspended", "ko")}</Badge>
         </Inline>
       ) : (
-        <DataText value={props.row.name} variant="body-sm" />
+        <SectionLink
+          onPress={(): void => {
+            props.open(props.row.id);
+          }}
+        >
+          <DataText value={props.row.name} variant="body-sm" />
+        </SectionLink>
       )}
     </TableRowHeader>
     <TableCell>
@@ -53,11 +70,12 @@ const Row = (props: { readonly row: HoldingRow }): ReactElement => (
 
 export const HoldingsCard = (props: {
   readonly holdings: readonly HoldingRow[];
+  readonly onOpenInstrument: (symbol: EntityId) => void;
   readonly onOpenTransactions: () => void;
 }): ReactElement => (
   <Card
     title={portfolioText("holdingsTitle", "ko")}
-    layout="fill"
+    layout="flow"
     actions={{
       label: portfolioText("openTransactions", "ko"),
       onPress: props.onOpenTransactions,
@@ -84,7 +102,7 @@ export const HoldingsCard = (props: {
         </TableHead>
         <TableBody>
           {props.holdings.map((row): ReactElement => (
-            <Row key={row.id} row={row} />
+            <Row key={row.id} open={props.onOpenInstrument} row={row} />
           ))}
         </TableBody>
       </TableRoot>

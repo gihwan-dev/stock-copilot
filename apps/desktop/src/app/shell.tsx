@@ -6,7 +6,12 @@ import { UpdateBar } from "../features/updates";
 import { AppShell, IconButton, type PanelState } from "../shared/ds";
 import { coreUpdateClient } from "../shared/ipc";
 import { text, type EntityId } from "../shared/lib";
-import { useNavigate, useSources, type NavigateFn } from "./context";
+import {
+  InstrumentSelection,
+  useNavigate,
+  useSources,
+  type NavigateFn,
+} from "./context";
 
 const destinations = [
   { path: "/", label: "nav.dashboard", icon: "chart-pie" },
@@ -48,6 +53,17 @@ const Destinations = (props: {
   );
 };
 
+const mainLayout = (
+  match: ReturnType<typeof useMatchRoute>,
+  instrument: EntityId | undefined,
+): "fill" | "scroll" =>
+  instrument === undefined &&
+  (match({ to: "/" }) !== false ||
+    match({ to: "/chat" }) !== false ||
+    match({ to: "/transactions" }) !== false)
+    ? "fill"
+    : "scroll";
+
 export const ShellLayout = (): ReactElement => {
   const go = useNavigate();
   const sources = useSources();
@@ -69,7 +85,9 @@ export const ShellLayout = (): ReactElement => {
   );
   const page =
     shown === undefined || settings ? (
-      <Outlet />
+      <InstrumentSelection value={setShown}>
+        <Outlet />
+      </InstrumentSelection>
     ) : (
       <InstrumentDetail
         key={shown}
@@ -92,14 +110,7 @@ export const ShellLayout = (): ReactElement => {
           }}
         />
       }
-      main={
-        shown === undefined &&
-        (matchRoute({ to: "/chat" }) !== false ||
-          matchRoute({ to: "/" }) !== false ||
-          matchRoute({ to: "/transactions" }) !== false)
-          ? "fill"
-          : "scroll"
-      }
+      main={mainLayout(matchRoute, shown)}
       listOpen={listState}
       onListOpenChange={setListState}
       list={

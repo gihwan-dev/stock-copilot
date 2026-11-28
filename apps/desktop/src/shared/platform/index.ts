@@ -1,3 +1,4 @@
+import type { EntityId } from "../lib";
 import type { ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -15,3 +16,13 @@ export {
   useCanvasChartTheme,
   useColorScheme,
 } from "./canvasTheme";
+export const focusResearchSection = (
+  target: "holdings" | "candidates" | "economy",
+  source?: EntityId,
+): void => {
+  const section = document.getElementById(
+    source === undefined ? target : `${target}-${source}`,
+  );
+  section?.focus({ preventScroll: true });
+  section?.scrollIntoView({ block: "start" });
+};

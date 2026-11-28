@@ -13,6 +13,44 @@ const base = (overrides = {}) => ({
 const setupWith = (state) =>
   makeSettingsClient({ checkTossConnection: () => fx.connection(state) });
 
+const report = (symbol, body, title, url = "https://example.org/report") => ({
+  status: "ready",
+  asOf: "2026-11-27T08:30:00+09:00",
+  entries: [
+    {
+      symbol,
+      body,
+      displayName:
+        symbol === "012345"
+          ? "예시전력"
+          : symbol === "005930"
+            ? "예시전자"
+            : null,
+      detail: symbol === "012345" ? "available" : "unavailable",
+    },
+  ],
+  sources: [{ title, url, observedAt: null }],
+});
+
+const research = () => ({
+  holdings: report(
+    "005930",
+    "반도체 매출 비중이 높아 메모리 가격 변동이 보유 자산 전체의 손익에 영향을 줍니다 [1].",
+    "예시전자 분기보고서",
+    null,
+  ),
+  candidates: report(
+    "012345",
+    "수주 잔고가 늘었고 보유 기업과 매출처가 다릅니다 [1].\n\n구리 가격 상승분이 납품가에 반영되기까지 이익률이 낮아질 수 있습니다.",
+    "예시전력 실적 발표",
+  ),
+  economy: report(
+    null,
+    "금리 동결로 기업의 차입 비용은 지난 분기 수준에 머물렀습니다 [1].\n\n설비 투자가 큰 제조업에서는 이자 비용과 신규 수주를 함께 살펴야 합니다.",
+    "산업 동향 조사",
+  ),
+});
+
 const filled = () => ({
   briefings: getBriefings,
   signals: () => fx.ok(data.signals()),
@@ -20,7 +58,18 @@ const filled = () => ({
   portfolio: () => fx.ok(data.portfolio()),
   allocation: () => fx.ok(data.allocation()),
   instruments: () => fx.ok(data.instruments()),
-  instrumentDetail: () => fx.ok(data.instrumentDetail()),
+  instrumentDetail: (symbol) =>
+    fx.ok(
+      symbol === "012345"
+        ? {
+            ...data.instrumentDetail(),
+            id: fx.id(symbol),
+            name: fx.free("예시전력"),
+            ticker: fx.ticker(symbol),
+            holding: undefined,
+          }
+        : data.instrumentDetail(),
+    ),
   thesis: () => fx.ok(data.thesis()),
   transactions: () => fx.ok(data.transactions()),
   selfCheck: () => fx.ok({ kind: "clear" }),
@@ -100,8 +149,77 @@ export const scenarios = {
   },
   "home-ready": {
     path: "/",
-    setup: () => base({ sources: filled() }),
+    setup: () =>
+      base({
+        sources: filled(),
+        commands: {
+          getDashboardResearch: research,
+          getPerformance: () => ({
+            lines: ["1m", "3m", "6m", "1y"].map((span, i) =>
+              i === 3
+                ? {
+                    span,
+                    status: "insufficient-data",
+                    period_return: null,
+                    max_drawdown: null,
+                    from: null,
+                    to: null,
+                  }
+                : {
+                    span,
+                    status: "ready",
+                    period_return: {
+                      rate: ["2.4", "3.6", "5.8"][i],
+                      direction: "up",
+                    },
+                    max_drawdown: { rate: "-1.2", direction: "down" },
+                    from: "2026-05-27T00:00:00Z",
+                    to: "2026-11-27T00:00:00Z",
+                  },
+            ),
+          }),
+        },
+      }),
     act: (helpers) => helpers.waitText("예시바이오"),
+  },
+  "home-research-refresh": {
+    path: "/",
+    setup: () => {
+      let reads = 0;
+      return base({
+        sources: filled(),
+        commands: {
+          getDashboardResearch: () => {
+            reads += 1;
+            const data = research();
+            if (reads >= 3)
+              return {
+                ...data,
+                candidates: {
+                  ...data.candidates,
+                  entries: data.candidates.entries.map((entry) => ({
+                    ...entry,
+                    detail: "unavailable",
+                  })),
+                },
+              };
+            return {
+              holdings: { ...data.holdings, status: "failed" },
+              candidates: {
+                status: "empty",
+                entries: [],
+                sources: [],
+                asOf: null,
+              },
+              economy: {
+                ...data.economy,
+                status: reads === 1 ? "refreshing" : "ready",
+              },
+            };
+          },
+        },
+      });
+    },
   },
   "home-empty": { path: "/", setup: () => base({ commands: noBriefings }) },
   "home-loading": { path: "/", setup: () => base({ sources: loading() }) },
@@ -176,10 +294,13 @@ export const scenarios = {
   },
   "chat-threads": {
     path: "/chat",
-    setup: () => base({
-      sources: filled(),
-      commands: chatThreads(() => new Promise((resolve) => setTimeout(resolve, 300))),
-    }),
+    setup: () =>
+      base({
+        sources: filled(),
+        commands: chatThreads(
+          () => new Promise((resolve) => setTimeout(resolve, 300)),
+        ),
+      }),
     act: (helpers) => helpers.waitText("저장된 예시 답변입니다."),
   },
   "chat-long": {

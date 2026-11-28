@@ -7,7 +7,7 @@ import {
 } from "react";
 import ReactMarkdown, { type ExtraProps, type Options } from "react-markdown";
 import { citationPlugin, type MarkdownCitation } from "./markdown-citations";
-import { MarkdownAction } from "./MarkdownAction";
+import { resolveMarkdownAction, MarkdownAction } from "./MarkdownAction";
 import remarkGfm from "remark-gfm";
 import { ScrollArea } from "./ScrollArea";
 import {
@@ -16,6 +16,7 @@ import {
   emptyFreeText,
   type ExternalUrl,
   type FreeText,
+  type EntityId,
 } from "../lib";
 type Conversion = NonNullable<
   NonNullable<Options["remarkRehypeOptions"]>["unknownHandler"]
@@ -37,6 +38,7 @@ type Props = {
   readonly content: FreeText;
   readonly linkAllowed: (url: ExternalUrl) => "allow" | "deny";
   readonly onOpenLink: (url: ExternalUrl) => void;
+  readonly onLocalCitation?: (number: EntityId) => void;
   readonly citations?: readonly MarkdownCitation[];
   readonly scale?: "body" | "reading";
   readonly flavor?: "basic" | "gfm";
@@ -91,29 +93,24 @@ const citationNumber = (node: LinkContent["node"]): unknown =>
   node?.properties["dataCitation"];
 const MarkdownLink = ({ href, children, node }: LinkContent): ReactElement => {
   const props = use(MarkdownContext);
+  const citation = props?.citations?.find(
+    (entry) => entry.number === citationNumber(node),
+  );
   const url = parseExternalUrl(href);
-  if (
-    hasChildren(node?.children) === "empty" ||
-    props === undefined ||
-    url.kind === "err" ||
-    props.linkAllowed(url.value) === "deny"
-  )
+  const open = resolveMarkdownAction(
+    citation,
+    url.kind === "ok" ? url.value : undefined,
+    props,
+  );
+  if (hasChildren(node?.children) === "empty" || open === undefined)
     return (
       <LinkContext value="inside">
         <span>{children}</span>
       </LinkContext>
     );
-  const citation = props.citations?.find(
-    (entry) => entry.number === citationNumber(node),
-  );
   return (
     <LinkContext value="inside">
-      <MarkdownAction
-        citation={citation?.title}
-        onOpen={(): void => {
-          props.onOpenLink(url.value);
-        }}
-      >
+      <MarkdownAction citation={citation?.title} onOpen={open}>
         <>{children}</>
       </MarkdownAction>
     </LinkContext>

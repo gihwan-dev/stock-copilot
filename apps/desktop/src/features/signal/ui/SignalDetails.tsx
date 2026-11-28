@@ -55,7 +55,7 @@ const Sizing = (props: {
       return <DataText value={props.sizing.reason} variant="body-sm" />;
     case "sized":
       return (
-        <Inline gap="space-6" align="center" wrap="wrap">
+        <Inline gap="space-3" align="center" wrap="wrap">
           <Fact label={signalText("quantity", "ko")}>
             <Quantity value={props.sizing.quantity} />
           </Fact>
@@ -72,7 +72,7 @@ export const KeyFacts = (props: {
 }): ReactElement => (
   <Stack gap="space-2">
     <Sizing sizing={props.card.sizing} />
-    <Inline gap="space-6" align="center" wrap="wrap">
+    <Inline gap="space-3" align="center" wrap="wrap">
       <Fact label={signalText("trackedProbability", "ko")}>
         <Probability value={props.card.trackedProbability} />
       </Fact>

@@ -9,23 +9,23 @@ const signed = (amount, rate, direction) => ({
 export const portfolio = () => ({
   recordedAt: fx.at("2026-11-25T09:30:00+09:00"),
   connection: "live",
-  totalApproximate: fx.krw("123456789"),
+  totalApproximate: fx.krw("3250000"),
   exchangeRate: { kind: "mid-rate", at: fx.at("2026-11-25T09:00:00+09:00") },
   currencies: [
     {
       currency: "KRW",
-      holdings: fx.krw("100000000"),
-      buyingPower: fx.krw("3456789"),
+      holdings: fx.krw("3250000"),
+      buyingPower: fx.krw("0"),
     },
     {
       currency: "USD",
-      holdings: fx.usd("14000.50"),
-      buyingPower: fx.usd("120.25"),
+      holdings: fx.usd("0"),
+      buyingPower: fx.usd("0"),
     },
   ],
   holdings: [
     {
-      id: fx.id("holding-1"),
+      id: fx.id("005930"),
       name: fx.free("예시전자"),
       ticker: fx.ticker("005930"),
       quantity: fx.qty("12"),
@@ -33,7 +33,7 @@ export const portfolio = () => ({
       profit: signed("50000", "6.25", "up"),
     },
     {
-      id: fx.id("holding-2"),
+      id: fx.id("207940"),
       name: fx.free("예시바이오"),
       ticker: fx.ticker("207940"),
       quantity: fx.qty("3"),
@@ -41,7 +41,7 @@ export const portfolio = () => ({
       profit: signed("-120000", "-4.76", "down"),
     },
   ],
-  today: signed("-15000", "-0.12", "down"),
+  today: signed("-15000", "-0.46", "down"),
 });
 
 export const allocation = () => ({
@@ -87,7 +87,7 @@ export const instruments = () => ({
       id: fx.id("i-2"),
       name: fx.free("예시바이오"),
       ticker: fx.ticker("207940"),
-      origin: "watchlist",
+      origin: "holding",
       todayRate: fx.pct("-0.50"),
       direction: "down",
     },
@@ -181,6 +181,12 @@ export const signals = () => ({
       id: fx.id("card-2"),
       name: fx.free("예시바이오"),
       ticker: fx.ticker("207940"),
+      rationale: fx.free(
+        "임상 결과 발표가 늦어져 다음 분기 기술료 수익의 불확실성이 커졌어요.",
+      ),
+      counterargument: fx.free(
+        "새 기술이전 계약을 체결하면 실적 전망이 달라질 수 있어요.",
+      ),
       direction: "sell",
       proposal: fx.id("proposal-2"),
       price: fx.krw("800000"),

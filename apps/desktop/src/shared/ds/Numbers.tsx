@@ -141,6 +141,7 @@ export const chartNumberText = (value: ChartDecimal): Display["text"] =>
 export const chartLabelText: (value: UiText | FreeText) => Display["text"] =
   formatDataValue;
 const dataClasses = {
+  emphasis: "status-sentence text-title-sm font-semibold text-ink",
   body: "status-sentence text-body text-ink",
   "body-sm": "status-sentence text-body-sm text-ink-muted",
   caption: "status-sentence text-caption text-ink-subtle",
@@ -148,7 +149,7 @@ const dataClasses = {
 } as const;
 export const DataText = (props: {
   readonly value: FreeText | Ticker | EntityId | ChartDecimal;
-  readonly variant?: "body" | "body-sm" | "caption" | "code";
+  readonly variant?: "body" | "body-sm" | "caption" | "code" | "emphasis";
 }): ReactElement => {
   const variant = props.variant ?? "body";
   return (

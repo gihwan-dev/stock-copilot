@@ -88,6 +88,7 @@ const catalog = {
   switchOff: {
     ko: '주문 기능이 꺼져 있어요. 설정 > 기본의 "주문 켜기"를 켜면 이 카드에서 주문할 수 있어요.' as UiText,
   },
+  confirmSkip: { ko: "넘기기 확인" as UiText },
   skip: { ko: "넘기기" as UiText },
   skipReason: { ko: "넘기는 이유 (선택)" as UiText },
   skipReasonHint: {

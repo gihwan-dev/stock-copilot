@@ -182,7 +182,7 @@ export const AllocationSection = (props: {
   readonly load: ScreenSources["allocation"];
   readonly retry: () => void;
 }): ReactElement => (
-  <Card title={portfolioText("allocationSection", "ko")} layout="fill">
+  <Card title={portfolioText("allocationSection", "ko")} layout="flow">
     <AllocationBody load={props.load} retry={props.retry} />
   </Card>
 );

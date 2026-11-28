@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
-import type { FreeText } from "../lib";
+import type { EntityId, ExternalUrl, FreeText } from "../lib";
+import type { MarkdownCitation } from "./markdown-citations";
 import { CitationTooltip } from "./Tooltip";
 
 export const MarkdownAction = (props: {
@@ -22,4 +23,27 @@ export const MarkdownAction = (props: {
   ) : (
     <CitationTooltip detail={props.citation} trigger={button} />
   );
+};
+
+export const resolveMarkdownAction = (
+  citation: MarkdownCitation | undefined,
+  url: ExternalUrl | undefined,
+  props:
+    | {
+        readonly onLocalCitation?: (number: EntityId) => void;
+        readonly linkAllowed: (url: ExternalUrl) => "allow" | "deny";
+        readonly onOpenLink: (url: ExternalUrl) => void;
+      }
+    | undefined,
+): (() => void) | undefined => {
+  if (props === undefined) return undefined;
+  const open = props.onLocalCitation;
+  if (citation?.url === null && open !== undefined)
+    return (): void => {
+      open(citation.number);
+    };
+  if (url === undefined || props.linkAllowed(url) === "deny") return undefined;
+  return (): void => {
+    props.onOpenLink(url);
+  };
 };

@@ -5,6 +5,7 @@ import {
   Card,
   DataText,
   Divider,
+  Disclosure,
   Inline,
   Skeleton,
   Stack,
@@ -41,22 +42,24 @@ const Actions = (props: {
   const [reason, setReason] = useState<InputValue>(emptyInputValue);
   const action = cardAction(props.card);
   const skip = (
-    <Stack gap="space-2">
-      <TextField
-        label={signalText("skipReason", "ko")}
-        hint={signalText("skipReasonHint", "ko")}
-        value={reason}
-        onChange={setReason}
-      />
-      <Button
-        variant="ghost"
-        onClick={(): void => {
-          props.handlers.onSkip(props.card.id, reason);
-        }}
-      >
-        {signalText("skip", "ko")}
-      </Button>
-    </Stack>
+    <Disclosure title={signalText("skip", "ko")}>
+      <Stack gap="space-2">
+        <TextField
+          label={signalText("skipReason", "ko")}
+          hint={signalText("skipReasonHint", "ko")}
+          value={reason}
+          onChange={setReason}
+        />
+        <Button
+          variant="ghost"
+          onClick={(): void => {
+            props.handlers.onSkip(props.card.id, reason);
+          }}
+        >
+          {signalText("confirmSkip", "ko")}
+        </Button>
+      </Stack>
+    </Disclosure>
   );
   switch (action.kind) {
     case "order":
@@ -170,7 +173,7 @@ export const SignalCards = (props: {
 }): ReactElement => {
   const handlers = useHandlers(props.sources);
   return (
-    <Card title={signalText("title", "ko")} layout="fill">
+    <Card title={signalText("title", "ko")} layout="flow">
       <SignalList load={props.sources.signals} handlers={handlers} />
       {props.footer}
     </Card>

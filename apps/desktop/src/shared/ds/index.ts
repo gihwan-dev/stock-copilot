@@ -55,3 +55,4 @@ export {
 export { Markdown } from "./Markdown";
 export { ChatInput } from "./ChatInput";
 export { ConversationTree } from "./ConversationTree";
+export { SectionLink, SectionTarget } from "./SectionLink";

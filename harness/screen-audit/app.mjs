@@ -54,7 +54,9 @@ const start = async () => {
   mockCommands(setup.commands);
   createRoot(page.document.getElementById("root")).render(
     h(App, {
-      initialPath: scenario.path,
+      initialPath: new URL(page.location.href).searchParams.has("hash-route")
+        ? undefined
+        : scenario.path,
       queryClient: createAppQueryClient(),
       sources: setup.sources,
       settingsClient: setup.settingsClient,

@@ -97,6 +97,7 @@ const AddForm = (props: { readonly sources: ListSources }): ReactElement => {
       />
       <Button
         size="control-height-sm"
+        disabled={value === emptyInputValue ? "disabled" : "enabled"}
         onClick={(): void => {
           actions.add(value);
         }}
