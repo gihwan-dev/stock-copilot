@@ -22,7 +22,7 @@ type Props = LayoutChildren & {
   readonly gap?: SpacingToken;
   readonly align?: InlineAlign;
   readonly justify?: InlineJustify;
-  readonly wrap?: InlineWrap;
+  readonly wrap?: InlineWrap | "metadata";
 };
 
 type LowGap =
@@ -193,6 +193,12 @@ const InlineHigh = (
 };
 
 export const Inline = (props: Props): ReactElement => {
+  if (props.wrap === "metadata")
+    return (
+      <div className="flex flex-wrap items-center gap-x-space-3 gap-y-gap-hairline text-caption">
+        <LayoutItems mode="inline">{props.children}</LayoutItems>
+      </div>
+    );
   const resolved = gapBand[props.gap ?? "space-2"];
   const preset = layoutKey(
     props.align ?? "center",

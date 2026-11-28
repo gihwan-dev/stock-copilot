@@ -111,9 +111,12 @@ const body = (
     {props.children}
   </tbody>
 );
-const row = (props: Children): ReactElement => (
-  <tr className="hover:bg-surface-sunken">{props.children}</tr>
-);
+const Row = (props: Children): ReactElement =>
+  use(FrameContext) === "embedded" ? (
+    <tr>{props.children}</tr>
+  ) : (
+    <tr className="hover:bg-surface-sunken">{props.children}</tr>
+  );
 type CellProps = {
   readonly children?: UiText | ReactElement;
   readonly align?: "start" | "end";
@@ -240,7 +243,7 @@ export const Table = {
   Root,
   Head,
   Body: body,
-  Row: row,
+  Row,
   Header: ColumnHeader,
   RowHeader,
   Cell,

@@ -30,7 +30,7 @@ const currencyKeys = {
 } as const satisfies Record<Currency, PortfolioMessageKey>;
 
 const MetaLine = (props: { readonly view: PortfolioView }): ReactElement => (
-  <Inline gap="space-1" align="center" wrap="wrap">
+  <Inline wrap="metadata">
     {[
       <Inline key="recorded" gap="space-1">
         <Text variant="caption" tone="ink-muted">

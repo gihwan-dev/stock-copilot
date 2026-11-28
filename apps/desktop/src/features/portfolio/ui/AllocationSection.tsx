@@ -66,14 +66,16 @@ const Row = (props: { readonly row: AllocationRow }): ReactElement => (
     </TableCell>
     <TableCell align="end">
       {props.row.weightRange === "below-unit" ? (
-        <Text variant="body-sm">{portfolioText("weightBelowUnit", "ko")}</Text>
+        <Text variant="body-sm" tone="ink-muted">
+          {portfolioText("weightBelowUnit", "ko")}
+        </Text>
       ) : (
         <Percent value={props.row.weight} />
       )}
     </TableCell>
     <TableCell align="end">
       {props.row.level === null ? (
-        <Text variant="body-sm">
+        <Text variant="body-sm" tone="ink-muted">
           {portfolioText("levelNotApplicable", "ko")}
         </Text>
       ) : (
