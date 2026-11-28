@@ -178,4 +178,8 @@ const Exchange = (props: { readonly exchange: ChatExchange }): ReactElement => {
   );
 };
 
-export const ChatExchangeView: typeof Exchange = memo(Exchange);
+const MemoizedExchange = memo(Exchange);
+
+export const ChatExchangeView: typeof Exchange = (props) => (
+  <MemoizedExchange exchange={props.exchange} />
+);

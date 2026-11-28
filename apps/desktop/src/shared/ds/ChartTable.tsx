@@ -211,4 +211,12 @@ export const CandleStatusBody = (props: {
   </>
 );
 
-export const CandleTable: typeof CandleRows = memo(CandleRows);
+const MemoizedCandleRows = memo(CandleRows);
+
+export const CandleTable: typeof CandleRows = (props) => (
+  <MemoizedCandleRows
+    data={props.data}
+    label={props.label}
+    onHighlight={props.onHighlight}
+  />
+);

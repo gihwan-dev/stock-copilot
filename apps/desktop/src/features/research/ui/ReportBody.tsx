@@ -78,4 +78,13 @@ const Body = (props: BodyProps): ReactElement => {
   );
 };
 
-export const ReportBody: typeof Body = memo(Body);
+const MemoizedBody = memo(Body);
+
+export const ReportBody: typeof Body = (props) => (
+  <MemoizedBody
+    body={props.body}
+    citations={props.citations}
+    onOpenLink={props.onOpenLink}
+    onLocalCitation={props.onLocalCitation}
+  />
+);

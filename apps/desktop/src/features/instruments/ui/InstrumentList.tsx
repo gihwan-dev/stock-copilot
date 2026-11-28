@@ -154,4 +154,8 @@ const List = (props: {
   </Stack>
 );
 
-export const InstrumentList: typeof List = memo(List);
+const MemoizedList = memo(List);
+
+export const InstrumentList: typeof List = (props) => (
+  <MemoizedList sources={props.sources} onSelect={props.onSelect} />
+);
