@@ -17,8 +17,8 @@ pub enum DashboardCacheKey {
 pub struct DashboardCacheDocument(String);
 
 impl std::fmt::Debug for DashboardCacheDocument {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("DashboardCacheDocument(<redacted>)")
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("DashboardCacheDocument(<redacted>)")
     }
 }
 
