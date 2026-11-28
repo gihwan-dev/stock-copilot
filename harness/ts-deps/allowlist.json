@@ -82,6 +82,10 @@
           "target": "react-resizable-panels",
           "reason": "채팅 사이드바 너비 조절 (ADR 0183, 사용자 요청)"
         },
+        "flexlayout-react": {
+          "target": "flexlayout-react",
+          "reason": "대시보드 위젯 도킹과 드롭 시 분할 크기 적용 (ADR 0200, 사용자 요청)"
+        },
         "remark-gfm": {
           "target": "remark-gfm",
           "reason": "채팅 답의 GFM 표·취소선 표시 (ADR 0183, 사용자 요청)"
