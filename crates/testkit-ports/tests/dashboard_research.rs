@@ -153,4 +153,43 @@ mod tests {
         );
         assert_eq!(ai.calls().len(), 7);
     }
+
+    #[test]
+    fn report_headings_allow_scan_reading_without_excusing_unsourced_claims() {
+        let ai = ScriptedAiProvider::default();
+        let evidence = [source("합성 수주 실적")];
+        let formatted = "### 핵심\n\n수주가 늘었다 [1].\n\n### 판단 근거\n\n- 수주가 전분기보다 늘었다 [1].\n\n### 확인 조건\n\n추가 수주를 확인한다 [1].";
+        for subject in [DashboardSubject::Holdings, DashboardSubject::Economy] {
+            script(&ai, formatted);
+            let outcome = run(research_dashboard_subject(
+                &ai,
+                &subject,
+                &evidence,
+                at(900),
+            ));
+            let BriefingOutcome::Completed { body, sources } = outcome else {
+                panic!("근거를 갖춘 보고서");
+            };
+            assert_eq!(body.as_untrusted_str(), formatted);
+            assert_eq!(sources, evidence);
+        }
+        for invalid in [
+            "### 핵심\n### 판단 근거",
+            "### 추세 상승이 확실하다\n수주가 늘었다 [1]",
+            "### 핵심\n근거 없는 결론이다\n수주가 늘었다 [1]",
+            "### 핵심\n- [1]",
+            "### 판단 근거\n- 관측했다 [2]",
+        ] {
+            script(&ai, invalid);
+            assert_eq!(
+                run(research_dashboard_subject(
+                    &ai,
+                    &DashboardSubject::Economy,
+                    &evidence,
+                    at(900)
+                )),
+                BriefingOutcome::Failed(BriefingFailure::EmptyResult)
+            );
+        }
+    }
 }

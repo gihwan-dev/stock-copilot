@@ -10,6 +10,7 @@ export const researchText = {
   empty: "아직 조사 결과가 없어요." as UiText,
   refreshing: "새 자료를 확인하고 있어요." as UiText,
   failed: "이번 조사 결과를 불러오지 못했어요." as UiText,
+  countUnit: "건" as UiText,
   sources: "근거 자료" as UiText,
   loading: "조사 결과를 불러오고 있어요." as UiText,
 } as const;

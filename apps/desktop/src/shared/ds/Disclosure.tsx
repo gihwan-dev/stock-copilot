@@ -1,10 +1,12 @@
 import { useState, type ReactElement } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
-import type { UiText } from "../lib";
+import type { FreeText, UiText } from "../lib";
+import { DataText } from "./Numbers";
 import { Icon } from "./Icon";
 type State = "open" | "closed";
 type Props = {
   readonly title: UiText;
+  readonly detail?: FreeText | undefined;
   readonly children: ReactElement;
   readonly open?: State;
   readonly defaultOpen?: State;
@@ -31,7 +33,10 @@ export const Disclosure = (props: Props): ReactElement => {
         <span className={states[state]}>
           <Icon name="chevron-right" />
         </span>
-        <span className="status-sentence flex-1">{props.title}</span>
+        <span className="status-sentence">{props.title}</span>
+        {props.detail === undefined ? null : (
+          <DataText value={props.detail} variant="caption" />
+        )}
       </Collapsible.Trigger>
       <Collapsible.Panel
         className={

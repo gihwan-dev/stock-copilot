@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import {
   Button,
   Card,
   DataText,
+  Disclosure,
   Inline,
   Markdown,
   Stack,
@@ -16,8 +17,9 @@ import {
   type ResearchSection,
   type ResearchSource,
 } from "../../../shared/ipc";
-import type { EntityId } from "../../../shared/lib";
+import { parseFreeText, type EntityId } from "../../../shared/lib";
 import { focusResearchSection } from "../../../shared/platform";
+import { reportMarkdown } from "../model/report-markdown";
 import { researchText } from "../messages";
 
 const topics = ["holdings", "candidates", "economy"] as const;
@@ -64,38 +66,49 @@ const InstrumentAction = (props: {
   </Button>
 );
 
-const SourceList = ({
-  report,
-  topic,
-}: {
-  readonly report: ResearchSection;
-  readonly topic: Topic;
-}): ReactElement => (
-  <Stack gap="space-1">
-    {report.sources.length === 0 ? (
-      []
-    ) : (
-      <Text variant="label">{researchText.sources}</Text>
-    )}
-    {report.sources.map((item) => (
-      <Stack key={item.number} position={{ topic, source: item.number }}>
-        <Source item={item} />
-      </Stack>
-    ))}
-  </Stack>
-);
+type ListState = "closed" | "open";
 
-const Report = ({
-  report,
-  topic,
-  open,
-}: {
+const Sources = (props: {
+  readonly items: readonly ResearchSource[];
+  readonly topic: Topic;
+  readonly state: ListState;
+  readonly change: (state: ListState) => void;
+}): ReactElement | null => {
+  if (props.items.length === 0) return null;
+  const count = parseFreeText(
+    `${props.items.length.toString()}${researchText.countUnit}`,
+  );
+  return (
+    <Disclosure
+      title={researchText.sources}
+      detail={count.kind === "ok" ? count.value : undefined}
+      open={props.state}
+      onOpenChange={props.change}
+    >
+      <Stack gap="space-2">
+        {props.items.map((item) => (
+          <Stack
+            key={item.number}
+            position={{ topic: props.topic, source: item.number }}
+          >
+            <Source item={item} />
+          </Stack>
+        ))}
+      </Stack>
+    </Disclosure>
+  );
+};
+
+type ReportProps = {
   readonly topic: Topic;
   readonly open: (symbol: EntityId) => void;
   readonly report: ResearchSection;
-}): ReactElement => {
+};
+
+const Report = ({ report, topic, open }: ReportProps): ReactElement => {
   const link = useMutation({ mutationFn: openExternal });
   const citations = report.sources;
+  const [sourceList, setSourceList] = useState<ListState>("closed");
   return (
     <Stack gap="space-2">
       {report.status === "ready" ? (
@@ -123,10 +136,12 @@ const Report = ({
             </Inline>
           )}
           <Markdown
-            content={entry.body}
+            content={reportMarkdown(entry.body)}
             citations={citations}
             onLocalCitation={(number) => {
-              focusResearchSection(topic, number);
+              focusResearchSection(topic, number, () => {
+                setSourceList("open");
+              });
             }}
             linkAllowed={(url) =>
               citations.some((item) => item.url === url) ? "allow" : "deny"
@@ -135,7 +150,12 @@ const Report = ({
           />
         </Stack>
       ))}
-      <SourceList report={report} topic={topic} />
+      <Sources
+        items={citations}
+        topic={topic}
+        state={sourceList}
+        change={setSourceList}
+      />
     </Stack>
   );
 };
