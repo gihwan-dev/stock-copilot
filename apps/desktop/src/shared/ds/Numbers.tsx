@@ -1,5 +1,7 @@
 import type { ReactElement } from "react";
 import { dataClasses, DataAction } from "./DataAction";
+import { NumberSize, type NumberEmphasis } from "./NumberSize";
+import { Icon } from "./Icon";
 import { text } from "../lib";
 import type {
   ChartDecimal,
@@ -62,23 +64,6 @@ const Directed = (props: {
     </span>
   </span>
 );
-type NumberEmphasis = "inherit" | "display" | "large" | "value";
-const Sized = (props: {
-  readonly emphasis: NumberEmphasis | undefined;
-  readonly children: ReactElement;
-}): ReactElement => {
-  switch (props.emphasis) {
-    case "display":
-      return <span className="text-num-display">{props.children}</span>;
-    case "value":
-      return <span className="text-title-sm text-ink">{props.children}</span>;
-    case "large":
-      return <span className="text-num-lg">{props.children}</span>;
-    case "inherit":
-    case undefined:
-      return props.children;
-  }
-};
 const Numeric = (props: {
   readonly display: Display;
   readonly direction: Direction | undefined;
@@ -98,7 +83,7 @@ export const Money = (props: {
   readonly direction?: Direction;
   readonly emphasis?: NumberEmphasis;
 }): ReactElement => (
-  <Sized emphasis={props.emphasis}>
+  <NumberSize emphasis={props.emphasis}>
     <Numeric
       display={formatNumber(
         {
@@ -110,7 +95,7 @@ export const Money = (props: {
       )}
       direction={props.direction}
     />
-  </Sized>
+  </NumberSize>
 );
 export const Percent = (props: {
   readonly value: PercentDisplay;
@@ -154,17 +139,28 @@ export const DataText = (props: {
   const value = formatDataValue(props.value);
   if (props.onPress === undefined)
     return <span className={dataClasses[variant]}>{value}</span>;
+  const words = dataValueWords(value);
   return (
     <DataAction onPress={props.onPress} alert={props.alert}>
       <span className="status-sentence">
-        {dataValueWords(value).flatMap(({ offset, space, word }) => [
+        {words.flatMap(({ offset, space, word }, i) => [
           space,
-          <span
-            key={offset}
-            className="inline-block max-w-full status-sentence"
-          >
-            {word}
-          </span>,
+          i === words.length - 1 ? (
+            <span
+              key={offset}
+              className="inline-flex max-w-full items-center gap-space-1"
+            >
+              <span>{word}</span>
+              <Icon name="chevron-right" size="icon-sm" />
+            </span>
+          ) : (
+            <span
+              key={offset}
+              className="inline-block max-w-full status-sentence"
+            >
+              {word}
+            </span>
+          ),
         ])}
       </span>
     </DataAction>
@@ -237,11 +233,11 @@ export const PriceChange = (props: {
     );
   }
   return (
-    <Sized emphasis={props.emphasis}>
+    <NumberSize emphasis={props.emphasis}>
       <Numeric
         display={formatPriceChange(props.amount, props.rate, props.direction)}
         direction={props.direction}
       />
-    </Sized>
+    </NumberSize>
   );
 };
