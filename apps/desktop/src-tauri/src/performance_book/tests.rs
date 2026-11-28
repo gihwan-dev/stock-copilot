@@ -379,10 +379,11 @@ fn a_finished_period_failure_stays_distinct_from_a_live_or_unstarted_calculation
     );
     let span = PerformanceSpan::SixMonths;
     assert_eq!(book.reading(span), super::PeriodReading::Waiting);
-    {
+    let while_running = {
         let _permit = book.running.try_acquire().expect("실행");
-        assert_eq!(book.reading(span), super::PeriodReading::Calculating);
-    }
+        book.reading(span)
+    };
+    assert_eq!(while_running, super::PeriodReading::Calculating);
     tauri::async_runtime::block_on(book.refresh(&Rows, &AccountId::new(7)));
     assert_eq!(
         book.reading(span),
