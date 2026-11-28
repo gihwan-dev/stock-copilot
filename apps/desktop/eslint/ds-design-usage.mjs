@@ -212,8 +212,59 @@ const dockTheme = `[data-dock-workspace] {
 }
 
 [data-dock-workspace] .flexlayout__float_window {
-  background: var(--color-surface-raised);
+  background: var(--color-surface);
+  border: var(--border-width-hairline) solid var(--color-line-strong);
   box-shadow: var(--shadow-popover);
+}
+
+[data-dock-workspace] .flexlayout__float_window_content {
+  margin: 0;
+}
+
+[data-dock-workspace] .flexlayout__float_window_drag_handle {
+  font-size: var(--spacing-icon-md);
+  opacity: 1;
+  --fl-color-icon: var(--color-ink);
+}
+
+[data-dock-workspace] .flexlayout__float_window_drag_handle + div > div {
+  opacity: 1 !important;
+}
+
+[data-dock-workspace] .flexlayout__float_window_drag_handle + div > div > div {
+  background-color: var(--color-ink-muted) !important;
+}
+
+[data-dock-workspace]
+  .flexlayout__float_window:not(
+    :has(
+      .flexlayout__tab_button ~ .flexlayout__tab_button,
+      .flexlayout__tabset ~ .flexlayout__tabset
+    )
+  )
+  .flexlayout__tab_toolbar_button-float {
+  display: none;
+}
+
+[data-dock-workspace] .flexlayout__splitter_drag {
+  outline: var(--border-width-hairline) solid var(--color-primary);
+}
+
+[data-dock-workspace] .flexlayout__splitter_drag .flexlayout__splitter_handle {
+  flex-shrink: 0;
+  background-color: var(--color-primary);
+}
+
+[data-dock-workspace]
+  .flexlayout__splitter_drag
+  .flexlayout__splitter_handle_horz {
+  width: var(--spacing-space-2);
+}
+
+[data-dock-workspace]
+  .flexlayout__splitter_drag
+  .flexlayout__splitter_handle_vert {
+  height: var(--spacing-space-2);
 }`;
 export const themeSource = (tokens) =>
   '@import "tailwindcss" source(none);\n@import "./tokens.css";\n@import "flexlayout-react/style/light.css";\n@source "../../";\n@source not "./testing/overflow-geometry.ts";\n\n@layer base {\n  html {\n    font-family: var(--font-sans);\n  }\n}\n\n' +
