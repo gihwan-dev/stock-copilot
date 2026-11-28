@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "ai-claude-code"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -38,7 +38,7 @@ dependencies = [
 
 [[package]]
 name = "ai-codex"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -64,7 +64,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "application"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "domain",
  "proptest",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "approval-command"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "broker-toss"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "broker-toss-schema",
@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "broker-toss-schema"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "regress",
  "serde",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "broker-toss-trade"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "broker-toss",
@@ -1005,7 +1005,7 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "proptest",
  "rust_decimal",
@@ -1051,7 +1051,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "e2e-app"
-version = "0.5.18"
+version = "0.5.19"
 
 [[package]]
 name = "embed-resource"
@@ -2322,14 +2322,14 @@ dependencies = [
 
 [[package]]
 name = "mcp-bridge"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "zeroize",
 ]
 
 [[package]]
 name = "mcp-server"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -2774,7 +2774,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "order-execution"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -3009,7 +3009,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "platform-macos"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "block2",
@@ -3682,7 +3682,7 @@ dependencies = [
 
 [[package]]
 name = "scheduler"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -3773,7 +3773,7 @@ dependencies = [
 
 [[package]]
 name = "secrets-keychain"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "security-framework",
@@ -4166,7 +4166,7 @@ dependencies = [
 
 [[package]]
 name = "sources"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -4260,7 +4260,7 @@ dependencies = [
 
 [[package]]
 name = "src-tauri"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "ai-claude-code",
  "application",
@@ -4303,7 +4303,7 @@ checksum = "ff7589a1859b09232522bb9edf076ca7fcf14ded96685d3fa629db73023ffbb7"
 
 [[package]]
 name = "store-sqlite"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -4865,7 +4865,7 @@ dependencies = [
 
 [[package]]
 name = "testkit"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "serde",
  "serde_json",
@@ -4873,7 +4873,7 @@ dependencies = [
 
 [[package]]
 name = "testkit-ports"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -5113,7 +5113,7 @@ checksum = "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a"
 
 [[package]]
 name = "toss-smoke"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "broker-toss",
@@ -5203,7 +5203,7 @@ dependencies = [
 
 [[package]]
 name = "trade-fakes"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "application",
  "domain",
@@ -6130,7 +6130,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.5.18"
+version = "0.5.19"
 dependencies = [
  "cargo_metadata 0.23.1",
  "proc-macro2",
